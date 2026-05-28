@@ -186,9 +186,27 @@ function _broadcast(symbol, payload) {
 function _broadcastAll(payload) {
     const json = JSON.stringify(payload);
     if (payload.symbol) _lastValues.set(`${payload.symbol.toUpperCase()}:${payload.type}`, payload);
+    // Iterate all WS clients on /ws/sync (not just symbol subscribers)
+    // This is needed for cross-symbol events: liq, watchlist, health, degraded
+    const sent = new Set();
     for (const [, subs] of _subs) {
-        for (const ws of subs) _safeSend(ws, json);
+        for (const ws of subs) {
+            if (sent.has(ws)) continue;
+            sent.add(ws);
+            _safeSend(ws, json);
+        }
     }
+    // Also broadcast to global /ws/sync clients (no symbol subscriptions)
+    try {
+        const globalWss = global.__zeusWss;
+        if (globalWss && globalWss.clients) {
+            for (const ws of globalWss.clients) {
+                if (sent.has(ws)) continue;
+                sent.add(ws);
+                _safeSend(ws, json);
+            }
+        }
+    } catch (_) {}
 }
 
 function getLastValue(symbol, type) {
@@ -391,6 +409,45 @@ function stopWatchlist() {
 
 function isWatchlistActive() {
     return _wlWs !== null;
+}
+
+// REST fallback poller — Hetzner blocks miniTicker WS, so we poll ticker/24hr every 10s
+const WATCHLIST_POLL_MS = 10_000;
+let _wlPollTimer = null;
+
+async function _pollWatchlistREST() {
+    try { require('./logger').info('WS_PROXY', `Watchlist poll tick — wss clients: ${global.__zeusWss?.clients?.size || 0}, subs: ${_subs.size}`); } catch(_) {}
+    for (const sym of WATCHLIST_SYMBOLS) {
+        try {
+            const res = await fetch(
+                `https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${sym}`,
+                { signal: AbortSignal.timeout(8000) }
+            );
+            if (!res || !res.ok) continue;
+            const t = await res.json();
+            if (!t || !t.symbol) continue;
+            const price = parseFloat(t.lastPrice);
+            const chg = parseFloat(t.priceChangePercent);
+            if (Number.isFinite(price) && price > 0) {
+                _broadcastAll({ type: 'market.wl', symbol: t.symbol, price, chg: Number.isFinite(chg) ? chg : 0, ts: Date.now() });
+            }
+        } catch (_) {}
+    }
+}
+
+function startWatchlistREST() {
+    if (_wlPollTimer) return;
+    try { require('./logger').info('WS_PROXY', `Watchlist REST poller started — 10s for ${WATCHLIST_SYMBOLS.join(',')}`); } catch (_) {}
+    _pollWatchlistREST().then(() => {
+        try { require('./logger').info('WS_PROXY', 'Watchlist first poll complete'); } catch (_) {}
+    }).catch(e => {
+        try { require('./logger').error('WS_PROXY', `Watchlist poll error: ${e.message}`); } catch (_) {}
+    });
+    _wlPollTimer = setInterval(_pollWatchlistREST, WATCHLIST_POLL_MS);
+}
+
+function stopWatchlistREST() {
+    if (_wlPollTimer) { clearInterval(_wlPollTimer); _wlPollTimer = null; }
 }
 
 // ═══ Quant data poller — funding + OI via REST into cache ═══
@@ -886,6 +943,7 @@ function _resetForTest() {
     for (const timer of _fallbackTimers.values()) clearInterval(timer);
     _fallbackTimers.clear();
     stopQuantPoller();
+    stopWatchlistREST();
     stopWatchlist();
 }
 
@@ -912,6 +970,8 @@ module.exports = {
     startWatchlist,
     stopWatchlist,
     isWatchlistActive,
+    startWatchlistREST,
+    stopWatchlistREST,
     _buildWatchlistUrl,
     startQuantPoller,
     stopQuantPoller,

@@ -1393,6 +1393,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     });
     // [WS-PROXY] Start quant data poller (funding + OI via REST → cache)
     try { require('./server/services/wsMarketProxy').startQuantPoller(); } catch (_) {}
+    try { require('./server/services/wsMarketProxy').startWatchlist(); } catch (_) {}
+    try { require('./server/services/wsMarketProxy').startWatchlistREST(); } catch (_) {}
     // [MULTI-SYM] Expose configured symbols for API
     app._sdSymbols = SD_SYMBOLS;
   } else {
@@ -1613,6 +1615,7 @@ const wss = new WebSocket.Server({
   maxPayload: 64 * 1024,
   perMessageDeflate: { zlibDeflateOptions: { level: 1 }, threshold: 256 },
 });
+global.__zeusWss = wss;
 const _wsClients = new Map(); // userId -> Set<ws>
 
 // Handle upgrade manually — prevents "Invalid Upgrade header" crash from Cloudflare/proxies
@@ -1749,6 +1752,18 @@ wss.on('connection', (ws, req) => {
       ws.send(JSON.stringify({ type: 'market.radar.snapshot', data: snap }));
     }
   } catch (_) { /* cache optional; never block WS accept */ }
+
+  // [WS-PROXY B.6] Watchlist warm-start — send cached prices on connect
+  try {
+    const wsProxy = require('./server/services/wsMarketProxy');
+    const wlSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'ZECUSDT'];
+    for (const sym of wlSymbols) {
+      const cached = wsProxy.getLastValue(sym, 'market.wl');
+      if (cached && ws.readyState === 1) {
+        try { ws.send(JSON.stringify(cached)); } catch (_) {}
+      }
+    }
+  } catch (_) {}
 
   // [Phase 12.A — Batch A] Exchange/env warm-start — mirrors radar snapshot.
   // Sends one typed exchange.changed frame so a new or reconnecting tab
