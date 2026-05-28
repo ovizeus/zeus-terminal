@@ -270,7 +270,7 @@ function getHealthSnapshot() {
             subscribers: (_subs.get(sym) || new Set()).size,
         };
     }
-    return { streams, overall: hasNonLive ? 'DEGRADED' : 'HEALTHY' };
+    return { streams, overall: hasNonLive ? 'DEGRADED' : 'HEALTHY', crossExchange: getAllCrossExchangeDivergences() };
 }
 
 // ═══ Circuit breaker per stream ═══
@@ -390,6 +390,45 @@ function stopWatchlist() {
 
 function isWatchlistActive() {
     return _wlWs !== null;
+}
+
+// ═══ Cross-exchange sanity check (B.14) ═══
+
+const _crossExchangePrices = new Map(); // symbol → { binance, bybit, ts }
+const CROSS_WARN_PCT = 0.5;
+const CROSS_STALE_PCT = 2.0;
+
+function recordCrossExchangePrice(symbol, exchange, price) {
+    const sym = symbol.toUpperCase();
+    if (!_crossExchangePrices.has(sym)) _crossExchangePrices.set(sym, { binance: 0, bybit: 0, ts: 0 });
+    const entry = _crossExchangePrices.get(sym);
+    entry[exchange] = price;
+    entry.ts = Date.now();
+}
+
+function getCrossExchangeDivergence(symbol) {
+    const sym = symbol.toUpperCase();
+    const entry = _crossExchangePrices.get(sym);
+    if (!entry || !entry.binance || !entry.bybit) return null;
+    if (Date.now() - entry.ts > 30000) return null;
+    const div = Math.abs(entry.binance - entry.bybit) / entry.binance * 100;
+    return {
+        symbol: sym,
+        binancePrice: entry.binance,
+        bybitPrice: entry.bybit,
+        divergencePct: div,
+        warn: div > CROSS_WARN_PCT,
+        stale: div > CROSS_STALE_PCT,
+    };
+}
+
+function getAllCrossExchangeDivergences() {
+    const out = [];
+    for (const sym of _crossExchangePrices.keys()) {
+        const d = getCrossExchangeDivergence(sym);
+        if (d) out.push(d);
+    }
+    return out;
 }
 
 // ═══ Shadow validation — 1% sample dual-stream XOR (B.13) ═══
@@ -653,6 +692,7 @@ function _handleBinanceMessage(symbol, msg) {
     if (stream.includes('markPrice')) {
         const price = +d.p;
         _recordEvent(symbol, 'price', price);
+        recordCrossExchangePrice(symbol, 'binance', price);
         _checkAndBroadcastStale();
         _broadcast(symbol, {
             type: 'market.price', symbol,
@@ -712,6 +752,8 @@ function _resetForTest() {
     _rateCounters.clear();
     _staleBroadcasted.clear();
     _shutdownInProgress = false;
+    _crossExchangePrices.clear();
+    _shadowDivergences.length = 0;
     for (const timer of _fallbackTimers.values()) clearInterval(timer);
     _fallbackTimers.clear();
     stopWatchlist();
@@ -741,6 +783,9 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    recordCrossExchangePrice,
+    getCrossExchangeDivergence,
+    getAllCrossExchangeDivergences,
     shouldShadow,
     recordShadowDivergence,
     getShadowReport,

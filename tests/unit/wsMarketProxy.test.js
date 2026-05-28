@@ -685,6 +685,37 @@ describe('wsMarketProxy sequence numbers', () => {
     });
 });
 
+describe('wsMarketProxy cross-exchange sanity', () => {
+    test('getCrossExchangeDivergence returns null when only one exchange', () => {
+        proxy.recordCrossExchangePrice('BTCUSDT', 'binance', 75000);
+        expect(proxy.getCrossExchangeDivergence('BTCUSDT')).toBeNull();
+    });
+
+    test('getCrossExchangeDivergence calculates divergence when both exchanges', () => {
+        proxy.recordCrossExchangePrice('BTCUSDT', 'binance', 75000);
+        proxy.recordCrossExchangePrice('BTCUSDT', 'bybit', 75300);
+        const d = proxy.getCrossExchangeDivergence('BTCUSDT');
+        expect(d).not.toBeNull();
+        expect(d.divergencePct).toBeCloseTo(0.4, 1);
+        expect(d.warn).toBe(false);
+        expect(d.stale).toBe(false);
+    });
+
+    test('divergence >0.5% triggers warn', () => {
+        proxy.recordCrossExchangePrice('BTCUSDT', 'binance', 75000);
+        proxy.recordCrossExchangePrice('BTCUSDT', 'bybit', 75500);
+        const d = proxy.getCrossExchangeDivergence('BTCUSDT');
+        expect(d.warn).toBe(true);
+    });
+
+    test('divergence >2% triggers stale', () => {
+        proxy.recordCrossExchangePrice('BTCUSDT', 'binance', 75000);
+        proxy.recordCrossExchangePrice('BTCUSDT', 'bybit', 76600);
+        const d = proxy.getCrossExchangeDivergence('BTCUSDT');
+        expect(d.stale).toBe(true);
+    });
+});
+
 describe('wsMarketProxy shadow validation', () => {
     test('getShadowReport returns empty initially', () => {
         const r = proxy.getShadowReport();
