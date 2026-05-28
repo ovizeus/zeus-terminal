@@ -1421,6 +1421,13 @@ const server = app.listen(PORT, '0.0.0.0', () => {
         } else {
           logger.info('SERVER', '[S3] Server brain started in shadow-only mode (parity harness)');
         }
+        // [Task H 2026-05-28] Dead Man's Switch watchdog — polls
+        // ml_module_heartbeats every 10s; halts globally if brain stale >60s.
+        try {
+          require('./server/services/brainWatchdog').start();
+        } catch (e) {
+          logger.warn('SERVER', 'brainWatchdog start failed: ' + e.message);
+        }
       }, 15000);  // 15s delay for initial candle load
     }
   } else {
@@ -1920,6 +1927,10 @@ async function _gracefulShutdown(signal) {
   } catch (err) {
     logger.warn('SERVER', 'serverBrain.stop failed: ' + err.message);
   }
+
+  // [Task H 2026-05-28] Stop brain watchdog so it doesn't false-positive
+  // during the drain (brain stopped → heartbeats stop → watchdog would alert).
+  try { require('./server/services/brainWatchdog').stop(); } catch (_) {}
 
   // [Task G 2026-05-28] Drain in-flight _executeLiveEntry calls up to 5s.
   // Without this, PM2 reload mid-entry can create orphan orders on the exchange.
