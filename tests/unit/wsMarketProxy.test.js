@@ -685,6 +685,33 @@ describe('wsMarketProxy sequence numbers', () => {
     });
 });
 
+describe('wsMarketProxy protocol versioning', () => {
+    test('handleHello sends hello.ack with server version', () => {
+        const ws = { readyState: 1, send: jest.fn(), bufferedAmount: 0 };
+        const result = proxy.handleHello(ws, { type: 'hello', protocolVersion: '1.0' });
+        expect(result.compatible).toBe(true);
+        const msg = JSON.parse(ws.send.mock.calls[0][0]);
+        expect(msg.type).toBe('hello.ack');
+        expect(msg.protocolVersion).toBe('1.0');
+    });
+
+    test('handleHello sends force_refresh on incompatible version', () => {
+        const ws = { readyState: 1, send: jest.fn(), bufferedAmount: 0 };
+        const result = proxy.handleHello(ws, { type: 'hello', protocolVersion: '0.5' });
+        expect(result.compatible).toBe(false);
+        expect(ws.send).toHaveBeenCalledTimes(2);
+        const refresh = JSON.parse(ws.send.mock.calls[1][0]);
+        expect(refresh.type).toBe('force_refresh');
+    });
+
+    test('generateCorrId returns unique IDs', () => {
+        const a = proxy.generateCorrId();
+        const b = proxy.generateCorrId();
+        expect(a).not.toBe(b);
+        expect(a.startsWith('ws-')).toBe(true);
+    });
+});
+
 describe('wsMarketProxy replay buffer', () => {
     test('getReplay returns empty when no events', () => {
         expect(proxy.getReplay('BTCUSDT', 'market.kline', 0)).toEqual([]);

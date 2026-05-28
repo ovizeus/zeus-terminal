@@ -393,6 +393,34 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Protocol versioning + correlation IDs (B.16) ═══
+
+const PROTOCOL_VERSION = '1.0';
+const PROTOCOL_MIN_SUPPORTED = '1.0';
+let _corrIdCounter = 0;
+
+function generateCorrId() {
+    return `ws-${Date.now().toString(36)}-${(++_corrIdCounter).toString(36)}`;
+}
+
+function handleHello(ws, msg) {
+    const clientVersion = msg.protocolVersion || '0.0';
+    const compatible = clientVersion >= PROTOCOL_MIN_SUPPORTED;
+    const response = {
+        type: 'hello.ack',
+        protocolVersion: PROTOCOL_VERSION,
+        minSupported: PROTOCOL_MIN_SUPPORTED,
+        compatible,
+        serverBuild: process.env.npm_package_version || 'dev',
+        ts: Date.now(),
+    };
+    _safeSend(ws, JSON.stringify(response));
+    if (!compatible) {
+        _safeSend(ws, JSON.stringify({ type: 'force_refresh', reason: 'protocol_mismatch', clientVersion, minSupported: PROTOCOL_MIN_SUPPORTED }));
+    }
+    return { compatible };
+}
+
 // ═══ Replay buffer (B.15) ═══
 
 const REPLAY_BUFFER_SIZE = 100;
@@ -686,6 +714,10 @@ const DEFAULT_TIMEFRAMES = ['5m', '1h', '4h'];
 function handleClientMessage(ws, msg) {
     if (!msg || !msg.type) return;
     const self = module.exports;
+    if (msg.type === 'hello') {
+        handleHello(ws, msg);
+        return;
+    }
     if (msg.type === 'market.subscribe') {
         if (!msg.symbol) return;
         if (!_checkRateLimit(ws)) return { ok: false, reason: 'rate_limited' };
@@ -819,6 +851,9 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    PROTOCOL_VERSION,
+    generateCorrId,
+    handleHello,
     getReplay,
     handleReplayRequest,
     recordCrossExchangePrice,
