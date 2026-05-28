@@ -204,6 +204,41 @@ let _pendingEntries = 0;
 function _incPending() { _pendingEntries++; }
 function _decPending() { _pendingEntries = Math.max(0, _pendingEntries - 1); }
 
+// ══════════════════════════════════════════════════════════════════
+// [Task L 2026-05-28] Pre-trade balance sanity check
+// ══════════════════════════════════════════════════════════════════
+// Before _executeLiveEntry calls exchangeOps.placeEntry, verify the user
+// actually has enough free balance. Catches stale-cache scenarios where
+// brain decided $X entry but a withdrawal/loss happened between balance
+// fetch and decision. Fail-open on balance fetch errors — exchange will
+// reject if truly insufficient, and blocking on a stale balance API
+// would cause more harm than good.
+//
+// Headroom factor 1.1 (10%) accounts for fees, slippage on entry, and
+// margin requirements above bare sizeUsd.
+async function _checkBalanceForEntry(userId, sizeUsd) {
+    const size = Number(sizeUsd);
+    if (!Number.isFinite(size) || size <= 0) {
+        return { ok: true, free: null, required: 0 };
+    }
+    // Round to 2dp to avoid FP artifacts (100 * 1.1 = 110.00000000000001)
+    const required = Math.round(size * 110) / 100;
+    try {
+        const exchangeOps = require('./exchangeOps');
+        const bal = await exchangeOps.getBalance(userId);
+        const free = Number(
+            bal ? (bal.free !== undefined ? bal.free : bal.availableBalance) : 0
+        ) || 0;
+        if (free < required) {
+            return { ok: false, reason: 'BALANCE_INSUFFICIENT', free, required };
+        }
+        return { ok: true, free, required };
+    } catch (err) {
+        // Fail-open: exchange will reject if truly insufficient.
+        return { ok: true, skipped: true, error: err && err.message ? err.message : String(err) };
+    }
+}
+
 /**
  * Wait for in-flight _executeLiveEntry calls to settle, up to maxWaitMs.
  * @param {number} [maxWaitMs=5000]
@@ -1475,6 +1510,32 @@ async function _executeLiveEntry(entry, stc) {
     if (entry.live && entry.live.mainOrderId) {
         logger.warn('AT_LIVE', `[${entry.seq}] MAIN order already recorded (${entry.live.mainOrderId}) — idempotency skip`);
         audit.record('SAT_ENTRY_DEDUP_SKIP', { userId, seq: entry.seq, symbol: entry.symbol, existingOrderId: entry.live.mainOrderId, clientOrderId }, 'SERVER_AT');
+        return;
+    }
+
+    // [Task L 2026-05-28] Pre-trade balance sanity check. Catches stale-cache
+    // scenarios where free balance dropped (withdrawal, loss) between brain
+    // decision and exchange dispatch. Fail-open on fetch errors — exchange
+    // will reject if truly insufficient. Skip → audit + Telegram, no order.
+    const _balCheck = await _checkBalanceForEntry(userId, entry.sizeUsd);
+    if (!_balCheck.ok) {
+        logger.warn('AT_LIVE', `[${entry.seq}] Entry skipped uid=${userId} sym=${entry.symbol} — ${_balCheck.reason} free=${_balCheck.free} need=${_balCheck.required}`);
+        try {
+            audit.record('BALANCE_INSUFFICIENT_SKIP', {
+                userId, seq: entry.seq, symbol: entry.symbol,
+                sizeUsd: entry.sizeUsd, free: _balCheck.free, required: _balCheck.required,
+            }, 'SERVER_AT');
+        } catch (_) {}
+        try {
+            const _telegram = require('./telegram');
+            await _telegram.sendToUser(userId,
+                '⚠️ *Entry skipped — insufficient balance*\n'
+                + '`' + entry.symbol + '` ' + entry.side + ' $' + Number(entry.sizeUsd || 0).toFixed(2) + '\n'
+                + 'Free: $' + Number(_balCheck.free || 0).toFixed(2)
+                + ' / Need: $' + Number(_balCheck.required || 0).toFixed(2));
+        } catch (_) {}
+        entry.live = { status: 'BALANCE_INSUFFICIENT' };
+        entry._livePending = false;
         return;
     }
 
@@ -5134,4 +5195,6 @@ module.exports = {
     drainPending,
     _testIncPending: _incPending,
     _testDecPending: _decPending,
+    // [Task L 2026-05-28] Pre-trade balance check (exported for testing)
+    _checkBalanceForEntry,
 };
