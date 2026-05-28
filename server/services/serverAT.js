@@ -4869,13 +4869,31 @@ _startReconciliation();
 // and recon only checks existing slOrderId (skips null).
 // ══════════════════════════════════════════════════════════════════
 const WATCHDOG_INTERVAL_MS = 30000; // 30s
+const WATCHDOG_ALERT_TTL_MS = 24 * 3600 * 1000; // 24h — purge old alerts
+const WATCHDOG_ALERT_MAX_SIZE = 500; // cap entries before forced sweep
 let _watchdogRunning = false;
-const _watchdogAlerted = new Set(); // "userId:seq" — throttle Telegram alerts
+// [BUG-2 FIX 2026-05-28] Convert Set → Map<key, lastAlertTs> with TTL sweep
+// to prevent unbounded growth (positions that stay LIVE_NO_SL leak entries).
+const _watchdogAlerted = new Map(); // "userId:seq" → lastAlertTs
+
+function _sweepWatchdogAlerts() {
+    const cutoff = Date.now() - WATCHDOG_ALERT_TTL_MS;
+    for (const [key, ts] of _watchdogAlerted) {
+        if (ts < cutoff) _watchdogAlerted.delete(key);
+    }
+    // Hard cap fallback: if still over MAX_SIZE, drop oldest half
+    if (_watchdogAlerted.size > WATCHDOG_ALERT_MAX_SIZE) {
+        const sorted = Array.from(_watchdogAlerted.entries()).sort((a, b) => a[1] - b[1]);
+        const dropCount = Math.floor(sorted.length / 2);
+        for (let i = 0; i < dropCount; i++) _watchdogAlerted.delete(sorted[i][0]);
+    }
+}
 
 async function _watchdogLiveNoSL() {
     if (_watchdogRunning) return;
     _watchdogRunning = true;
     try {
+        _sweepWatchdogAlerts();
         const targets = _positions.filter(p =>
             p.status === 'OPEN' && p.live &&
             p.live.status === 'LIVE_NO_SL' && !p.live.slOrderId
@@ -4913,7 +4931,7 @@ async function _watchdogLiveNoSL() {
                 logger.error('WATCHDOG', `[${pos.seq}] SL repair failed: ${err.message}`);
                 const alertKey = `${userId}:${pos.seq}`;
                 if (!_watchdogAlerted.has(alertKey)) {
-                    _watchdogAlerted.add(alertKey);
+                    _watchdogAlerted.set(alertKey, Date.now());
                     telegram.sendToUser(userId, `🚨 *Watchdog: SL Repair Failed*\n${pos.side} ${pos.symbol}\nPosition remains *UNPROTECTED*.\nWatchdog will keep retrying every ${WATCHDOG_INTERVAL_MS / 1000}s.\nError: ${err.message}`);
                 }
             }
