@@ -46,6 +46,33 @@ setInterval(_rotate, _AUDIT_ROTATE_INTERVAL_MS);
  * @param {string} [actor='system'] — who triggered it: 'AT', 'ARES', 'user', 'system'
  * @param {string} [ip] — request IP if applicable
  */
+// [Task I 2026-05-28] Critical event classifier.
+// These actions touch money, halt, or recovery paths — DB write failures
+// must be loudly logged (stderr) so operator notices broken audit trail
+// before something catastrophic. Non-critical events keep existing silent
+// swallow on DB failure (no regression on noisy paths like LOGIN).
+const CRITICAL_EVENTS = new Set([
+    'SAT_ENTRY_FAILED',
+    'SAT_ENTRY_PLACED',
+    'SAT_EMERGENCY_CLOSE',
+    'GLOBAL_HALT_TOGGLE',
+    'KILL_SWITCH',
+    'EMERGENCY_CLOSE_CATASTROPHIC',
+    'RECOVERY_EXCHANGE_ONLY_AUTOSL_PLACED',
+    'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED',
+    'RECOVERY_EXCHANGE_ONLY_INVALID_DATA',
+    'RECOVERY_SL_PLACEMENT_FAILED',
+    'BRAIN_WATCHDOG_HALT',
+    'DRIFT_DETECTED_HALT',
+    'LIVE_ENTRY_FAILED',
+    'LIVE_ENTRY_PLACED',
+]);
+
+function isCriticalEvent(action) {
+    if (!action || typeof action !== 'string') return false;
+    return CRITICAL_EVENTS.has(action);
+}
+
 function record(action, details, actor, ip) {
     const d = details || {};
     const entry = {
@@ -61,11 +88,21 @@ function record(action, details, actor, ip) {
     if (stream) {
         stream.write(JSON.stringify(entry) + '\n');
     }
-    // Also write to SQLite audit_log (unified source)
+    // Also write to SQLite audit_log (unified source).
+    // [Task I 2026-05-28] For CRITICAL events, log DB failures loudly to stderr
+    // so operator notices broken trail. Non-critical: keep silent swallow.
     try {
         const db = require('./database');
         db.auditLog(d.userId || null, action, d, ip || null);
-    } catch (_) { /* DB not ready at early boot — JSONL still captures */ }
+    } catch (dbErr) {
+        if (isCriticalEvent(action)) {
+            console.error(
+                '[AUDIT][CRITICAL] DB write failed for ' + action + ': ' + dbErr.message,
+                dbErr.stack || ''
+            );
+        }
+        // Non-critical: continue silently as before (JSONL still captured)
+    }
 }
 
 /**
@@ -173,4 +210,4 @@ function readByUser(userId, count) {
     }
 }
 
-module.exports = { record, readLast, readByUser };
+module.exports = { record, readLast, readByUser, isCriticalEvent };
