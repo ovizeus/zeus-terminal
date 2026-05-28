@@ -46,6 +46,21 @@ async function sweep(userId) {
         return result;
     }
 
+    // [Task M.1 2026-05-28] De-dup by orderId — defensive against the same
+    // order surfacing in both regular and algo paths of getOpenOrders.
+    // Without this, we'd attempt to cancel the same orderId twice.
+    {
+        const seen = new Set();
+        const dedup = [];
+        for (const o of openOrders) {
+            const k = String(o && o.orderId || '');
+            if (!k || seen.has(k)) continue;
+            seen.add(k);
+            dedup.push(o);
+        }
+        openOrders = dedup;
+    }
+
     // Build Set of orderIds the DB knows about (slOrderId/tpOrderId in at_positions data JSON)
     let dbOrderIds;
     try {

@@ -557,6 +557,10 @@ async function cancelOrder(uid, params, creds) {
 // [Task M 2026-05-28] List open orders for orphan sweep (boot recovery).
 // Queries both regular orders + algo orders (SL/TP moved to /algoOrder
 // since Binance Dec 2025) and merges results. Optional symbol filter.
+//
+// [Task M.1 2026-05-28] Per-path catch now audits with err.message so
+// soak operators see WHY a path is silent (testnet 404 vs transient 500
+// vs auth failure). Silent swallow during 7d soak would be invisible.
 async function getOpenOrders(uid, params, creds) {
     const symbol = params && params.symbol;
     const query = symbol ? { symbol, recvWindow: 5000 } : { recvWindow: 5000 };
@@ -581,7 +585,18 @@ async function getOpenOrders(uid, params, creds) {
                 });
             }
         }
-    } catch (_) { /* per-endpoint best-effort */ }
+    } catch (err) {
+        // [Task M.1] Surface regular path failure to audit so operator sees it
+        // on soak. err.message preserved so 404 (endpoint absent) is distinct
+        // from 5xx (transient outage) at triage time.
+        try {
+            const audit = require('./audit');
+            audit.record('ORDER_SWEEPER_REGULAR_FAILED', {
+                userId: uid,
+                error: err && err.message ? err.message : String(err),
+            }, 'ORDER_SWEEPER');
+        } catch (_) {}
+    }
 
     // 2. Algo orders (SL/TP since Dec 2025)
     try {
@@ -601,7 +616,17 @@ async function getOpenOrders(uid, params, creds) {
                 });
             }
         }
-    } catch (_) { /* algoOrders endpoint may not exist on testnet — degrade gracefully */ }
+    } catch (err) {
+        // [Task M.1] Algo endpoint may legitimately not exist on testnet,
+        // OR may be a real outage. Audit either way — operator interprets.
+        try {
+            const audit = require('./audit');
+            audit.record('ORDER_SWEEPER_ALGO_UNAVAILABLE', {
+                userId: uid,
+                error: err && err.message ? err.message : String(err),
+            }, 'ORDER_SWEEPER');
+        } catch (_) {}
+    }
 
     return out;
 }

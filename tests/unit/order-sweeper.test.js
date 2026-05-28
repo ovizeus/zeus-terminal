@@ -145,4 +145,77 @@ describe('orderSweeper.sweep', () => {
             orderId: 'x1', symbol: 'BTCUSDT', clientOrderId: 'sl_a_0',
         }), null);
     });
+
+    // ─── Task M.1 — dedup on duplicate orderId across paths ──────────────
+    test('duplicate orderId across paths cancelled only ONCE (de-dup)', async () => {
+        // Same orderId appearing in both regular and algo paths (defensive)
+        exchangeOpsMock.getOpenOrders.mockResolvedValue([
+            { orderId: 'x1', clientOrderId: 'sl_a_0', symbol: 'BTCUSDT', source: 'regular' },
+            { orderId: 'x1', clientOrderId: 'sl_a_0', symbol: 'BTCUSDT', source: 'algo' },
+        ]);
+        dbMock.getZeusOrderIds.mockReturnValue(new Set());
+        const result = await sweeper.sweep(42);
+        expect(exchangeOpsMock.cancelOrder).toHaveBeenCalledTimes(1);
+        expect(result.cancelled.length).toBe(1);
+    });
+});
+
+// ─── Task M.1 — algo path audit on getOpenOrders ─────────────────────────
+describe('binanceOps.getOpenOrders — Task M.1 audit on per-path failure', () => {
+    // Verifies path-level audit emission. Lightweight — doesn't exercise the
+    // full binanceSigner flow, just confirms the audit hook fires when one
+    // path throws while the other succeeds.
+
+    let getOpenOrders;
+    const signerMock = { sendSignedRequest: jest.fn() };
+    const auditMock = { record: jest.fn() };
+
+    beforeEach(() => {
+        jest.resetModules();
+        signerMock.sendSignedRequest.mockReset();
+        auditMock.record.mockReset();
+        jest.doMock(path.resolve(__dirname, '../../server/services/binanceSigner'), () => signerMock);
+        jest.doMock(path.resolve(__dirname, '../../server/services/audit'), () => auditMock);
+        // binanceOps transitively loads positionStateMachine → positionEvents
+        // which calls db.prepare() at module load. Stub it so the require chain
+        // doesn't crash; we don't exercise the DB in this test block.
+        const dbStub = { prepare: jest.fn(() => ({ run: jest.fn(), all: jest.fn(() => []), get: jest.fn() })) };
+        jest.doMock(path.resolve(__dirname, '../../server/services/database'), () => ({ db: dbStub, auditLog: jest.fn() }));
+        const binanceOps = require('../../server/services/binanceOps');
+        getOpenOrders = binanceOps.getOpenOrders;
+    });
+
+    test('regular path 404 → audit ORDER_SWEEPER_REGULAR_FAILED with err.message', async () => {
+        signerMock.sendSignedRequest
+            .mockRejectedValueOnce(new Error('404 Not Found'))  // regular
+            .mockResolvedValueOnce([]);                          // algo
+        const out = await getOpenOrders(42, {}, { apiKey: 'k', apiSecret: 's', baseUrl: 'b' });
+        expect(out).toEqual([]);
+        expect(auditMock.record).toHaveBeenCalledWith(
+            'ORDER_SWEEPER_REGULAR_FAILED',
+            expect.objectContaining({ userId: 42, error: expect.stringMatching(/404/) }),
+            expect.any(String)
+        );
+    });
+
+    test('algo path 404 → audit ORDER_SWEEPER_ALGO_UNAVAILABLE with err.message', async () => {
+        signerMock.sendSignedRequest
+            .mockResolvedValueOnce([])  // regular OK
+            .mockRejectedValueOnce(new Error('algoOrders not supported on testnet'));
+        const out = await getOpenOrders(42, {}, { apiKey: 'k', apiSecret: 's', baseUrl: 'b' });
+        expect(out).toEqual([]);
+        expect(auditMock.record).toHaveBeenCalledWith(
+            'ORDER_SWEEPER_ALGO_UNAVAILABLE',
+            expect.objectContaining({ userId: 42, error: expect.stringMatching(/algoOrders/) }),
+            expect.any(String)
+        );
+    });
+
+    test('both paths succeed → no audit fires', async () => {
+        signerMock.sendSignedRequest
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([]);
+        await getOpenOrders(42, {}, { apiKey: 'k', apiSecret: 's', baseUrl: 'b' });
+        expect(auditMock.record).not.toHaveBeenCalled();
+    });
 });
