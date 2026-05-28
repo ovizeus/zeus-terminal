@@ -192,6 +192,37 @@ function _newDecisionId() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// [Task G 2026-05-28] Graceful shutdown drain counter
+// ══════════════════════════════════════════════════════════════════
+// Tracks in-flight _executeLiveEntry calls so _gracefulShutdown can wait
+// for them to settle before closing DB / exchange. Without this, PM2 restart
+// mid-entry creates orphan orders (exchange holds it; DB doesn't know).
+// Counter incremented/decremented inside _executeLiveEntry try/finally.
+// drainPending(maxWaitMs) polls every 50ms until counter==0 or timeout.
+let _pendingEntries = 0;
+
+function _incPending() { _pendingEntries++; }
+function _decPending() { _pendingEntries = Math.max(0, _pendingEntries - 1); }
+
+/**
+ * Wait for in-flight _executeLiveEntry calls to settle, up to maxWaitMs.
+ * @param {number} [maxWaitMs=5000]
+ * @returns {Promise<{settled: boolean, timedOut: boolean, pending: number}>}
+ */
+async function drainPending(maxWaitMs) {
+    const maxWait = Number(maxWaitMs) > 0 ? Number(maxWaitMs) : 5000;
+    const t0 = Date.now();
+    while (_pendingEntries > 0 && (Date.now() - t0) < maxWait) {
+        await new Promise(r => setTimeout(r, 50));
+    }
+    return {
+        settled: _pendingEntries === 0,
+        timedOut: _pendingEntries > 0,
+        pending: _pendingEntries,
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
 // [Phase 2 S2.B] Global PANIC Halt — cross-user entry kill switch
 // ══════════════════════════════════════════════════════════════════
 // Persisted in at_state under key 'global:halt' (TEXT PRIMARY KEY ⇒
@@ -1242,6 +1273,10 @@ async function _executeLiveEntry(entry, stc) {
         err.code = 'LIVE_ENTRY_REQUIRES_FULL_SERVER_AT';
         throw err;
     }
+    // [Task G 2026-05-28] Track this call for graceful shutdown drain.
+    // Increment AFTER the gate check so refused entries don't count.
+    _incPending();
+    try {
     entry._livePending = true; // [TL-04] Lock position from onPriceUpdate exits
     // [P5A SERVER LIVE OWNERSHIP] _livePending true transition — this is what getLivePositions() relies on
     // to keep the position visible BEFORE entry.live.status is set at line ~1146.
@@ -1626,6 +1661,11 @@ async function _executeLiveEntry(entry, stc) {
         } else {
             _persistPosition(entry);
         }
+    }
+    } finally {
+        // [Task G 2026-05-28] Decrement drain counter regardless of exit path
+        // (success, throw, early return). Pairs with _incPending after the gate.
+        _decPending();
     }
 }
 
@@ -5068,4 +5108,8 @@ module.exports = {
         decisionDedupKey: _decisionDedupKey,
         checkAndStoreDecisionId: _checkAndStoreDecisionId,
     }),
+    // [Task G 2026-05-28] Graceful shutdown drain
+    drainPending,
+    _testIncPending: _incPending,
+    _testDecPending: _decPending,
 };

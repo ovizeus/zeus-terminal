@@ -1907,9 +1907,32 @@ app.locals.wsBroadcastAll = function (payload) {
 global.__zeusWsBroadcastAll = app.locals.wsBroadcastAll;
 
 // ─── Graceful Shutdown ───
-function _gracefulShutdown(signal) {
+async function _gracefulShutdown(signal) {
   logger.warn('SERVER', 'Shutdown signal received: ' + signal);
   console.log('\n🛑 Shutting down gracefully (' + signal + ')...');
+
+  // [Task G 2026-05-28] Stop brain first — prevents new _executeLiveEntry calls
+  // from being dispatched while we drain. Idempotent if already stopped.
+  try {
+    const serverBrain = require('./server/services/serverBrain');
+    if (typeof serverBrain.stop === 'function') serverBrain.stop();
+    logger.info('SERVER', 'serverBrain stopped (no new cycles)');
+  } catch (err) {
+    logger.warn('SERVER', 'serverBrain.stop failed: ' + err.message);
+  }
+
+  // [Task G 2026-05-28] Drain in-flight _executeLiveEntry calls up to 5s.
+  // Without this, PM2 reload mid-entry can create orphan orders on the exchange.
+  try {
+    const serverAT = require('./server/services/serverAT');
+    if (typeof serverAT.drainPending === 'function') {
+      const drainResult = await serverAT.drainPending(5000);
+      logger.info('SERVER', 'serverAT drain: settled=' + drainResult.settled
+        + ' timedOut=' + drainResult.timedOut + ' pending=' + drainResult.pending);
+    }
+  } catch (err) {
+    logger.warn('SERVER', 'serverAT.drainPending failed: ' + err.message);
+  }
 
   // [Wave 8 G] Omega farewell — best-effort, before sockets close
   try {
@@ -1944,8 +1967,8 @@ function _gracefulShutdown(signal) {
   });
 }
 
-process.on('SIGTERM', () => _gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => _gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => { _gracefulShutdown('SIGTERM').catch(err => { console.error('[FATAL] shutdown error:', err.message); process.exit(1); }); });
+process.on('SIGINT', () => { _gracefulShutdown('SIGINT').catch(err => { console.error('[FATAL] shutdown error:', err.message); process.exit(1); }); });
 
 // ─── Crash Safety Net ───
 process.on('uncaughtException', (err) => {
