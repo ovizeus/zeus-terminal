@@ -156,7 +156,9 @@ router.get('/audit/me', (req, res) => {
 // ─── GET /api/balance ───
 // [FIX 2026-05-27] Cache last known-good balance per user so UI never shows $0
 // during temporary Binance unavailability (ban, rate limit, network).
+// [BUG-3 FIX 2026-05-28] TTL 30min — stale entries evicted on read/write.
 const _balanceCache = new Map();
+const BALANCE_CACHE_TTL_MS = 30 * 60 * 1000;
 router.get('/balance', async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
@@ -176,9 +178,10 @@ router.get('/balance', async (req, res) => {
     console.error('[API] balance error:', err.message);
     logger.error('API', 'balance error', { error: err.message });
     const cached = uid && _balanceCache.get(uid);
-    if (cached) {
+    if (cached && (Date.now() - cached.cachedAt) <= BALANCE_CACHE_TTL_MS) {
       res.json({ ...cached, _cached: true, _reason: err.message });
     } else {
+      if (cached) _balanceCache.delete(uid);
       res.status(err.status || 500).json({ error: _safeError(err) });
     }
   }
