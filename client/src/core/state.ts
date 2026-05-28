@@ -18,6 +18,7 @@ import { onPositionOpened } from '../trading/positions'
 import { renderLivePositions , renderDemoPositions } from '../data/marketDataPositions'
 import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
+import { readCached as _readServerATCache, writeCached as _writeServerATCache } from './serverATCache'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
 import { useBrainStore } from '../stores/brainStore'
 import { acquirePositionWrite, releasePositionWrite, getDropCount, getLockHeld } from '../utils/positionMutex'
@@ -835,7 +836,13 @@ export const ZState = (() => {
   }
 
   // ── Server AT state consumer ──
-  w._serverATEnabled = false
+  // [Task S8-P0-3 2026-05-28] Pre-arm from localStorage cache to close the
+  // race window between boot and the first /api/at/state response. If the
+  // last session ran with server-AT active, lock the client AT engine
+  // immediately at boot so a manual trade or scheduled brain cycle in the
+  // ~50-500ms before preboot completes can't bypass the lockout.
+  // Preboot still overrides if server state has changed.
+  w._serverATEnabled = _readServerATCache()
   // [Phase 2 S6-B4] Demo-authority window mirrors. Default false at boot;
   // overwritten on first at_update / pullState response if present.
   // S6-B5 will wire the client AT engine gate against these flags.
@@ -1146,6 +1153,8 @@ export const ZState = (() => {
       if (_prev !== _next) {
         // [FIX #3] Log MF.SERVER_AT flip so client lockout transitions are visible.
         try { console.warn('[AT/SERVER-FLIP] _serverATEnabled ' + _prev + ' → ' + _next + ' — client AT engine ' + (_next ? 'LOCKED (server owns)' : 'UNLOCKED (client owns)')) } catch (_) {}
+        // [Task S8-P0-3 2026-05-28] Persist for next boot's pre-arm race fix.
+        try { _writeServerATCache(_next) } catch (_) {}
       }
       w._serverATEnabled = _next
     }
