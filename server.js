@@ -1428,6 +1428,15 @@ const server = app.listen(PORT, '0.0.0.0', () => {
         } catch (e) {
           logger.warn('SERVER', 'brainWatchdog start failed: ' + e.message);
         }
+
+        // [Task N 2026-05-28] Periodic drift checker — every 15min compare
+        // serverAT positions vs exchange positions; halt on 2 consecutive
+        // drift detections (transient WS drops don't escalate).
+        try {
+          require('./server/services/driftChecker').start();
+        } catch (e) {
+          logger.warn('SERVER', 'driftChecker start failed: ' + e.message);
+        }
       }, 15000);  // 15s delay for initial candle load
     }
   } else {
@@ -1931,6 +1940,9 @@ async function _gracefulShutdown(signal) {
   // [Task H 2026-05-28] Stop brain watchdog so it doesn't false-positive
   // during the drain (brain stopped → heartbeats stop → watchdog would alert).
   try { require('./server/services/brainWatchdog').stop(); } catch (_) {}
+
+  // [Task N 2026-05-28] Stop drift checker (no point checking during shutdown)
+  try { require('./server/services/driftChecker').stop(); } catch (_) {}
 
   // [Task G 2026-05-28] Drain in-flight _executeLiveEntry calls up to 5s.
   // Without this, PM2 reload mid-entry can create orphan orders on the exchange.
