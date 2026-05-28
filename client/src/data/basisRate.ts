@@ -13,5 +13,9 @@ export async function fetchBasisRate(): Promise<void> {
     w.S.basisRate = w.S.indexPrice > 0 ? ((w.S.markPrice - w.S.indexPrice) / w.S.indexPrice * 100) : 0
     const _fr = d.rate
     if (Number.isFinite(_fr)) w.S.fr = _fr
+    // [QM-FIX] Fallback price from funding markPrice when WS price is dead
+    if (d.markPrice > 0 && (!w.S.price || w.S.price <= 0)) {
+      w.S.price = d.markPrice
+    }
   } catch (_) { /* silent */ }
 }

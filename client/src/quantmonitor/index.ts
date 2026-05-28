@@ -64,6 +64,11 @@ function runAllEngines(): void {
 
 function _syncQmVars(): void {
   const S = w.S; if (!S) return
+  // Price fallback chain: WS markPrice → basisRate REST markPrice → last kline close
+  if (!S.price || S.price <= 0) {
+    if (S.markPrice && S.markPrice > 0) S.price = S.markPrice
+    else if (S.klines?.length) S.price = S.klines[S.klines.length - 1].close || 0
+  }
   S._qmBasisRate = S.basisRate || 0
   S._qmFrBybit = S.frBybit || 0
   S._qmFrOkx = S.frOkx || 0
@@ -80,6 +85,8 @@ function _syncQmVars(): void {
   S._qmBid = S.bids?.[0]?.p || 0
   S._qmAsk = S.asks?.[0]?.p || 0
   S._qmSpread = S._qmAsk > 0 && S._qmBid > 0 ? S._qmAsk - S._qmBid : 0
+  // FR from server funding cache (basisRate.ts populates S.fr)
+  if (S.fr && S.fr !== 0) S._qmFr = S.fr
 }
 
 function startRenderLoop(screenId: string): void {
@@ -124,6 +131,18 @@ export async function init(screenId: string, canvasId: string): Promise<void> {
   }
   window.addEventListener('zeus:liq', _liqHandler as EventListener)
   window.addEventListener('zeus:okxLiq', _okxLiqHandler as EventListener)
+
+  // [QM-FIX] Ensure price is available from REST before rendering
+  try {
+    const pr = await fetch('/api/market/klines?symbol=BTCUSDT&interval=5m&limit=1')
+    if (pr.ok) {
+      const kd = await pr.json()
+      if (Array.isArray(kd) && kd.length && w.S) {
+        const close = +kd[0][4]
+        if (close > 0 && (!w.S.price || w.S.price <= 0)) w.S.price = close
+      }
+    }
+  } catch (_) {}
 
   // Fetch new data sources
   await Promise.all([
