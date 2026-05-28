@@ -1606,7 +1606,11 @@ try {
 } catch (_) {}
 
 // ─── WebSocket Sync (real-time cross-device push) ───
-const wss = new WebSocket.Server({ noServer: true, maxPayload: 64 * 1024 });
+const wss = new WebSocket.Server({
+  noServer: true,
+  maxPayload: 64 * 1024,
+  perMessageDeflate: { zlibDeflateOptions: { level: 1 }, threshold: 256 },
+});
 const _wsClients = new Map(); // userId -> Set<ws>
 
 // Handle upgrade manually — prevents "Invalid Upgrade header" crash from Cloudflare/proxies

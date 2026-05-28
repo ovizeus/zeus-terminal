@@ -640,6 +640,51 @@ describe('wsMarketProxy stale detection', () => {
     });
 });
 
+describe('wsMarketProxy sequence numbers', () => {
+    test('kline broadcast includes seq counter', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@kline_5m',
+            data: { k: { i: '5m', t: 1779900000000, o: '75000', h: '75100', l: '74900', c: '75050', v: '100', x: false } }
+        });
+
+        const msg = JSON.parse(ws.send.mock.calls[0][0]);
+        expect(msg.seq).toBe(1);
+    });
+
+    test('seq increments per symbol per type', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@kline_5m',
+            data: { k: { i: '5m', t: 1, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }
+        });
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@kline_5m',
+            data: { k: { i: '5m', t: 2, o: '2', h: '2', l: '2', c: '2', v: '2', x: false } }
+        });
+
+        const msg2 = JSON.parse(ws.send.mock.calls[1][0]);
+        expect(msg2.seq).toBe(2);
+    });
+
+    test('price broadcast does NOT include seq', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@markPrice@1s',
+            data: { p: '75000', r: '0.0001', T: 1779900000000 }
+        });
+
+        const msg = JSON.parse(ws.send.mock.calls[0][0]);
+        expect(msg.seq).toBeUndefined();
+    });
+});
+
 describe('wsMarketProxy graceful shutdown', () => {
     test('initiateShutdown broadcasts server.shutdown to all clients', () => {
         const ws1 = { readyState: 1, send: jest.fn() };

@@ -69,6 +69,7 @@ const RECONNECT_MAX_MS = 60000;
 
 const _connections = new Map();  // symbol → { ws, state, reconnects, pingTimer, timeframes }
 const _lastValues = new Map();   // 'symbol:streamType' → lastEvent
+const _seqCounters = new Map();  // 'symbol:streamType' → monotonic seq number
 
 function _buildStreamUrl(symbol, timeframes) {
     const sym = symbol.toLowerCase();
@@ -162,8 +163,18 @@ function getConnectionState(symbol) {
 
 // ═══ Broadcast engine + last value cache ═══
 
+function _nextSeq(symbol, type) {
+    const key = `${symbol}:${type}`;
+    const n = (_seqCounters.get(key) || 0) + 1;
+    _seqCounters.set(key, n);
+    return n;
+}
+
 function _broadcast(symbol, payload) {
     const sym = symbol.toUpperCase();
+    if (payload.type === 'market.kline' || payload.type === 'market.aggTrade') {
+        payload.seq = _nextSeq(sym, payload.type);
+    }
     const json = JSON.stringify(payload);
     _lastValues.set(`${sym}:${payload.type}`, payload);
     const subs = _subs.get(sym);
@@ -667,6 +678,7 @@ function _resetForTest() {
     }
     _connections.clear();
     _lastValues.clear();
+    _seqCounters.clear();
     _cbFailures.clear();
     _healthState.clear();
     _rateCounters.clear();
