@@ -244,6 +244,27 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
   // req.body.sl truthy — null → SL placement SKIPPED → position opens on
   // Binance with no exchange SL = BUG-T2c regression.
   //
+  // [WS-PROXY B.8] Stale data trade blocker — refuse order if price data is stale.
+  // Only when WS_PROXY_ENABLED (proxy is the price source). Non-demo only.
+  try {
+    const MF = require('../migrationFlags');
+    if (MF.WS_PROXY_ENABLED) {
+      const wsProxy = require('../services/wsMarketProxy');
+      const symbol = req.body.symbol;
+      if (wsProxy.isSymbolStale(symbol)) {
+        const staleness = wsProxy.getStalenessMs(symbol);
+        try { audit.record('STALE_TRADE_BLOCKED', { userId: req.user.id, symbol, staleness_ms: staleness, threshold_ms: 10000 }, 'TRADE_BLOCKER', req.ip); } catch (_) {}
+        return res.status(423).json({
+          error: 'STALE_DATA',
+          symbol,
+          staleness_ms: Math.round(staleness),
+          threshold_ms: 10000,
+          message: `Trading paused — ${symbol} market data is ${Math.round(staleness / 1000)}s stale (max 10s)`,
+        });
+      }
+    }
+  } catch (_) { /* defensive — never block trading on wsProxy load failure */ }
+
   // M1.9 audit (2026-05-20) confirmed 0/48 live trades had slOrderId for
   // exactly this reason. Block here at the entry edge.
   let _actualEngineMode;

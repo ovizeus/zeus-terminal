@@ -380,6 +380,40 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Stale data detection (trade blocker B.8) ═══
+
+const STALE_THRESHOLD_MS = 10_000;
+
+const _staleBroadcasted = new Set();
+
+function _checkAndBroadcastStale() {
+    for (const [sym] of _subs) {
+        const stale = isSymbolStale(sym);
+        const wasStale = _staleBroadcasted.has(sym);
+        if (stale && !wasStale) {
+            _staleBroadcasted.add(sym);
+            _broadcastAll({ type: 'market.stale', symbol: sym, staleness_ms: getStalenessMs(sym), ts: Date.now() });
+        } else if (!stale && wasStale) {
+            _staleBroadcasted.delete(sym);
+            _broadcastAll({ type: 'market.fresh', symbol: sym, ts: Date.now() });
+        }
+    }
+}
+
+function isSymbolStale(symbol) {
+    const sym = symbol.toUpperCase();
+    const h = _healthState.get(sym);
+    if (!h) return true;
+    return (Date.now() - h.lastEventTs) > STALE_THRESHOLD_MS;
+}
+
+function getStalenessMs(symbol) {
+    const sym = symbol.toUpperCase();
+    const h = _healthState.get(sym);
+    if (!h) return Infinity;
+    return Date.now() - h.lastEventTs;
+}
+
 // ═══ Fallback REST polling ═══
 
 const FALLBACK_POLL_MS = 5000;
@@ -507,6 +541,7 @@ function _handleBinanceMessage(symbol, msg) {
     if (stream.includes('markPrice')) {
         const price = +d.p;
         _recordEvent(symbol, 'price', price);
+        _checkAndBroadcastStale();
         _broadcast(symbol, {
             type: 'market.price', symbol,
             price, fr: +d.r, frCd: +d.T, ts: Date.now(),
@@ -562,6 +597,7 @@ function _resetForTest() {
     _cbFailures.clear();
     _healthState.clear();
     _rateCounters.clear();
+    _staleBroadcasted.clear();
     for (const timer of _fallbackTimers.values()) clearInterval(timer);
     _fallbackTimers.clear();
     stopWatchlist();
@@ -591,6 +627,8 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    isSymbolStale,
+    getStalenessMs,
     _checkFallbackNeeded,
     _startFallbackPolling,
     _stopFallbackPolling,

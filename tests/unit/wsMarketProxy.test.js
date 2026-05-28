@@ -605,6 +605,41 @@ describe('wsMarketProxy fallback REST', () => {
     });
 });
 
+describe('wsMarketProxy stale detection', () => {
+    test('isSymbolStale returns false when fresh event exists', () => {
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        expect(proxy.isSymbolStale('BTCUSDT')).toBe(false);
+    });
+
+    test('isSymbolStale returns true when no events ever', () => {
+        expect(proxy.isSymbolStale('NEVERUSDT')).toBe(true);
+    });
+
+    test('isSymbolStale returns true when last event >10s old', () => {
+        const now = Date.now();
+        proxy._recordEventAt('BTCUSDT', 'price', 75000, now - 15000, now - 15000);
+        expect(proxy.isSymbolStale('BTCUSDT')).toBe(true);
+    });
+
+    test('isSymbolStale returns false when event <10s old', () => {
+        const now = Date.now();
+        proxy._recordEventAt('BTCUSDT', 'price', 75000, now - 5000, now - 5000);
+        expect(proxy.isSymbolStale('BTCUSDT')).toBe(false);
+    });
+
+    test('getStalenessMs returns ms since last event', () => {
+        const now = Date.now();
+        proxy._recordEventAt('BTCUSDT', 'price', 75000, now - 8000, now - 8000);
+        const ms = proxy.getStalenessMs('BTCUSDT');
+        expect(ms).toBeGreaterThanOrEqual(7000);
+        expect(ms).toBeLessThan(12000);
+    });
+
+    test('getStalenessMs returns Infinity when no events', () => {
+        expect(proxy.getStalenessMs('XYZUSDT')).toBe(Infinity);
+    });
+});
+
 describe('wsMarketProxy auth + rate limits continued', () => {
     test('unsubscribeAll cleanup restores quota', () => {
         const ws = { readyState: 1, send: jest.fn(), _uid: 1 };

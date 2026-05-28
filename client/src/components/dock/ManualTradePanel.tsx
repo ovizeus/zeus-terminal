@@ -53,6 +53,20 @@ export function ManualTradePanel() {
   }, [])
   const [tp, setTp] = useState('')
   const [sl, setSl] = useState('')
+  const [isStale, setIsStale] = useState(false)
+
+  useEffect(() => {
+    if (!(w.__MF && w.__MF.WS_PROXY_ENABLED)) return
+    function onFrame(e: Event) {
+      const msg = (e as CustomEvent).detail
+      if (!msg) return
+      if (msg.type === 'market.stale') setIsStale(true)
+      else if (msg.type === 'market.fresh' || msg.type === 'market.price') setIsStale(false)
+    }
+    window.addEventListener('zeus:wsFrame', onFrame)
+    return () => window.removeEventListener('zeus:wsFrame', onFrame)
+  }, [])
+
   const demoBalance = usePositionsStore((s) => s.demoBalance)
   const liveBalanceTotal = usePositionsStore((s) => s.liveBalance.totalBalance)
   const manualPnl = usePositionsStore((s) => s.manualPnl)
@@ -314,8 +328,11 @@ export function ManualTradePanel() {
           <button className="tp-pct" onClick={() => setPct(100)}>100%</button>
         </div>
 
+        {/* STALE DATA BANNER */}
+        {isStale && <div style={{ background: '#3a0000', border: '1px solid #ff3355', borderRadius: '4px', padding: '6px 10px', marginBottom: '6px', fontSize: '9px', color: '#ff5577', letterSpacing: '1px', textAlign: 'center', fontFamily: 'var(--ff)' }}>⚠️ STALE DATA — trading paused</div>}
+
         {/* PLACE ORDER */}
-        <button id="demoExec" className={`tp-exec ${isLiveMode && envLabel === 'LOCKED' ? 'tp-exec-locked' : 'demo-exec'}`} disabled={isPlacingLive} onClick={() => {
+        <button id="demoExec" className={`tp-exec ${isLiveMode && envLabel === 'LOCKED' ? 'tp-exec-locked' : 'demo-exec'}`} disabled={isPlacingLive || isStale} onClick={() => {
           // [UI-CMP-6] Sync useRef guard FIRST (immune to React state batch
           // delay) — then keep the existing isPlacingLive belt-and-braces.
           if (placeBusyRef.current) return
