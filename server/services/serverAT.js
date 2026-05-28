@@ -147,6 +147,14 @@ function _defaultUserState() {
         dailyPnL: 0,
         dailyPnLDemo: 0,
         dailyPnLLive: 0,
+        // [Task S8-P1-4 2026-05-28] Streak counters — broadcast to client so
+        // brain PREDATOR/DEFENSE gates stay correct when the SERVER executes
+        // trades (client _bmPostClose no longer fires under server authority).
+        // lossStreak/winStreak persist across days (reset only on opposite
+        // outcome); dailyTrades resets at UTC day rollover.
+        lossStreak: 0,
+        winStreak: 0,
+        dailyTrades: 0,
         lastResetDay: -1,
         atActive: false, // [BUG-O5] LEGACY field — kept synced cu current engineMode via toggleActive (BUG-T7 2026-05-13)
         atActiveDemo: false, // [BUG-T7 2026-05-13] Per-mode AT toggle — DEMO independent
@@ -468,6 +476,10 @@ function _persistState(userId) {
             dailyPnL: us.dailyPnL,
             dailyPnLDemo: us.dailyPnLDemo,
             dailyPnLLive: us.dailyPnLLive,
+            // [Task S8-P1-4 2026-05-28] Persist streak counters
+            lossStreak: us.lossStreak || 0,
+            winStreak: us.winStreak || 0,
+            dailyTrades: us.dailyTrades || 0,
             killActive: us.killActive,
             killPct: us.killPct,
             killActiveAt: us.killActiveAt || 0,
@@ -515,6 +527,10 @@ function _applyStateBlob(userId, saved) {
     us.dailyPnL = saved.dailyPnL || 0;
     us.dailyPnLDemo = saved.dailyPnLDemo || 0;
     us.dailyPnLLive = saved.dailyPnLLive || 0;
+    // [Task S8-P1-4 2026-05-28] Restore streak counters across PM2 reload.
+    us.lossStreak = saved.lossStreak || 0;
+    us.winStreak = saved.winStreak || 0;
+    us.dailyTrades = saved.dailyTrades || 0;
     us.killActive = !!saved.killActive;
     us.killPct = (typeof saved.killPct === 'number' && saved.killPct > 0) ? saved.killPct : 5;
     us.killActiveAt = saved.killActiveAt || 0;
@@ -2283,6 +2299,8 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     us.dailyPnL = +(us.dailyPnL + pnl).toFixed(2);
     if (pos.mode === 'live') { us.dailyPnLLive = +(us.dailyPnLLive + pnl).toFixed(2); }
     else { us.dailyPnLDemo = +(us.dailyPnLDemo + pnl).toFixed(2); }
+    // [Task S8-P1-4 2026-05-28] Update streak counters for brain-gate parity.
+    _updateStreakCounters(us, pnl);
     _checkKillSwitch(userId);
 
     // [RE-ENTRY + S5] Set close cooldown DEADLINE (now + CLOSE_COOLDOWN_MS) and
@@ -2435,11 +2453,26 @@ function _checkDailyReset(userId) {
         us.dailyPnLLive = 0;
         us.pnlAtReset = 0;
         us.killActive = false;
+        // [Task S8-P1-4 2026-05-28] dailyTrades is a per-day counter — reset at
+        // UTC rollover. lossStreak/winStreak are NOT daily (they're streaks that
+        // only break on the opposite outcome), so they survive the rollover.
+        us.dailyTrades = 0;
         us.lastResetDay = utcDay;
         _persistState(userId);
         // [M2] Push state change to clients via WS so UI unlocks immediately after midnight
         if (wasKillActive) _notifyChange(userId);
     }
+}
+
+// [Task S8-P1-4 2026-05-28] Pure streak-counter update. Called on every close.
+// win (pnl>0) → winStreak++, lossStreak=0. loss (pnl<0) → lossStreak++,
+// winStreak=0. flat/non-numeric → no streak change. dailyTrades always ++.
+function _updateStreakCounters(us, pnl) {
+    us.dailyTrades = (us.dailyTrades || 0) + 1;
+    const p = Number(pnl);
+    if (!Number.isFinite(p)) return;
+    if (p > 0) { us.winStreak = (us.winStreak || 0) + 1; us.lossStreak = 0; }
+    else if (p < 0) { us.lossStreak = (us.lossStreak || 0) + 1; us.winStreak = 0; }
 }
 
 function _checkKillSwitch(userId) {
@@ -3049,6 +3082,12 @@ function getFullState(userId) {
         dailyPnLDemo: us.dailyPnLDemo || 0,
         dailyPnLLive: us.dailyPnLLive || 0,
         pnlAtReset: us.pnlAtReset || 0,
+        // [Task S8-P1-4 2026-05-28] Streak counters for client brain-gate parity.
+        // Client mirrors these into w.BM.lossStreak when server owns AT so
+        // PREDATOR/DEFENSE gates compute correctly without local _bmPostClose.
+        lossStreak: us.lossStreak || 0,
+        winStreak: us.winStreak || 0,
+        dailyTrades: us.dailyTrades || 0,
         srvPosFlags: {
             master: !!(MF && MF.SERVER_AUTHORITATIVE_POSITIONS),
             testnet: !!(MF && MF._SRV_POS_TESTNET_ENABLED),
@@ -5170,6 +5209,10 @@ module.exports = {
         broadcastPositions: _broadcastPositions,
         normalizePositionRow: _normalizePositionRow,
         positions: _positions,
+    }),
+    // [Task S8-P1-4 2026-05-28] Pure streak-counter logic for unit testing.
+    _s8p1TestHooks: Object.freeze({
+        updateStreakCounters: _updateStreakCounters,
     }),
     // [Phase 2 S6-B2] Test-only hooks for the paranoid live execution gate
     // probe. Two pure flag readers + the actual _executeLiveEntry function

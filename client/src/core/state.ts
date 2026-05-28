@@ -1353,6 +1353,21 @@ export const ZState = (() => {
       AT.killActiveAt = state.killActiveAt || 0
       // Server is source of truth for dailyPnL — sync to window.AT to avoid stale localStorage drift
       if (typeof state.dailyPnL === 'number') AT.dailyPnL = state.dailyPnL
+      // [Task S8-P1-4 2026-05-28] When the server owns AT, the client's
+      // _bmPostClose never fires, so w.BM.lossStreak/dailyTrades would stay 0
+      // and brain PREDATOR/DEFENSE gates would mis-compute. Mirror the
+      // server-broadcast counters into BM so the gates stay correct. Only
+      // when server-authoritative — in client-AT mode BM owns these locally.
+      if (w._serverATEnabled) {
+        try {
+          const _bm = getBrainMetrics()
+          if (_bm) {
+            if (typeof state.lossStreak === 'number') _bm.lossStreak = state.lossStreak
+            if (typeof state.winStreak === 'number') _bm.winStreak = state.winStreak
+            if (typeof state.dailyTrades === 'number') _bm.dailyTrades = state.dailyTrades
+          }
+        } catch (_) { /* BM not ready — non-fatal */ }
+      }
       if (!state.killActive && state.killActiveAt === 0) {
         // Kill cleared on server — wipe local realized counter so journal recompute can't retrigger
         AT.realizedDailyPnL = 0
