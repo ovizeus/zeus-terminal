@@ -14,6 +14,7 @@ import { calcConfluenceScore } from './confluence'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
 import { _syncDslAssistUI } from '../trading/dsl'
+import { serverOwnsAT } from './lockoutGate'
 import { RegimeEngine } from './regime'
 import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
@@ -2762,6 +2763,13 @@ export function updateOrderFlow(): any {
 // ─── Adaptive Auto-Trade Params ──────────────────────────────
 export function adaptAutoTradeParams(): void {
   if (!getATEnabled()) return
+  // [Task S8-P0-1 2026-05-28] Server-AT authoritative: skip client param
+  // adaptation when the server owns trading. Server has its own adaptive
+  // sizing (serverAdaptiveSizing.js); running client adapt in parallel
+  // would mutate TC settings that diverge from server, causing UI/state
+  // confusion. Brain observation (updateBrainState) still runs above —
+  // only the WRITE path is gated.
+  if (serverOwnsAT()) return
   // FIX debounce — only adapt max once every 5 minutes
   const now = Date.now()
   if (BR._lastAdaptTs && now - BR._lastAdaptTs < 300000) return
