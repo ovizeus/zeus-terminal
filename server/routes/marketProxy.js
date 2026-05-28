@@ -111,4 +111,25 @@ router.get('/spot/klines', async (req, res) => {
     }
 });
 
+router.get('/funding', (req, res) => {
+    try {
+        const mc = require('../services/marketCache');
+        const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+        const exch = req.query.exchange || 'binance';
+        res.json({ ok: true, data: mc.get('funding', exch + ':' + sym) || null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/oi', (req, res) => {
+    try {
+        const mc = require('../services/marketCache');
+        const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+        res.json({ ok: true, data: mc.get('oi', sym) || null });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
