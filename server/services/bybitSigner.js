@@ -226,7 +226,32 @@ async function sendSignedRequest(method, path, params = {}, creds = {}, options 
         fetchOpts.body = body;
     }
 
-    const res = await fetch(url, fetchOpts);
+    // [Task J 2026-05-28] Exchange-level CB gate for bybit.
+    try {
+        const _ecb = require('./exchangeCircuitBreaker');
+        if (!_ecb.canDispatch('bybit')) {
+            const status = _ecb.getStatus('bybit');
+            const remainingS = Math.max(0, Math.ceil((status.openUntil - Date.now()) / 1000));
+            const err = new Error(`Bybit exchange CB open — paused ~${remainingS}s`);
+            err.code = 'EXCHANGE_CB_OPEN';
+            err.status = 503;
+            throw err;
+        }
+    } catch (e) {
+        if (e && e.code === 'EXCHANGE_CB_OPEN') throw e;
+        // module load failure → fail-open
+    }
+
+    let res;
+    try {
+        res = await fetch(url, fetchOpts);
+    } catch (fetchErr) {
+        // [Task J 2026-05-28] Network failure counts as 5xx for exchange CB.
+        try { require('./exchangeCircuitBreaker').recordResponse('bybit', 503); } catch (_) {}
+        throw fetchErr;
+    }
+    // [Task J 2026-05-28] Feed HTTP status into exchange-level CB.
+    try { require('./exchangeCircuitBreaker').recordResponse('bybit', res.status); } catch (_) {}
     const json = await res.json();
     return json;  // { retCode, retMsg, result, time }
 }

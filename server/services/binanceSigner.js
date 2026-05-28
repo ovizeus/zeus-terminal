@@ -178,6 +178,24 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
     throw err;
   }
 
+  // [Task J 2026-05-28] Exchange-level CB — global per-exchange gate above
+  // the per-user CB. Trips at 5 consecutive 5xx within 30s to protect against
+  // exchange-wide outages where all users would otherwise hammer Binance.
+  try {
+    const _ecb = require('./exchangeCircuitBreaker');
+    if (!_ecb.canDispatch('binance')) {
+      const status = _ecb.getStatus('binance');
+      const remainingS = Math.max(0, Math.ceil((status.openUntil - Date.now()) / 1000));
+      const err = new Error(`Binance exchange CB open — paused ~${remainingS}s`);
+      err.status = 503;
+      err.code = 'EXCHANGE_CB_OPEN';
+      throw err;
+    }
+  } catch (e) {
+    if (e && e.code === 'EXCHANGE_CB_OPEN') throw e;
+    // module load failure → fail-open (don't block legitimate traffic)
+  }
+
   if (!creds.baseUrl) {
     const err = new Error('[SIGNER] Missing baseUrl in credentials — refusing to default to production. Check credentialStore.');
     err.status = 500;
@@ -237,11 +255,15 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
         continue;
       }
       _cbRecordFailure(_cbKey);
+      // [Task J 2026-05-28] Network unreachable counts as 5xx for exchange CB.
+      try { require('./exchangeCircuitBreaker').recordResponse('binance', 503); } catch (_) {}
       const err = new Error('Binance API unreachable: ' + fetchErr.message);
       err.status = 503;
       throw err;
     }
     metrics.recordLatency(Date.now() - _t0);
+    // [Task J 2026-05-28] Feed HTTP status into exchange-level CB.
+    try { require('./exchangeCircuitBreaker').recordResponse('binance', res.status); } catch (_) {}
 
     // 5xx server error — retry with backoff
     if (res.status >= 500 && attempt < MAX_RETRIES) {
