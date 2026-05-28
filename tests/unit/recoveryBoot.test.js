@@ -102,6 +102,12 @@ jest.mock('../../server/services/serverAT', () => ({
     setGlobalHalt: (...a) => mockSetGlobalHalt(...a),
 }));
 
+// [Task E 2026-05-28] Telegram mock for exchange-only auto-SL alerts
+const mockTelegramSendToUser = jest.fn(async () => ({ ok: true }));
+jest.mock('../../server/services/telegram', () => ({
+    sendToUser: (...a) => mockTelegramSendToUser(...a),
+}));
+
 const recoveryBoot = require('../../server/services/recoveryBoot');
 
 function resetState() {
@@ -128,6 +134,7 @@ beforeEach(() => {
     mockPlaceStopLoss.mockReset().mockResolvedValue({ ok: true, slOrderId: 'sl_recovery' });
     mockSetGlobalHalt.mockReset();
     mockPositionEventsAppend.mockReset();
+    mockTelegramSendToUser.mockReset().mockResolvedValue({ ok: true });
 });
 
 describe('recoveryBoot', () => {
@@ -217,5 +224,144 @@ describe('recoveryBoot', () => {
         mockDb.prepare = () => { throw new Error('DB completely down'); };
         await expect(recoveryBoot.run()).resolves.toBeDefined();
         mockDb.prepare = origPrepare;
+    });
+
+    // ─── Task E 2026-05-28: Exchange-only position auto-SL (markPrice-based) ──
+    describe('exchange-only position → auto-SL placement', () => {
+        it('LONG exchange-only → SL = markPrice * 0.98 (NOT entryPrice * 0.98)', async () => {
+            addExchangeAccount(1, 'binance');
+            // Deliberately set markPrice != entryPrice to verify which is used
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01',
+                entryPrice: '50000',   // would yield 49000 SL — WRONG
+                markPrice: '60000',    // yields 58800 SL — CORRECT
+            }]);
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(1);
+            const slArg = mockPlaceStopLoss.mock.calls[0][1];
+            expect(slArg.symbol).toBe('BTCUSDT');
+            expect(slArg.side).toBe('LONG');
+            // SL = 60000 * 0.98 = 58800 (markPrice-based, NOT 50000 * 0.98 = 49000)
+            expect(Number(slArg.stopPrice)).toBeCloseTo(58800, -1);
+            expect(Number(slArg.stopPrice)).not.toBeCloseTo(49000, -1);
+
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_POSITION')).toBeDefined();
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_PLACED')).toBeDefined();
+            expect(mockTelegramSendToUser).toHaveBeenCalledWith(1, expect.stringMatching(/EXCHANGE-ONLY POSITION/));
+        });
+
+        it('SHORT exchange-only → SL = markPrice * 1.02', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'ETHUSDT', side: 'SHORT', qty: '0.5',
+                entryPrice: '2500',
+                markPrice: '3000',
+            }]);
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(1);
+            const slArg = mockPlaceStopLoss.mock.calls[0][1];
+            // SL = 3000 * 1.02 = 3060 (markPrice-based)
+            expect(Number(slArg.stopPrice)).toBeCloseTo(3060, -1);
+        });
+
+        it('non-trigger error (exchange down) → NO retry, immediate globalHalt + critical alert', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', markPrice: '60000',
+            }]);
+            mockPlaceStopLoss.mockRejectedValue(new Error('exchange down'));
+
+            await recoveryBoot.run();
+
+            // No retry on non-trigger errors
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(1);
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED')).toBeDefined();
+            expect(mockSetGlobalHalt).toHaveBeenCalledWith(true, 1, expect.stringMatching(/RECOVERY_AUTOSL_FAILED/));
+            expect(mockTelegramSendToUser).toHaveBeenCalledWith(1, expect.stringMatching(/CRITICAL|UNPROTECTED/));
+        });
+
+        it('placeStopLoss returns ok:false (non-trigger) → NO retry, globalHalt', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', markPrice: '60000',
+            }]);
+            mockPlaceStopLoss.mockResolvedValue({ ok: false, error: 'signature_mismatch' });
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(1);
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED')).toBeDefined();
+            expect(mockSetGlobalHalt).toHaveBeenCalledWith(true, 1, expect.stringMatching(/RECOVERY_AUTOSL_FAILED/));
+        });
+
+        it('would-trigger error → refetch markPrice → retry succeeds (NO halt)', async () => {
+            addExchangeAccount(1, 'binance');
+            // First getPositions = initial (mark=60000), second = refetch (mark=59500)
+            mockGetPositions
+                .mockResolvedValueOnce([{ symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', markPrice: '60000' }])
+                .mockResolvedValueOnce([{ symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', markPrice: '59500' }]);
+            // First placeStopLoss = would-trigger, second = success
+            mockPlaceStopLoss
+                .mockResolvedValueOnce({ ok: false, error: '"Order would immediately trigger" (-2021)' })
+                .mockResolvedValueOnce({ ok: true, slOrderId: 'sl_retry' });
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(2);
+            // Retry should use refreshed mark=59500 → SL = 59500 * 0.98 = 58310
+            const retryArg = mockPlaceStopLoss.mock.calls[1][1];
+            expect(Number(retryArg.stopPrice)).toBeCloseTo(58310, -1);
+
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_PLACED')).toBeDefined();
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED')).toBeUndefined();
+            expect(mockSetGlobalHalt).not.toHaveBeenCalledWith(true, 1, expect.anything());
+        });
+
+        it('would-trigger error → retry also fails → globalHalt + critical alert', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', markPrice: '60000',
+            }]);
+            // Both attempts return would-trigger
+            mockPlaceStopLoss.mockResolvedValue({ ok: false, error: '-2021 Order would immediately trigger' });
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(2);  // retry attempted
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED')).toBeDefined();
+            expect(mockSetGlobalHalt).toHaveBeenCalledWith(true, 1, expect.stringMatching(/RECOVERY_AUTOSL_FAILED/));
+        });
+
+        it('invalid exchPos data (no markPrice + no entryPrice) → audit invalid, no SL attempt', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01',
+                // markPrice + entryPrice both missing
+            }]);
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).not.toHaveBeenCalled();
+            expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_INVALID_DATA')).toBeDefined();
+        });
+
+        it('uses entryPrice as markPrice fallback if markPrice missing', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01',
+                entryPrice: '60000',
+                // markPrice missing
+            }]);
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(1);
+            const slArg = mockPlaceStopLoss.mock.calls[0][1];
+            expect(Number(slArg.stopPrice)).toBeCloseTo(60000 * 0.98, -1);
+        });
     });
 });

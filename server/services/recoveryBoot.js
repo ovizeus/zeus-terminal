@@ -246,9 +246,13 @@ async function _reconcileUser(uid, exchange) {
         }
     }
 
-    // 3c. Position ONLY on exchange (not in DB) → audit_log warning (manual check needed)
-    // exchangeBySymbol still contains unmatched exchange positions after step 3a deletions
+    // 3c. Position ONLY on exchange (not in DB) — Task E 2026-05-28 enhancement:
+    // Auto-place conservative 2% adverse SL + Telegram alert. On SL failure,
+    // arm globalHalt + critical Telegram (position UNPROTECTED). Preserves the
+    // existing RECOVERY_EXCHANGE_ONLY_POSITION detection audit for forensics.
+    // exchangeBySymbol still contains unmatched exchange positions after step 3a deletions.
     for (const [symbol, exchPos] of exchangeBySymbol.entries()) {
+        // 3c.1 Forensic detection audit (preserved from pre-Task E behavior)
         try {
             db.prepare(
                 `INSERT INTO audit_log (user_id, action, details) VALUES (?, 'RECOVERY_EXCHANGE_ONLY_POSITION', ?)`
@@ -261,8 +265,11 @@ async function _reconcileUser(uid, exchange) {
             }));
         } catch (_) {}
         _logWarn('RECOVERY_BOOT',
-            `user ${uid}: position ${symbol} on ${exchange} but not in DB — manual check needed`
+            `user ${uid}: position ${symbol} on ${exchange} but not in DB — placing conservative auto-SL`
         );
+
+        // 3c.2 Auto-SL placement
+        await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos);
     }
 
     // 4. Lift global halt for this user (setGlobalHalt signature: active, byUserId, reason)
@@ -276,4 +283,139 @@ async function _reconcileUser(uid, exchange) {
     return { orphaned, slPlaced };
 }
 
-module.exports = { run, _reconcileUser };
+/**
+ * _handleExchangeOnlyPosition — Task E 2026-05-28
+ *
+ * Exchange has a position Zeus DB doesn't know about (PM2 crash mid-fill or
+ * external action). Place conservative 2% adverse SL relative to CURRENT
+ * markPrice (not historical entryPrice — orphan positions may be stale).
+ *
+ * On "would immediately trigger" rejection (race: mark moved further adversely
+ * between read+write), refetch markPrice + retry ONCE with fresh value. All
+ * other rejections (exchange down, signature, permission) → globalHalt + CRITICAL
+ * alert immediately (no retry).
+ *
+ * Three audit events:
+ *  - RECOVERY_EXCHANGE_ONLY_INVALID_DATA  — no markPrice + no entryPrice
+ *  - RECOVERY_EXCHANGE_ONLY_AUTOSL_PLACED — success (records retried flag)
+ *  - RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED — UNPROTECTED, halt armed
+ */
+const _SL_PCT = 0.02;
+
+function _computeStop(side, mark) {
+    const raw = side === 'LONG' ? mark * (1 - _SL_PCT) : mark * (1 + _SL_PCT);
+    return String(Math.round(raw * 100) / 100);
+}
+
+function _isWouldTriggerError(err) {
+    if (!err) return false;
+    const s = String(err);
+    // Binance -2021, Bybit 30038 / 110041, plus generic substring fallbacks.
+    return /-?2021\b|\b30038\b|\b110041\b|would.{0,20}(immediately|trigger)|stop.{0,10}passed/i.test(s);
+}
+
+async function _tryPlaceStopLoss(uid, symbol, side, mark) {
+    const stopPrice = _computeStop(side, mark);
+    try {
+        const r = await exchangeOps.placeStopLoss(uid, {
+            symbol, side, stopPrice, decisionKey: decisionKey.generate(),
+        });
+        if (r && r.ok) return { ok: true, stopPrice, slOrderId: r.slOrderId || null };
+        return { ok: false, stopPrice, error: (r && r.error) || 'placeStopLoss returned ok:false' };
+    } catch (err) {
+        return { ok: false, stopPrice, error: err && err.message ? err.message : String(err) };
+    }
+}
+
+async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
+    const side = exchPos.side;
+    const qty = Math.abs(Number(exchPos.qty) || 0);
+    // markPrice = current truth for orphan positions; entryPrice only as fallback.
+    let mark = Number(exchPos.markPrice) || Number(exchPos.entryPrice) || 0;
+
+    if (!mark || !qty) {
+        _logWarn('RECOVERY_BOOT',
+            `uid=${uid} ${symbol}: invalid markPrice/qty — cannot auto-SL, manual review needed`);
+        try {
+            db.prepare(
+                `INSERT INTO audit_log (user_id, action, details) VALUES (?, 'RECOVERY_EXCHANGE_ONLY_INVALID_DATA', ?)`
+            ).run(uid, JSON.stringify({
+                symbol, side, qty: exchPos.qty, markPrice: exchPos.markPrice, entryPrice: exchPos.entryPrice, exchange,
+            }));
+        } catch (_) {}
+        return;
+    }
+
+    // Attempt 1: place SL at current mark ± 2%
+    let result = await _tryPlaceStopLoss(uid, symbol, side, mark);
+    let retried = false;
+
+    // Retry ONCE only on "would immediately trigger" — race where mark moved
+    // further adverse between getPositions and placeStopLoss. Refetch fresh mark.
+    if (!result.ok && _isWouldTriggerError(result.error)) {
+        _logWarn('RECOVERY_BOOT',
+            `uid=${uid} ${symbol}: SL would trigger at mark=${mark} (${result.error}) — refetching for retry`);
+        retried = true;
+        try {
+            const fresh = await exchangeOps.getPositions(uid, { symbol });
+            const refreshed = Array.isArray(fresh)
+                ? fresh.find(p => p && p.symbol === symbol)
+                : null;
+            const freshMark = refreshed ? Number(refreshed.markPrice) : 0;
+            if (freshMark > 0) mark = freshMark;
+        } catch (_) { /* keep stale mark if refetch fails */ }
+        result = await _tryPlaceStopLoss(uid, symbol, side, mark);
+    }
+
+    if (result.ok) {
+        _logInfo('RECOVERY_BOOT',
+            `uid=${uid} ${symbol} ${side}: auto-SL placed @ $${result.stopPrice} (slOrderId=${result.slOrderId}${retried ? ' [RETRIED]' : ''})`);
+        try {
+            db.prepare(
+                `INSERT INTO audit_log (user_id, action, details) VALUES (?, 'RECOVERY_EXCHANGE_ONLY_AUTOSL_PLACED', ?)`
+            ).run(uid, JSON.stringify({
+                symbol, side, qty, markPrice: mark, stopPrice: result.stopPrice,
+                slOrderId: result.slOrderId, exchange, retried,
+            }));
+        } catch (_) {}
+        try {
+            const telegram = require('./telegram');
+            await telegram.sendToUser(uid,
+                '🔴 *EXCHANGE-ONLY POSITION DETECTED*\n'
+                + '`' + symbol + '` ' + side + ' qty=' + qty + ' @ mark=' + mark.toFixed(2) + '\n'
+                + 'Auto-SL placed at ' + result.stopPrice + ' (2% adverse from current mark).\n'
+                + (retried ? '_Initial SL would have triggered immediately — retried after markPrice refetch._\n' : '')
+                + '_Position opened on exchange but missing from Zeus DB — manual review recommended._');
+        } catch (_) {}
+        return;
+    }
+
+    // FAIL path — UNPROTECTED. Halt + critical alert.
+    _logError('RECOVERY_BOOT',
+        `uid=${uid} ${symbol} ${side}: auto-SL FAILED (${result.error}) — UNPROTECTED, arming globalHalt`);
+    try {
+        db.prepare(
+            `INSERT INTO audit_log (user_id, action, details) VALUES (?, 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED', ?)`
+        ).run(uid, JSON.stringify({
+            symbol, side, qty, markPrice: mark, stopPrice: result.stopPrice,
+            error: result.error, retried, exchange,
+        }));
+    } catch (_) {}
+    try {
+        const serverAT = require('./serverAT');
+        if (typeof serverAT.setGlobalHalt === 'function') {
+            serverAT.setGlobalHalt(true, uid, 'RECOVERY_AUTOSL_FAILED:' + symbol);
+        }
+    } catch (_) {}
+    try {
+        const telegram = require('./telegram');
+        await telegram.sendToUser(uid,
+            '🚨 *CRITICAL — AUTO-SL FAILED*\n'
+            + '`' + symbol + '` ' + side + ' qty=' + qty + ' is UNPROTECTED.\n'
+            + 'Global halt ARMED. MANUAL INTERVENTION REQUIRED.\n'
+            + 'Error: ' + result.error
+            + (retried ? '\n_Retried after markPrice refetch but rejection persisted._' : ''));
+    } catch (_) {}
+}
+
+module.exports = { run, _reconcileUser, _handleExchangeOnlyPosition };
