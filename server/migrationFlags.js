@@ -238,6 +238,13 @@ function _validateMutex(f) {
     if (f.SERVER_AT_DEMO && f.BYBIT_TESTNET_ENABLED) {
         violations.push('SERVER_AT_DEMO && BYBIT_TESTNET_ENABLED both true — DEMO carve-out must not co-exist with Bybit testnet execution');
     }
+    // [Task C 2026-05-28] TESTNET carve-out mutex vs full SERVER_AT.
+    // Full SERVER_AT covers TESTNET; the carve-out is redundant + confusing
+    // if both flags ever flip true via manual edit or admin route race.
+    // Same rationale as SERVER_AT_DEMO above — one-way ratchet.
+    if (f.SERVER_AT_TESTNET && f.SERVER_AT) {
+        violations.push('SERVER_AT_TESTNET && SERVER_AT both true — TESTNET carve-out is redundant once full SERVER_AT is enabled; disable one before enabling the other');
+    }
     return { ok: violations.length === 0, violations };
 }
 
