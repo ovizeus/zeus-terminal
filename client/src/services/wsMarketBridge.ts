@@ -22,6 +22,12 @@ export function install() {
   if (_installed) return
   _installed = true
   wsSubscribe(_dispatch)
+  on('market.degraded', (msg) => {
+    try { const { toast } = require('../data/marketDataHelpers'); toast(`WS DEGRADED: ${msg.symbol || '?'} — fallback REST active`, 5000) } catch (_) {}
+  })
+  on('market.recovered', (msg) => {
+    try { const { toast } = require('../data/marketDataHelpers'); toast(`WS RECOVERED: ${msg.symbol || '?'} — live stream restored`, 3000) } catch (_) {}
+  })
 }
 
 export function on(type: string, fn: MarketHandler): () => void {

@@ -12,6 +12,7 @@ import { _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
 import { QuotaIndicator } from './QuotaIndicator'
+import { WsHealthIndicator } from './WsHealthIndicator'
 
 export function ModeBar() {
   const engineMode = useATStore((s) => s.mode) || 'demo'
@@ -122,6 +123,7 @@ export function ModeBar() {
           </span>
         )}
         <QuotaIndicator />
+        <WsHealthIndicator />
       </div>
       <button
         className={btnClass}
