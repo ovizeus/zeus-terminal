@@ -573,16 +573,16 @@
         /* ─── System Module Showcase ─── */
         .features {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            width: 560px;
-            max-width: 92vw
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            width: 720px;
+            max-width: 94vw
         }
         .feat-card {
             background: linear-gradient(160deg, #0b1120 0%, #0d1528 100%);
             border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 14px 16px;
+            border-radius: 8px;
+            padding: 10px 12px;
             transition: border-color 0.3s, transform 0.2s;
             position: relative;
             overflow: hidden
@@ -596,21 +596,21 @@
             opacity: 0.5
         }
         .feat-card:hover { border-color: rgba(0,175,255,0.2); transform: translateY(-1px) }
-        .feat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 7px }
+        .feat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px }
         .feat-icon {
-            font-size: 11px; font-weight: 800;
-            width: 28px; height: 28px;
+            font-size: 10px; font-weight: 800;
+            width: 24px; height: 24px;
             display: flex; align-items: center; justify-content: center;
-            border-radius: 6px;
+            border-radius: 5px;
             font-family: 'Courier New', monospace;
             letter-spacing: -0.5px;
             flex-shrink: 0
         }
-        .feat-meta { display: flex; flex-direction: column; gap: 1px }
-        .feat-chip { display: inline-block; font-size: 7.5px; letter-spacing: 1.5px; font-weight: 700; padding: 1px 5px; border-radius: 3px; width: fit-content }
-        .feat-label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px; color: #d0d8e4 }
-        .feat-desc { font-size: 10.5px; color: #4d5d6d; line-height: 1.5 }
-        .feat-scan { height: 2px; margin-top: 10px; border-radius: 1px; position: relative; overflow: hidden; opacity: 0.35 }
+        .feat-meta { display: flex; flex-direction: column; gap: 0 }
+        .feat-chip { display: inline-block; font-size: 6.5px; letter-spacing: 1.5px; font-weight: 700; padding: 1px 4px; border-radius: 3px; width: fit-content }
+        .feat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.3px; color: #d0d8e4 }
+        .feat-desc { font-size: 9px; color: #4d5d6d; line-height: 1.4 }
+        .feat-scan { height: 2px; margin-top: 7px; border-radius: 1px; position: relative; overflow: hidden; opacity: 0.35 }
         .feat-scan::after {
             content: '';
             position: absolute;
@@ -625,6 +625,11 @@
         .feat-card:nth-child(5) .feat-scan::after { animation-delay: 2s }
         .feat-card:nth-child(6) .feat-scan::after { animation-delay: 2.5s }
         .feat-card:nth-child(7) .feat-scan::after { animation-delay: 3s }
+        .feat-card:nth-child(8) .feat-scan::after { animation-delay: 3.5s }
+        .feat-card:nth-child(9) .feat-scan::after { animation-delay: 4s }
+        .feat-card:nth-child(10) .feat-scan::after { animation-delay: 4.5s }
+        .feat-card:nth-child(11) .feat-scan::after { animation-delay: 5s }
+        .feat-card:nth-child(12) .feat-scan::after { animation-delay: 5.5s }
         @keyframes scanSlide { 0% { left:-30%; opacity:0 } 20% { opacity:1 } 80% { opacity:1 } 100% { left:100%; opacity:0 } }
 
         /* Module accents */
@@ -669,6 +674,30 @@
         .mod-ares .feat-chip { background: rgba(16,185,129,0.08); color: #10b981; border: 1px solid rgba(16,185,129,0.18) }
         .mod-ares .feat-scan { background: rgba(16,185,129,0.15) }
         .mod-ares .feat-scan::after { background: linear-gradient(90deg, transparent, #10b981, transparent) }
+
+        .mod-omega::before { background: linear-gradient(to bottom, #00d4ff, #0088cc) }
+        .mod-omega .feat-icon { background: rgba(0,212,255,0.12); border: 1px solid rgba(0,212,255,0.25); color: #00d4ff; font-family: serif }
+        .mod-omega .feat-chip { background: rgba(0,212,255,0.08); color: #00b8d4; border: 1px solid rgba(0,212,255,0.18) }
+        .mod-omega .feat-scan { background: rgba(0,212,255,0.15) }
+        .mod-omega .feat-scan::after { background: linear-gradient(90deg, transparent, #00d4ff, transparent) }
+
+        .mod-ml::before { background: linear-gradient(to bottom, #ff6b9d, #c44569) }
+        .mod-ml .feat-icon { background: rgba(255,107,157,0.12); border: 1px solid rgba(255,107,157,0.25); color: #ff6b9d }
+        .mod-ml .feat-chip { background: rgba(255,107,157,0.08); color: #c44569; border: 1px solid rgba(255,107,157,0.18) }
+        .mod-ml .feat-scan { background: rgba(255,107,157,0.15) }
+        .mod-ml .feat-scan::after { background: linear-gradient(90deg, transparent, #ff6b9d, transparent) }
+
+        .mod-multi::before { background: linear-gradient(to bottom, #ffd700, #ff8c00) }
+        .mod-multi .feat-icon { background: rgba(255,215,0,0.12); border: 1px solid rgba(255,215,0,0.25); color: #ffd700 }
+        .mod-multi .feat-chip { background: rgba(255,215,0,0.08); color: #cc9900; border: 1px solid rgba(255,215,0,0.18) }
+        .mod-multi .feat-scan { background: rgba(255,215,0,0.15) }
+        .mod-multi .feat-scan::after { background: linear-gradient(90deg, transparent, #ffd700, transparent) }
+
+        .mod-doctor::before { background: linear-gradient(to bottom, #00ff88, #00cc66) }
+        .mod-doctor .feat-icon { background: rgba(0,255,136,0.12); border: 1px solid rgba(0,255,136,0.25); color: #00ff88 }
+        .mod-doctor .feat-chip { background: rgba(0,255,136,0.08); color: #00cc66; border: 1px solid rgba(0,255,136,0.18) }
+        .mod-doctor .feat-scan { background: rgba(0,255,136,0.15) }
+        .mod-doctor .feat-scan::after { background: linear-gradient(90deg, transparent, #00ff88, transparent) }
 
         /* ─── Footer ─── */
         .footer {
@@ -742,11 +771,14 @@
         }
         @media(max-width:800px) {
             .main-row { flex-direction: column; align-items: center }
-            .features { width: 560px; max-width: 92vw }
+            .features { width: 720px; max-width: 94vw; grid-template-columns: 1fr 1fr }
             .ticker-strip { gap: 6px }
             .tick { min-width: 150px; padding: 8px 12px }
         }
         @media(max-width:560px) {
+            .features { grid-template-columns: 1fr 1fr }
+        }
+        @media(max-width:420px) {
             .features { grid-template-columns: 1fr }
         }
         @media(max-width:420px) {
@@ -1203,6 +1235,50 @@
                         </div>
                     </div>
                     <div class="feat-desc">Autonomous wallet logic, control-state supervision, position intelligence, and protected execution monitoring.</div>
+                    <div class="feat-scan"></div>
+                </div>
+                <div class="feat-card mod-omega">
+                    <div class="feat-head">
+                        <div class="feat-icon">&Omega;</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">OMEGA</span>
+                            <span class="feat-label">Cognitive Layer</span>
+                        </div>
+                    </div>
+                    <div class="feat-desc">AI personality engine, real-time market chat, mood-reactive Orb, voice output, and long-term trader memory.</div>
+                    <div class="feat-scan"></div>
+                </div>
+                <div class="feat-card mod-ml">
+                    <div class="feat-head">
+                        <div class="feat-icon">5</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">ML</span>
+                            <span class="feat-label">Ring5 Bandit</span>
+                        </div>
+                    </div>
+                    <div class="feat-desc">Thompson Sampling adaptive learning, per-cell confidence tuning, reflection gate, and influence audit trail.</div>
+                    <div class="feat-scan"></div>
+                </div>
+                <div class="feat-card mod-multi">
+                    <div class="feat-head">
+                        <div class="feat-icon">X</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">EXCHANGE</span>
+                            <span class="feat-label">Multi-Exchange</span>
+                        </div>
+                    </div>
+                    <div class="feat-desc">Binance &amp; Bybit unified routing, per-user credential isolation, automatic API failover, and cross-exchange sanity.</div>
+                    <div class="feat-scan"></div>
+                </div>
+                <div class="feat-card mod-doctor">
+                    <div class="feat-head">
+                        <div class="feat-icon">+</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">DOCTOR</span>
+                            <span class="feat-label">System Health</span>
+                        </div>
+                    </div>
+                    <div class="feat-desc">Cognitive diagnostics, severity classification, quarantine manager, trust scoring, and false-positive auditor.</div>
                     <div class="feat-scan"></div>
                 </div>
             </div>
