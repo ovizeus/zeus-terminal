@@ -62,11 +62,32 @@ function runAllEngines(): void {
   buildLiqEstimate()
 }
 
+function _syncQmVars(): void {
+  const S = w.S; if (!S) return
+  S._qmBasisRate = S.basisRate || 0
+  S._qmFrBybit = S.frBybit || 0
+  S._qmFrOkx = S.frOkx || 0
+  S._qmBtcDominance = S.btcDominance || 0
+  S._qmBtcDomPrev = S.btcDomPrev || S.btcDominance || 0
+  S._qmStableMarketCap = S.stableMarketCap || 0
+  S._qmStableChange24h = S.stableChange24h || 0
+  S._qmOpenInterest = S.oi || 0
+  S._qmWsOK = !!(S.bnbOk || S.bybOk)
+  S._qmChgP = S.chg24hPct || 0
+  S._qmH24 = S.high24h || 0
+  S._qmL24 = S.low24h || 0
+  S._qmVol = S.vol24h || 0
+  S._qmBid = S.bids?.[0]?.p || 0
+  S._qmAsk = S.asks?.[0]?.p || 0
+  S._qmSpread = S._qmAsk > 0 && S._qmBid > 0 ? S._qmAsk - S._qmBid : 0
+}
+
 function startRenderLoop(screenId: string): void {
   renderIv = setInterval(() => {
     if (_destroyed) return
     const el = document.getElementById(screenId)
     if (!el) return
+    _syncQmVars()
     runAllEngines()
     el.innerHTML = renderFrame()
   }, 500)
