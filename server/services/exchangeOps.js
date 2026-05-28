@@ -137,6 +137,17 @@ async function cancelOrder(uid, params) {
     return ops.cancelOrder(uid, params, creds);
 }
 
+// [Task M 2026-05-28] Router for getOpenOrders — used by orderSweeper at boot
+// to detect orphan SL/TP orders (exchange knows, Zeus DB doesn't).
+async function getOpenOrders(uid, params) {
+    const { ops, creds } = _resolveOps(uid);
+    if (typeof ops.getOpenOrders !== 'function') {
+        // Not implemented for this exchange yet (e.g. Bybit) — return empty
+        return [];
+    }
+    return ops.getOpenOrders(uid, params || {}, creds);
+}
+
 async function placeStopLoss(uid, params) {
     const { ops, creds } = _resolveOps(uid);
     return ops.placeStopLoss(uid, params, creds);
@@ -149,5 +160,6 @@ function _resetForTest() {
 module.exports = {
     placeEntry, closePosition, ensureSymbolReady, invalidateReady,
     getPositions, getBalance, getUserTrades, ping, cancelOrder, placeStopLoss,
+    getOpenOrders,
     _resetForTest, CACHE_TTL_MS,
 };

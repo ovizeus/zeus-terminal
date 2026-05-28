@@ -554,6 +554,58 @@ async function cancelOrder(uid, params, creds) {
     };
 }
 
+// [Task M 2026-05-28] List open orders for orphan sweep (boot recovery).
+// Queries both regular orders + algo orders (SL/TP moved to /algoOrder
+// since Binance Dec 2025) and merges results. Optional symbol filter.
+async function getOpenOrders(uid, params, creds) {
+    const symbol = params && params.symbol;
+    const query = symbol ? { symbol, recvWindow: 5000 } : { recvWindow: 5000 };
+
+    const out = [];
+
+    // 1. Regular orders (entries, manual limits)
+    try {
+        const resp = await sendSignedRequest('GET', '/fapi/v1/openOrders', query, creds);
+        if (Array.isArray(resp)) {
+            for (const o of resp) {
+                out.push({
+                    orderId: String(o.orderId),
+                    clientOrderId: o.clientOrderId || '',
+                    symbol: o.symbol,
+                    side: o.side,
+                    type: o.type,
+                    price: Number(o.price),
+                    origQty: Number(o.origQty),
+                    status: o.status,
+                    source: 'regular',
+                });
+            }
+        }
+    } catch (_) { /* per-endpoint best-effort */ }
+
+    // 2. Algo orders (SL/TP since Dec 2025)
+    try {
+        const respAlgo = await sendSignedRequest('GET', '/fapi/v1/algoOrders', query, creds);
+        if (Array.isArray(respAlgo)) {
+            for (const o of respAlgo) {
+                out.push({
+                    orderId: String(o.algoId || o.orderId),
+                    clientOrderId: o.clientOrderId || o.algoClientOrderId || '',
+                    symbol: o.symbol,
+                    side: o.side,
+                    type: o.algoType || o.type,
+                    price: Number(o.stopPrice || o.price),
+                    origQty: Number(o.origQty || 0),
+                    status: o.status,
+                    source: 'algo',
+                });
+            }
+        }
+    } catch (_) { /* algoOrders endpoint may not exist on testnet — degrade gracefully */ }
+
+    return out;
+}
+
 async function placeStopLoss(uid, params, creds) {
     const resp = await sendSignedRequest('POST', '/fapi/v1/order', {
         symbol: params.symbol,
@@ -586,5 +638,6 @@ module.exports = {
     ping,
     cancelOrder,
     placeStopLoss,
+    getOpenOrders,
     _emergencyClose,
 };

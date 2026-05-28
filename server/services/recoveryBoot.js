@@ -272,6 +272,18 @@ async function _reconcileUser(uid, exchange) {
         await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos);
     }
 
+    // [Task M 2026-05-28] Sweep orphan Zeus SL/TP orders. Runs BEFORE global
+    // halt lift so any orphan-cancel failures still surface in audit. Defensive
+    // — failures don't block recovery completion.
+    try {
+        const orderSweeper = require('./orderSweeper');
+        const sweepResult = await orderSweeper.sweep(uid);
+        _logInfo('RECOVERY_BOOT',
+            `uid=${uid}: order sweep — cancelled=${sweepResult.cancelled.length} preserved=${sweepResult.preserved.length} errors=${sweepResult.errors.length}`);
+    } catch (e) {
+        _logWarn('RECOVERY_BOOT', `uid=${uid}: order sweep failed: ${e.message}`);
+    }
+
     // 4. Lift global halt for this user (setGlobalHalt signature: active, byUserId, reason)
     try {
         const serverAT = require('./serverAT');

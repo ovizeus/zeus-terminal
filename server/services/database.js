@@ -10613,6 +10613,33 @@ function atGetState(key) {
     try { return JSON.parse(row.value); } catch (_) { return row.value; }
 }
 
+// [Task M 2026-05-28] Return Set<orderIdStr> for all Zeus-managed orders
+// known to DB for a given user. Used by orderSweeper to distinguish active
+// Zeus orders (preserved) from orphans (cancelled at boot).
+// Extracts slOrderId / tpOrderId from at_positions.data JSON for OPEN positions.
+function getZeusOrderIds(userId) {
+    const ids = new Set();
+    if (!userId) return ids;
+    try {
+        const rows = db.prepare(
+            `SELECT data FROM at_positions WHERE user_id = ? AND status IN ('OPEN', 'OPENING')`
+        ).all(userId);
+        for (const r of rows) {
+            let d;
+            try { d = JSON.parse(r.data); } catch (_) { continue; }
+            if (d && d.slOrderId) ids.add(String(d.slOrderId));
+            if (d && d.tpOrderId) ids.add(String(d.tpOrderId));
+            // entry/mainOrderId also tracked for completeness, though entries
+            // are MARKET (rarely sit as open). Defensive.
+            if (d && d.mainOrderId) ids.add(String(d.mainOrderId));
+            if (d && d.live && d.live.mainOrderId) ids.add(String(d.live.mainOrderId));
+            if (d && d.live && d.live.slOrderId) ids.add(String(d.live.slOrderId));
+            if (d && d.live && d.live.tpOrderId) ids.add(String(d.live.tpOrderId));
+        }
+    } catch (_) { /* defensive: schema may not exist on fresh DB */ }
+    return ids;
+}
+
 function atSetState(key, value, userId) {
     // [SRV-8] Defensive cross-user scoping check — keys often follow
     // format 'category:userId' (e.g. 'serverAT:closeCooldowns:1') sau
@@ -11255,6 +11282,8 @@ module.exports = {
     atSetState,
     atGetStateByUser,
     atPruneClosed,
+    // [Task M 2026-05-28] Orphan order sweeper helper
+    getZeusOrderIds,
     // [B2] Startup ghost cleanup helpers
     runRaw: (sql) => { const r = db.prepare(sql).run(); return r.changes; },
     deleteGhostPosition: (seq, userId) => { return db.prepare('DELETE FROM at_positions WHERE seq = ? AND user_id = ?').run(seq, userId).changes; },
