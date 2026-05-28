@@ -281,7 +281,7 @@ router.post('/login', async (req, res) => {
 
         // Check account status (blocked?)
         if (user.status === 'blocked') {
-            return res.status(403).json({ error: 'Contul tău a fost blocat.' });
+            return res.status(403).json({ error: 'Your account has been blocked.' });
         }
 
         // Check ban
@@ -289,7 +289,7 @@ router.post('/login', async (req, res) => {
             const banEnd = new Date(user.banned_until);
             if (banEnd > new Date()) {
                 const remaining = banEnd.getFullYear() >= 9999 ? 'permanent' : banEnd.toLocaleString('ro-RO');
-                return res.status(403).json({ error: 'Contul tău este suspendat până la: ' + remaining });
+                return res.status(403).json({ error: 'Your account is suspended until: ' + remaining });
             }
             // Ban expired — auto-unban
             db.unbanUser(user.id);
@@ -297,7 +297,7 @@ router.post('/login', async (req, res) => {
 
         // Per-email rate limit (prevents targeted brute-force on known accounts)
         if (!_checkLoginRateEmail(normalEmail)) {
-            return res.status(429).json({ error: 'Prea multe încercări pentru acest cont. Așteaptă 15 minute.' });
+            return res.status(429).json({ error: 'Too many attempts for this account. Try again in 15 minutes.' });
         }
 
         const valid = await bcrypt.compare(password, user.password_hash);
@@ -312,12 +312,12 @@ router.post('/login', async (req, res) => {
         if (user.pwd_temp_expires_at && new Date(user.pwd_temp_expires_at) < new Date()) {
             db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'temp_password_expired' }, req.ip);
             logger.warn('AUTH', 'LOGIN_FAILED temp_password_expired ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
-            return res.status(401).json({ error: 'Parola temporară a expirat. Cere admin-ului una nouă.' });
+            return res.status(401).json({ error: 'Your temporary password has expired. Ask an administrator for a new one.' });
         }
 
         // Check approval
         if (!user.approved) {
-            return res.status(403).json({ error: 'Contul tău nu a fost încă aprobat de administrator.' });
+            return res.status(403).json({ error: 'You already have a pending access request — it is awaiting administrator approval.' });
         }
 
         // [AUTH-1] 2FA email-bombing rate limit — gate before pendingCodes.set
@@ -337,7 +337,7 @@ router.post('/login', async (req, res) => {
             }
             if (_track.count >= _2FA_MAX_SENDS) {
                 logger.warn('AUTH', `2FA send rate limit hit uid=${user.id} email=${_mask(normalEmail)} ip=${req.ip} count=${_track.count}/${_2FA_MAX_SENDS}`);
-                return res.status(429).json({ error: 'Prea multe coduri 2FA trimise — încearcă din nou în câteva minute.' });
+                return res.status(429).json({ error: 'Too many 2FA codes sent — try again in a few minutes.' });
             }
             _track.count++;
             _2faSendTracker.set(normalEmail, _track);
@@ -378,7 +378,7 @@ router.post('/login', async (req, res) => {
             // Dev/test: keep the code in pendingCodes and print it server-side.
             console.warn(`[AUTH-2FA][DEV] SMTP not configured. 2FA code for ${_mask(normalEmail)}: ${code}`);
             logger.warn('AUTH', '2FA code printed to console (dev, no SMTP)', { email: _mask(normalEmail) });
-            return res.json({ ok: true, needsCode: true, message: 'Cod 2FA tipărit în consola serverului (dev mode).' });
+            return res.json({ ok: true, needsCode: true, message: '2FA code printed to the server console (dev mode).' });
         }
 
         const sent = await _sendCode(normalEmail, code);
@@ -411,33 +411,33 @@ router.post('/verify-code', (req, res) => {
 
         const { email, code } = req.body;
         if (!email || !code) {
-            return res.status(400).json({ error: 'Email și codul sunt obligatorii' });
+            return res.status(400).json({ error: 'Email and code are required' });
         }
 
         const normalEmail = email.toLowerCase().trim();
         const pending = pendingCodes.get(normalEmail);
 
         if (!pending) {
-            return res.status(400).json({ error: 'Nu există un cod activ. Loghează-te din nou.' });
+            return res.status(400).json({ error: 'No active code. Please sign in again.' });
         }
 
         // Check expiration
         if (Date.now() > pending.expiresAt) {
             pendingCodes.delete(normalEmail);
-            return res.status(400).json({ error: 'Codul a expirat. Loghează-te din nou.' });
+            return res.status(400).json({ error: 'The code has expired. Please sign in again.' });
         }
 
         // Check attempts
         pending.attempts++;
         if (pending.attempts > MAX_ATTEMPTS) {
             pendingCodes.delete(normalEmail);
-            return res.status(429).json({ error: 'Prea multe încercări. Loghează-te din nou.' });
+            return res.status(429).json({ error: 'Too many attempts. Please sign in again.' });
         }
 
         // Verify code (constant-time comparison)
         const codeStr = String(code).trim();
         if (codeStr.length !== 6 || !crypto.timingSafeEqual(Buffer.from(codeStr), Buffer.from(pending.code))) {
-            return res.status(401).json({ error: 'Cod incorect. Mai ai ' + (MAX_ATTEMPTS - pending.attempts) + ' încercări.' });
+            return res.status(401).json({ error: 'Incorrect code. You have ' + (MAX_ATTEMPTS - pending.attempts) + ' attempts left.' });
         }
 
         // Success — clear code and set JWT (includes user id + tokenVersion)
@@ -606,7 +606,7 @@ router.post('/admin/delete', (req, res) => {
         const normalEmail = email.toLowerCase().trim();
         // Can't delete yourself
         if (normalEmail === decoded.email) {
-            return res.status(400).json({ error: 'Nu te poți șterge pe tine' });
+            return res.status(400).json({ error: 'You cannot delete your own account' });
         }
 
         const target = db.findUserByEmail(normalEmail);
@@ -1013,12 +1013,12 @@ router.post('/change-password/request', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const { currentPassword } = req.body;
-        if (!currentPassword) return res.status(400).json({ error: 'Parola curentă este necesară' });
+        if (!currentPassword) return res.status(400).json({ error: 'Current password is required' });
 
         const valid = await bcrypt.compare(currentPassword, user.password_hash);
         if (!valid) {
             db.auditLog(user.id, 'CHANGE_PASSWORD_FAILED', { reason: 'wrong_current_password' }, req.ip);
-            return res.status(401).json({ error: 'Parola curentă este incorectă' });
+            return res.status(401).json({ error: 'Current password is incorrect' });
         }
 
         const code = _generateCode();
@@ -1032,7 +1032,7 @@ router.post('/change-password/request', async (req, res) => {
         const sent = await _sendCode(decoded.email, code);
         if (!sent) {
             pendingCodes.delete('chpw_' + decoded.email);
-            return res.status(503).json({ error: 'Nu s-a putut trimite codul. Încearcă mai târziu.' });
+            return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
         }
 
         db.auditLog(user.id, 'CHANGE_PASSWORD_REQUESTED', {}, req.ip);
@@ -1053,27 +1053,27 @@ router.post('/change-password/confirm', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const { code, newPassword } = req.body;
-        if (!code || !newPassword) return res.status(400).json({ error: 'Cod și parola nouă sunt necesare' });
+        if (!code || !newPassword) return res.status(400).json({ error: 'Code and new password are required' });
         var _pwErr2 = _validatePassword(newPassword);
         if (_pwErr2) return res.status(400).json({ error: _pwErr2 });
 
         const key = 'chpw_' + decoded.email;
         const pending = pendingCodes.get(key);
-        if (!pending) return res.status(400).json({ error: 'Niciun cod activ. Solicită unul nou.' });
+        if (!pending) return res.status(400).json({ error: 'No active code. Request a new one.' });
 
         if (Date.now() > pending.expiresAt) {
             pendingCodes.delete(key);
-            return res.status(400).json({ error: 'Codul a expirat. Solicită unul nou.' });
+            return res.status(400).json({ error: 'The code has expired. Request a new one.' });
         }
 
         pending.attempts++;
         if (pending.attempts > 5) {
             pendingCodes.delete(key);
-            return res.status(429).json({ error: 'Prea multe încercări. Solicită un cod nou.' });
+            return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
         }
 
         if (String(code).length !== 6 || !crypto.timingSafeEqual(Buffer.from(String(code)), Buffer.from(String(pending.code)))) {
-            return res.status(400).json({ error: 'Cod incorect. Mai ai ' + (5 - pending.attempts) + ' încercări.' });
+            return res.status(400).json({ error: 'Incorrect code. You have ' + (5 - pending.attempts) + ' attempts left.' });
         }
 
         // Code valid — check password history (last 5)
@@ -1081,7 +1081,7 @@ router.post('/change-password/confirm', async (req, res) => {
         const history = db.getPasswordHistory(user.id);
         for (const oldHash of history) {
             if (await bcrypt.compare(newPassword, oldHash)) {
-                return res.status(400).json({ error: 'Nu poți refolosi una din ultimele 5 parole.' });
+                return res.status(400).json({ error: 'You cannot reuse one of your last 5 passwords.' });
             }
         }
 
@@ -1102,7 +1102,7 @@ router.post('/change-password/confirm', async (req, res) => {
 
         db.auditLog(user.id, 'CHANGE_PASSWORD_SUCCESS', {}, req.ip);
         logger.info('AUTH', 'Password changed', { email: _mask(decoded.email) });
-        res.json({ ok: true, message: 'Parola a fost schimbată cu succes!' });
+        res.json({ ok: true, message: 'Your password has been changed successfully.' });
     } catch (err) {
         res.status(401).json({ error: 'Token invalid' });
     }
@@ -1119,9 +1119,9 @@ router.post('/change-email/request', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const { currentPassword, newEmail } = req.body;
-        if (!currentPassword) return res.status(400).json({ error: 'Parola curentă este necesară' });
+        if (!currentPassword) return res.status(400).json({ error: 'Current password is required' });
         if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-            return res.status(400).json({ error: 'Adresă de email invalidă' });
+            return res.status(400).json({ error: 'Invalid email address' });
         }
 
         const normalised = newEmail.toLowerCase().trim();
@@ -1135,7 +1135,7 @@ router.post('/change-email/request', async (req, res) => {
         const valid = await bcrypt.compare(currentPassword, user.password_hash);
         if (!valid) {
             db.auditLog(user.id, 'CHANGE_EMAIL_FAILED', { reason: 'wrong_password' }, req.ip);
-            return res.status(401).json({ error: 'Parola curentă este incorectă' });
+            return res.status(401).json({ error: 'Current password is incorrect' });
         }
 
         const code = _generateCode();
@@ -1150,7 +1150,7 @@ router.post('/change-email/request', async (req, res) => {
         const sent = await _sendCode(normalised, code);
         if (!sent) {
             pendingCodes.delete('chem_' + decoded.email);
-            return res.status(503).json({ error: 'Nu s-a putut trimite codul. Încearcă mai târziu.' });
+            return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
         }
 
         db.auditLog(user.id, 'CHANGE_EMAIL_REQUESTED', { newEmail: normalised }, req.ip);
@@ -1175,21 +1175,21 @@ router.post('/change-email/confirm', async (req, res) => {
 
         const key = 'chem_' + decoded.email;
         const pending = pendingCodes.get(key);
-        if (!pending) return res.status(400).json({ error: 'Niciun cod activ. Solicită unul nou.' });
+        if (!pending) return res.status(400).json({ error: 'No active code. Request a new one.' });
 
         if (Date.now() > pending.expiresAt) {
             pendingCodes.delete(key);
-            return res.status(400).json({ error: 'Codul a expirat. Solicită unul nou.' });
+            return res.status(400).json({ error: 'The code has expired. Request a new one.' });
         }
 
         pending.attempts++;
         if (pending.attempts > 5) {
             pendingCodes.delete(key);
-            return res.status(429).json({ error: 'Prea multe încercări. Solicită un cod nou.' });
+            return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
         }
 
         if (String(code).length !== 6 || !crypto.timingSafeEqual(Buffer.from(String(code)), Buffer.from(String(pending.code)))) {
-            return res.status(400).json({ error: 'Cod incorect. Mai ai ' + (5 - pending.attempts) + ' încercări.' });
+            return res.status(400).json({ error: 'Incorrect code. You have ' + (5 - pending.attempts) + ' attempts left.' });
         }
 
         // Atomic check + update in transaction
@@ -1236,10 +1236,10 @@ router.post('/forgot-password/request', async (req, res) => {
 
     const user = db.findUserByEmail(email);
     // Always return success (don't reveal if email exists)
-    if (!user) return res.json({ ok: true, message: 'Dacă emailul există, vei primi un cod.' });
+    if (!user) return res.json({ ok: true, message: 'If the email exists, you will receive a code.' });
 
     if (user.status === 'banned' || (user.banned_until && new Date(user.banned_until) > new Date())) {
-        return res.json({ ok: true, message: 'Dacă emailul există, vei primi un cod.' });
+        return res.json({ ok: true, message: 'If the email exists, you will receive a code.' });
     }
 
     const code = _generateCode();
@@ -1253,46 +1253,46 @@ router.post('/forgot-password/request', async (req, res) => {
     const sent = await _sendCode(email, code);
     if (!sent) {
         pendingCodes.delete('fgpw_' + email.toLowerCase().trim());
-        return res.status(503).json({ error: 'Nu s-a putut trimite codul. Încearcă mai târziu.' });
+        return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
     }
 
     db.auditLog(user.id, 'FORGOT_PASSWORD_REQUESTED', {}, req.ip);
     logger.info('AUTH', 'Forgot password code sent', { email: _mask(email) });
-    res.json({ ok: true, message: 'Dacă emailul există, vei primi un cod.' });
+    res.json({ ok: true, message: 'If the email exists, you will receive a code.' });
 });
 
 // ─── FORGOT PASSWORD: Step 2 — verify code & set new password ───
 router.post('/forgot-password/confirm', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const { email, code, newPassword } = req.body;
-    if (!email || !code || !newPassword) return res.status(400).json({ error: 'Email, cod și parola nouă sunt necesare' });
+    if (!email || !code || !newPassword) return res.status(400).json({ error: 'Email, code and new password are required' });
     var _pwErr3 = _validatePassword(newPassword);
     if (_pwErr3) return res.status(400).json({ error: _pwErr3 });
 
     const key = 'fgpw_' + email.toLowerCase().trim();
     const pending = pendingCodes.get(key);
-    if (!pending) return res.status(400).json({ error: 'Niciun cod activ. Solicită unul nou.' });
+    if (!pending) return res.status(400).json({ error: 'No active code. Request a new one.' });
 
     if (Date.now() > pending.expiresAt) {
         pendingCodes.delete(key);
-        return res.status(400).json({ error: 'Codul a expirat. Solicită unul nou.' });
+        return res.status(400).json({ error: 'The code has expired. Request a new one.' });
     }
 
     pending.attempts++;
     if (pending.attempts > MAX_ATTEMPTS) {
         pendingCodes.delete(key);
-        return res.status(429).json({ error: 'Prea multe încercări. Solicită un cod nou.' });
+        return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
     }
 
     if (String(code).length !== 6 || !crypto.timingSafeEqual(Buffer.from(String(code)), Buffer.from(String(pending.code)))) {
-        return res.status(400).json({ error: 'Cod incorect. Mai ai ' + (MAX_ATTEMPTS - pending.attempts) + ' încercări.' });
+        return res.status(400).json({ error: 'Incorrect code. You have ' + (MAX_ATTEMPTS - pending.attempts) + ' attempts left.' });
     }
 
     const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
     const history = db.getPasswordHistory(pending.userId);
     for (const oldHash of history) {
         if (await bcrypt.compare(newPassword, oldHash)) {
-            return res.status(400).json({ error: 'Nu poți refolosi una din ultimele 5 parole.' });
+            return res.status(400).json({ error: 'You cannot reuse one of your last 5 passwords.' });
         }
     }
 
@@ -1304,7 +1304,7 @@ router.post('/forgot-password/confirm', async (req, res) => {
 
     db.auditLog(pending.userId, 'FORGOT_PASSWORD_SUCCESS', {}, req.ip);
     logger.info('AUTH', 'Password reset via forgot-password', { email: _mask(email) });
-    res.json({ ok: true, message: 'Parola a fost resetată cu succes! Te poți autentifica.' });
+    res.json({ ok: true, message: 'Your password has been reset successfully. You can now sign in.' });
 });
 
 // ─── CLOSE ACCOUNT: Step 1 — request code ───
@@ -1318,16 +1318,16 @@ router.post('/close-account/request', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const { currentPassword } = req.body;
-        if (!currentPassword) return res.status(400).json({ error: 'Parola curentă este necesară' });
+        if (!currentPassword) return res.status(400).json({ error: 'Current password is required' });
 
         const valid = await bcrypt.compare(currentPassword, user.password_hash);
         if (!valid) {
             db.auditLog(user.id, 'CLOSE_ACCOUNT_FAILED', { reason: 'wrong_password' }, req.ip);
-            return res.status(401).json({ error: 'Parola curentă este incorectă' });
+            return res.status(401).json({ error: 'Current password is incorrect' });
         }
 
         if (user.role === 'admin') {
-            return res.status(403).json({ error: 'Contul de administrator nu poate fi șters.' });
+            return res.status(403).json({ error: 'The administrator account cannot be deleted.' });
         }
 
         const code = _generateCode();
@@ -1341,7 +1341,7 @@ router.post('/close-account/request', async (req, res) => {
         const sent = await _sendCode(decoded.email, code);
         if (!sent) {
             pendingCodes.delete('clac_' + decoded.email);
-            return res.status(503).json({ error: 'Nu s-a putut trimite codul. Încearcă mai târziu.' });
+            return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
         }
 
         db.auditLog(user.id, 'CLOSE_ACCOUNT_REQUESTED', {}, req.ip);
@@ -1362,7 +1362,7 @@ router.post('/close-account/confirm', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         if (user.role === 'admin') {
-            return res.status(403).json({ error: 'Contul de administrator nu poate fi șters.' });
+            return res.status(403).json({ error: 'The administrator account cannot be deleted.' });
         }
 
         const { code } = req.body;
@@ -1370,21 +1370,21 @@ router.post('/close-account/confirm', async (req, res) => {
 
         const key = 'clac_' + decoded.email;
         const pending = pendingCodes.get(key);
-        if (!pending) return res.status(400).json({ error: 'Niciun cod activ. Solicită unul nou.' });
+        if (!pending) return res.status(400).json({ error: 'No active code. Request a new one.' });
 
         if (Date.now() > pending.expiresAt) {
             pendingCodes.delete(key);
-            return res.status(400).json({ error: 'Codul a expirat. Solicită unul nou.' });
+            return res.status(400).json({ error: 'The code has expired. Request a new one.' });
         }
 
         pending.attempts++;
         if (pending.attempts > MAX_ATTEMPTS) {
             pendingCodes.delete(key);
-            return res.status(429).json({ error: 'Prea multe încercări. Solicită un cod nou.' });
+            return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
         }
 
         if (String(code).length !== 6 || !crypto.timingSafeEqual(Buffer.from(String(code)), Buffer.from(String(pending.code)))) {
-            return res.status(400).json({ error: 'Cod incorect. Mai ai ' + (MAX_ATTEMPTS - pending.attempts) + ' încercări.' });
+            return res.status(400).json({ error: 'Incorrect code. You have ' + (MAX_ATTEMPTS - pending.attempts) + ' attempts left.' });
         }
 
         // Delete user and all associated data
@@ -1404,7 +1404,7 @@ router.post('/close-account/confirm', async (req, res) => {
 
         db.auditLog(user.id, 'CLOSE_ACCOUNT_SUCCESS', { email: decoded.email }, req.ip);
         logger.info('AUTH', 'Account closed', { email: _mask(decoded.email) });
-        res.json({ ok: true, message: 'Contul a fost șters. Vei fi redirecționat.' });
+        res.json({ ok: true, message: 'Your account has been deleted. You will be redirected.' });
     } catch (err) {
         res.status(401).json({ error: 'Token invalid' });
     }
@@ -1425,7 +1425,7 @@ router.post('/pin/set', async (req, res) => {
         if (!user || user.status !== 'active') return res.status(401).json({ error: 'session_invalid' });
         const { pin, currentPin } = req.body;
         if (!pin || typeof pin !== 'string' || pin.length < 4 || pin.length > 8) {
-            return res.status(400).json({ error: 'PIN trebuie să aibă 4–8 caractere' });
+            return res.status(400).json({ error: 'PIN must be 4–8 characters' });
         }
         // [BATCH3-S] If PIN already set, require currentPin re-entry before overwrite.
         const existingHash = db.getUserPin(user.id);

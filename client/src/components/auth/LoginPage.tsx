@@ -4,6 +4,11 @@ import type { AdminUser } from '../../services/api'
 import { useAuthStore } from '../../stores'
 import './login.css'
 
+// [Task 1A 2026-05-28] Terms consent version sent with registration.
+// Server (auth.js) persists this for GDPR Art. 7 demonstrability. Bump when
+// legal pages (terms.html / privacy.html / cookies.html) materially change.
+const TERMS_VERSION = '1.0'
+
 /* ── SVG icons for password eye toggle ── */
 const EYE_SVG = (
   <svg viewBox="0 0 24 24">
@@ -333,6 +338,10 @@ export function LoginPage() {
   const [registerErrorMsg, setRegisterErrorMsg] = useState('')
   const [showPendingMsg, setShowPendingMsg] = useState(false)
   const [registerBtnText, setRegisterBtnText] = useState('Request an Invite')
+  // [Task 1A 2026-05-28] Terms consent — server requires termsAcceptedAt +
+  // termsVersion (GDPR Art. 7). Without these the register POST returns 400
+  // and no user could ever register. Checkbox gates the submit.
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   // Admin panel
   const [adminStatus, _setAdminStatus] = useState('')
@@ -572,13 +581,23 @@ export function LoginPage() {
     if (!/[a-z]/.test(pw)) { showRegError('Must contain at least one lowercase letter'); return }
     if (!/[A-Z]/.test(pw)) { showRegError('Must contain at least one uppercase letter'); return }
     if (!/\d/.test(pw)) { showRegError('Password must contain at least one digit'); return }
+    // [Task 1A 2026-05-28] Block submit until terms accepted — server rejects
+    // (400) any register without consent, so gate it client-side with a clear
+    // message instead of a confusing server error.
+    if (!termsAccepted) { showRegError('Please accept the Terms, Privacy Policy and Cookie Policy to continue'); return }
 
     setRegisterBtnText('...')
     try {
       const res = await fetch('/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: em, password: pw }),
+        body: JSON.stringify({
+          email: em,
+          password: pw,
+          // [Task 1A 2026-05-28] GDPR Art. 7 consent record — required by server
+          termsAcceptedAt: new Date().toISOString(),
+          termsVersion: TERMS_VERSION,
+        }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -759,7 +778,20 @@ export function LoginPage() {
                   <input type="password" id="confirmPassword" placeholder="Repeat password" autoComplete="new-password" ref={regConfirmRef} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
                   <PwEye inputRef={regConfirmRef} />
                 </div>
-                <button type="submit" className="main-btn" id="registerBtn">{registerBtnText}</button>
+                <label className="terms-consent">
+                  <input
+                    type="checkbox"
+                    id="termsAccept"
+                    checked={termsAccepted}
+                    onChange={e => setTermsAccepted(e.target.checked)}
+                  />
+                  <span>
+                    I accept the <a href="/terms.html" target="_blank" rel="noopener noreferrer">Terms</a>,{' '}
+                    <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and{' '}
+                    <a href="/cookies.html" target="_blank" rel="noopener noreferrer">Cookie Policy</a>
+                  </span>
+                </label>
+                <button type="submit" className="main-btn" id="registerBtn" disabled={!termsAccepted}>{registerBtnText}</button>
                 <div className="link-line">Already have an account? <a id="backToLogin2" href="#" onClick={e => { e.preventDefault(); setActive(false) }}>Sign in</a></div>
                 <div className="footer-note">Access requests are manually reviewed</div>
               </form>
