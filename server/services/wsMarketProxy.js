@@ -103,6 +103,7 @@ function _connectSymbol(symbol, timeframes) {
         if (isFallbackActive(sym)) {
             _stopFallbackPolling(sym);
             _broadcastAll({ type: 'market.recovered', symbol: sym, mode: 'WS', ts: Date.now() });
+            _triggerReconcile(sym);
         }
         conn.pingTimer = setInterval(() => {
             try { if (ws.readyState === WebSocket.OPEN) ws.ping(); } catch (_) {}
@@ -380,6 +381,47 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Forced reconcile on WS recovery (B.9) ═══
+
+async function _triggerReconcile(symbol) {
+    const sym = symbol.toUpperCase();
+    try {
+        const logger = require('./logger');
+        const serverAT = require('./serverAT');
+        const exchangeOps = require('./exchangeOps');
+        const db = require('./database');
+
+        logger.info('WS_PROXY', `[RECONCILE] START ${sym} — WS recovered, forcing position+balance sync`);
+
+        const users = db.db.prepare(`SELECT DISTINCT user_id FROM exchange_accounts WHERE is_active=1`).all();
+
+        for (const { user_id: uid } of users) {
+            try {
+                const positions = await exchangeOps.getPositions(uid, { symbol: sym });
+                const balance = await exchangeOps.getBalance(uid);
+
+                const posCount = Array.isArray(positions) ? positions.length : 0;
+                const bal = balance && balance.walletBalance ? parseFloat(balance.walletBalance) : 0;
+
+                logger.info('WS_PROXY', `[RECONCILE] uid=${uid} ${sym}: ${posCount} positions, balance=$${bal.toFixed(2)}`);
+
+                try {
+                    db.auditLog(uid, 'WS_RECOVERY_RECONCILE_COMPLETE', {
+                        symbol: sym, posCount, balance: bal, ts: Date.now(),
+                    }, '127.0.0.1');
+                } catch (_) {}
+            } catch (err) {
+                try {
+                    const logger2 = require('./logger');
+                    logger2.warn('WS_PROXY', `[RECONCILE] uid=${uid} ${sym} FAILED: ${err.message}`);
+                } catch (_) {}
+            }
+        }
+    } catch (err) {
+        try { console.error('[WS_PROXY] reconcile error:', err.message); } catch (_) {}
+    }
+}
+
 // ═══ Stale data detection (trade blocker B.8) ═══
 
 const STALE_THRESHOLD_MS = 10_000;
@@ -629,6 +671,7 @@ module.exports = {
     _buildWatchlistUrl,
     isSymbolStale,
     getStalenessMs,
+    _triggerReconcile,
     _checkFallbackNeeded,
     _startFallbackPolling,
     _stopFallbackPolling,

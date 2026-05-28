@@ -640,6 +640,16 @@ describe('wsMarketProxy stale detection', () => {
     });
 });
 
+describe('wsMarketProxy forced reconcile', () => {
+    test('_triggerReconcile is a function', () => {
+        expect(typeof proxy._triggerReconcile).toBe('function');
+    });
+
+    test('_triggerReconcile does not throw on empty DB', async () => {
+        await expect(proxy._triggerReconcile('BTCUSDT')).resolves.not.toThrow();
+    });
+});
+
 describe('wsMarketProxy auth + rate limits continued', () => {
     test('unsubscribeAll cleanup restores quota', () => {
         const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
