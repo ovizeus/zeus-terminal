@@ -1163,6 +1163,9 @@ app.use('/api/omega/doctor', doctorRoutes);
 const ring5Routes = require('./server/routes/ring5');
 app.use('/api/ring5', ring5Routes);
 
+// [Task B 2026-05-28] Admin operations — global halt toggle endpoint
+app.use('/api/admin', require('./server/routes/admin'));
+
 // ─── Health Routes (Tasks 54-56: feed / locks / recovery) ───
 const healthRoutes = require('./server/routes/health');
 app.use('/api/health', healthRoutes);
