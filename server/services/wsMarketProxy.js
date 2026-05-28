@@ -174,6 +174,7 @@ function _broadcast(symbol, payload) {
     const sym = symbol.toUpperCase();
     if (payload.type === 'market.kline' || payload.type === 'market.aggTrade') {
         payload.seq = _nextSeq(sym, payload.type);
+        _pushReplay(sym, payload.type, payload.seq, payload);
     }
     const json = JSON.stringify(payload);
     _lastValues.set(`${sym}:${payload.type}`, payload);
@@ -390,6 +391,38 @@ function stopWatchlist() {
 
 function isWatchlistActive() {
     return _wlWs !== null;
+}
+
+// ═══ Replay buffer (B.15) ═══
+
+const REPLAY_BUFFER_SIZE = 100;
+const _replayBuffers = new Map(); // 'symbol:type' → Array<{seq, payload}>
+
+function _pushReplay(symbol, type, seq, payload) {
+    if (!seq) return;
+    const key = `${symbol}:${type}`;
+    if (!_replayBuffers.has(key)) _replayBuffers.set(key, []);
+    const buf = _replayBuffers.get(key);
+    buf.push({ seq, payload, ts: Date.now() });
+    if (buf.length > REPLAY_BUFFER_SIZE) buf.shift();
+}
+
+function getReplay(symbol, type, afterSeq) {
+    const key = `${symbol.toUpperCase()}:${type}`;
+    const buf = _replayBuffers.get(key);
+    if (!buf || !buf.length) return [];
+    if (!afterSeq) return buf.slice(-10);
+    return buf.filter(e => e.seq > afterSeq);
+}
+
+function handleReplayRequest(ws, msg) {
+    if (!msg || msg.type !== 'market.replay') return;
+    const { symbol, streamType, afterSeq } = msg;
+    if (!symbol || !streamType) return;
+    const events = getReplay(symbol, streamType, afterSeq || 0);
+    for (const e of events) {
+        _safeSend(ws, JSON.stringify(e.payload));
+    }
 }
 
 // ═══ Cross-exchange sanity check (B.14) ═══
@@ -667,6 +700,8 @@ function handleClientMessage(ws, msg) {
         if (result.isLastSubscriber) {
             self._disconnectSymbol(msg.symbol);
         }
+    } else if (msg.type === 'market.replay') {
+        handleReplayRequest(ws, msg);
     } else if (msg.type === 'market.subscribe.wl') {
         const symbols = msg.symbols || [];
         for (const sym of symbols) subscribe(ws, sym);
@@ -754,6 +789,7 @@ function _resetForTest() {
     _shutdownInProgress = false;
     _crossExchangePrices.clear();
     _shadowDivergences.length = 0;
+    _replayBuffers.clear();
     for (const timer of _fallbackTimers.values()) clearInterval(timer);
     _fallbackTimers.clear();
     stopWatchlist();
@@ -783,6 +819,8 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    getReplay,
+    handleReplayRequest,
     recordCrossExchangePrice,
     getCrossExchangeDivergence,
     getAllCrossExchangeDivergences,

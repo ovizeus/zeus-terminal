@@ -685,6 +685,66 @@ describe('wsMarketProxy sequence numbers', () => {
     });
 });
 
+describe('wsMarketProxy replay buffer', () => {
+    test('getReplay returns empty when no events', () => {
+        expect(proxy.getReplay('BTCUSDT', 'market.kline', 0)).toEqual([]);
+    });
+
+    test('kline broadcast pushes to replay buffer', () => {
+        const ws = { readyState: 1, send: jest.fn(), bufferedAmount: 0 };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@kline_5m',
+            data: { k: { i: '5m', t: 1, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }
+        });
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@kline_5m',
+            data: { k: { i: '5m', t: 2, o: '2', h: '2', l: '2', c: '2', v: '2', x: false } }
+        });
+
+        const replay = proxy.getReplay('BTCUSDT', 'market.kline', 0);
+        expect(replay.length).toBe(2);
+        expect(replay[0].seq).toBe(1);
+        expect(replay[1].seq).toBe(2);
+    });
+
+    test('getReplay filters by afterSeq', () => {
+        const ws = { readyState: 1, send: jest.fn(), bufferedAmount: 0 };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        for (let i = 0; i < 5; i++) {
+            proxy._handleBinanceMessage('BTCUSDT', {
+                stream: 'btcusdt@kline_5m',
+                data: { k: { i: '5m', t: i, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }
+            });
+        }
+
+        const replay = proxy.getReplay('BTCUSDT', 'market.kline', 3);
+        expect(replay.length).toBe(2);
+        expect(replay[0].seq).toBe(4);
+        expect(replay[1].seq).toBe(5);
+    });
+
+    test('handleReplayRequest sends missed events to client', () => {
+        const ws1 = { readyState: 1, send: jest.fn(), bufferedAmount: 0 };
+        proxy.subscribe(ws1, 'BTCUSDT');
+
+        for (let i = 0; i < 3; i++) {
+            proxy._handleBinanceMessage('BTCUSDT', {
+                stream: 'btcusdt@kline_5m',
+                data: { k: { i: '5m', t: i, o: '1', h: '1', l: '1', c: '1', v: '1', x: false } }
+            });
+        }
+        ws1.send.mockClear();
+
+        const ws2 = { readyState: 1, send: jest.fn(), bufferedAmount: 0 };
+        proxy.handleReplayRequest(ws2, { type: 'market.replay', symbol: 'BTCUSDT', streamType: 'market.kline', afterSeq: 1 });
+
+        expect(ws2.send).toHaveBeenCalledTimes(2);
+    });
+});
+
 describe('wsMarketProxy cross-exchange sanity', () => {
     test('getCrossExchangeDivergence returns null when only one exchange', () => {
         proxy.recordCrossExchangePrice('BTCUSDT', 'binance', 75000);
