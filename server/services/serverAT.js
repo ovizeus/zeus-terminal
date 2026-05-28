@@ -1011,6 +1011,26 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     const userPosCount = _positions.filter(p => p.userId === userId).length;
     if (userPosCount >= stc.maxPos) { _recordMissedTrade(userId, decision, 'MAX_POSITIONS'); return null; }
 
+    // [Task K 2026-05-28] Per-user trade rate limit — hard cap on entries/h
+    // (default 10/h). Last-line defense against runaway brain bugs that
+    // bypass confidence/dedup checks. Defensive: never blocks if module
+    // load fails (fail-open since this is a defense layer, not gate).
+    try {
+        const _trl = require('./tradeRateLimiter');
+        if (!_trl.canEnter(userId)) {
+            const st = _trl.getState(userId);
+            logger.warn('AT_ENGINE', `Entry blocked uid=${userId} sym=${decision.symbol} — RATE_LIMIT (${st.recentEntries.length}/${st.limit} in 1h)`);
+            _recordMissedTrade(userId, decision, 'RATE_LIMIT');
+            try {
+                audit.record('AT_ENTRY_RATE_LIMITED', {
+                    userId, symbol: decision.symbol, side: decision.side,
+                    count: st.recentEntries.length, limit: st.limit,
+                }, 'SERVER_AT');
+            } catch (_) {}
+            return null;
+        }
+    } catch (_) { /* fail-open on module load failure */ }
+
     // ── Compute order ──
     const baseSize = stc.size;
     const lev = stc.lev;
@@ -1227,6 +1247,8 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     }
 
     _notifyChange(userId);
+    // [Task K 2026-05-28] Record entry in rate limiter — counts toward 10/h cap.
+    try { require('./tradeRateLimiter').recordEntry(userId); } catch (_) {}
     return entry;
 }
 
