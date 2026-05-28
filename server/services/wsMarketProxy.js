@@ -381,6 +381,37 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Graceful shutdown (B.10) ═══
+
+const SHUTDOWN_GRACE_MS = 5000;
+let _shutdownInProgress = false;
+
+function initiateShutdown(wss) {
+    if (_shutdownInProgress) return;
+    _shutdownInProgress = true;
+    try { console.log('[WS_PROXY] SHUTDOWN_INITIATED — broadcasting grace period'); } catch (_) {}
+
+    const msg = JSON.stringify({ type: 'server.shutdown', graceMs: SHUTDOWN_GRACE_MS, ts: Date.now() });
+    if (wss && wss.clients) {
+        wss.clients.forEach(ws => {
+            try { if (ws.readyState === 1) ws.send(msg); } catch (_) {}
+        });
+    }
+
+    for (const [sym, conn] of _connections) {
+        if (conn.pingTimer) { clearInterval(conn.pingTimer); conn.pingTimer = null; }
+        try { conn.ws.close(); } catch (_) {}
+    }
+    _connections.clear();
+    stopWatchlist();
+
+    try { console.log('[WS_PROXY] SHUTDOWN_COMPLETE — all streams closed'); } catch (_) {}
+}
+
+function isShuttingDown() {
+    return _shutdownInProgress;
+}
+
 // ═══ Forced reconcile on WS recovery (B.9) ═══
 
 async function _triggerReconcile(symbol) {
@@ -640,6 +671,7 @@ function _resetForTest() {
     _healthState.clear();
     _rateCounters.clear();
     _staleBroadcasted.clear();
+    _shutdownInProgress = false;
     for (const timer of _fallbackTimers.values()) clearInterval(timer);
     _fallbackTimers.clear();
     stopWatchlist();
@@ -669,6 +701,8 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    initiateShutdown,
+    isShuttingDown,
     isSymbolStale,
     getStalenessMs,
     _triggerReconcile,

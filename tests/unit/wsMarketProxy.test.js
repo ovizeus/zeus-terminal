@@ -640,6 +640,35 @@ describe('wsMarketProxy stale detection', () => {
     });
 });
 
+describe('wsMarketProxy graceful shutdown', () => {
+    test('initiateShutdown broadcasts server.shutdown to all clients', () => {
+        const ws1 = { readyState: 1, send: jest.fn() };
+        const ws2 = { readyState: 1, send: jest.fn() };
+        const mockWss = { clients: new Set([ws1, ws2]) };
+
+        proxy.initiateShutdown(mockWss);
+
+        expect(ws1.send).toHaveBeenCalledWith(expect.stringContaining('"server.shutdown"'));
+        expect(ws2.send).toHaveBeenCalledWith(expect.stringContaining('"server.shutdown"'));
+    });
+
+    test('initiateShutdown is idempotent', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        const mockWss = { clients: new Set([ws]) };
+
+        proxy.initiateShutdown(mockWss);
+        proxy.initiateShutdown(mockWss);
+
+        expect(ws.send).toHaveBeenCalledTimes(1);
+    });
+
+    test('isShuttingDown returns true after initiateShutdown', () => {
+        const mockWss = { clients: new Set() };
+        proxy.initiateShutdown(mockWss);
+        expect(proxy.isShuttingDown()).toBe(true);
+    });
+});
+
 describe('wsMarketProxy forced reconcile', () => {
     test('_triggerReconcile is a function', () => {
         expect(typeof proxy._triggerReconcile).toBe('function');

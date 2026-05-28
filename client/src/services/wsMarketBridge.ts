@@ -22,6 +22,14 @@ export function install() {
   if (_installed) return
   _installed = true
   wsSubscribe(_dispatch)
+  // Also listen to non-market.* types via the raw ws listener
+  wsSubscribe((msg: any) => {
+    if (msg && msg.type === 'server.shutdown') {
+      const graceMs = msg.graceMs || 5000
+      const jitter = Math.random() * 3000
+      try { const { toast } = require('../data/marketDataHelpers'); toast(`Server restarting — reconnecting in ${Math.round((graceMs + jitter) / 1000)}s`, graceMs) } catch (_) {}
+    }
+  })
   on('market.degraded', (msg) => {
     try { const { toast } = require('../data/marketDataHelpers'); toast(`WS DEGRADED: ${msg.symbol || '?'} — fallback REST active`, 5000) } catch (_) {}
   })

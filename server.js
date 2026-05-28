@@ -1888,6 +1888,7 @@ function _gracefulShutdown(signal) {
   } catch (_) { /* best-effort during shutdown */ }
 
   telegramBot.stop();
+  try { require('./server/services/wsMarketProxy').initiateShutdown(wss); } catch (_) {}
   clearInterval(_wsPing);
   wss.clients.forEach(ws => ws.terminate());
   telegram.alertServerStop(signal).finally(() => {
