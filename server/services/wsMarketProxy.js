@@ -392,6 +392,34 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Shadow validation — 1% sample dual-stream XOR (B.13) ═══
+
+const SHADOW_SAMPLE_PCT = 1;
+const _shadowClients = new WeakSet();
+const _shadowDivergences = [];
+const SHADOW_MAX_LOG = 200;
+
+function shouldShadow(ws) {
+    if (_shadowClients.has(ws)) return true;
+    if (Math.random() * 100 < SHADOW_SAMPLE_PCT) {
+        _shadowClients.add(ws);
+        return true;
+    }
+    return false;
+}
+
+function recordShadowDivergence(entry) {
+    _shadowDivergences.push({ ...entry, ts: Date.now() });
+    if (_shadowDivergences.length > SHADOW_MAX_LOG) _shadowDivergences.shift();
+}
+
+function getShadowReport() {
+    const total = _shadowDivergences.length;
+    const recent = _shadowDivergences.filter(d => Date.now() - d.ts < 3600_000);
+    const maxDiv = recent.reduce((m, d) => Math.max(m, Math.abs(d.divergencePct || 0)), 0);
+    return { total, recent: recent.length, maxDivergencePct: maxDiv, entries: recent.slice(-10) };
+}
+
 // ═══ Graceful shutdown (B.10) ═══
 
 const SHUTDOWN_GRACE_MS = 5000;
@@ -713,6 +741,9 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    shouldShadow,
+    recordShadowDivergence,
+    getShadowReport,
     initiateShutdown,
     isShuttingDown,
     isSymbolStale,

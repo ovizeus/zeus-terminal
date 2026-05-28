@@ -685,6 +685,21 @@ describe('wsMarketProxy sequence numbers', () => {
     });
 });
 
+describe('wsMarketProxy shadow validation', () => {
+    test('getShadowReport returns empty initially', () => {
+        const r = proxy.getShadowReport();
+        expect(r.total).toBe(0);
+        expect(r.recent).toBe(0);
+    });
+
+    test('recordShadowDivergence stores entry', () => {
+        proxy.recordShadowDivergence({ symbol: 'BTCUSDT', divergencePct: 0.15, proxyPrice: 75000, shadowPrice: 75112 });
+        const r = proxy.getShadowReport();
+        expect(r.total).toBe(1);
+        expect(r.maxDivergencePct).toBeCloseTo(0.15);
+    });
+});
+
 describe('wsMarketProxy graceful shutdown', () => {
     test('initiateShutdown broadcasts server.shutdown to all clients', () => {
         const ws1 = { readyState: 1, send: jest.fn() };

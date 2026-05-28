@@ -77,6 +77,29 @@ function _connectBNBProxy(): void {
   }))
   w.S.bnbOk = true; _setWsDiag('bnb', { state: 'OPEN', err: '' }); updConn()
   subscribeSymbol(sym)
+  // [B.13] Shadow validation — 1% clients also open direct WS for XOR comparison
+  if (Math.random() * 100 < 1) {
+    try {
+      const shadowSym = sym.toLowerCase()
+      const shadowUrl = `wss://fstream.binance.com/stream?streams=${shadowSym}@markPrice@1s`
+      const shadowWs = new WebSocket(shadowUrl)
+      shadowWs.onmessage = (e: any) => {
+        try {
+          const j = JSON.parse(e.data)
+          if (j.data && j.data.p) {
+            const shadowPrice = +j.data.p
+            const proxyPrice = w.S.price || 0
+            if (proxyPrice > 0 && shadowPrice > 0) {
+              const div = Math.abs(shadowPrice - proxyPrice) / shadowPrice * 100
+              if (div > 0.1) console.warn(`[SHADOW] divergence ${sym}: proxy=$${proxyPrice} shadow=$${shadowPrice} div=${div.toFixed(3)}%`)
+            }
+          }
+        } catch (_) {}
+      }
+      shadowWs.onerror = () => { try { shadowWs.close() } catch (_) {} }
+      setTimeout(() => { try { shadowWs.close() } catch (_) {} }, 300000)
+    } catch (_) {}
+  }
   console.log(`[connectBNB] WS_PROXY mode | sym=${sym}`)
 }
 
