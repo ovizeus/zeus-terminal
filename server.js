@@ -132,14 +132,26 @@ app.use('/api', globalApiLimit);
 // [GATEWAY] Market data proxy — public, no auth required. Must be before auth middleware.
 app.use('/api/market', require('./server/routes/marketProxy'));
 
-app.get('/api/ws/health', (_req, res) => {
+// [FA-P0-1 2026-05-28] These two health endpoints are mounted BEFORE
+// sessionAuth and previously had NO guard — fully public, leaking internal
+// WS topology (tracked symbols, connection state, reconnect counts). Restrict
+// to localhost: operator/monitoring runs on the same VPS; remote callers get
+// 403. The general /health (below) stays public for external uptime monitors.
+function _isLocalReq(req) {
+  const ip = req.ip || (req.connection && req.connection.remoteAddress) || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+app.get('/api/ws/health', (req, res) => {
+  if (!_isLocalReq(req)) return res.status(403).json({ error: 'Forbidden' });
   try {
     const wsProxy = require('./server/services/wsMarketProxy');
     res.json(wsProxy.getHealthSnapshot());
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/userdatastream/health', (_req, res) => {
+app.get('/api/userdatastream/health', (req, res) => {
+  if (!_isLocalReq(req)) return res.status(403).json({ error: 'Forbidden' });
   try {
     const uds = require('./server/services/userDataStream');
     res.json({ ok: true, ...uds.getHealthStatus() });

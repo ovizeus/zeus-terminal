@@ -70,6 +70,13 @@ router.post('/shadow-report', express.json(), (req, res) => {
 });
 
 router.get('/shadow-report', (req, res) => {
+    // [FA-P0-2 2026-05-28] Localhost-only — this router is mounted BEFORE
+    // sessionAuth, and the GET handlers previously had NO guard (only POST
+    // did). Remote callers could read divergence reports (position fragments).
+    // No client UI consumes this GET — operator-only diagnostic via curl.
+    if (!_isLocalhost(req)) {
+        return res.status(403).json({ ok: false, error: 'Forbidden' });
+    }
     const last = parseInt(req.query.last) || 20;
     const recent = _reports.slice(-last);
     const totalDivergences = _reports.reduce((sum, r) => sum + r.count, 0);
@@ -82,6 +89,12 @@ router.get('/shadow-report', (req, res) => {
 });
 
 router.get('/status', (req, res) => {
+    // [FA-P0-2 2026-05-28] Localhost-only — leaked _SRV_POS_REAL_ENABLED
+    // (confirms real-money trading to any anonymous remote caller). No client
+    // UI consumes this — operator diagnostic only.
+    if (!_isLocalhost(req)) {
+        return res.status(403).json({ ok: false, error: 'Forbidden' });
+    }
     const MF = require('../migrationFlags');
     res.json({
         ok: true,
