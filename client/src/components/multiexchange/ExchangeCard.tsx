@@ -1,6 +1,8 @@
 import type { ExchangeAccount } from '../../stores/multiExchangeStore'
 
-export type CardStatus = 'active' | 'inactive' | 'blocked'
+// [P7a.2] 'switchable' = connected but not the active exchange → offer one-click Switch.
+// 'blocked' retained for back-compat but no longer produced (multi-connect replaced it).
+export type CardStatus = 'active' | 'inactive' | 'blocked' | 'switchable'
 
 interface Props {
   id: string
@@ -9,6 +11,7 @@ interface Props {
   account?: ExchangeAccount
   blockedMessage?: string
   onClick: (id: string) => void
+  onSwitch?: (id: string) => void
 }
 
 const ACCENT: Record<string, string> = {
@@ -16,22 +19,26 @@ const ACCENT: Record<string, string> = {
   bybit: '#aa44ff',
 }
 
-export function ExchangeCard({ id, label, status, account, blockedMessage, onClick }: Props) {
+export function ExchangeCard({ id, label, status, account, blockedMessage, onClick, onSwitch }: Props) {
   const accent = ACCENT[id] || '#00d4ff'
-  const isClickable = status === 'active' || status === 'inactive'
+  // [P7a.2] active + switchable + inactive cards open the detail view on click.
+  const isClickable = status === 'active' || status === 'inactive' || status === 'switchable'
 
   const borderColor =
     status === 'active' ? accent :
+    status === 'switchable' ? `${accent}` :
     status === 'blocked' ? '#ff8844' :
     '#1f2937'
 
   const statusLabel =
     status === 'active' ? 'ACTIVE' :
+    status === 'switchable' ? 'CONNECTED' :
     status === 'blocked' ? 'BLOCKED' :
     'INACTIVE'
 
   const statusColor =
     status === 'active' ? '#00d97a' :
+    status === 'switchable' ? '#00d4ff' :
     status === 'blocked' ? '#ff8844' :
     '#6b7280'
 
@@ -65,17 +72,32 @@ export function ExchangeCard({ id, label, status, account, blockedMessage, onCli
           {label}
         </span>
         <span style={{ fontFamily: 'Orbitron, sans-serif', fontWeight: 600, fontSize: '10px', letterSpacing: '1px', color: statusColor }}>
-          {status === 'active' ? '● ' : status === 'blocked' ? '🔒 ' : '○ '}
+          {status === 'active' ? '● ' : status === 'switchable' ? '◆ ' : status === 'blocked' ? '🔒 ' : '○ '}
           {statusLabel}
         </span>
       </div>
 
-      {status === 'active' && account && (
+      {(status === 'active' || status === 'switchable') && account && (
         <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#94a3b8', lineHeight: '1.7' }}>
           <div>Mode &nbsp;&nbsp; <span style={{ color: '#f0f4f8' }}>{account.mode.toUpperCase()}</span></div>
           <div>Key &nbsp;&nbsp;&nbsp; <span style={{ color: '#f0f4f8' }}>{account.maskedKey}</span></div>
           <div>Balance &nbsp;<span style={{ color: '#00d97a' }}>${(account.balance || 0).toFixed(2)}</span></div>
         </div>
+      )}
+
+      {status === 'switchable' && (
+        <button
+          data-testid={`exchange-switch-${id}`}
+          onClick={(e) => { e.stopPropagation(); onSwitch?.(id) }}
+          style={{
+            marginTop: '10px', width: '100%', padding: '8px',
+            background: 'transparent', border: `1px solid ${accent}`, borderRadius: '4px',
+            color: accent, fontFamily: 'Orbitron, sans-serif', fontWeight: 700, fontSize: '11px',
+            letterSpacing: '1px', cursor: 'pointer',
+          }}
+        >
+          ⇄ SWITCH TO {label}
+        </button>
       )}
 
       {status === 'inactive' && (

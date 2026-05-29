@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMultiExchangeStore } from '../../stores/multiExchangeStore'
+import { usePositionsStore } from '../../stores/positionsStore'
 import { ExchangeCard } from './ExchangeCard'
 import { ComingSoonCard } from './ComingSoonCard'
 import { ExchangeDetail } from './ExchangeDetail'
+import { toast } from '../../data/marketDataHelpers'
 
 const COMING_SOON = [
   { id: 'okx', label: 'OKX', phase: 'Phase 3 — Jun 2026' },
@@ -15,9 +17,14 @@ const COMING_SOON = [
 export function MultiExchangePage() {
   const accounts = useMultiExchangeStore((s) => s.accounts)
   const loadAccounts = useMultiExchangeStore((s) => s.loadAccounts)
+  const switchExchange = useMultiExchangeStore((s) => s.switchExchange)
   const error = useMultiExchangeStore((s) => s.error)
+  const liveCount = usePositionsStore((s) => s.livePositions.length)
 
   const [view, setView] = useState<'grid' | string>('grid')
+  // [P7a.2] one-click Switch confirm flow. confirmTarget = exchange awaiting confirm.
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null)
+  const [switching, setSwitching] = useState(false)
 
   useEffect(() => {
     loadAccounts().catch(() => {})
@@ -34,20 +41,44 @@ export function MultiExchangePage() {
     return () => window.removeEventListener('zeus:page-back', onPageBack)
   }, [view])
 
-  const activeKeys = Object.keys(accounts).filter((k) => !!accounts[k])
-  const activeExchange = activeKeys[0] || null
-  const activeCount = activeKeys.length
+  const connectedKeys = Object.keys(accounts).filter((k) => !!accounts[k])
+  const activeExchange = connectedKeys.find((k) => accounts[k]?.active) || null
+  const connectedCount = connectedKeys.length
 
-  function getStatus(id: 'binance' | 'bybit'): 'active' | 'inactive' | 'blocked' {
-    if (accounts[id]) return 'active'
-    if (activeExchange && activeExchange !== id) return 'blocked'
-    return 'inactive'
+  // [P7a.2] active → the live exchange; switchable → connected but inactive (offer
+  // Switch); inactive → not connected. The old 'blocked' mutual-exclusion is gone.
+  function getStatus(id: 'binance' | 'bybit'): 'active' | 'inactive' | 'switchable' {
+    if (!accounts[id]) return 'inactive'
+    return accounts[id].active ? 'active' : 'switchable'
   }
 
-  function getBlockedMsg(id: 'binance' | 'bybit'): string {
-    const activeLabel = activeExchange === 'binance' ? 'Binance' : 'Bybit'
-    const targetLabel = id === 'binance' ? 'Binance' : 'Bybit'
-    return `${targetLabel} cannot be activated because ${activeLabel} is currently connected. Zeus allows one exchange per account. Disconnect ${activeLabel} first.`
+  // [P7a.2] If the current active exchange has open positions, confirm first (they
+  // stay DSL-managed on their own exchange). Otherwise switch immediately.
+  function requestSwitch(id: string) {
+    if (switching) return
+    if (activeExchange && liveCount > 0) setConfirmTarget(id)
+    else doSwitch(id)
+  }
+
+  async function doSwitch(id: string) {
+    setConfirmTarget(null)
+    setSwitching(true)
+    try {
+      const r = await switchExchange(id)
+      if (r.ok) {
+        await loadAccounts(true).catch(() => {})
+        const left = (r.openPositionsOnPrevious || [])
+          .map((p) => `${p.count} on ${p.exchange.toUpperCase()}`)
+          .join(', ')
+        toast(`Switched — new orders go to ${id.toUpperCase()}${left ? ` · ${left} still managed` : ''}`, 4000)
+      } else {
+        toast(r.error || r.message || 'Switch failed', 4000)
+      }
+    } catch (e: any) {
+      toast(`Switch failed: ${e?.message || e}`, 4000)
+    } finally {
+      setSwitching(false)
+    }
   }
 
   if (view !== 'grid') {
@@ -75,7 +106,7 @@ export function MultiExchangePage() {
           color: '#94a3b8',
           marginTop: '4px',
         }}>
-          {COMING_SOON.length + 2} venues · {activeCount} connected
+          {COMING_SOON.length + 2} venues · {connectedCount} connected
         </div>
       </div>
 
@@ -95,21 +126,67 @@ export function MultiExchangePage() {
           label="BINANCE"
           status={getStatus('binance')}
           account={accounts.binance}
-          blockedMessage={getStatus('binance') === 'blocked' ? getBlockedMsg('binance') : undefined}
           onClick={(id) => setView(id)}
+          onSwitch={requestSwitch}
         />
         <ExchangeCard
           id="bybit"
           label="BYBIT"
           status={getStatus('bybit')}
           account={accounts.bybit}
-          blockedMessage={getStatus('bybit') === 'blocked' ? getBlockedMsg('bybit') : undefined}
           onClick={(id) => setView(id)}
+          onSwitch={requestSwitch}
         />
         {COMING_SOON.map((cs) => (
           <ComingSoonCard key={cs.id} label={cs.label} phase={cs.phase} />
         ))}
       </div>
+
+      {confirmTarget && (
+        <div
+          data-testid="switch-confirm-dialog"
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setConfirmTarget(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#13192a', border: '1px solid #00d4ff55', borderRadius: '8px',
+              padding: '22px', maxWidth: '380px', width: '90%',
+              fontFamily: 'JetBrains Mono, monospace', color: '#cbd5e1',
+            }}
+          >
+            <div style={{ fontFamily: 'Orbitron, sans-serif', fontWeight: 700, fontSize: '14px', letterSpacing: '1px', color: '#00d4ff', marginBottom: '12px' }}>
+              Switch active exchange
+            </div>
+            <div style={{ fontSize: '12px', lineHeight: '1.6', marginBottom: '18px' }}>
+              Switch new orders to <b style={{ color: '#f0f4f8' }}>{confirmTarget.toUpperCase()}</b>?<br /><br />
+              {activeExchange?.toUpperCase()} has <b style={{ color: '#f0c040' }}>{liveCount}</b> open position(s).
+              They stay open and DSL keeps managing them on {activeExchange?.toUpperCase()} — only new orders, AT and brain move to {confirmTarget.toUpperCase()}.
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                data-testid="switch-cancel"
+                onClick={() => setConfirmTarget(null)}
+                style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #6b7280', borderRadius: '4px', color: '#94a3b8', cursor: 'pointer', fontFamily: 'Orbitron, sans-serif', fontSize: '11px' }}
+              >
+                CANCEL
+              </button>
+              <button
+                data-testid="switch-confirm"
+                disabled={switching}
+                onClick={() => doSwitch(confirmTarget)}
+                style={{ padding: '8px 16px', background: '#00d4ff', border: 'none', borderRadius: '4px', color: '#04121f', cursor: 'pointer', fontFamily: 'Orbitron, sans-serif', fontWeight: 700, fontSize: '11px' }}
+              >
+                SWITCH
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
