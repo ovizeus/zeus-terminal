@@ -65,6 +65,13 @@ async function run() {
             `SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE status = 'verified'`
         ).all();
 
+        // [HALT-FIX] Halt lift is per-USER and decided AFTER all the user's exchanges
+        // are reconciled: a user is disarmed only if reconciled cleanly on EVERY
+        // exchange AND no exchange-only position was left unprotected (haltArmed). A
+        // user with an errored exchange is never added → stays halted.
+        const reconciledUsers = new Set();
+        const haltArmedUsers = new Set();
+        const erroredUsers = new Set();
         for (const { user_id: uid, exchange } of users) {
             totalUsers++;
             try {
@@ -72,11 +79,28 @@ async function run() {
                 totalReconciled++;
                 totalOrphaned += result.orphaned;
                 totalSlPlaced += result.slPlaced;
+                reconciledUsers.add(uid);
+                if (result.haltArmed) haltArmedUsers.add(uid);
             } catch (err) {
                 errors++;
+                erroredUsers.add(uid);
                 _logError('RECOVERY_BOOT', `user ${uid} reconciliation failed: ${err.message}`);
                 // User stays halted — don't lift their halt
             }
+        }
+
+        // Lift the halt only for users fully clean across all their exchanges.
+        const serverAT = require('./serverAT');
+        for (const uid of reconciledUsers) {
+            if (haltArmedUsers.has(uid) || erroredUsers.has(uid)) {
+                _logWarn('RECOVERY_BOOT', `uid=${uid}: global halt KEPT ARMED — unprotected position or failed exchange; manual intervention required`);
+                continue;
+            }
+            try {
+                if (typeof serverAT.setGlobalHalt === 'function') {
+                    serverAT.setGlobalHalt(false, uid, 'RECOVERY_BOOT_COMPLETE');
+                }
+            } catch (_) {}
         }
     } catch (err) {
         _logError('RECOVERY_BOOT', `boot failed entirely: ${err.message}`);
@@ -107,6 +131,7 @@ async function run() {
 async function _reconcileUser(uid, exchange) {
     let orphaned = 0;
     let slPlaced = 0;
+    let haltArmed = false; // [HALT-FIX] set if an unprotected exchange-only position armed globalHalt
 
     // 1. [P2c.3] Scan positions for THIS exchange (routed to its own creds).
     let exchangePositions;
@@ -275,8 +300,9 @@ async function _reconcileUser(uid, exchange) {
             `user ${uid}: position ${symbol} on ${exchange} but not in DB — placing conservative auto-SL`
         );
 
-        // 3c.2 Auto-SL placement
-        await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos);
+        // 3c.2 Auto-SL placement. Returns true if it left the position UNPROTECTED
+        // (auto-SL failed → armed globalHalt) — propagate so the caller keeps the halt.
+        if (await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos)) haltArmed = true;
     }
 
     // [Task M 2026-05-28] Sweep orphan Zeus SL/TP orders. Runs BEFORE global
@@ -291,15 +317,10 @@ async function _reconcileUser(uid, exchange) {
         _logWarn('RECOVERY_BOOT', `uid=${uid}: order sweep failed: ${e.message}`);
     }
 
-    // 4. Lift global halt for this user (setGlobalHalt signature: active, byUserId, reason)
-    try {
-        const serverAT = require('./serverAT');
-        if (typeof serverAT.setGlobalHalt === 'function') {
-            serverAT.setGlobalHalt(false, uid, 'RECOVERY_BOOT_COMPLETE');
-        }
-    } catch (_) {}
-
-    return { orphaned, slPlaced };
+    // [HALT-FIX] Halt lift is decided by run() AFTER all of this user's exchanges are
+    // reconciled — NOT here. Previously this disarmed the halt unconditionally, which
+    // defeated a halt armed by an unprotected exchange-only position (auto-SL failed).
+    return { orphaned, slPlaced, haltArmed };
 }
 
 /**
@@ -363,7 +384,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
                 symbol, side, qty: exchPos.qty, markPrice: exchPos.markPrice, entryPrice: exchPos.entryPrice, exchange,
             }));
         } catch (_) {}
-        return;
+        return false; // [HALT-FIX] invalid data → no halt armed (Task E behavior preserved)
     }
 
     // Attempt 1: place SL at current mark ± 2%
@@ -407,7 +428,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
                 + (retried ? '_Initial SL would have triggered immediately — retried after markPrice refetch._\n' : '')
                 + '_Position opened on exchange but missing from Zeus DB — manual review recommended._');
         } catch (_) {}
-        return;
+        return false; // [HALT-FIX] SL placed → protected, no halt
     }
 
     // FAIL path — UNPROTECTED. Halt + critical alert.
@@ -436,6 +457,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
             + 'Error: ' + result.error
             + (retried ? '\n_Retried after markPrice refetch but rejection persisted._' : ''));
     } catch (_) {}
+    return true; // [HALT-FIX] auto-SL failed → halt ARMED; caller must NOT disarm this user
 }
 
 module.exports = { run, _reconcileUser, _handleExchangeOnlyPosition };

@@ -336,6 +336,9 @@ describe('recoveryBoot', () => {
             expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED')).toBeDefined();
             expect(mockSetGlobalHalt).toHaveBeenCalledWith(true, 1, expect.stringMatching(/RECOVERY_AUTOSL_FAILED/));
             expect(mockTelegramSendToUser).toHaveBeenCalledWith(1, expect.stringMatching(/CRITICAL|UNPROTECTED/));
+            // [HALT-FIX] The armed halt MUST NOT be disarmed by recovery-complete —
+            // an unprotected exchange-only position keeps the halt for manual intervention.
+            expect(mockSetGlobalHalt).not.toHaveBeenCalledWith(false, 1, 'RECOVERY_BOOT_COMPLETE');
         });
 
         it('placeStopLoss returns ok:false (non-trigger) → NO retry, globalHalt', async () => {
@@ -350,6 +353,7 @@ describe('recoveryBoot', () => {
             expect(mockPlaceStopLoss).toHaveBeenCalledTimes(1);
             expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED')).toBeDefined();
             expect(mockSetGlobalHalt).toHaveBeenCalledWith(true, 1, expect.stringMatching(/RECOVERY_AUTOSL_FAILED/));
+            expect(mockSetGlobalHalt).not.toHaveBeenCalledWith(false, 1, 'RECOVERY_BOOT_COMPLETE'); // [HALT-FIX] stays armed
         });
 
         it('would-trigger error → refetch markPrice → retry succeeds (NO halt)', async () => {
@@ -388,6 +392,7 @@ describe('recoveryBoot', () => {
             expect(mockPlaceStopLoss).toHaveBeenCalledTimes(2);  // retry attempted
             expect(_auditLog.find(a => a.action === 'RECOVERY_EXCHANGE_ONLY_AUTOSL_FAILED')).toBeDefined();
             expect(mockSetGlobalHalt).toHaveBeenCalledWith(true, 1, expect.stringMatching(/RECOVERY_AUTOSL_FAILED/));
+            expect(mockSetGlobalHalt).not.toHaveBeenCalledWith(false, 1, 'RECOVERY_BOOT_COMPLETE'); // [HALT-FIX] stays armed
         });
 
         it('invalid exchPos data (no markPrice + no entryPrice) → audit invalid, no SL attempt', async () => {
