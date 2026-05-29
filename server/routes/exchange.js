@@ -64,7 +64,11 @@ async function _testBybitKeys(apiKey, apiSecret, mode) {
     const timestamp = Date.now();
     const recvWindow = 5000;
     // Bybit v5: sign = HMAC-SHA256(timestamp + apiKey + recvWindow + queryString)
-    const queryString = 'accountType=CONTRACT';
+    // [BYBIT-VERIFY-FIX 2026-05-29] UNIFIED (not CONTRACT) — modern Bybit v5 accounts
+    // (incl. testnet) are Unified Trading Accounts; CONTRACT returns an error/empty body
+    // for them → res.json() threw "Unexpected end of JSON input" → save 400. Matches
+    // the proven bybitOps.getBalance (accountType: 'UNIFIED').
+    const queryString = 'accountType=UNIFIED';
     const signPayload = `${timestamp}${apiKey}${recvWindow}${queryString}`;
     const signature = crypto
         .createHmac('sha256', apiSecret)
@@ -85,8 +89,15 @@ async function _testBybitKeys(apiKey, apiSecret, mode) {
         signal: AbortSignal.timeout(10000),
     });
 
-    const data = await res.json();
-    if (data.retCode !== 0) throw new Error(data.retMsg || 'Bybit API error');
+    // [BYBIT-VERIFY-FIX] Robust parse — a non-JSON / empty Bybit body must surface a
+    // clean error, not a raw "Unexpected end of JSON input" thrown by res.json().
+    let data;
+    try {
+        data = await res.json();
+    } catch (_) {
+        throw new Error(`Bybit verification failed — HTTP ${res.status} (non-JSON response)`);
+    }
+    if (!data || data.retCode !== 0) throw new Error((data && data.retMsg) || `Bybit API error (HTTP ${res.status})`);
 
     const coins = data.result?.list?.[0]?.coin || [];
     const usdt = coins.find(c => c.coin === 'USDT') || {};

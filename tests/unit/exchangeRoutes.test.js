@@ -283,6 +283,50 @@ describe('[P7.0a] multi-connect — second exchange connects INACTIVE; per-excha
     });
 });
 
+describe('[BYBIT-VERIFY-FIX] /save verifies Bybit via UNIFIED wallet-balance', () => {
+  let origFetch;
+  beforeEach(() => {
+    mockDb.exec('DELETE FROM exchange_accounts; DELETE FROM audit_log;');
+    origFetch = global.fetch;
+  });
+  afterEach(() => { global.fetch = origFetch; });
+
+  it('uses accountType=UNIFIED (not CONTRACT) and saves on success', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ retCode: 0, result: { list: [{ coin: [{ coin: 'USDT', walletBalance: '1000', availableToWithdraw: '800' }] }] } }),
+    });
+    global.fetch = fetchMock;
+
+    const res = await request(buildApp()).post('/api/exchange/save').send({
+      exchange: 'bybit', mode: 'testnet', apiKey: 'k'.repeat(12), apiSecret: 's'.repeat(12),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    // The verification call must target the UNIFIED account (matches bybitOps).
+    const calledUrl = String(fetchMock.mock.calls[0][0]);
+    expect(calledUrl).toMatch(/accountType=UNIFIED/);
+    expect(calledUrl).not.toMatch(/accountType=CONTRACT/);
+  });
+
+  it('surfaces a clean error (not a raw JSON-parse crash) on a non-JSON Bybit response', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => { throw new Error('Unexpected end of JSON input'); },
+    });
+    const res = await request(buildApp()).post('/api/exchange/save').send({
+      exchange: 'bybit', mode: 'testnet', apiKey: 'k'.repeat(12), apiSecret: 's'.repeat(12),
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/Bybit verification failed|HTTP 401/i);
+    expect(res.body.error).not.toMatch(/Unexpected end of JSON/i);
+  });
+});
+
 describe('Phase 8 Tasks 47-50', () => {
     // Task 47: /save returns verified:true on success
     describe('POST /save with verify (Task 47)', () => {
