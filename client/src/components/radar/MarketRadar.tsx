@@ -250,6 +250,7 @@ export function MarketRadar() {
     const green = useMarketRadarStore((s) => s.green)
     const red = useMarketRadarStore((s) => s.red)
     const lastEventTs = useMarketRadarStore((s) => s.lastEventTs)
+    const source = useMarketRadarStore((s) => s.source)
     const patch = useMarketStore((s) => s.patch)
 
     // 1s tick drives the "updated Xs ago" badge and the 10s NEW halo decay.
@@ -271,7 +272,7 @@ export function MarketRadar() {
     return (
         <section id="market-radar" className="mr-root" aria-label="Market Radar">
             <header className="mr-head">
-                <span className="mr-title">📡 TOP 300 BINANCE USDT · 24h VOL</span>
+                <span className="mr-title">📡 TOP 300 {(source || 'binance').toUpperCase()} USDT · 24h VOL</span>
                 <span className={`mr-age${lastEventTs === 0 ? ' mr-age--idle' : ''}`}>{ageLabel}</span>
             </header>
             <Band color="green" events={green} now={now} onPillClick={onPillClick} />

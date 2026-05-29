@@ -76,7 +76,45 @@ async function fetchKlines(symbol, binanceInterval, limit) {
     return norm.length > 0 ? norm : null;
 }
 
+// [Phase B / Task B5] Bybit tickers → Binance /ticker/24hr field shape so marketRadar's
+// existing parser (reads .symbol/.lastPrice/.quoteVolume/.priceChangePercent) consumes it
+// unchanged. Bybit price24hPcnt is a FRACTION (0.001797 = 0.18%); turnover24h = USD volume.
+function _normalizeTickers(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    for (const t of list) {
+        if (!t || typeof t.symbol !== 'string') continue;
+        const pctNum = parseFloat(t.price24hPcnt);
+        out.push({
+            symbol: t.symbol,
+            lastPrice: t.lastPrice,
+            quoteVolume: t.turnover24h,                       // USD traded → Binance quoteVolume
+            priceChangePercent: Number.isFinite(pctNum) ? String(pctNum * 100) : '0',
+            openInterest: t.openInterest,                     // base qty (radar enrichment)
+            fundingRate: t.fundingRate,
+        });
+    }
+    return out;
+}
+
+// Fetch the full linear-perp ticker universe from Bybit REST, normalized to the
+// Binance /ticker/24hr field shape. Returns the array on success, null on failure.
+async function fetchTickers() {
+    const url = `${BYBIT_REST}/v5/market/tickers?category=linear`;
+    let res;
+    try {
+        res = await gateway.fetch(url, { __weight: 1, __src: 'bybit-tickers-fallback' });
+    } catch (_) { return null; }
+    if (!res || !res.ok) return null;
+    let data;
+    try { data = await res.json(); } catch (_) { return null; }
+    if (!data || data.retCode !== 0 || !data.result || !Array.isArray(data.result.list)) return null;
+    const norm = _normalizeTickers(data.result.list);
+    return norm.length > 0 ? norm : null;
+}
+
 module.exports = {
     fetchKlines,
-    _test: { toBybitInterval: _toBybitInterval, normalizeKlines: _normalizeKlines },
+    fetchTickers,
+    _test: { toBybitInterval: _toBybitInterval, normalizeKlines: _normalizeKlines, normalizeTickers: _normalizeTickers },
 };

@@ -25,6 +25,9 @@ export interface MarketRadarState {
   green: RadarEvent[]
   red: RadarEvent[]
   lastEventTs: number
+  /** [B5] Exchange the radar universe currently comes from ('binance'|'bybit').
+   *  Drives an honest UI title — never label Bybit data as "BINANCE". */
+  source: string
   push: (ev: RadarEvent) => void
   /** [Phase 11.7] replace both queues with a server-sent warm-start snapshot */
   hydrate: (green: RadarEvent[], red: RadarEvent[], lastEventTs: number) => void
@@ -51,6 +54,7 @@ export const useMarketRadarStore = create<MarketRadarState>((set, get) => ({
   green: [],
   red: [],
   lastEventTs: 0,
+  source: 'binance',
 
   push: (ev) => {
     // Defensive coercion — the realtime service validates shape, but keep
@@ -65,11 +69,17 @@ export const useMarketRadarStore = create<MarketRadarState>((set, get) => ({
     // Leaves room for slightly-out-of-order frames from the same poll.
     if (lastEventTs > 0 && ev.ts < lastEventTs - STALE_GUARD_MS) return
 
+    // [B5] capture honest source tag from the event when present
+    const _src = typeof (ev as { source?: unknown }).source === 'string'
+      ? (ev as { source?: string }).source as string
+      : undefined
+
     set((s) => {
+      const _base = _src ? { source: _src } : {}
       if (ev.color === 'green') {
-        return { green: _enqueue(s.green, ev), lastEventTs: Math.max(s.lastEventTs, ev.ts) }
+        return { ..._base, green: _enqueue(s.green, ev), lastEventTs: Math.max(s.lastEventTs, ev.ts) }
       }
-      return { red: _enqueue(s.red, ev), lastEventTs: Math.max(s.lastEventTs, ev.ts) }
+      return { ..._base, red: _enqueue(s.red, ev), lastEventTs: Math.max(s.lastEventTs, ev.ts) }
     })
   },
 

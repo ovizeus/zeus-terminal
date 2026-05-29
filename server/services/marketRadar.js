@@ -99,6 +99,10 @@ let _btcDelta = null;          // BTCUSDT priceChangePercent24h from the latest 
 // queried by chatResponder / /api/market/top for top gainers/losers/volume
 // without re-hitting Binance. Replaced atomically per tick.
 let _lastSnapshot = null;      // { ts, tickers: [{symbol, price, quoteVolume, priceChangePercent24h, priceChangePercent1h}, ...] }
+// [Phase B / Task B5] Which exchange the current universe came from. When Binance
+// /ticker/24hr is IP-blocked we fall back to Bybit; the UI title must reflect the
+// REAL source (no "BINANCE" label on Bybit data).
+let _source = 'binance';
 
 function _broadcast(payload) {
     const fn = global.__zeusWsBroadcastAll;
@@ -152,6 +156,7 @@ function _emit(event) {
     //   - streakCount: consecutive fires of (symbol, category) within 15 min
     //   - tfMetrics: per-timeframe change % from real klines (D2)
     if (event && typeof event === 'object') {
+        if (event.source === undefined) event.source = _source; // [B5] honest source tag for UI title
         if (event.btcDelta === undefined) event.btcDelta = _btcDelta;
         if (event.streakCount === undefined && event.symbol && event.category) {
             event.streakCount = _bumpStreak(event.symbol, event.category, event.ts || Date.now());
@@ -215,13 +220,24 @@ async function _telemFetch(url, opts) {
 
 async function _pollOnce() {
     let rows;
+    let source = 'binance';
     try {
         rows = await _fetchTicker24h();
     } catch (err) {
-        logger.error('RADAR', `fetch /ticker/24hr failed: ${err.message}`);
-        return;
+        // [Phase B / Task B5] Binance ticker IP-blocked → fall back to Bybit bulk
+        // tickers (not blocked from this host), normalized to Binance field shape.
+        try {
+            const bybitRows = await require('./bybitRest').fetchTickers();
+            if (Array.isArray(bybitRows) && bybitRows.length > 0) { rows = bybitRows; source = 'bybit'; }
+        } catch (_) { /* fall through to error below */ }
+        if (!rows) {
+            logger.error('RADAR', `fetch /ticker/24hr failed: ${err.message} (Bybit fallback also unavailable)`);
+            return;
+        }
+        logger.warn('RADAR', `Binance ticker unavailable — using Bybit fallback universe (${rows.length} symbols)`);
     }
     if (!Array.isArray(rows) || rows.length === 0) return;
+    _source = source;
 
     // Keep only USDT-margined perpetuals and coerce numerics
     const tickers = [];
@@ -589,6 +605,7 @@ function getTopSnapshot(opts) {
     return {
         ts: _lastSnapshot.ts,
         kind,
+        source: _source, // [B5] honest source tag (binance|bybit)
         universeSize: _lastSnapshot.tickers.length,
         symbols: all.slice(0, Math.min(limit, all.length)),
     };
