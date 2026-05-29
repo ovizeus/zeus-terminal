@@ -70,6 +70,18 @@ function _buildTopics() {
     return { kline, trade, tickers, orderbook };
 }
 
+// [Phase B / Task B1] Bybit V5 allows max ~10 args per subscribe request. The old
+// hand-rolled batch1=t.kline put 12 topics (4 symbols × 3 TFs) in ONE message →
+// ret_msg=fail → klines never subscribed (half-failing feed). Chunk ALL topics into
+// <=10-topic messages so every batch is accepted.
+const BYBIT_MAX_TOPICS_PER_MSG = 10;
+function _chunkTopics(topics, maxPerBatch) {
+    const max = maxPerBatch || BYBIT_MAX_TOPICS_PER_MSG;
+    const out = [];
+    for (let i = 0; i < topics.length; i += max) out.push(topics.slice(i, i + max));
+    return out;
+}
+
 let _reqIdCounter = 0;
 function _nextReqId() {
     return `bybit-sub-${Date.now()}-${++_reqIdCounter}`;
@@ -86,11 +98,10 @@ const _failedTopics = new Map();
 function _sendSubscribeBatches() {
     if (!_ws || _ws.readyState !== WebSocket.OPEN) return;
     const t = _buildTopics();
-    const batch1 = t.kline;
-    const batch2 = [...t.trade, ...t.tickers, ...t.orderbook.slice(0, 2)];
-    const batch3 = t.orderbook.slice(2);
+    const all = [...t.kline, ...t.trade, ...t.tickers, ...t.orderbook];
+    const batches = _chunkTopics(all, BYBIT_MAX_TOPICS_PER_MSG);
 
-    for (const batch of [batch1, batch2, batch3]) {
+    for (const batch of batches) {
         if (batch.length === 0) continue;
         const reqId = _nextReqId();
         try {
@@ -404,6 +415,8 @@ module.exports = {
     _dispatchMessage,
     _sendSubscribeBatches,
     _buildTopics,
+    _chunkTopics,
+    BYBIT_MAX_TOPICS_PER_MSG,
     _normalizeKline,
     _normalizeTrade,
     _normalizeBookTicker,
