@@ -9,7 +9,13 @@ const crypto = require('crypto');
 const Sentry = require('@sentry/node');
 const logger = require('./logger');
 const MF = require('../migrationFlags');
-const { getExchangeCreds } = require('./credentialStore');
+const credentialStore = require('./credentialStore');
+const { getExchangeCreds } = credentialStore;
+const { credsForPosition } = require('./credsRouting');
+// [Multi-exchange switch P2a] Creds for an existing position's OWN exchange.
+// New orders use getExchangeCreds (active); close/SL/TP/add-on of an open position
+// route to position.exchange so old-exchange positions stay managed after a switch.
+function _credsForPosition(userId, pos) { return credsForPosition(credentialStore, userId, pos); }
 const { sendSignedRequest } = require('./binanceSigner');
 // [Task 40 — Bybit Phase 1A+1B] exchangeOps router: routes entry/close/balance
 // calls to the correct exchange (Binance or Bybit) based on per-user config.
@@ -1789,7 +1795,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
     if (!pos.userId) { logger.error('AT_LIVE', 'handleLiveExit without pos.userId — aborting'); return; }
     const userId = pos.userId;
     const us = _uState(userId);
-    const creds = getExchangeCreds(userId);
+    const creds = _credsForPosition(userId, pos);
     if (!creds) return;
 
     // [FIX-EXPIRY] EXPIRED handling removed — no code path produces EXPIRED anymore
@@ -2287,7 +2293,7 @@ function _closePosition(idx, pos, exitType, price, pnl) {
 
     const emoji = pnl > 0 ? '✅' : pnl < 0 ? '❌' : '⏳';
     // [MODE-P5] Resolved environment for Telegram exit label
-    const _exitCreds = getExchangeCreds(userId);
+    const _exitCreds = _credsForPosition(userId, pos);
     const _exitEnv = pos.mode === 'demo' ? 'DEMO' : ((_exitCreds && _exitCreds.mode === 'testnet') ? 'TESTNET' : 'LIVE');
     const modeTag = _exitEnv === 'TESTNET' ? '🟡 TESTNET' : (pos.mode === 'live' ? '🔴 LIVE' : '🎮 DEMO');
     const phaseLabel = dslState ? ` | DSL: ${dslState.phase}` : '';
@@ -2392,7 +2398,7 @@ async function _updateLiveSL(pos, newSL) {
     pos._slQueuedSL = null;
     try {
     const userId = pos.userId;
-    const creds = getExchangeCreds(userId);
+    const creds = _credsForPosition(userId, pos);
     if (!creds) return;
 
     const oldSlOrderId = pos.live.slOrderId;
@@ -4114,7 +4120,7 @@ async function addOnPosition(userId, seq, options = {}) {
         // LIVE ADD-ON BRANCH — Binance MARKET order + SL/TP replace
         // ════════════════════════════════════════════════════════════
         if (pos.mode === 'live') {
-            const creds = getExchangeCreds(userId);
+            const creds = _credsForPosition(userId, pos);
             if (!creds) return { ok: false, error: 'No exchange credentials' };
 
             // ── Snapshot pre-addon state for rollback ──
@@ -5155,7 +5161,7 @@ async function _watchdogLiveNoSL() {
         for (const pos of targets) {
             if (!pos.userId) continue;
             const userId = pos.userId;
-            const creds = getExchangeCreds(userId);
+            const creds = _credsForPosition(userId, pos);
             if (!creds) continue;
 
             const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
