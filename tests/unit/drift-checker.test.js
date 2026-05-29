@@ -19,6 +19,12 @@ const dbMock = {
     auditLog: jest.fn(),
 };
 const telegramMock = { sendToUser: jest.fn(() => Promise.resolve()) };
+// [P2c.2] driftChecker now resolves the active exchange to also check it for
+// exchange-only positions. Default active = binance for the legacy single-exchange tests.
+const credentialStoreMock = {
+    getExchangeCreds: jest.fn(() => ({ exchange: 'binance', mode: 'testnet' })),
+    getExchangeCredsFor: jest.fn((uid, exchange) => ({ exchange, mode: 'testnet' })),
+};
 
 describe('driftChecker', () => {
     let dc;
@@ -31,10 +37,12 @@ describe('driftChecker', () => {
         dbMock.listActiveExchangeUsers.mockReset().mockReturnValue([]);
         dbMock.auditLog.mockReset();
         telegramMock.sendToUser.mockReset().mockResolvedValue({ ok: true });
+        credentialStoreMock.getExchangeCreds.mockReset().mockReturnValue({ exchange: 'binance', mode: 'testnet' });
         jest.doMock(path.resolve(__dirname, '../../server/services/serverAT'), () => serverATMock);
         jest.doMock(path.resolve(__dirname, '../../server/services/exchangeOps'), () => exchangeOpsMock);
         jest.doMock(path.resolve(__dirname, '../../server/services/database'), () => ({ db: dbMock }));
         jest.doMock(path.resolve(__dirname, '../../server/services/telegram'), () => telegramMock);
+        jest.doMock(path.resolve(__dirname, '../../server/services/credentialStore'), () => credentialStoreMock);
         dc = require('../../server/services/driftChecker');
         dc._reset();
     });
@@ -153,6 +161,25 @@ describe('driftChecker', () => {
         jest.advanceTimersByTime(20000);
         expect(dbMock.listActiveExchangeUsers.mock.calls.length).toBe(callsBefore);
         jest.useRealTimers();
+    });
+
+    // [P2c.2] Cross-exchange: a db position on a NON-active exchange must be checked
+    // against ITS OWN exchange (via exchangeOverride), not the active one — otherwise
+    // it is falsely flagged dbOnly → false global HALT after a switch.
+    test('[P2c.2] db position on non-active exchange is checked against its own exchange (no false drift)', async () => {
+        // Active = binance; the open position lives on bybit.
+        serverATMock.getOpenPositions.mockReturnValue([{ userId: 42, symbol: 'BTCUSDT', side: 'LONG', qty: 0.01, exchange: 'bybit' }]);
+        exchangeOpsMock.getPositions.mockImplementation((uid, params) => {
+            const ex = params && params.exchangeOverride;
+            if (ex === 'bybit') return Promise.resolve([{ symbol: 'BTCUSDT', side: 'LONG', qty: 0.01 }]);
+            return Promise.resolve([]); // binance (active) holds nothing
+        });
+
+        const result = await dc.checkUser(42);
+
+        expect(result.driftDetected).toBe(false);
+        expect(exchangeOpsMock.getPositions).toHaveBeenCalledWith(42, expect.objectContaining({ exchangeOverride: 'bybit' }));
+        expect(serverATMock.setGlobalHalt).not.toHaveBeenCalled();
     });
 
     test('side mismatch (LONG vs SHORT) treated as separate positions → drift', async () => {

@@ -38,53 +38,73 @@ function _key(sym, side) { return _normSym(sym) + ':' + _normSide(side); }
 async function checkUser(userId) {
     const serverAT = require('./serverAT');
     const exchangeOps = require('./exchangeOps');
+    const { groupPositionsByExchange } = require('./reconHelpers');
 
     let dbPos = [];
-    let exchPos = [];
-
     try {
         dbPos = serverAT.getOpenPositions ? (serverAT.getOpenPositions(userId) || []) : [];
     } catch (_) { dbPos = []; }
 
+    // [P2c.2] Compare PER EXCHANGE. Pre-P2c this compared ALL db positions (any
+    // exchange) against only the ACTIVE exchange's held positions — so after a
+    // switch a position on a non-active exchange was falsely flagged dbOnly →
+    // false GLOBAL HALT. Now each exchange's db positions are checked against
+    // THAT exchange (exchangeOps.getPositions exchangeOverride → its own creds).
+    const dbByExchange = groupPositionsByExchange(dbPos); // Map exchange→[]
+    const exchanges = new Set(dbByExchange.keys());
+    // Also check the active exchange so an untracked position there is still caught
+    // (exchangeOnly) even when we hold no db position on it.
     try {
-        exchPos = (await exchangeOps.getPositions(userId)) || [];
-    } catch (err) {
-        // No signal — don't count toward consecutive drift, don't halt.
-        return {
-            driftDetected: false,
-            error: err && err.message ? err.message : String(err),
-        };
-    }
-
-    // Filter zero-qty exchange positions (closed/empty)
-    exchPos = exchPos.filter(p => Math.abs(Number(p.qty || 0)) > 0);
-
-    const dbMap = new Map(dbPos.map(p => [_key(p.symbol, p.side), p]));
-    const exchMap = new Map(exchPos.map(p => [_key(p.symbol, p.side), p]));
+        const active = require('./credentialStore').getExchangeCreds(userId);
+        if (active && active.exchange) exchanges.add(active.exchange);
+    } catch (_) { /* no active creds — fall back to db exchanges only */ }
 
     const exchangeOnly = [];
     const dbOnly = [];
     const sizeMismatch = [];
+    let anySignal = false;
+    let lastError = null;
 
-    for (const [k, p] of exchMap) {
-        if (!dbMap.has(k)) {
-            exchangeOnly.push({ symbol: p.symbol, side: _normSide(p.side), qty: Number(p.qty) });
-        } else {
-            const dbQty = Math.abs(Number(dbMap.get(k).qty || 0));
-            const exchQty = Math.abs(Number(p.qty || 0));
-            const denom = Math.max(dbQty, exchQty);
-            if (denom > 0 && Math.abs(dbQty - exchQty) / denom > SIZE_TOLERANCE_PCT) {
-                sizeMismatch.push({
-                    symbol: p.symbol, side: _normSide(p.side),
-                    dbQty, exchQty,
-                });
+    for (const exchange of exchanges) {
+        let exchPos;
+        try {
+            exchPos = (await exchangeOps.getPositions(userId, { exchangeOverride: exchange })) || [];
+        } catch (err) {
+            // No signal for THIS exchange — skip it (don't flag its db positions as
+            // dbOnly off a transient error). Preserves the defensive no-signal rule.
+            lastError = err && err.message ? err.message : String(err);
+            continue;
+        }
+        anySignal = true;
+        // Filter zero-qty exchange positions (closed/empty)
+        exchPos = exchPos.filter(p => Math.abs(Number(p.qty || 0)) > 0);
+        const dbList = dbByExchange.get(exchange) || [];
+        const dbMap = new Map(dbList.map(p => [_key(p.symbol, p.side), p]));
+        const exchMap = new Map(exchPos.map(p => [_key(p.symbol, p.side), p]));
+
+        for (const [k, p] of exchMap) {
+            if (!dbMap.has(k)) {
+                exchangeOnly.push({ exchange, symbol: p.symbol, side: _normSide(p.side), qty: Number(p.qty) });
+            } else {
+                const dbQty = Math.abs(Number(dbMap.get(k).qty || 0));
+                const exchQty = Math.abs(Number(p.qty || 0));
+                const denom = Math.max(dbQty, exchQty);
+                if (denom > 0 && Math.abs(dbQty - exchQty) / denom > SIZE_TOLERANCE_PCT) {
+                    sizeMismatch.push({ exchange, symbol: p.symbol, side: _normSide(p.side), dbQty, exchQty });
+                }
+            }
+        }
+        for (const [k, p] of dbMap) {
+            if (!exchMap.has(k)) {
+                dbOnly.push({ exchange, symbol: p.symbol, side: _normSide(p.side), qty: Number(p.qty) });
             }
         }
     }
-    for (const [k, p] of dbMap) {
-        if (!exchMap.has(k)) {
-            dbOnly.push({ symbol: p.symbol, side: _normSide(p.side), qty: Number(p.qty) });
-        }
+
+    if (!anySignal) {
+        // No exchange returned a result — no signal at all. Don't count toward
+        // consecutive drift, don't halt (same as the pre-P2c single-exchange rule).
+        return { driftDetected: false, error: lastError };
     }
 
     const driftDetected = (exchangeOnly.length + dbOnly.length + sizeMismatch.length) > 0;
