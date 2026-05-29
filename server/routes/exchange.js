@@ -34,10 +34,14 @@ async function _testBinanceKeys(apiKey, apiSecret, mode) {
 
     const url = `${baseUrl}/fapi/v2/balance?${params}&signature=${signature}`;
 
-    const res = await fetch(url, {
+    // [Phase A / Task A3] Route the signed key-health probe through the gateway so it
+    // respects the circuit-breaker / ban state (testnet host now tracked distinctly) —
+    // the hourly cron was hammering a banned IP via raw fetch and extending 418 bans.
+    const res = await require('../services/binanceGateway').fetch(url, {
         method: 'GET',
         headers: { 'X-MBX-APIKEY': apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
         signal: AbortSignal.timeout(10000),
+        __weight: 5, __src: 'keyhealth',
     });
 
     const data = await res.json();

@@ -33,9 +33,8 @@ let _alertedAt = 0;
 async function _runCheck() {
     _lastCheckTs = Date.now();
     try {
-        // Use global fetch (Node 18+) or fall back to node-fetch
-        const _fetch = (typeof globalThis.fetch === 'function') ? globalThis.fetch : require('node-fetch');
-        const resp = await _fetch('https://fapi.binance.com/fapi/v1/time', { signal: AbortSignal.timeout(5000) });
+        // [Phase A / Task A2] Route through gateway (ban gate) instead of raw fetch.
+        const resp = await require('./binanceGateway').fetch('https://fapi.binance.com/fapi/v1/time', { signal: AbortSignal.timeout(5000), __weight: 1, __src: 'timesync' });
         const json = await resp.json();
         if (json && typeof json.serverTime === 'number') {
             const drift = json.serverTime - Date.now();

@@ -33,6 +33,11 @@ function _extractEndpoint(url) {
 
 function _extractExchange(url) {
     if (!url) return 'binance';
+    // [Phase A / Task A3] Testnet host (binancefuture.com) must be checked BEFORE
+    // binance.com and tracked as a DISTINCT exchange so its circuit breaker is
+    // independent of prod — otherwise testnet key-health probes were 'unknown'
+    // and untracked, tripping 418 IP-bans unchecked on a banned IP.
+    if (url.includes('binancefuture.com')) return 'binance-testnet';
     if (url.includes('binance.com')) return 'binance';
     if (url.includes('bybit.com')) return 'bybit';
     if (url.includes('okx.com')) return 'okx';
@@ -106,4 +111,9 @@ function getStatus() {
     };
 }
 
-module.exports = { fetch: gatewayFetch, getStatus };
+module.exports = {
+    fetch: gatewayFetch,
+    getStatus,
+    // [Phase A / Task A3] Pure-logic exports for unit testing (no runtime use).
+    _test: { extractExchange: _extractExchange, poolForExchange: _poolForExchange },
+};

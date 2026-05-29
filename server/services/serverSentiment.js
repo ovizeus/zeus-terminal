@@ -49,7 +49,8 @@ async function _pollAll() {
 }
 
 async function _fetchJson(url) {
-    const res = await fetch(url);
+    // [Phase A / Task A2] Route through gateway (ban gate + rate-limiter) not raw fetch.
+    const res = await require('./binanceGateway').fetch(url, { __weight: 1, __src: 'sentiment' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
 }

@@ -419,9 +419,11 @@ async function _pollWatchlistREST() {
     try { require('./logger').info('WS_PROXY', `Watchlist poll tick — wss clients: ${global.__zeusWss?.clients?.size || 0}, subs: ${_subs.size}`); } catch(_) {}
     for (const sym of WATCHLIST_SYMBOLS) {
         try {
-            const res = await fetch(
+            // [Phase A / Task A2] Route through gateway (rate-limiter + circuit-breaker
+            // + ban gate) instead of raw fetch — never hammer a banned IP.
+            const res = await require('./binanceGateway').fetch(
                 `https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${sym}`,
-                { signal: AbortSignal.timeout(8000) }
+                { signal: AbortSignal.timeout(8000), __weight: 1, __src: 'wsproxy-watchlist' }
             );
             if (!res || !res.ok) continue;
             const t = await res.json();
@@ -462,9 +464,9 @@ async function _pollQuantData() {
 
         for (const sym of QUANT_SYMBOLS) {
             try {
-                const frRes = await fetch(
+                const frRes = await require('./binanceGateway').fetch(
                     `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${sym}`,
-                    { signal: AbortSignal.timeout(8000) }
+                    { signal: AbortSignal.timeout(8000), __weight: 1, __src: 'wsproxy-quant' }
                 );
                 if (frRes && frRes.ok) {
                     const d = await frRes.json();
@@ -482,9 +484,9 @@ async function _pollQuantData() {
             } catch (_) {}
 
             try {
-                const oiRes = await fetch(
+                const oiRes = await require('./binanceGateway').fetch(
                     `https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`,
-                    { signal: AbortSignal.timeout(8000) }
+                    { signal: AbortSignal.timeout(8000), __weight: 1, __src: 'wsproxy-quant' }
                 );
                 if (oiRes && oiRes.ok) {
                     const d = await oiRes.json();
