@@ -827,20 +827,28 @@ async function preLiveChecklist(userId) {
     } else {
         checks.push({ name: 'API_KEYS', ok: true, detail: 'Credentials found' });
 
-        // 2. Binance connectivity + balance
+        // 2. Connectivity + balance on the ACTIVE exchange (multi-exchange aware).
+        //    [BUG multi-exchange] This block was hardcoded to the Binance signer
+        //    (sendSignedRequest GET /fapi/v2/balance) but fed the ACTIVE exchange's
+        //    creds. Once the active exchange was Bybit it sent a Binance-format
+        //    request to the Bybit host (api-demo.bybit.com) → HTTP 200 non-JSON →
+        //    CONNECTIVITY/BALANCE falsely failed → "Cannot switch to LIVE" blocked
+        //    every live switch while Bybit was active. Route through
+        //    exchangeOps.getBalance (mirrors Fix #10 @ setMode + Task 40.1 @ margin
+        //    pre-check) so each exchange uses its own ops + normalized balance shape.
+        const _exLabel = (creds.exchange || 'exchange').charAt(0).toUpperCase() + (creds.exchange || 'exchange').slice(1);
         try {
-            const balances = await sendSignedRequest('GET', '/fapi/v2/balance', {}, creds);
-            const usdtBal = balances.find(b => b.asset === 'USDT');
-            const available = usdtBal ? parseFloat(usdtBal.availableBalance || 0) : 0;
+            const bal = await exchangeOps.getBalance(userId);
+            const available = bal ? parseFloat(bal.availableBalance || 0) : 0;
+            checks.push({ name: 'CONNECTIVITY', ok: true, detail: `${_exLabel} API reachable` });
             if (available > 0) {
                 checks.push({ name: 'BALANCE', ok: true, detail: `$${available.toFixed(2)} USDT available` });
             } else {
-                checks.push({ name: 'BALANCE', ok: false, detail: 'Zero USDT balance on Binance' });
+                checks.push({ name: 'BALANCE', ok: false, detail: `Zero USDT balance on ${_exLabel}` });
                 allOk = false;
             }
-            checks.push({ name: 'CONNECTIVITY', ok: true, detail: 'Binance API reachable' });
         } catch (err) {
-            checks.push({ name: 'CONNECTIVITY', ok: false, detail: 'Binance API unreachable: ' + err.message });
+            checks.push({ name: 'CONNECTIVITY', ok: false, detail: `${_exLabel} API unreachable: ` + err.message });
             checks.push({ name: 'BALANCE', ok: false, detail: 'Cannot verify (API unreachable)' });
             allOk = false;
         }
