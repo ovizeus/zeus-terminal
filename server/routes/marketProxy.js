@@ -3,6 +3,15 @@
 const express = require('express');
 const router = express.Router();
 const gateway = require('../services/binanceGateway');
+const bybitRest = require('../services/bybitRest');
+
+// [Phase B / Task B3b] Bybit REST kline fallback — Bybit isn't IP-blocked from this
+// host, so when Binance is unavailable we serve FRESH Bybit klines (normalized to
+// Binance shape) in preference to STALE Binance data. Returns null on any failure.
+async function _bybitKlineFallback(symbol, interval, limit) {
+    try { return await bybitRest.fetchKlines(symbol, interval, limit); }
+    catch (_) { return null; }
+}
 
 const FUTURES_BASE = 'https://fapi.binance.com';
 const SPOT_BASE = 'https://api.binance.com';
@@ -85,9 +94,15 @@ router.get('/klines', async (req, res) => {
     const key = _cacheKey('klines', { symbol, interval, limit: lim });
     try {
         const r = await _proxyFetch(url, key, ttl, lim <= 2 ? 1 : 5);
-        if (r.stale) res.set('X-Zeus-Stale', String(r.ageMs));
-        res.json(r.data);
+        if (!r.stale) { res.json(r.data); return; }
+        // Binance failed → prefer FRESH Bybit over STALE Binance for a live chart.
+        const bybit = await _bybitKlineFallback(symbol, interval, lim);
+        if (bybit) { res.set('X-Zeus-Source', 'bybit'); res.json(bybit); return; }
+        res.set('X-Zeus-Stale', String(r.ageMs)); res.json(r.data);
     } catch (err) {
+        // No Binance data at all → last-resort Bybit, else 502.
+        const bybit = await _bybitKlineFallback(symbol, interval, lim);
+        if (bybit) { res.set('X-Zeus-Source', 'bybit'); res.json(bybit); return; }
         res.status(502).json({ error: 'Binance unavailable', detail: err.message });
     }
 });
