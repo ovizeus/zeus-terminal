@@ -23,9 +23,10 @@ function isZeusOrder(order) {
     return ZEUS_PREFIX_REGEX.test(String(order && order.clientOrderId || ''));
 }
 
-async function sweep(userId) {
+async function sweep(userId, exchange) {
     const result = {
         userId,
+        exchange: exchange || null,
         cancelled: [],
         preserved: [],
         errors: [],
@@ -34,9 +35,15 @@ async function sweep(userId) {
     const exchangeOps = require('./exchangeOps');
     const { db } = require('./database');
 
+    // [P2c.4] Sweep the exchange being reconciled. recoveryBoot now iterates each
+    // connected exchange (P2c.3) and passes it here so orphan SL/TP are cancelled on
+    // their OWN exchange, not always the active one. Omitted → falls back to active
+    // (exchangeOps resolves the active creds when no override).
+    const _ovr = exchange ? { exchangeOverride: exchange } : {};
+
     let openOrders;
     try {
-        openOrders = await exchangeOps.getOpenOrders(userId);
+        openOrders = await exchangeOps.getOpenOrders(userId, _ovr);
     } catch (err) {
         result.errors.push({ stage: 'getOpenOrders', error: err.message });
         return result;
@@ -95,6 +102,7 @@ async function sweep(userId) {
             await exchangeOps.cancelOrder(userId, {
                 symbol: order.symbol,
                 orderId: order.orderId,
+                ..._ovr,
             });
             result.cancelled.push(order);
             try {

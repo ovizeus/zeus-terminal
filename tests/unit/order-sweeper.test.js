@@ -146,6 +146,28 @@ describe('orderSweeper.sweep', () => {
         }), null);
     });
 
+    // ─── [P2c.4] cross-exchange: sweep the exchange being reconciled ─────
+    test('[P2c.4] sweep(uid, exchange) routes getOpenOrders + cancelOrder to that exchange', async () => {
+        exchangeOpsMock.getOpenOrders.mockResolvedValue([
+            { orderId: 'b1', clientOrderId: 'sl_x_0', symbol: 'BTCUSDT' },  // Zeus orphan
+        ]);
+        dbMock.getZeusOrderIds.mockReturnValue(new Set());
+        const result = await sweeper.sweep(42, 'bybit');
+        expect(exchangeOpsMock.getOpenOrders).toHaveBeenCalledWith(42, expect.objectContaining({ exchangeOverride: 'bybit' }));
+        expect(exchangeOpsMock.cancelOrder).toHaveBeenCalledWith(42, expect.objectContaining({ orderId: 'b1', exchangeOverride: 'bybit' }));
+        expect(result.cancelled.length).toBe(1);
+    });
+
+    test('[P2c.4] sweep(uid) without exchange stays active (no exchangeOverride key)', async () => {
+        exchangeOpsMock.getOpenOrders.mockResolvedValue([
+            { orderId: 'x1', clientOrderId: 'sl_a_0', symbol: 'BTCUSDT' },
+        ]);
+        dbMock.getZeusOrderIds.mockReturnValue(new Set());
+        await sweeper.sweep(42);
+        // Back-compat: no exchangeOverride → exchangeOps falls back to active exchange.
+        expect(exchangeOpsMock.cancelOrder).toHaveBeenCalledWith(42, { symbol: 'BTCUSDT', orderId: 'x1' });
+    });
+
     // ─── Task M.1 — dedup on duplicate orderId across paths ──────────────
     test('duplicate orderId across paths cancelled only ONCE (de-dup)', async () => {
         // Same orderId appearing in both regular and algo paths (defensive)

@@ -283,7 +283,7 @@ async function _reconcileUser(uid, exchange) {
     // — failures don't block recovery completion.
     try {
         const orderSweeper = require('./orderSweeper');
-        const sweepResult = await orderSweeper.sweep(uid);
+        const sweepResult = await orderSweeper.sweep(uid, exchange); // [P2c.4] sweep THIS exchange
         _logInfo('RECOVERY_BOOT',
             `uid=${uid}: order sweep — cancelled=${sweepResult.cancelled.length} preserved=${sweepResult.preserved.length} errors=${sweepResult.errors.length}`);
     } catch (e) {
