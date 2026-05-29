@@ -36,6 +36,33 @@ function _oppositeSide(side) {
     return side === 'LONG' ? 'SELL' : 'BUY';
 }
 
+// [BUG#3/#4 2026-05-29] Binance (Dec 2025) moved STOP_MARKET / TAKE_PROFIT_MARKET off
+// /fapi/v1/order → it rejects them there ("use the Algo Order API endpoints instead").
+// All conditional SL/TP placement routes through here, mirroring the proven
+// serverAT._placeConditionalOrder + trading.js path (stopPrice→triggerPrice,
+// newClientOrderId→clientAlgoId, algoId→orderId). Prefer quantity+reduceOnly (proven);
+// fall back to closePosition when no quantity is known.
+async function _placeConditionalAlgo({ symbol, side, type, triggerPrice, quantity, clientAlgoId }, creds) {
+    const body = {
+        algoType: 'CONDITIONAL',
+        symbol,
+        side,
+        type,
+        triggerPrice: String(triggerPrice),
+        clientAlgoId: String(clientAlgoId).slice(0, 36),
+        recvWindow: 5000,
+    };
+    if (quantity != null) {
+        body.quantity = String(quantity);
+        body.reduceOnly = 'true';
+    } else {
+        body.closePosition = 'true';
+    }
+    const resp = await sendSignedRequest('POST', '/fapi/v1/algoOrder', body, creds);
+    if (resp && resp.algoId != null && resp.orderId == null) resp.orderId = resp.algoId;
+    return resp;
+}
+
 async function _emergencyClose(uid, params, creds, seq) {
     const closeSide = _oppositeSide(params.side);
     for (let i = 0; i < EMERGENCY_RETRIES; i++) {
@@ -139,14 +166,13 @@ async function placeEntry(uid, params, creds) {
             let lastErr = null;
             for (let i = 0; i < SL_RETRIES; i++) {
                 try {
-                    const slResp = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    const slResp = await _placeConditionalAlgo({
                         symbol: params.symbol,
                         side: _oppositeSide(params.side),
                         type: 'STOP_MARKET',
-                        stopPrice: params.sl.price,
-                        closePosition: 'true',
-                        newClientOrderId: `sl_${params.decisionKey}_${i}`.slice(0, 36),
-                        recvWindow: 5000,
+                        triggerPrice: params.sl.price,
+                        quantity: params.qty,
+                        clientAlgoId: `sl_${params.decisionKey}_${i}`,
                     }, creds);
                     if (slResp && slResp.orderId) {
                         slOrderId = slResp.orderId;
@@ -210,14 +236,13 @@ async function placeEntry(uid, params, creds) {
         let tpOrderId = null;
         if (params.tp && params.tp.price) {
             try {
-                const tpResp = await sendSignedRequest('POST', '/fapi/v1/order', {
+                const tpResp = await _placeConditionalAlgo({
                     symbol: params.symbol,
                     side: _oppositeSide(params.side),
                     type: 'TAKE_PROFIT_MARKET',
-                    stopPrice: params.tp.price,
-                    closePosition: 'true',
-                    newClientOrderId: `tp_${params.decisionKey}`.slice(0, 36),
-                    recvWindow: 5000,
+                    triggerPrice: params.tp.price,
+                    quantity: params.qty,
+                    clientAlgoId: `tp_${params.decisionKey}`,
                 }, creds);
                 if (tpResp && tpResp.orderId) {
                     tpOrderId = tpResp.orderId;
@@ -638,22 +663,14 @@ async function placeStopLoss(uid, params, creds) {
     // serverAT._placeConditionalOrder + trading.js (stopPrice→triggerPrice,
     // newClientOrderId→clientAlgoId, algoId→orderId). Prefer the proven
     // quantity+reduceOnly form; fall back to closePosition when no quantity is given.
-    const algoParams = {
-        algoType: 'CONDITIONAL',
+    const resp = await _placeConditionalAlgo({
         symbol: params.symbol,
         side: _oppositeSide(params.side),
         type: 'STOP_MARKET',
-        triggerPrice: String(params.stopPrice),
-        clientAlgoId: `resl_${params.decisionKey}`.slice(0, 36),
-        recvWindow: 5000,
-    };
-    if (params.quantity != null) {
-        algoParams.quantity = String(params.quantity);
-        algoParams.reduceOnly = 'true';
-    } else {
-        algoParams.closePosition = 'true';
-    }
-    const resp = await sendSignedRequest('POST', '/fapi/v1/algoOrder', algoParams, creds);
+        triggerPrice: params.stopPrice,
+        quantity: params.quantity,   // proven quantity+reduceOnly; closePosition fallback in helper
+        clientAlgoId: `resl_${params.decisionKey}`,
+    }, creds);
     if (!resp || resp.code) {
         return { ok: false, error: canonicalErrors.translateBinance(resp), rawExchange: 'binance' };
     }

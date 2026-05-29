@@ -76,13 +76,20 @@ describe('binanceOps.placeEntry', () => {
 
     it('happy path: entry FILLED + SL placed → returns canonical EntryResult', async () => {
         mockSendSignedRequest.mockResolvedValueOnce({ status: 'FILLED', orderId: 'entry1', executedQty: '0.001', avgPrice: '50000' });
-        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'sl1', status: 'NEW' });
+        mockSendSignedRequest.mockResolvedValueOnce({ algoId: 'sl1', algoStatus: 'NEW' });
 
         const r = await binanceOps.placeEntry(1, _validParams(), _validCreds);
 
         expect(r.ok).toBe(true);
         expect(r.orderId).toBe('entry1');
         expect(r.slOrderId).toBe('sl1');
+        // [BUG#4] entry SL must go via the algo endpoint (Binance Dec 2025), not /fapi/v1/order.
+        const slCall = mockSendSignedRequest.mock.calls[1];
+        expect(slCall[0]).toBe('POST');
+        expect(slCall[1]).toBe('/fapi/v1/algoOrder');
+        expect(slCall[2].algoType).toBe('CONDITIONAL');
+        expect(slCall[2].type).toBe('STOP_MARKET');
+        expect(slCall[2].triggerPrice).toBe('49000');
         expect(r.status).toBe('FILLED');
         expect(r.rawExchange).toBe('binance');
 
