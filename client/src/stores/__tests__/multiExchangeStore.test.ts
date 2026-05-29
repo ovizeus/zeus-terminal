@@ -23,7 +23,8 @@ describe('useMultiExchangeStore', () => {
       json: async () => ({
         ok: true,
         accounts: [
-          { exchange: 'binance', mode: 'testnet', maskedKey: '****abcd', lastVerified: '2026-05-20T20:00:00Z' },
+          { exchange: 'binance', active: true, mode: 'testnet', maskedKey: '****abcd', lastVerified: '2026-05-20T20:00:00Z' },
+          { exchange: 'bybit', active: false, mode: 'live', maskedKey: '****wxyz', lastVerified: '2026-05-20T20:00:00Z' },
         ],
       }),
     } as any)
@@ -34,6 +35,9 @@ describe('useMultiExchangeStore', () => {
     expect(state.accounts.binance).toBeDefined()
     expect(state.accounts.binance.mode).toBe('testnet')
     expect(state.accounts.binance.maskedKey).toBe('****abcd')
+    // [P7a.2] active flag mapped from /status (P7.0b)
+    expect(state.accounts.binance.active).toBe(true)
+    expect(state.accounts.bybit.active).toBe(false)
     expect(state.lastFetchTs).toBeGreaterThan(0)
   })
 
@@ -99,7 +103,7 @@ describe('useMultiExchangeStore', () => {
 
   it('verifyAccount POSTs to /api/exchange/verify and updates balance + lastVerified', async () => {
     useMultiExchangeStore.setState({
-      accounts: { binance: { connected: true, mode: 'testnet', maskedKey: '****x', balance: 0, lastVerified: '' } },
+      accounts: { binance: { connected: true, active: true, mode: 'testnet', maskedKey: '****x', balance: 0, lastVerified: '' } },
     })
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,
@@ -115,7 +119,7 @@ describe('useMultiExchangeStore', () => {
 
   it('disconnectAccount POSTs to /api/exchange/disconnect and removes account from state', async () => {
     useMultiExchangeStore.setState({
-      accounts: { binance: { connected: true, mode: 'testnet', maskedKey: '****x', balance: 0, lastVerified: '' } },
+      accounts: { binance: { connected: true, active: true, mode: 'testnet', maskedKey: '****x', balance: 0, lastVerified: '' } },
     })
     vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       ok: true,

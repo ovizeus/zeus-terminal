@@ -17,6 +17,7 @@ const _CACHE_TTL_MS = 60_000
 
 export interface ExchangeAccount {
   connected: boolean
+  active: boolean        // [P7a.2] is this the currently-active exchange? (server is_active)
   mode: 'live' | 'testnet'
   maskedKey: string
   balance: number
@@ -27,6 +28,7 @@ interface SaveResult {
   ok: boolean
   message?: string
   error?: string
+  active?: boolean
   mode?: 'live' | 'testnet'
   maskedKey?: string
   balance?: number
@@ -98,6 +100,7 @@ export const useMultiExchangeStore = create<MultiExchangeState>((set, get) => ({
         for (const a of (d.accounts || [])) {
           map[a.exchange] = {
             connected: true,
+            active: !!a.active,   // [P7a.2] from /status active flag (P7.0b)
             mode: a.mode,
             maskedKey: a.maskedKey,
             balance: typeof a.balance === 'number' ? a.balance : 0,
@@ -121,6 +124,9 @@ export const useMultiExchangeStore = create<MultiExchangeState>((set, get) => ({
           ...s.accounts,
           [exchange]: {
             connected: true,
+            // [P7a.2] /save returns `active` (true=first/only, false=connected-inactive).
+            // Authoritative active flags are refreshed via loadAccounts after save/switch.
+            active: !!r.active,
             mode: r.mode,
             maskedKey: r.maskedKey,
             balance: typeof r.balance === 'number' ? r.balance : 0,

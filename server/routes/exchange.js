@@ -228,6 +228,7 @@ router.post('/save', async (req, res) => {
         verified: true,
         exchange: exName,
         mode: safeMode,
+        active: _makeActive,  // [P7a.2] true=first/only (active), false=connected-inactive (Switch activates)
         maskedKey: maskKey(cleanKey),
         balance: balanceInfo.balance,
         availableBalance: balanceInfo.availableBalance,
