@@ -39,9 +39,12 @@ jest.mock('../../server/services/serverAT', () => ({ setGlobalHalt: jest.fn() })
 
 // [BUG#5] migrationFlags lives at server/migrationFlags (one level up from services).
 // bybitOps._dispatchRequest must require it from '../migrationFlags' — a wrong './…'
-// path throws MODULE_NOT_FOUND on every real Bybit call. Mock the CORRECT path so a
-// real dispatch (no synthetic) reaches the DRY_RUN gate instead of crashing.
-jest.mock('../../server/migrationFlags', () => ({ flags: { BYBIT_DRY_RUN_ONLY: true } }));
+// path throws MODULE_NOT_FOUND on every real Bybit call. [BUG#5b] The real module
+// exposes each flag as a getter DIRECTLY on the exported object (MF.BYBIT_DRY_RUN_ONLY),
+// NOT under a `.flags` sub-object — so the mock must match that shape, otherwise a
+// `.flags` accessor silently reads undefined in prod (it crashed with
+// "Cannot read properties of undefined") while a `{flags:{…}}` mock hid the defect.
+jest.mock('../../server/migrationFlags', () => ({ BYBIT_DRY_RUN_ONLY: true }));
 
 const bybitOps = require('../../server/services/bybitOps');
 
@@ -50,9 +53,13 @@ const _validCreds = { exchange: 'bybit', mode: 'testnet', apiKey: 'k', apiSecret
 describe('[BUG#5] _dispatchRequest migrationFlags require path', () => {
     it('resolves migrationFlags from the correct path (reaches DRY_RUN gate, not MODULE_NOT_FOUND)', async () => {
         // No synthetic enqueued → real dispatch path → hits require('../migrationFlags').
-        // With the wrong './migrationFlags' path this rejects with "Cannot find module".
-        await expect(bybitOps.getBalance(1, _validCreds)).rejects.toThrow(/DRY_RUN/i);
+        // Must reach the gate and throw its real message; NOT a require/shape crash.
+        // (Asserting on the literal gate message — "dispatch blocked" — because the
+        //  bare token /DRY_RUN/ also matches the "Cannot read properties of undefined
+        //  (reading 'BYBIT_DRY_RUN_ONLY')" crash that the `.flags` shape bug produced.)
+        await expect(bybitOps.getBalance(1, _validCreds)).rejects.toThrow(/dispatch blocked/i);
         await expect(bybitOps.getBalance(1, _validCreds)).rejects.not.toThrow(/Cannot find module/i);
+        await expect(bybitOps.getBalance(1, _validCreds)).rejects.not.toThrow(/Cannot read properties/i);
     });
 });
 

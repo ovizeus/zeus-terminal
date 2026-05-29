@@ -40,7 +40,7 @@ async function _dispatchRequest(method, path, params, creds) {
     if (_syntheticQueue.length > 0) {
         return _syntheticQueue.shift();
     }
-    const flags = require('../migrationFlags').flags;  // [BUG#5] correct path (server/migrationFlags, not services/)
+    const flags = require('../migrationFlags');  // [BUG#5] correct path (server/migrationFlags, not services/); [BUG#5b] flags are getters on the module object — there is no `.flags` sub-object
     if (flags.BYBIT_DRY_RUN_ONLY) {
         throw new Error('BYBIT_DRY_RUN_ONLY=true — real HTTP dispatch blocked');
     }
