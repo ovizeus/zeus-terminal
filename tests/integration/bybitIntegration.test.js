@@ -6,7 +6,7 @@ const mockDb = new Database(TEST_DB);
 
 // Full schema needed for integration
 mockDb.exec(`
-    CREATE TABLE exchange_accounts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, exchange TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, mode TEXT NOT NULL DEFAULT 'testnet', api_key_encrypted TEXT NOT NULL DEFAULT '', api_secret_encrypted TEXT NOT NULL DEFAULT '');
+    CREATE TABLE exchange_accounts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, exchange TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, mode TEXT NOT NULL DEFAULT 'testnet', status TEXT NOT NULL DEFAULT 'verified', api_key_encrypted TEXT NOT NULL DEFAULT '', api_secret_encrypted TEXT NOT NULL DEFAULT '');
     CREATE TABLE at_positions (seq INTEGER PRIMARY KEY, data TEXT, status TEXT DEFAULT 'OPEN', user_id INTEGER, exchange TEXT DEFAULT 'binance', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
     CREATE TABLE position_events (id INTEGER PRIMARY KEY, position_seq INTEGER NOT NULL, user_id INTEGER NOT NULL, exchange TEXT NOT NULL, event_type TEXT NOT NULL, from_state TEXT, to_state TEXT, payload TEXT NOT NULL DEFAULT '{}', cycle_no INTEGER, ts INTEGER NOT NULL);
     CREATE TABLE emergency_close_queue (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, exchange TEXT NOT NULL, qty TEXT NOT NULL, decision_key TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, resolved_at INTEGER, resolved_by TEXT);
@@ -20,6 +20,12 @@ jest.mock('../../server/services/credentialStore', () => ({
     getExchangeCreds: jest.fn((uid) => {
         if (uid === 10) return { exchange: 'bybit', mode: 'testnet', apiKey: 'testKey', apiSecret: 'testSecret' };
         if (uid === 30) return { exchange: 'bybit', mode: 'testnet', apiKey: 'testKey30', apiSecret: 'testSecret30' };
+        return null;
+    }),
+    // [P1/P2c.3] per-exchange creds — recoveryBoot + exchangeOps route via this now.
+    getExchangeCredsFor: jest.fn((uid, exchange) => {
+        if (uid === 10) return { exchange, mode: 'testnet', apiKey: 'testKey', apiSecret: 'testSecret' };
+        if (uid === 30) return { exchange, mode: 'testnet', apiKey: 'testKey30', apiSecret: 'testSecret30' };
         return null;
     }),
 }));
@@ -164,7 +170,7 @@ describe('Integration: Recovery boot reconciliation', () => {
         // Insert a Bybit user with an open position
         mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active) VALUES (30, 'bybit', 1)`).run();
         mockDb.prepare(`INSERT INTO at_positions (data, status, user_id, exchange) VALUES (?, 'OPEN', 30, 'bybit')`).run(
-            JSON.stringify({ symbol: 'ETHUSDT', side: 'LONG', qty: '1', slOrderId: 'sl1' })
+            JSON.stringify({ symbol: 'ETHUSDT', side: 'LONG', qty: '1', slOrderId: 'sl1', exchange: 'bybit' })
         );
 
         // Seed synthetic response for getPositions → empty list (position closed externally)
