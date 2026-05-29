@@ -10173,8 +10173,18 @@ const _stmts = {
     findAllExchanges: db.prepare('SELECT * FROM exchange_accounts WHERE user_id = ? AND is_active = 1'),
     findExchangeById: db.prepare('SELECT * FROM exchange_accounts WHERE id = ? AND user_id = ?'),
     insertExchange: db.prepare('INSERT INTO exchange_accounts (user_id, exchange, api_key_encrypted, api_secret_encrypted, mode, status, last_verified_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))'),
+    // [P7.0a Multi-connect] Insert a connected-but-INACTIVE account (a 2nd exchange
+    // saved while another is active). is_active=0 keeps the one-active-per-user index
+    // (idx_exchange_user_active_single) intact; Switch (P3) activates it later.
+    insertExchangeInactive: db.prepare('INSERT INTO exchange_accounts (user_id, exchange, api_key_encrypted, api_secret_encrypted, mode, status, last_verified_at, is_active) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'), 0)'),
     updateExchange: db.prepare("UPDATE exchange_accounts SET api_key_encrypted = ?, api_secret_encrypted = ?, mode = ?, status = ?, last_verified_at = datetime('now'), updated_at = datetime('now') WHERE user_id = ? AND is_active = 1"),
     updateExchangeByName: db.prepare("UPDATE exchange_accounts SET api_key_encrypted = ?, api_secret_encrypted = ?, mode = ?, status = ?, last_verified_at = datetime('now'), updated_at = datetime('now') WHERE user_id = ? AND exchange = ? AND is_active = 1"),
+    // [P7.0a] Update a (user, exchange) row regardless of is_active — re-verifying a
+    // connected-but-inactive exchange must update its row (the is_active=1-only update
+    // would miss it and the caller would wrongly insert a duplicate).
+    updateExchangeByNameAny: db.prepare("UPDATE exchange_accounts SET api_key_encrypted = ?, api_secret_encrypted = ?, mode = ?, status = ?, last_verified_at = datetime('now'), updated_at = datetime('now') WHERE user_id = ? AND exchange = ?"),
+    // [P7.0b] All connected (verified) exchanges for a user — active first.
+    findConnectedExchanges: db.prepare("SELECT * FROM exchange_accounts WHERE user_id = ? AND status = 'verified' ORDER BY is_active DESC, exchange"),
     deactivateExchange: db.prepare("UPDATE exchange_accounts SET is_active = 0, status = 'disconnected', updated_at = datetime('now') WHERE user_id = ? AND is_active = 1"),
     deactivateExchangeByName: db.prepare("UPDATE exchange_accounts SET is_active = 0, status = 'disconnected', updated_at = datetime('now') WHERE user_id = ? AND exchange = ? AND is_active = 1"),
     listAllExchanges: db.prepare(`
@@ -10415,14 +10425,25 @@ function saveExchangeAccount(userId, exchange, encKey, encSecret, mode) {
     return info.lastInsertRowid;
 }
 
-function saveExchangeByName(userId, exchange, encKey, encSecret, mode) {
-    const existing = _stmts.findExchangeByName.get(userId, exchange);
+// [P7.0a Multi-connect] makeActive (default true) controls is_active ONLY for a
+// brand-new row: true → active (first/only exchange), false → connected-but-inactive
+// (a 2nd exchange saved while another is active; Switch activates it later). Existing
+// rows (any is_active) are updated in place — re-verify never changes active state.
+// Uses findExchangeByNameAny so an inactive row is found + updated (not duplicated).
+function saveExchangeByName(userId, exchange, encKey, encSecret, mode, makeActive = true) {
+    const existing = _stmts.findExchangeByNameAny.get(userId, exchange);
     if (existing) {
-        _stmts.updateExchangeByName.run(encKey, encSecret, mode, 'verified', userId, exchange);
+        _stmts.updateExchangeByNameAny.run(encKey, encSecret, mode, 'verified', userId, exchange);
         return existing.id;
     }
-    const info = _stmts.insertExchange.run(userId, exchange, encKey, encSecret, mode, 'verified');
+    const stmt = makeActive ? _stmts.insertExchange : _stmts.insertExchangeInactive;
+    const info = stmt.run(userId, exchange, encKey, encSecret, mode, 'verified');
     return info.lastInsertRowid;
+}
+
+// [P7.0b] All connected (verified) exchanges for a user — active row first.
+function getConnectedExchanges(userId) {
+    return _stmts.findConnectedExchanges.all(userId);
 }
 
 function disconnectExchange(userId) {
@@ -11254,6 +11275,7 @@ module.exports = {
     getExchangeAccount,
     getExchangeByName,
     getExchangeAccountByExchange,
+    getConnectedExchanges,
     getAllExchanges,
     saveExchangeAccount,
     saveExchangeByName,

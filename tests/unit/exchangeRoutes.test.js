@@ -24,13 +24,15 @@ jest.mock('../../server/services/database', () => {
         mockDb.prepare(`SELECT * FROM exchange_accounts WHERE user_id = ? AND is_active = 1`).all(userId);
     const getExchangeByName = (userId, exchange) =>
         mockDb.prepare(`SELECT * FROM exchange_accounts WHERE user_id = ? AND exchange = ? AND is_active = 1`).get(userId, exchange);
-    const saveExchangeByName = (userId, exchange, encKey, encSecret, mode) => {
+    // [P7.0a] makeActive controls is_active on a NEW row only; existing rows update
+    // in place WITHOUT changing is_active (mirrors real saveExchangeByName + updateExchangeByNameAny).
+    const saveExchangeByName = (userId, exchange, encKey, encSecret, mode, makeActive = true) => {
         const existing = mockDb.prepare(`SELECT id FROM exchange_accounts WHERE user_id = ? AND exchange = ?`).get(userId, exchange);
         if (existing) {
-            mockDb.prepare(`UPDATE exchange_accounts SET api_key_encrypted = ?, api_secret_encrypted = ?, mode = ?, is_active = 1 WHERE user_id = ? AND exchange = ?`).run(encKey, encSecret || '', mode, userId, exchange);
+            mockDb.prepare(`UPDATE exchange_accounts SET api_key_encrypted = ?, api_secret_encrypted = ?, mode = ? WHERE user_id = ? AND exchange = ?`).run(encKey, encSecret || '', mode, userId, exchange);
             return existing.id;
         }
-        const r = mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, api_key_encrypted, api_secret_encrypted, mode, is_active) VALUES (?, ?, ?, ?, ?, 1)`).run(userId, exchange, encKey, encSecret || '', mode);
+        const r = mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, api_key_encrypted, api_secret_encrypted, mode, is_active) VALUES (?, ?, ?, ?, ?, ?)`).run(userId, exchange, encKey, encSecret || '', mode, makeActive ? 1 : 0);
         return r.lastInsertRowid;
     };
     const disconnectExchangeByName = (userId, exchange) =>
@@ -211,6 +213,53 @@ describe('exchange routes — Phase 6 Task 36', () => {
                 expect(mockInvalidateUserExchangeCache).toHaveBeenCalledWith(1);
             }
         });
+    });
+});
+
+describe('[P7.0a] multi-connect — second exchange connects INACTIVE; per-exchange env mutex kept', () => {
+    let origFetch;
+    beforeEach(() => {
+        mockDb.exec('DELETE FROM exchange_accounts; DELETE FROM at_positions; DELETE FROM audit_log;');
+        origFetch = global.fetch;
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ([{ asset: 'USDT', balance: '1000', availableBalance: '800' }]),
+        });
+    });
+    afterEach(() => { global.fetch = origFetch; });
+
+    it('saving a DIFFERENT exchange while one is active SUCCEEDS and connects INACTIVE (no 409, active unchanged)', async () => {
+        // Bybit already active (testnet). Now add Binance (testnet) creds.
+        mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'bybit', 1, 'testnet', 'enc')`).run();
+
+        const res = await request(buildApp()).post('/api/exchange/save').send({
+            exchange: 'binance', mode: 'testnet', apiKey: 'k'.repeat(12), apiSecret: 's'.repeat(12),
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+        // Binance connected but INACTIVE; Bybit stays active (Switch activates Binance later).
+        expect(mockDb.prepare(`SELECT is_active FROM exchange_accounts WHERE user_id=1 AND exchange='binance'`).get().is_active).toBe(0);
+        expect(mockDb.prepare(`SELECT is_active FROM exchange_accounts WHERE user_id=1 AND exchange='bybit'`).get().is_active).toBe(1);
+        // No EXCHANGE_CONFLICT block audited.
+        expect(mockDb.prepare(`SELECT * FROM audit_log WHERE action='EXCHANGE_SAVE_BLOCKED'`).get()).toBeUndefined();
+    });
+
+    it('first exchange ever saved becomes ACTIVE', async () => {
+        const res = await request(buildApp()).post('/api/exchange/save').send({
+            exchange: 'binance', mode: 'testnet', apiKey: 'k'.repeat(12), apiSecret: 's'.repeat(12),
+        });
+        expect(res.status).toBe(200);
+        expect(mockDb.prepare(`SELECT is_active FROM exchange_accounts WHERE user_id=1 AND exchange='binance'`).get().is_active).toBe(1);
+    });
+
+    it('KEPT: same exchange, different env (testnet↔real) still rejected with ENV_CONFLICT', async () => {
+        mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'binance', 1, 'testnet', 'enc')`).run();
+        const res = await request(buildApp()).post('/api/exchange/save').send({
+            exchange: 'binance', mode: 'live', apiKey: 'k'.repeat(12), apiSecret: 's'.repeat(12),
+        });
+        expect(res.status).toBe(409);
+        expect(res.body.code).toBe('ENV_CONFLICT');
     });
 });
 

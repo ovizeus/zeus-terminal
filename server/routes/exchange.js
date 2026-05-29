@@ -144,26 +144,18 @@ router.post('/save', async (req, res) => {
     // ─── Phase 1A: single-exchange + single-env per user enforcement ───
     // Reject conflicting save BEFORE external API verify or DB write.
     // Re-verify/update on exact same (exchange, mode) falls through.
+    // [P7.0a Multi-connect] A DIFFERENT exchange being active no longer BLOCKS this
+    // save — Zeus now supports multiple connected exchanges (one active). The new
+    // exchange connects as INACTIVE (_makeActive=false); the operator activates it
+    // with one-click Switch. The per-exchange env mutex (testnet↔real on the SAME
+    // exchange) is KEPT below — fail-closed on a same-exchange env clash.
+    let _makeActive = true;
     const _activeRows = db.getAllExchanges(req.user.id) || [];
     for (const _row of _activeRows) {
         if (_row.exchange !== exName) {
-            const _wantedLabel = exName === 'bybit' ? 'Bybit' : 'Binance';
-            const _activeLabel = _row.exchange === 'bybit' ? 'Bybit' : 'Binance';
-            const _msg = `${_wantedLabel} is blocked because ${_activeLabel} API credentials are currently active for this account. Zeus allows only one active exchange at a time. To use ${_wantedLabel}, first disconnect the active ${_activeLabel} API credentials, then return and add valid ${_wantedLabel} API credentials.`;
-            db.auditLog(req.user.id, 'EXCHANGE_SAVE_BLOCKED', {
-                code: 'EXCHANGE_CONFLICT',
-                attempted: { exchange: exName, mode: safeMode },
-                active: { exchange: _row.exchange, mode: _row.mode },
-            }, req.ip);
-            return res.status(409).json({
-                ok: false,
-                code: 'EXCHANGE_CONFLICT',
-                message: _msg,
-                details: {
-                    attempted: { exchange: exName, mode: safeMode },
-                    active: { exchange: _row.exchange, mode: _row.mode },
-                },
-            });
+            // Another exchange is active → connect this one inactive (no 409).
+            _makeActive = false;
+            continue;
         }
         if (_row.mode !== safeMode) {
             const _wantedEnv = safeMode === 'testnet' ? 'TESTNET' : 'REAL';
@@ -197,7 +189,7 @@ router.post('/save', async (req, res) => {
 
     const encKey = encrypt(cleanKey);
     const encSecret = encrypt(cleanSecret);
-    const accountId = db.saveExchangeByName(req.user.id, exName, encKey, encSecret, safeMode);
+    const accountId = db.saveExchangeByName(req.user.id, exName, encKey, encSecret, safeMode, _makeActive);
 
     db.auditLog(req.user.id, 'EXCHANGE_CONNECTED', { exchange: exName, mode: safeMode, accountId, balance: balanceInfo.balance }, req.ip);
     logger.info('EXCHANGE', `User connected ${exName}`, { userId: req.user.id, mode: safeMode });
