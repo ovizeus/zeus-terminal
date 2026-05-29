@@ -11,6 +11,7 @@ const logger = require('../services/logger');
 const serverAT = require('../services/serverAT');
 const positionEvents = require('../services/positionEvents');
 const exchangeOps = require('../services/exchangeOps');
+const { summarizeOpenPositions } = require('./_exchangeSwitchHelpers');
 
 // Lazy require to avoid circular import: serverBrain → routes/exchange → serverBrain
 function _getServerBrain() {
@@ -362,11 +363,12 @@ router.post('/verify', async (req, res) => {
 //   1. Validate targetExchange (binance|bybit) → 400 on missing/invalid
 //   2. Read current active exchange from exchange_accounts
 //   3. No-op if target === current → 200 { noOp: true }
-//   4. Check open positions in at_positions → 409 BLOCKED
-//   5. Audit EXCHANGE_SWITCH_REQUESTED
-//   6. Call serverBrain._markPendingSwitch(uid, from, to)
-//   7. Toggle is_active flags in exchange_accounts
-//   8. Return 200 { ok: true, from, to, message }
+//   4.  [P3] Summarize open positions on previous exchange(s)
+//   4b. [P3-REGATE, TEMP until P2c] 409 if any open — fail-closed; summary in body
+//   5.  Audit EXCHANGE_SWITCH_REQUESTED (with summary)
+//   6.  Call serverBrain._markPendingSwitch(uid, from, to)
+//   7.  Toggle is_active flags in exchange_accounts (old row kept, is_active=0)
+//   8.  Return 200 { ok: true, from, to, openPositionsOnPrevious, message }
 router.post('/switch', (req, res) => {
     if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'Not authenticated' });
 
@@ -404,26 +406,45 @@ router.post('/switch', (req, res) => {
         });
     }
 
-    // Step 4: Check open positions (OPEN / OPENING / CLOSING) — exclude DEMO
-    const openPos = rawDb.prepare(
-        `SELECT seq FROM at_positions WHERE user_id = ? AND status IN ('OPEN','OPENING','CLOSING')
-         AND json_extract(data, '$.mode') != 'demo' LIMIT 1`
-    ).get(uid);
-    if (openPos) {
+    // Step 4: [Multi-exchange switch P3] Summarize open positions on the previous
+    // exchange(s). Source of truth for venue is the persisted entry (data.exchange);
+    // fall back to the column then 'binance' for legacy rows. (Once P2c lands and the
+    // P3-REGATE gate below is lifted, this summary becomes a non-blocking confirm
+    // hint: "BINANCE has N open positions — they stay managed on Binance".)
+    const openRows = rawDb.prepare(
+        `SELECT COALESCE(json_extract(data, '$.exchange'), exchange, 'binance') AS exchange
+         FROM at_positions WHERE user_id = ? AND status IN ('OPEN','OPENING','CLOSING')
+         AND json_extract(data, '$.mode') != 'demo'`
+    ).all(uid);
+    const openPositionsOnPrevious = summarizeOpenPositions(openRows);
+
+    // Step 4b: [P3-REGATE 2026-05-29] TEMPORARY fail-closed gate — NOT PERMANENT.
+    // Block the switch while non-demo positions are open. Rationale: reconciliation
+    // (serverAT _runReconciliation) + driftChecker + recoveryBoot + orderSweeper +
+    // trading manual-close are still Binance-hardcoded / active-exchange-only. After a
+    // switch with an open position on a now-non-active exchange, recon would either
+    // leave it unreconciled (active=bybit → Binance endpoint 401 → skip) or, worse,
+    // FALSE-PHANTOM-CLOSE a live non-active position (active=binance, position on bybit
+    // not found in the Binance held-map → closed locally while still live on bybit).
+    // The 409 still returns openPositionsOnPrevious so the client can say "close these
+    // N first". This gate is LIFTED once P2c lands (cross-exchange recon/recovery).
+    // Do NOT mark/​toggle before this gate — fail-closed (no half-committed switch).
+    if (openPositionsOnPrevious.length > 0) {
         rawDb.prepare(
             `INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, 'EXCHANGE_SWITCH_BLOCKED', ?, datetime('now'))`
-        ).run(uid, JSON.stringify({ from: currentExchange, to: targetExchange, reason: 'open_positions' }));
+        ).run(uid, JSON.stringify({ from: currentExchange, to: targetExchange, reason: 'open_positions_pre_p2c', openPositionsOnPrevious }));
         return res.status(409).json({
             ok: false,
             code: 'OPEN_POSITIONS',
-            error: 'Cannot switch exchange: close all open positions first',
+            error: 'Cannot switch exchange while positions are open: close them first (cross-exchange management lands in P2c).',
+            openPositionsOnPrevious,
         });
     }
 
-    // Step 5: Audit EXCHANGE_SWITCH_REQUESTED
+    // Step 5: Audit EXCHANGE_SWITCH_REQUESTED (include managed-position summary)
     rawDb.prepare(
         `INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, 'EXCHANGE_SWITCH_REQUESTED', ?, datetime('now'))`
-    ).run(uid, JSON.stringify({ from: currentExchange, to: targetExchange }));
+    ).run(uid, JSON.stringify({ from: currentExchange, to: targetExchange, openPositionsOnPrevious }));
 
     // Step 6: Invoke serverBrain._markPendingSwitch (explicit barrier per spec pillar 7)
     try {
@@ -453,6 +474,7 @@ router.post('/switch', (req, res) => {
         ok: true,
         from: currentExchange,
         to: targetExchange,
+        openPositionsOnPrevious,  // [P3] [{exchange,count}] — stay DSL-managed on their own exchange
         message: 'switch will apply at next brain cycle',
     });
 });
