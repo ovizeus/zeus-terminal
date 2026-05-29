@@ -90,6 +90,9 @@ function attach(position, params, savedProgress) {
         userId: position.userId || null,
         symbol: position.symbol,
         side: position.side,
+        // [P4] Carry the position's exchange so a DSL-driven close routes to the
+        // right venue and the UI can label the order's exchange. null for demo/legacy.
+        exchange: position.exchange || null,
         entry: position.price,
         originalSL: position.sl,
         originalTP: position.tp,
@@ -322,6 +325,7 @@ function getState(posId) {
     return {
         phase: _getPhase(s),
         active: s.active,
+        exchange: s.exchange || null,  // [P4] venue label for UI + DSL-driven close routing
         progress: +s.progress.toFixed(1),
         currentSL: s.currentSL,
         originalSL: s.originalSL,
