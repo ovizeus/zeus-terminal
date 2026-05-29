@@ -10,7 +10,7 @@ const Sentry = require('@sentry/node');
 const logger = require('./logger');
 const MF = require('../migrationFlags');
 const credentialStore = require('./credentialStore');
-const { getExchangeCreds } = credentialStore;
+const { getExchangeCreds, getExchangeCredsFor } = credentialStore;
 const { credsForPosition } = require('./credsRouting');
 // [Multi-exchange switch P2a] Creds for an existing position's OWN exchange.
 // New orders use getExchangeCreds (active); close/SL/TP/add-on of an open position
@@ -27,7 +27,7 @@ const telegram = require('./telegram');
 const audit = require('./audit');
 // [BUG-T2a + T2b 2026-05-13] Pure-function recon helpers extracted pentru
 // testability. T2a: hedge-aware Binance held map. T2b: strict userTrades filter.
-const { buildBinanceHeldMap, findExitTrade } = require('./reconHelpers');
+const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const db = require('./database');
@@ -4526,18 +4526,28 @@ async function _runReconciliation(isStartup) {
         const livePositions = _positions.filter(p => p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL'));
         if (livePositions.length === 0) return; // [B6] finally will reset _reconRunning
 
-        // Group live positions by userId for per-user reconciliation
+        // [P2c.1b] Group live positions by (userId, exchange) so each exchange's
+        // positions reconcile against THEIR OWN exchange (creds + held + trades via
+        // exchangeOps exchangeOverride → getExchangeCredsFor). Pre-P2c this grouped by
+        // user and queried only the ACTIVE exchange (Binance-hardcoded positionRisk),
+        // which after a switch would skip a non-active position — or, worse,
+        // false-phantom-close a live one absent from the active exchange's held map.
         const byUser = new Map();
         for (const p of livePositions) {
             // [MULTI-USER] Skip positions without userId instead of defaulting to 1
             if (!p.userId) { logger.warn(label, `Skipping live position seq=${p.seq} without userId`); continue; }
-            const uid = p.userId;
-            if (!byUser.has(uid)) byUser.set(uid, []);
-            byUser.get(uid).push(p);
+            if (!byUser.has(p.userId)) byUser.set(p.userId, []);
+            byUser.get(p.userId).push(p);
+        }
+        const byUserExchange = [];
+        for (const [uid, ulp] of byUser) {
+            for (const [exchange, exPositions] of groupPositionsByExchange(ulp)) {
+                byUserExchange.push({ userId: uid, exchange, positions: exPositions });
+            }
         }
 
-        for (const [userId, userLivePositions] of byUser) {
-            const creds = getExchangeCreds(userId);
+        for (const { userId, exchange, positions: userLivePositions } of byUserExchange) {
+            const creds = getExchangeCredsFor(userId, exchange);
             if (!creds) continue;
 
             // [RECON-SUBSCRIBE 2026-05-14] Auto-subscribe market feed for symbols
@@ -4571,12 +4581,14 @@ async function _runReconciliation(isStartup) {
                 logger.warn(label, `Auto-subscribe block failed: ${subErr.message}`);
             }
 
-            // 1. Query Binance position risk
-            let binancePositions;
+            // 1. [P2c.1b] Query held positions for THIS exchange via exchangeOps
+            // (normalized output, routed to the exchange's own creds). On failure,
+            // skip ONLY this exchange — other exchanges' positions still reconcile.
+            let held;
             try {
-                binancePositions = await sendSignedRequest('GET', '/fapi/v2/positionRisk', {}, Object.assign({}, creds, { __src: 'serverAT:recon-positionRisk' }));
+                held = await exchangeOps.getPositions(userId, { exchangeOverride: exchange });
             } catch (err) {
-                logger.warn(label, `Binance positionRisk query failed uid=${userId}: ${err.message}`);
+                logger.warn(label, `positionRisk query failed uid=${userId} exchange=${exchange}: ${err.message}`);
                 continue;
             }
 
@@ -4584,8 +4596,9 @@ async function _runReconciliation(isStartup) {
             // `symbol_side` tuple pentru a păstra LONG + SHORT same symbol
             // independente în HEDGE mode. Pre-T2a: keyed by symbol only,
             // collapsed both → recon detection lookup mismatch on side.
-            // Logic extracted la reconHelpers.buildBinanceHeldMap pentru testability.
-            const binanceHeld = buildBinanceHeldMap(binancePositions);
+            // [P2c.1b] Generic held-map from normalized getPositions (binance+bybit).
+            // Var name kept `binanceHeld` to minimize churn in the body below.
+            const binanceHeld = buildHeldMap(held);
 
             // [Bug#3 STEP 3] Multi-seq collision reconciliation — if multiple OPEN
             // server seqs claim the same (symbol, side), Binance (ONE-WAY mode) holds
@@ -4681,9 +4694,7 @@ async function _runReconciliation(isStartup) {
                     let realExitPrice = null;
                     let realPnl = null;
                     try {
-                        const trades = await sendSignedRequest('GET', '/fapi/v1/userTrades', {
-                            symbol: pos.symbol, limit: 10,
-                        }, creds);
+                        const trades = await exchangeOps.getUserTrades(userId, { symbol: pos.symbol, limit: 10, exchangeOverride: exchange });
                         // [BUG-T2b 2026-05-13] Strict exit trade filter via reconHelpers.
                         // Pre-T2b: `realizedPnl !== 0` matched ANY trade — could
                         // fortuitously pick UNRELATED old trade pentru same symbol.
@@ -4885,7 +4896,10 @@ async function _runReconciliation(isStartup) {
 
             // [LIVE-PARITY] Check pending live closes — resolve or escalate
             for (const [seq, pending] of _pendingLiveCloses) {
+                // [P2c.1b] Scope to this (user, exchange) — a pending close on another
+                // exchange must NOT be resolved against this exchange's held map.
                 if (pending.pos.userId !== userId) continue;
+                if ((pending.pos.exchange || 'binance') !== exchange) continue;
                 // [BUG-RECON-SYMBOL FIX 2026-05-14] Lookup using composite key
                 // (BUG-T2a map keys SYMBOL_SIDE); previous pure-symbol lookup
                 // never matched → stillOnExchange always false → valid live
@@ -5273,6 +5287,19 @@ module.exports = {
     // Reconciliation (for manual trigger / testing)
     _runReconciliation,
     onUserDataEvent,
+    // [P2c.1b] Test-only recon hooks — seed/reset module-internal _positions +
+    // recon state so the cross-exchange recon path can be exercised in isolation.
+    // Never called by any runtime path.
+    _reconTestHooks: Object.freeze({
+        seedPositions: (arr) => { _positions.length = 0; (arr || []).forEach((p) => _positions.push(p)); },
+        getPositions: () => _positions.slice(),
+        reset: () => {
+            _positions.length = 0;
+            _phantomCandidates = null;
+            _pendingLiveCloses.clear();
+            _orphanPending.clear();
+        },
+    }),
     // Watchdog (for manual trigger / testing)
     _watchdogLiveNoSL,
     // [S5] Test-only hooks. Exposed via require but never called by any
