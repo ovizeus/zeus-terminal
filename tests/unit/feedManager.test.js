@@ -129,6 +129,60 @@ describe('feedManager', () => {
         });
     });
 
+    // ─── [P5] managed-position feed holds ───────────────────────────────
+    describe('[P5] markPositionOpen / markPositionClosed / isManaged', () => {
+        it('markPositionOpen on an exchange with no active user starts + holds its feed', () => {
+            fm.markPositionOpen(1, 'bybit');
+            expect(mockBybitFeed.start).toHaveBeenCalledTimes(1);
+            expect(fm.getRefcount('bybit')).toBe(1);
+            expect(fm.isManaged(1, 'bybit')).toBe(true);
+        });
+
+        it('switching away keeps the old exchange feed ALIVE while a position is open there', () => {
+            fm.activateForUser(1, 'binance');     // active binance (ref 1)
+            fm.markPositionOpen(1, 'binance');    // open binance position (ref 2)
+            expect(fm.getRefcount('binance')).toBe(2);
+
+            fm.activateForUser(1, 'bybit');       // switch → deactivates binance (ref 1 remains from position)
+            expect(fm.getRefcount('binance')).toBe(1);
+            expect(mockBinanceFeed.stop).not.toHaveBeenCalled();  // feed stays alive
+            expect(fm.isManaged(1, 'binance')).toBe(true);        // still managed via position
+            expect(fm.getUserExchange(1)).toBe('bybit');          // active is bybit
+        });
+
+        it('closing the last position releases the hold (grace-stop, not immediate)', () => {
+            fm.activateForUser(1, 'bybit');
+            fm.markPositionOpen(1, 'binance');
+            expect(fm.getRefcount('binance')).toBe(1);
+            fm.markPositionClosed(1, 'binance');
+            expect(fm.getRefcount('binance')).toBe(0);
+            expect(mockBinanceFeed.stop).not.toHaveBeenCalled();  // grace period, not sync
+            expect(fm.isManaged(1, 'binance')).toBe(false);
+        });
+
+        it('refcounts multiple positions; feed held until the last closes', () => {
+            fm.markPositionOpen(1, 'binance');
+            fm.markPositionOpen(1, 'binance');    // 2 positions, 1 feed hold
+            expect(fm.getRefcount('binance')).toBe(1);
+            fm.markPositionClosed(1, 'binance');
+            expect(fm.getRefcount('binance')).toBe(1);  // still 1 position open
+            expect(fm.isManaged(1, 'binance')).toBe(true);
+            fm.markPositionClosed(1, 'binance');
+            expect(fm.getRefcount('binance')).toBe(0);
+        });
+
+        it('markPositionClosed below zero is safe (no negative refcount)', () => {
+            fm.markPositionClosed(1, 'binance');
+            expect(fm.getRefcount('binance')).toBe(0);
+        });
+
+        it('unknown exchange is ignored (never breaks the entry/close path)', () => {
+            expect(() => fm.markPositionOpen(1, 'kraken')).not.toThrow();
+            expect(() => fm.markPositionClosed(1, 'kraken')).not.toThrow();
+            expect(fm.isManaged(1, 'kraken')).toBe(false);
+        });
+    });
+
     describe('GRACE_MS constant', () => {
         it('is 30 seconds', () => {
             expect(fm.GRACE_MS).toBe(30_000);
