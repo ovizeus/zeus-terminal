@@ -134,4 +134,25 @@ describe('feedManager', () => {
             expect(fm.GRACE_MS).toBe(30_000);
         });
     });
+
+    // [Phase B / Task B1.2] stopAll — used by graceful shutdown so the dying
+    // process closes all feed WS connections cleanly (no flap → no restart-boundary
+    // connection storm). Stops every active feed regardless of refcount.
+    describe('stopAll', () => {
+        it('stops all active feeds and clears state', () => {
+            fm.activateForUser(1, 'bybit');
+            fm.activateForUser(2, 'binance');
+            fm.stopAll();
+            expect(mockBybitFeed.stop).toHaveBeenCalled();
+            expect(mockBinanceFeed.stop).toHaveBeenCalled();
+            expect(fm.getActiveExchanges()).toEqual([]);
+            expect(fm.getRefcount('bybit')).toBe(0);
+            expect(fm.getRefcount('binance')).toBe(0);
+        });
+
+        it('is safe to call with no active feeds (idempotent)', () => {
+            expect(() => fm.stopAll()).not.toThrow();
+            expect(fm.getActiveExchanges()).toEqual([]);
+        });
+    });
 });

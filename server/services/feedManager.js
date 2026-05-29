@@ -108,6 +108,20 @@ function getActiveExchanges() {
     return Object.keys(_refcounts).filter(ex => _refcounts[ex] > 0);
 }
 
+// [Phase B / Task B1.2] Stop ALL feeds (regardless of refcount) for graceful
+// shutdown. Without this, the dying process never closes its feed WS → the close
+// fires with _closing=false → reconnect attempts flap during teardown, producing
+// the restart-boundary connection storm. Calling each feed.stop() sets _closing=true
+// so the close is clean and silent (no reconnect).
+function stopAll() {
+    for (const ex of Object.keys(_refcounts)) {
+        _cancelGrace(ex);
+        _stopFeed(ex);
+        _refcounts[ex] = 0;
+    }
+    _userExchange.clear();
+}
+
 function _resetForTest() {
     _refcounts.binance = 0;
     _refcounts.bybit = 0;
@@ -118,5 +132,6 @@ function _resetForTest() {
 module.exports = {
     activateForUser, deactivateForUser,
     getFeedForUser, getUserExchange, getRefcount, getActiveExchanges,
+    stopAll,
     _resetForTest, GRACE_MS
 };

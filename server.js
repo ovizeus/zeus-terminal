@@ -1956,6 +1956,12 @@ async function _gracefulShutdown(signal) {
   // [Task N 2026-05-28] Stop drift checker (no point checking during shutdown)
   try { require('./server/services/driftChecker').stop(); } catch (_) {}
 
+  // [Phase B / Task B1.2 2026-05-29] Stop all market feeds so the dying process
+  // closes its WS connections cleanly. Without this, bybitFeed's WS flaps during
+  // teardown (close fires with _closing=false → reconnect storm), producing the
+  // restart-boundary connection burst seen in logs (32-48 connects/min aggregate).
+  try { require('./server/services/feedManager').stopAll(); logger.info('SERVER', 'feeds stopped (feedManager.stopAll)'); } catch (err) { logger.warn('SERVER', 'feedManager.stopAll failed: ' + (err && err.message)); }
+
   // [Task G 2026-05-28] Drain in-flight _executeLiveEntry calls up to 5s.
   // Without this, PM2 reload mid-entry can create orphan orders on the exchange.
   try {
