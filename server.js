@@ -1935,7 +1935,12 @@ app.locals.wsBroadcastAll = function (payload) {
 global.__zeusWsBroadcastAll = app.locals.wsBroadcastAll;
 
 // ─── Graceful Shutdown ───
+let _shuttingDown = false;
 async function _gracefulShutdown(signal) {
+  // [Phase B / Task B1.3] Idempotent — message + signal (or signal + kill-timeout)
+  // could both fire; run the graceful sequence exactly once.
+  if (_shuttingDown) return;
+  _shuttingDown = true;
   logger.warn('SERVER', 'Shutdown signal received: ' + signal);
   console.log('\n🛑 Shutting down gracefully (' + signal + ')...');
 
@@ -2010,6 +2015,15 @@ async function _gracefulShutdown(signal) {
 
 process.on('SIGTERM', () => { _gracefulShutdown('SIGTERM').catch(err => { console.error('[FATAL] shutdown error:', err.message); process.exit(1); }); });
 process.on('SIGINT', () => { _gracefulShutdown('SIGINT').catch(err => { console.error('[FATAL] shutdown error:', err.message); process.exit(1); }); });
+// [Phase B / Task B1.3] ecosystem.config.js sets shutdown_with_message:true → pm2
+// sends an IPC 'shutdown' MESSAGE, NOT a signal. Without this handler the message was
+// ignored and pm2 hard-killed after kill_timeout → _gracefulShutdown (drain, clean
+// feed/brain stop) NEVER ran on reload. Handle the message so graceful shutdown fires.
+process.on('message', (msg) => {
+  if (msg === 'shutdown') {
+    _gracefulShutdown('pm2-message').catch(err => { console.error('[FATAL] shutdown error:', err.message); process.exit(1); });
+  }
+});
 
 // ─── Crash Safety Net ───
 process.on('uncaughtException', (err) => {
