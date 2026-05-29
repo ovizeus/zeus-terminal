@@ -402,14 +402,37 @@ describe('binanceOps.cancelOrder', () => {
 describe('binanceOps.placeStopLoss', () => {
     beforeEach(() => mockSendSignedRequest.mockReset());
 
-    it('places STOP_MARKET closePosition → returns slOrderId', async () => {
-        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'sl_new', status: 'NEW' });
+    // [BUG#3 2026-05-29] SL must be placed via the ALGO endpoint (Binance Dec 2025
+    // moved STOP_MARKET/TAKE_PROFIT off /fapi/v1/order → "use Algo Order API").
+    it('places SL via /fapi/v1/algoOrder (CONDITIONAL), not /fapi/v1/order', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ algoId: 'algo_1', algoStatus: 'NEW' });
         const r = await binanceOps.placeStopLoss(1, {
-            symbol: 'BTCUSDT', side: 'LONG', stopPrice: '49000', decisionKey: 'resl_dk_1',
+            symbol: 'BTCUSDT', side: 'LONG', stopPrice: '49000', quantity: '0.01', decisionKey: 'resl_dk_1',
         }, _validCreds);
         expect(r.ok).toBe(true);
-        expect(r.slOrderId).toBe('sl_new');
+        expect(r.slOrderId).toBe('algo_1');     // algoId normalized to slOrderId
         expect(r.rawExchange).toBe('binance');
+        const [method, url, body] = mockSendSignedRequest.mock.calls[0];
+        expect(method).toBe('POST');
+        expect(url).toBe('/fapi/v1/algoOrder');
+        expect(body.algoType).toBe('CONDITIONAL');
+        expect(body.type).toBe('STOP_MARKET');
+        expect(body.triggerPrice).toBe('49000');
+        expect(body.side).toBe('SELL');          // opposite of LONG
+        // quantity provided → proven quantity+reduceOnly format (matches _placeConditionalOrder)
+        expect(body.quantity).toBe('0.01');
+        expect(body.reduceOnly).toBe('true');
+    });
+
+    it('without quantity → closePosition on the algo order', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ algoId: 'algo_2', algoStatus: 'NEW' });
+        await binanceOps.placeStopLoss(1, {
+            symbol: 'BTCUSDT', side: 'SHORT', stopPrice: '51000', decisionKey: 'resl_dk_2',
+        }, _validCreds);
+        const body = mockSendSignedRequest.mock.calls[0][2];
+        expect(body.algoType).toBe('CONDITIONAL');
+        expect(body.closePosition).toBe('true');
+        expect(body.side).toBe('BUY');           // opposite of SHORT
     });
 });
 

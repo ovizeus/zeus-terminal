@@ -632,22 +632,35 @@ async function getOpenOrders(uid, params, creds) {
 }
 
 async function placeStopLoss(uid, params, creds) {
-    const resp = await sendSignedRequest('POST', '/fapi/v1/order', {
+    // [BUG#3 2026-05-29] Binance (Dec 2025) moved STOP_MARKET off /fapi/v1/order →
+    // it now rejects it with "use the Algo Order API endpoints instead". Route SL
+    // through /fapi/v1/algoOrder (CONDITIONAL), mirroring the proven entry-SL helper
+    // serverAT._placeConditionalOrder + trading.js (stopPrice→triggerPrice,
+    // newClientOrderId→clientAlgoId, algoId→orderId). Prefer the proven
+    // quantity+reduceOnly form; fall back to closePosition when no quantity is given.
+    const algoParams = {
+        algoType: 'CONDITIONAL',
         symbol: params.symbol,
         side: _oppositeSide(params.side),
         type: 'STOP_MARKET',
-        stopPrice: params.stopPrice,
-        closePosition: 'true',
-        newClientOrderId: `resl_${params.decisionKey}`.slice(0, 36),
+        triggerPrice: String(params.stopPrice),
+        clientAlgoId: `resl_${params.decisionKey}`.slice(0, 36),
         recvWindow: 5000,
-    }, creds);
+    };
+    if (params.quantity != null) {
+        algoParams.quantity = String(params.quantity);
+        algoParams.reduceOnly = 'true';
+    } else {
+        algoParams.closePosition = 'true';
+    }
+    const resp = await sendSignedRequest('POST', '/fapi/v1/algoOrder', algoParams, creds);
     if (!resp || resp.code) {
         return { ok: false, error: canonicalErrors.translateBinance(resp), rawExchange: 'binance' };
     }
     return {
         ok: true,
-        slOrderId: resp.orderId,
-        status: resp.status,
+        slOrderId: resp.algoId != null ? resp.algoId : resp.orderId,
+        status: resp.status || resp.algoStatus,
         ts: Date.now(),
         rawExchange: 'binance',
     };

@@ -206,6 +206,7 @@ async function _reconcileUser(uid, exchange) {
                         symbol,
                         side: dbPos.parsedData.side || exchPos.side,
                         stopPrice,
+                        quantity: exchPos.qty,       // [BUG#3] proven quantity+reduceOnly algo SL
                         decisionKey: decisionKey.generate(),
                         exchangeOverride: exchange,  // [P2c.5] place SL on THIS position's exchange
                     });
@@ -354,11 +355,12 @@ function _isWouldTriggerError(err) {
     return /-?2021\b|\b30038\b|\b110041\b|would.{0,20}(immediately|trigger)|stop.{0,10}passed/i.test(s);
 }
 
-async function _tryPlaceStopLoss(uid, symbol, side, mark, exchange) {
+async function _tryPlaceStopLoss(uid, symbol, side, mark, exchange, qty) {
     const stopPrice = _computeStop(side, mark);
     try {
         const r = await exchangeOps.placeStopLoss(uid, {
             symbol, side, stopPrice, decisionKey: decisionKey.generate(),
+            quantity: qty,               // [BUG#3] proven quantity+reduceOnly algo SL
             exchangeOverride: exchange,  // [P2c.5] orphan auto-SL on its own exchange
         });
         if (r && r.ok) return { ok: true, stopPrice, slOrderId: r.slOrderId || null };
@@ -388,7 +390,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
     }
 
     // Attempt 1: place SL at current mark ± 2%
-    let result = await _tryPlaceStopLoss(uid, symbol, side, mark, exchange);
+    let result = await _tryPlaceStopLoss(uid, symbol, side, mark, exchange, qty);
     let retried = false;
 
     // Retry ONCE only on "would immediately trigger" — race where mark moved
@@ -405,7 +407,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
             const freshMark = refreshed ? Number(refreshed.markPrice) : 0;
             if (freshMark > 0) mark = freshMark;
         } catch (_) { /* keep stale mark if refetch fails */ }
-        result = await _tryPlaceStopLoss(uid, symbol, side, mark, exchange);
+        result = await _tryPlaceStopLoss(uid, symbol, side, mark, exchange, qty);
     }
 
     if (result.ok) {
