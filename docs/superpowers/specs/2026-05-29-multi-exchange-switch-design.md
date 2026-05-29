@@ -34,7 +34,7 @@ This decouples "where new orders go" from "which exchanges we still manage." fee
 
 ## Order routing
 
-- **New entry** (brain / AT / manual /order/place) → `activeExchange`.
+- **New entry** (brain / AT / **ML** / manual /order/place) → `activeExchange`. All new decision-making (brain, AT, ML influence) targets the active exchange only.
 - **Close / reduceOnly / SL / TP / DSL trail** → the **position's own exchange** (`position.exchange`), regardless of which is active.
 
 ## Positions panel (client)
@@ -48,7 +48,11 @@ This decouples "where new orders go" from "which exchanges we still manage." fee
 - Every order/position carries its exchange tag (DSL state already keyed `symbol|exchange`).
 - DSL UI shows the exchange label per order.
 - DSL trail/PL takeover runs **cross-exchange concurrently** — Binance positions trail on Binance while new Bybit positions trail on Bybit.
-- Native SL stays on each position's exchange until DSL activation, then PL takes over (per operator's SL→DSL→PL lifecycle).
+- **Old-exchange positions are managed EXACTLY as if their exchange were still active** — nothing in their handling changes; only the UI label differs. Confirmed close behavior:
+  - Manual close → closes on the position's own (old) exchange.
+  - DSL hits PL → DSL closes the position normally on the old exchange.
+  - DSL not yet activated → the native SL closes the position automatically (native SL stays live on the old exchange until DSL activation, then PL/trail takes over).
+- Native SL stays on each position's exchange until DSL activation, then PL takes over (operator's SL→DSL→PL lifecycle).
 
 ## Modes: uniform (demo / testnet / real)
 
@@ -91,6 +95,6 @@ The switch is the ROUTING layer. To actually trade an exchange, its execution mu
 - No MEXC/OKX/Hyperliquid integrations now — only make the model N-exchange-extensible.
 - No real-money flip (separate gate; demo edge currently negative).
 
-## Open question for operator review
+## Resolved (operator 2026-05-29)
 
-- Confirm "block = stop new orders but keep creds+feed alive for managing open positions" (NOT full disconnect) — implied by the design; flag if you want full disconnect instead (would drop DSL on old positions).
+- **"Block" = stop new orders but keep creds+feed alive — CONFIRMED.** Old-exchange positions stay managed by DSL exactly as if that exchange were active; nothing in their behavior changes, only the UI label. New orders + AT + brain + ML decide on the active exchange. Per-user, uniform across demo/testnet/real. This is "change the exchange whenever you want; old orders keep living in DSL as if their exchange were active."
