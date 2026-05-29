@@ -3306,6 +3306,16 @@ function _normalizePositionSide(side) {
     return s; // 'LONG'/'SHORT' pass through; anything else surfaces to caller validation
 }
 
+// [Fix #2 safety net 2026-05-29] Correct-side protective stop from markPrice. LONG → below,
+// SHORT → above. Returns null on invalid mark. Used by recon to guarantee NO live position
+// is ever naked (mirrors recoveryBoot Task-E auto-SL). DSL takes over this native SL on activation.
+function _computeProtectiveStop(side, markPrice, adversePct) {
+    const m = Number(markPrice);
+    if (!Number.isFinite(m) || m <= 0) return null;
+    const pct = Number.isFinite(adversePct) ? adversePct : 0.02;
+    return _normalizePositionSide(side) === 'LONG' ? m * (1 - pct) : m * (1 + pct);
+}
+
 async function _executeLiveEntryCore(entryInput, stc, creds) {
     if (!entryInput || typeof entryInput !== 'object') {
         const err = new Error('_executeLiveEntryCore: entry object required');
@@ -5024,6 +5034,29 @@ function onUserDataEvent(userId, event) {
                             qty: Math.abs(p.positionAmt),
                         });
                         _broadcastPositions(userId);
+                        // [Fix #2 safety net 2026-05-29] Never leave a recon-discovered live
+                        // position naked. _syncExternalPosition registers WITHOUT an SL; place a
+                        // correct-side protective stop (markPrice ±2%) so no position is unprotected.
+                        // Fire-and-forget (don't block recon); DSL takes over this native SL on activation.
+                        (async () => {
+                            try {
+                                const _mark = Number(p.markPrice) || Number(p.entryPrice) || 0;
+                                const _stop = _computeProtectiveStop(side, _mark, 0.02);
+                                if (!_stop) return;
+                                const r = await require('./exchangeOps').placeStopLoss(userId, {
+                                    symbol: p.symbol, side, stopPrice: _stop,
+                                    decisionKey: require('./decisionKey').generate(),
+                                });
+                                if (r && r.ok) {
+                                    logger.info('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} ${side} protective SL @ $${_stop.toFixed(2)} (slOrderId=${r.slOrderId})`);
+                                    try { audit.record('RECON_SAFETY_SL_PLACED', { userId, symbol: p.symbol, side, stopPrice: _stop, slOrderId: r.slOrderId }, 'AT_RECON'); } catch (_) {}
+                                } else {
+                                    logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} placeStopLoss not ok: ${r && r.error}`);
+                                }
+                            } catch (_e) {
+                                logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} failed: ${_e && _e.message}`);
+                            }
+                        })();
                     }
                 } else {
                     // Position MODIFIED (partial fill, scale in/out)
@@ -5292,4 +5325,6 @@ module.exports = {
     _checkBalanceForEntry,
     // [Bug A fix 2026-05-29] Position-side normalizer (exported for testing)
     _normalizePositionSide,
+    // [Fix #2 safety net 2026-05-29] Protective-stop computation (exported for testing)
+    _computeProtectiveStop,
 };
