@@ -1803,7 +1803,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
         // SL triggered on exchange — cancel remaining TP
         // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
         if (pos.live.tpOrderId) {
-            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.tpOrderId }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
+            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.tpOrderId, exchangeOverride: pos.exchange }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
         }
         // Query real fill price from SL order (best-effort — corrects slippage)
         // [Fix #6] Guard by exchange: Binance-only algoOrder/order query. Bybit deferred to Phase 2.
@@ -1867,7 +1867,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
         // TP triggered on exchange — cancel remaining SL
         // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
         if (pos.live.slOrderId) {
-            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.slOrderId }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
+            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.slOrderId, exchangeOverride: pos.exchange }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
         }
     } else {
         // All other exit types: DSL_PL, DSL_TTP, MANUAL_CLIENT, RESET, RECON_PHANTOM, etc.
@@ -1897,6 +1897,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                         closeType: 'MARKET',
                         decisionKey: closeDecisionKey,
                         source: exitType,         // audit trail: DSL_PL, MANUAL_CLIENT, RESET, etc.
+                        exchangeOverride: pos.exchange,  // [P2b] close on the position's OWN exchange
                     });
                     if (closeResult && closeResult.ok) break; // success
                     // ok:false (e.g. lock timeout, close rejected) — treat as retriable error
@@ -1940,7 +1941,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
             // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
             for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
                 if (oid) {
-                    try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: oid }); } catch (_) { /* warn only */ }
+                    try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: oid, exchangeOverride: pos.exchange }); } catch (_) { /* warn only */ }
                 }
             }
         }

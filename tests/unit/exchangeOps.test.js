@@ -6,7 +6,14 @@ jest.mock('../../server/services/credentialStore', () => ({
         if (uid === 2) return { exchange: 'bybit', mode: 'testnet', apiKey: 'k2', apiSecret: 's2' };
         if (uid === 3) return { exchange: 'binance', mode: 'live', apiKey: 'k3', apiSecret: 's3' };
         return null;
-    })
+    }),
+    // [P2b] Per-exchange creds (regardless of is_active) — distinct apiKey per exchange
+    // so a test can prove the OVERRIDE exchange's OWN creds are used (not active + label swap).
+    getExchangeCredsFor: jest.fn((uid, exchange) => {
+        if (exchange === 'binance') return { exchange: 'binance', mode: 'testnet', apiKey: 'kBIN', apiSecret: 'sBIN' };
+        if (exchange === 'bybit') return { exchange: 'bybit', mode: 'testnet', apiKey: 'kBYB', apiSecret: 'sBYB' };
+        return null; // no connected account for that exchange
+    }),
 }));
 
 const mockBinanceOps = {
@@ -35,6 +42,7 @@ jest.mock('../../server/services/binanceOps', () => mockBinanceOps);
 jest.mock('../../server/services/bybitOps', () => mockBybitOps);
 
 const exchangeOps = require('../../server/services/exchangeOps');
+const credStore = require('../../server/services/credentialStore');
 
 const _validParams = (overrides = {}) => ({
     symbol: 'BTCUSDT', side: 'LONG', qty: '0.001', entryType: 'MARKET',
@@ -166,6 +174,58 @@ describe('exchangeOps', () => {
         it('cancelOrder routes', async () => {
             await exchangeOps.cancelOrder(1, { symbol: 'BTCUSDT', orderId: 'x' });
             expect(mockBinanceOps.cancelOrder).toHaveBeenCalled();
+        });
+    });
+
+    // [P2b] Per-position exchangeOverride: close/cancel/SL of an OPEN position must
+    // route to the position's OWN exchange (via getExchangeCredsFor), even when the
+    // ACTIVE exchange is different. uid=1 is active=binance throughout this block.
+    describe('exchangeOverride — per-position routing', () => {
+        it('closePosition with exchangeOverride=bybit routes to bybitOps using bybit creds', async () => {
+            await exchangeOps.closePosition(1, { symbol: 'BTCUSDT', side: 'LONG', qty: '0.001', closeType: 'MARKET', decisionKey: 'ovr_close_dk', source: 'manual', exchangeOverride: 'bybit' });
+            expect(mockBybitOps.closePosition).toHaveBeenCalled();
+            expect(mockBinanceOps.closePosition).not.toHaveBeenCalled();
+            expect(credStore.getExchangeCredsFor).toHaveBeenCalledWith(1, 'bybit');
+            // bybitOps receives bybit's OWN creds (not active binance apiKey)
+            const passedCreds = mockBybitOps.closePosition.mock.calls[0][2];
+            expect(passedCreds.apiKey).toBe('kBYB');
+            expect(passedCreds.exchange).toBe('bybit');
+        });
+
+        it('cancelOrder with exchangeOverride=bybit routes to bybitOps', async () => {
+            await exchangeOps.cancelOrder(1, { symbol: 'BTCUSDT', orderId: 'x', exchangeOverride: 'bybit' });
+            expect(mockBybitOps.cancelOrder).toHaveBeenCalled();
+            expect(mockBinanceOps.cancelOrder).not.toHaveBeenCalled();
+            const passedCreds = mockBybitOps.cancelOrder.mock.calls[0][2];
+            expect(passedCreds.apiKey).toBe('kBYB');
+        });
+
+        it('placeStopLoss with exchangeOverride=bybit routes to bybitOps', async () => {
+            await exchangeOps.placeStopLoss(1, { symbol: 'BTCUSDT', side: 'LONG', sl: { price: '49000' }, exchangeOverride: 'bybit' });
+            expect(mockBybitOps.placeStopLoss).toHaveBeenCalled();
+            expect(mockBinanceOps.placeStopLoss).not.toHaveBeenCalled();
+        });
+
+        it('no override → close routes to ACTIVE exchange (binance for uid=1) — unchanged', async () => {
+            await exchangeOps.closePosition(1, { symbol: 'BTCUSDT', side: 'LONG', qty: '0.001', closeType: 'MARKET', decisionKey: 'noovr_close_dk', source: 'manual' });
+            expect(mockBinanceOps.closePosition).toHaveBeenCalled();
+            expect(mockBybitOps.closePosition).not.toHaveBeenCalled();
+        });
+
+        it('getPositions override resolves the override exchange OWN creds (not active+label swap)', async () => {
+            await exchangeOps.getPositions(1, { exchangeOverride: 'bybit' });
+            expect(mockBybitOps.getPositions).toHaveBeenCalled();
+            expect(credStore.getExchangeCredsFor).toHaveBeenCalledWith(1, 'bybit');
+            const passedCreds = mockBybitOps.getPositions.mock.calls[0][2];
+            expect(passedCreds.apiKey).toBe('kBYB');
+        });
+
+        it('fail-closed: override to an exchange with no connected account throws (no silent active fallback)', async () => {
+            await expect(
+                exchangeOps.closePosition(1, { symbol: 'BTCUSDT', side: 'LONG', qty: '0.001', closeType: 'MARKET', decisionKey: 'ovr_okx_dk', source: 'manual', exchangeOverride: 'okx' })
+            ).rejects.toThrow(/no creds/i);
+            expect(mockBinanceOps.closePosition).not.toHaveBeenCalled();
+            expect(mockBybitOps.closePosition).not.toHaveBeenCalled();
         });
     });
 

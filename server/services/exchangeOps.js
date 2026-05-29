@@ -26,14 +26,28 @@ const canonicalErrors = require('./canonicalErrors');
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const _readyCache = new Map(); // `${uid}|${symbol}` → { leverage, marginMode, ts }
 
-function _resolveOps(uid) {
-    const creds = credentialStore.getExchangeCreds(uid);
+function _opsForCreds(creds, uid, label) {
     if (!creds || !creds.exchange) {
-        throw new Error(`exchangeOps: no creds for uid=${uid}`);
+        throw new Error(`exchangeOps: no creds for uid=${uid}${label ? ` exchange=${label}` : ''}`);
     }
     if (creds.exchange === 'binance') return { ops: require('./binanceOps'), creds };
     if (creds.exchange === 'bybit')   return { ops: require('./bybitOps'),   creds };
     throw new Error(`exchangeOps: unknown exchange '${creds.exchange}'`);
+}
+
+function _resolveOps(uid) {
+    return _opsForCreds(credentialStore.getExchangeCreds(uid), uid);
+}
+
+// [Multi-exchange switch P2b] Resolve ops + creds for a SPECIFIC exchange when
+// managing an already-open position (close/cancel/SL) on its own exchange after a
+// switch. Uses getExchangeCredsFor → the override exchange's OWN apiKey/baseUrl
+// (NOT the active creds with a swapped label). Fail-closed: throws if no connected
+// account exists for that exchange — never silently routes to the active one.
+// No override → falls back to the active exchange (unchanged behavior).
+function _resolveOpsFor(uid, exchangeOverride) {
+    if (!exchangeOverride) return _resolveOps(uid);
+    return _opsForCreds(credentialStore.getExchangeCredsFor(uid, exchangeOverride), uid, exchangeOverride);
 }
 
 function _validatePlaceEntry(params, creds) {
@@ -71,7 +85,7 @@ async function placeEntry(uid, params) {
 
 async function closePosition(uid, params) {
     decisionKey.assert(params.decisionKey);
-    const { ops, creds } = _resolveOps(uid);
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
     return ops.closePosition(uid, params, creds);
 }
 
@@ -105,15 +119,11 @@ function invalidateReady(uid, symbol) {
 }
 
 async function getPositions(uid, params) {
-    if (params && params.exchangeOverride) {
-        // Fix #11: credentialStore.getExchangeCreds doesn't accept a 2nd arg.
-        // Resolve ops directly by override exchange name, get base creds, override exchange field.
-        const exchange = params.exchangeOverride;
-        const ops = exchange === 'bybit' ? require('./bybitOps') : require('./binanceOps');
-        const creds = credentialStore.getExchangeCreds(uid);
-        return ops.getPositions(uid, params, { ...creds, exchange });
-    }
-    const { ops, creds } = _resolveOps(uid);
+    // [P2b] Override now resolves the override exchange's OWN creds via
+    // getExchangeCredsFor (correct apiKey/baseUrl), replacing the prior
+    // {...activeCreds, exchange} label-swap which sent the active exchange's
+    // apiKey to the override exchange's ops module.
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
     return ops.getPositions(uid, params, creds);
 }
 
@@ -133,7 +143,7 @@ async function ping(uid) {
 }
 
 async function cancelOrder(uid, params) {
-    const { ops, creds } = _resolveOps(uid);
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
     return ops.cancelOrder(uid, params, creds);
 }
 
@@ -149,7 +159,7 @@ async function getOpenOrders(uid, params) {
 }
 
 async function placeStopLoss(uid, params) {
-    const { ops, creds } = _resolveOps(uid);
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
     return ops.placeStopLoss(uid, params, creds);
 }
 
