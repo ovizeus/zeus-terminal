@@ -309,6 +309,8 @@ describe('[BYBIT-VERIFY-FIX] /save verifies Bybit via UNIFIED wallet-balance', (
     const calledUrl = String(fetchMock.mock.calls[0][0]);
     expect(calledUrl).toMatch(/accountType=UNIFIED/);
     expect(calledUrl).not.toMatch(/accountType=CONTRACT/);
+    // [BYBIT-DEMO] testnet mode verifies against Demo Trading (api-demo.bybit.com).
+    expect(calledUrl).toMatch(/api-demo\.bybit\.com/);
   });
 
   it('surfaces a clean error (not a raw JSON-parse crash) on a non-JSON Bybit response', async () => {

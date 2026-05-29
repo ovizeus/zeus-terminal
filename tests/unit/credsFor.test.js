@@ -25,7 +25,9 @@ describe('getExchangeCredsFor(userId, exchange)', () => {
     test('loads a specific exchange row even when NOT active (is_active=0)', () => {
         mockDb.getExchangeAccountByExchange.mockReturnValue(bybitRow);
         const c = cred.getExchangeCredsFor(1, 'bybit');
-        expect(c).toEqual({ exchange: 'bybit', apiKey: 'BKEY', apiSecret: 'BSEC', baseUrl: 'https://api-testnet.bybit.com', mode: 'testnet' });
+        // [BYBIT-DEMO] bybit "testnet" maps to Demo Trading (api-demo.bybit.com) — the env
+        // where keys created under bybit.com → Demo Trading live (not legacy testnet.bybit.com).
+        expect(c).toEqual({ exchange: 'bybit', apiKey: 'BKEY', apiSecret: 'BSEC', baseUrl: 'https://api-demo.bybit.com', mode: 'testnet' });
         expect(mockDb.getExchangeAccountByExchange).toHaveBeenCalledWith(1, 'bybit');
     });
 

@@ -57,8 +57,10 @@ async function _testBinanceKeys(apiKey, apiSecret, mode) {
 
 // ─── Bybit Derivatives key verification ───
 async function _testBybitKeys(apiKey, apiSecret, mode) {
+    // [BYBIT-DEMO 2026-05-29] testnet → Demo Trading (api-demo.bybit.com), matching
+    // credentialStore.BASE_URLS.bybit.testnet (keys are created in bybit.com → Demo Trading).
     const baseUrl = mode === 'testnet'
-        ? 'https://api-testnet.bybit.com'
+        ? 'https://api-demo.bybit.com'
         : 'https://api.bybit.com';
 
     const timestamp = Date.now();

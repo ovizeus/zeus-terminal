@@ -14,7 +14,12 @@ const BASE_URLS = {
         live:    'https://fapi.binance.com',
     },
     bybit: {
-        testnet: 'https://api-testnet.bybit.com',
+        // [BYBIT-DEMO 2026-05-29] "testnet" maps to Bybit DEMO TRADING (api-demo.bybit.com),
+        // NOT the legacy separate testnet (api-testnet.bybit.com). Demo Trading keys are
+        // created inside the real bybit.com account (Account → Demo Trading) and only auth
+        // against api-demo.bybit.com — that's what operators actually use. Market data still
+        // comes from the real WS (bybitFeed stream.bybit.com); only account/order REST differs.
+        testnet: 'https://api-demo.bybit.com',
         live:    'https://api.bybit.com',
     },
 };
