@@ -108,6 +108,7 @@ function _maskAndFormat(account) {
         exchange: account.exchange,
         mode: account.mode,
         status: account.status,
+        active: account.is_active === 1,  // [P7.0b] which connected exchange is the active one
         maskedKey,
         lastVerified: account.last_verified_at,
         createdAt: account.created_at,
@@ -118,7 +119,9 @@ function _maskAndFormat(account) {
 router.get('/status', (req, res) => {
     if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'Not authenticated' });
 
-    const accounts = db.getAllExchanges(req.user.id);
+    // [P7.0b] All connected (verified) exchanges, not just the active one — so the
+    // client can show both and offer a one-click Switch to the inactive one.
+    const accounts = db.getConnectedExchanges(req.user.id);
     res.json({
         ok: true,
         accounts: accounts.map(_maskAndFormat),

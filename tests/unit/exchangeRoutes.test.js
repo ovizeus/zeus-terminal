@@ -35,13 +35,16 @@ jest.mock('../../server/services/database', () => {
         const r = mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, api_key_encrypted, api_secret_encrypted, mode, is_active) VALUES (?, ?, ?, ?, ?, ?)`).run(userId, exchange, encKey, encSecret || '', mode, makeActive ? 1 : 0);
         return r.lastInsertRowid;
     };
+    // [P7.0b] All connected accounts (test schema has no status column → all rows), active first.
+    const getConnectedExchanges = (userId) =>
+        mockDb.prepare(`SELECT * FROM exchange_accounts WHERE user_id = ? ORDER BY is_active DESC, exchange`).all(userId);
     const disconnectExchangeByName = (userId, exchange) =>
         mockDb.prepare(`UPDATE exchange_accounts SET is_active = 0 WHERE user_id = ? AND exchange = ?`).run(userId, exchange);
     const auditLog = (userId, action, details) =>
         mockDb.prepare(`INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, ?, ?, datetime('now'))`).run(userId, action, JSON.stringify(details));
     const listUsers = () => [];
 
-    return { db: mockDb, getAllExchanges, getExchangeByName, saveExchangeByName, disconnectExchangeByName, auditLog, listUsers };
+    return { db: mockDb, getAllExchanges, getConnectedExchanges, getExchangeByName, saveExchangeByName, disconnectExchangeByName, auditLog, listUsers };
 });
 
 const mockMarkPendingSwitch = jest.fn();
@@ -114,6 +117,23 @@ beforeEach(() => {
 });
 
 describe('exchange routes — Phase 6 Task 36', () => {
+    describe('[P7.0b] GET /status — all connected exchanges + active flag', () => {
+        it('returns every verified account (active + inactive) with a per-account active flag', async () => {
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'binance', 1, 'testnet', 'enc')`).run();
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'bybit', 0, 'live', 'enc2')`).run();
+
+            const res = await request(buildApp()).get('/api/exchange/status');
+            expect(res.status).toBe(200);
+            expect(res.body.ok).toBe(true);
+            const byEx = Object.fromEntries((res.body.accounts || []).map(a => [a.exchange, a]));
+            expect(byEx.binance).toBeDefined();
+            expect(byEx.bybit).toBeDefined();           // inactive one MUST appear now
+            expect(byEx.binance.active).toBe(true);
+            expect(byEx.bybit.active).toBe(false);
+            expect(byEx.bybit.mode).toBe('live');        // per-exchange independent mode
+        });
+    });
+
     describe('POST /switch', () => {
         it('switches binance → bybit + 200 + audit log + _markPendingSwitch called', async () => {
             mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'binance', 1, 'testnet', 'enc')`).run();
