@@ -253,6 +253,25 @@ describe('recoveryBoot', () => {
         );
     });
 
+    it('[P2c.5] SL/auto-SL is placed on the reconciled exchange (exchangeOverride), not active', async () => {
+        // binance active + bybit connected; bybit has an exchange-only position → auto-SL must go to bybit.
+        addExchangeAccount(1, 'binance', 1);
+        addExchangeAccount(1, 'bybit', 0);
+        mockGetPositions.mockImplementation(async (uid, params) => {
+            const ex = params && params.exchangeOverride;
+            if (ex === 'bybit') return [{ symbol: 'ETHUSDT', side: 'SHORT', qty: '0.5', markPrice: '3000' }];
+            return []; // binance holds nothing
+        });
+
+        await recoveryBoot.run();
+
+        expect(mockPlaceStopLoss).toHaveBeenCalledWith(1, expect.objectContaining({
+            symbol: 'ETHUSDT', exchangeOverride: 'bybit',
+        }));
+        // Never placed on the active (binance) exchange.
+        expect(mockPlaceStopLoss).not.toHaveBeenCalledWith(1, expect.objectContaining({ exchangeOverride: 'binance' }));
+    });
+
     it('run never throws (defensive)', async () => {
         // Simulate a completely broken DB by replacing prepare with a thrower
         const origPrepare = mockDb.prepare;
