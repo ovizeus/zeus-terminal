@@ -449,17 +449,23 @@ router.post('/switch', (req, res) => {
         logger.warn('EXCHANGE', `_markPendingSwitch failed uid=${uid}: ${err && err.message}`);
     }
 
-    // Step 7: Toggle is_active flags in exchange_accounts
-    // Deactivate current (if exists)
-    if (currentExchange) {
-        rawDb.prepare(
-            `UPDATE exchange_accounts SET is_active = 0 WHERE user_id = ? AND exchange = ?`
-        ).run(uid, currentExchange);
-    }
-    // Activate target if row exists, otherwise leave for _applyPendingSwitches
-    rawDb.prepare(
-        `UPDATE exchange_accounts SET is_active = 1 WHERE user_id = ? AND exchange = ?`
-    ).run(uid, targetExchange);
+    // Step 7: Toggle is_active flags — ATOMIC + dedupe-safe.
+    // [SWITCH-DEDUPE 2026-05-29] Deactivate ALL of the user's rows (not just the current
+    // exchange) then activate EXACTLY ONE target row (by id). Legacy duplicate rows (from
+    // an old save bug) meant `UPDATE ... is_active=1 WHERE exchange=?` set MULTIPLE rows
+    // active → violated idx_exchange_user_active_single (UNIQUE one-active-per-user) →
+    // the activate threw, the switch half-applied, and the user ended with ZERO active
+    // exchange (LIVE LOCKED). Run in a transaction so it's all-or-nothing.
+    const _targetRow = rawDb.prepare(
+        `SELECT id FROM exchange_accounts WHERE user_id = ? AND exchange = ? AND status = 'verified'
+         ORDER BY is_active DESC, last_verified_at DESC, id DESC LIMIT 1`
+    ).get(uid, targetExchange);
+    rawDb.transaction(() => {
+        rawDb.prepare(`UPDATE exchange_accounts SET is_active = 0 WHERE user_id = ?`).run(uid);
+        if (_targetRow) {
+            rawDb.prepare(`UPDATE exchange_accounts SET is_active = 1 WHERE id = ?`).run(_targetRow.id);
+        }
+    })();
 
     // Best-effort WS broadcast
     try { req.app.locals.broadcastExchangeChanged(uid); } catch (_) { /* WS push best-effort */ }

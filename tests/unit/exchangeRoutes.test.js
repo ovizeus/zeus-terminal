@@ -9,7 +9,8 @@ const TEST_DB = '/tmp/zeus-exchange-routes-test-' + Date.now() + '.db';
 if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
 const mockDb = new Database(TEST_DB);
 mockDb.exec(`
-    CREATE TABLE exchange_accounts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, exchange TEXT NOT NULL DEFAULT 'binance', is_active INTEGER NOT NULL DEFAULT 1, mode TEXT NOT NULL DEFAULT 'testnet', api_key_encrypted TEXT NOT NULL DEFAULT '', api_secret_encrypted TEXT NOT NULL DEFAULT '', created_at TEXT DEFAULT (datetime('now')));
+    CREATE TABLE exchange_accounts (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, exchange TEXT NOT NULL DEFAULT 'binance', is_active INTEGER NOT NULL DEFAULT 1, mode TEXT NOT NULL DEFAULT 'testnet', status TEXT NOT NULL DEFAULT 'verified', api_key_encrypted TEXT NOT NULL DEFAULT '', api_secret_encrypted TEXT NOT NULL DEFAULT '', last_verified_at TEXT, created_at TEXT DEFAULT (datetime('now')));
+    CREATE UNIQUE INDEX idx_exchange_user_active_single ON exchange_accounts(user_id) WHERE is_active = 1;
     CREATE TABLE at_positions (seq INTEGER PRIMARY KEY, data TEXT, status TEXT DEFAULT 'OPEN', user_id INTEGER, exchange TEXT DEFAULT 'binance');
     CREATE TABLE at_positions_orphaned (seq INTEGER PRIMARY KEY, original_at_positions_seq INTEGER, user_id INTEGER NOT NULL, exchange TEXT NOT NULL, data TEXT NOT NULL, disconnected_at INTEGER NOT NULL, resolved_at INTEGER, resolved_by TEXT);
     CREATE TABLE position_events (id INTEGER PRIMARY KEY, position_seq INTEGER, user_id INTEGER, exchange TEXT, event_type TEXT, from_state TEXT, to_state TEXT, payload TEXT, cycle_no INTEGER, ts INTEGER);
@@ -177,6 +178,24 @@ describe('exchange routes — Phase 6 Task 36', () => {
             const reqAudit = mockDb.prepare(`SELECT * FROM audit_log WHERE action='EXCHANGE_SWITCH_REQUESTED'`).get();
             expect(reqAudit).toBeDefined();
             expect(JSON.parse(reqAudit.details).openPositionsOnPrevious).toEqual([{ exchange: 'binance', count: 2 }]);
+        });
+
+        it('[SWITCH-DEDUPE] switching to an exchange with DUPLICATE rows activates exactly ONE (no UNIQUE crash)', async () => {
+            // Legacy duplicate binance rows (from an old save bug) + bybit currently active.
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'bybit', 1, 'testnet', 'encb')`).run();
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'binance', 0, 'testnet', 'enc1')`).run();
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'binance', 0, 'testnet', 'enc2')`).run();
+
+            const res = await request(buildApp()).post('/api/exchange/switch').send({ targetExchange: 'binance' });
+
+            // Old code did `UPDATE ... is_active=1 WHERE exchange='binance'` → set BOTH binance
+            // rows active → violated idx_exchange_user_active_single → 500 + LIVE LOCKED.
+            expect(res.status).toBe(200);
+            expect(res.body.ok).toBe(true);
+            const active = mockDb.prepare(`SELECT COUNT(*) c FROM exchange_accounts WHERE user_id=1 AND is_active=1`).get();
+            expect(active.c).toBe(1);  // exactly one active — never zero (LIVE LOCKED) or many
+            const activeEx = mockDb.prepare(`SELECT exchange FROM exchange_accounts WHERE user_id=1 AND is_active=1`).get();
+            expect(activeEx.exchange).toBe('binance');
         });
 
         it('[P3] demo positions never count toward the switch summary', async () => {
