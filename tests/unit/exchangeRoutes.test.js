@@ -127,13 +127,12 @@ describe('exchange routes — Phase 6 Task 36', () => {
             expect(audit.some(a => a.action === 'EXCHANGE_SWITCH_REQUESTED')).toBe(true);
         });
 
-        // [P3-REGATE 2026-05-29] TEMPORARY fail-closed gate until P2c (cross-exchange
-        // recon/drift/recoveryBoot/orderSweeper/trading). Recon is Binance-hardcoded;
-        // switching away with open positions would leave them unreconciled (or, in the
-        // mirror case, false-phantom-closed). So block the switch but RETURN THE SUMMARY
-        // in the 409 body so the client can say "close these N first". The summary helper
-        // + its tests stay intact for when the gate is lifted post-P2c.
-        it('[P3-REGATE] switch with open positions is BLOCKED (409) + summary in body + no toggle/markPending', async () => {
+        // [P2c.6 2026-05-29] Gate LIFTED — the cross-exchange safety family (recon,
+        // driftChecker, recoveryBoot, orderSweeper, SL-placement) is now per-exchange
+        // and manual close routes by pos.exchange (P2a/P2b). So a switch with open
+        // positions SUCCEEDS: the old positions stay DSL-managed on their own exchange;
+        // the response carries the summary so the client can confirm/label them.
+        it('[P2c.6] switch with open positions SUCCEEDS (200) + summary + keeps old account connected', async () => {
             mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'binance', 1, 'testnet', 'enc')`).run();
             mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'bybit', 0, 'testnet', 'enc2')`).run();
             mockDb.prepare(`INSERT INTO at_positions (data, status, user_id, exchange) VALUES ('{"mode":"testnet","exchange":"binance"}', 'OPEN', 1, 'binance')`).run();
@@ -142,20 +141,20 @@ describe('exchange routes — Phase 6 Task 36', () => {
             const app = buildApp();
             const res = await request(app).post('/api/exchange/switch').send({ targetExchange: 'bybit' });
 
-            expect(res.status).toBe(409);
-            expect(res.body.ok).toBe(false);
-            expect(res.body.code).toBe('OPEN_POSITIONS');
-            // Summary IS returned so the client can list what to close first.
+            expect(res.status).toBe(200);
+            expect(res.body.ok).toBe(true);
             expect(res.body.openPositionsOnPrevious).toEqual([{ exchange: 'binance', count: 2 }]);
+            expect(mockMarkPendingSwitch).toHaveBeenCalledWith(1, 'binance', 'bybit');
 
-            // Fail-closed: NOT committed — no markPending, is_active unchanged.
-            expect(mockMarkPendingSwitch).not.toHaveBeenCalled();
-            expect(mockDb.prepare(`SELECT is_active FROM exchange_accounts WHERE user_id=1 AND exchange='binance'`).get().is_active).toBe(1);
-            expect(mockDb.prepare(`SELECT is_active FROM exchange_accounts WHERE user_id=1 AND exchange='bybit'`).get().is_active).toBe(0);
+            // Old account row KEPT (not deleted), just deactivated → still manageable.
+            expect(mockDb.prepare(`SELECT is_active FROM exchange_accounts WHERE user_id=1 AND exchange='binance'`).get().is_active).toBe(0);
+            expect(mockDb.prepare(`SELECT is_active FROM exchange_accounts WHERE user_id=1 AND exchange='bybit'`).get().is_active).toBe(1);
 
-            // BLOCKED audit emitted; no REQUESTED.
-            expect(mockDb.prepare(`SELECT * FROM audit_log WHERE action='EXCHANGE_SWITCH_BLOCKED'`).get()).toBeDefined();
-            expect(mockDb.prepare(`SELECT * FROM audit_log WHERE action='EXCHANGE_SWITCH_REQUESTED'`).get()).toBeUndefined();
+            // No BLOCKED audit; REQUESTED carries the summary.
+            expect(mockDb.prepare(`SELECT * FROM audit_log WHERE action='EXCHANGE_SWITCH_BLOCKED'`).get()).toBeUndefined();
+            const reqAudit = mockDb.prepare(`SELECT * FROM audit_log WHERE action='EXCHANGE_SWITCH_REQUESTED'`).get();
+            expect(reqAudit).toBeDefined();
+            expect(JSON.parse(reqAudit.details).openPositionsOnPrevious).toEqual([{ exchange: 'binance', count: 2 }]);
         });
 
         it('[P3] demo positions never count toward the switch summary', async () => {
