@@ -57,9 +57,12 @@ async function run() {
     let errors = 0;
 
     try {
-        // Get all users with active exchange accounts
+        // [P2c.3] Iterate ALL connected (verified) exchanges per user, not just the
+        // ACTIVE one. Pre-P2c used is_active=1 → after a switch, positions on a
+        // non-active connected exchange were never scanned there; they'd be compared
+        // against the active exchange's held set and falsely marked ORPHANED at boot.
         const users = db.prepare(
-            `SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE is_active = 1`
+            `SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE status = 'verified'`
         ).all();
 
         for (const { user_id: uid, exchange } of users) {
@@ -105,23 +108,26 @@ async function _reconcileUser(uid, exchange) {
     let orphaned = 0;
     let slPlaced = 0;
 
-    // 1. Scan exchange positions
+    // 1. [P2c.3] Scan positions for THIS exchange (routed to its own creds).
     let exchangePositions;
     try {
-        exchangePositions = await exchangeOps.getPositions(uid, {});
+        exchangePositions = await exchangeOps.getPositions(uid, { exchangeOverride: exchange });
     } catch (err) {
         throw new Error(`getPositions failed: ${err.message}`);
     }
 
-    // 2. Read DB positions (OPEN + OPENING) — exclude DEMO (never on exchange)
+    // 2. Read DB positions (OPEN + OPENING) — exclude DEMO (never on exchange) and
+    // scope to THIS exchange (data.exchange, default 'binance' for legacy rows) so a
+    // position on another connected exchange is reconciled in its own pass, not here.
     const dbPositionsRaw = db.prepare(
         `SELECT seq, data, status FROM at_positions WHERE user_id = ? AND status IN ('OPEN', 'OPENING')`
     ).all(uid);
     const dbPositions = dbPositionsRaw.filter(dp => {
         try {
             const d = JSON.parse(dp.data);
-            return d.mode !== 'demo';
-        } catch (_) { return true; }
+            if (d.mode === 'demo') return false;
+            return (d.exchange || 'binance') === exchange;
+        } catch (_) { return exchange === 'binance'; }
     });
 
     // Build lookup maps keyed by symbol

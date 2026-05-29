@@ -20,8 +20,18 @@ function _makeDb() {
         prepare(sql) {
             return {
                 all(...params) {
-                    if (/SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE is_active/.test(sql)) {
-                        return _exchangeAccounts.filter(r => r.is_active === 1);
+                    if (/SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE status/.test(sql)) {
+                        // [P2c.3] DISTINCT (user_id, exchange) among verified accounts.
+                        const seen = new Set();
+                        const out = [];
+                        for (const r of _exchangeAccounts) {
+                            if (r.status !== 'verified') continue;
+                            const k = r.user_id + '|' + r.exchange;
+                            if (seen.has(k)) continue;
+                            seen.add(k);
+                            out.push({ user_id: r.user_id, exchange: r.exchange });
+                        }
+                        return out;
                     }
                     if (/SELECT seq, data, status FROM at_positions WHERE user_id = \? AND status IN/.test(sql)) {
                         const uid = params[0];
@@ -118,8 +128,9 @@ function resetState() {
     _seqCounter = 1;
 }
 
-function addExchangeAccount(user_id, exchange = 'binance') {
-    _exchangeAccounts.push({ id: _seqCounter++, user_id, exchange, is_active: 1, mode: 'testnet', api_key_encrypted: '' });
+function addExchangeAccount(user_id, exchange = 'binance', is_active = 1) {
+    // [P2c.3] recoveryBoot now iterates all status='verified' accounts (not just is_active=1).
+    _exchangeAccounts.push({ id: _seqCounter++, user_id, exchange, is_active, status: 'verified', mode: 'testnet', api_key_encrypted: '' });
 }
 
 function addPosition(user_id, data, status = 'OPEN', exchange = 'binance') {
@@ -216,6 +227,30 @@ describe('recoveryBoot', () => {
         // User 2 halt lifted, user 1 NOT
         expect(mockSetGlobalHalt).toHaveBeenCalledWith(false, 2, 'RECOVERY_BOOT_COMPLETE');
         expect(mockSetGlobalHalt).not.toHaveBeenCalledWith(false, 1, expect.anything());
+    });
+
+    it('[P2c.3] position on a NON-active connected exchange is reconciled against ITS OWN exchange (not orphaned)', async () => {
+        // User 1: binance ACTIVE (is_active=1) + bybit connected but NOT active (is_active=0).
+        addExchangeAccount(1, 'binance', 1);
+        addExchangeAccount(1, 'bybit', 0);
+        // Open position lives on bybit (data.exchange='bybit'), with an SL already set.
+        const seq = addPosition(1, { symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', slOrderId: 'sl_b', exchange: 'bybit' }, 'OPEN', 'bybit');
+        // Bybit reports it live; binance holds nothing.
+        mockGetPositions.mockImplementation(async (uid, params) => {
+            const ex = params && params.exchangeOverride;
+            if (ex === 'bybit') return [{ symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', entryPrice: '60000', markPrice: '60000' }];
+            return [];
+        });
+
+        await recoveryBoot.run();
+
+        // Must NOT be orphaned — it was confirmed live on its own exchange.
+        const pos = _atPositions.find(p => p.seq === seq);
+        expect(pos.status).toBe('OPEN');
+        expect(mockGetPositions).toHaveBeenCalledWith(1, expect.objectContaining({ exchangeOverride: 'bybit' }));
+        expect(mockPositionEventsAppend).not.toHaveBeenCalledWith(
+            expect.objectContaining({ event_type: 'RECOVERY_ORPHANED_NO_EXCHANGE' })
+        );
     });
 
     it('run never throws (defensive)', async () => {
