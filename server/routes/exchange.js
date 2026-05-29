@@ -11,7 +11,7 @@ const logger = require('../services/logger');
 const serverAT = require('../services/serverAT');
 const positionEvents = require('../services/positionEvents');
 const exchangeOps = require('../services/exchangeOps');
-const { summarizeOpenPositions } = require('./_exchangeSwitchHelpers');
+const { summarizeOpenPositions } = require('./exchangeSwitchHelpers');
 
 // Lazy require to avoid circular import: serverBrain → routes/exchange → serverBrain
 function _getServerBrain() {
