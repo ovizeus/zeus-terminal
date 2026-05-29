@@ -17,6 +17,10 @@ const CACHE_TTL = {
 
 const _cache = new Map();
 const _pending = new Map();
+// [Phase A / Task A1] Last-good payload per key, NEVER purged on TTL. When Binance
+// fails, we serve this (marked stale via X-Zeus-Stale header) instead of a 502 blank,
+// so the chart shows last-known data rather than going dark.
+const _lastGood = new Map();
 
 function _cacheKey(endpoint, params) {
     return endpoint + '|' + JSON.stringify(params);
@@ -33,19 +37,38 @@ function _setCache(key, data) {
     _cache.set(key, { data, ts: Date.now() });
 }
 
+// [Phase A / Task A1] Pure stale-serve decision. fresh wins; else last-good as stale;
+// else miss (route 502s). Keeps payload shape untouched (same reference) so array
+// responses (klines/ticker) are unaffected.
+function _resolveServe(fresh, lastGood, nowMs) {
+    if (fresh !== null && fresh !== undefined) return { data: fresh, stale: false };
+    if (lastGood) return { data: lastGood.data, stale: true, ageMs: nowMs - lastGood.ts };
+    return { data: null, stale: false, miss: true };
+}
+
+// Returns { data, stale, ageMs? } — callers set X-Zeus-Stale header when stale,
+// or 502 when the promise rejects (no last-good ever existed).
 async function _proxyFetch(url, cacheKey, ttlMs, weight) {
-    const cached = _getCached(cacheKey, ttlMs);
-    if (cached) return cached;
+    const fresh = _getCached(cacheKey, ttlMs);
+    if (fresh) return { data: fresh, stale: false };
 
     if (_pending.has(cacheKey)) return _pending.get(cacheKey);
 
     const promise = (async () => {
-        const res = await gateway.fetch(url, { __weight: weight, __src: 'marketProxy' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        _setCache(cacheKey, data);
-        _pending.delete(cacheKey);
-        return data;
+        try {
+            const res = await gateway.fetch(url, { __weight: weight, __src: 'marketProxy' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            _setCache(cacheKey, data);
+            _lastGood.set(cacheKey, { data, ts: Date.now() });
+            _pending.delete(cacheKey);
+            return { data, stale: false };
+        } catch (err) {
+            _pending.delete(cacheKey);
+            const served = _resolveServe(null, _lastGood.get(cacheKey), Date.now());
+            if (served.miss) throw err; // no last-good ever → let route 502
+            return served;
+        }
     })();
 
     _pending.set(cacheKey, promise);
@@ -61,8 +84,9 @@ router.get('/klines', async (req, res) => {
     const ttl = lim <= 2 ? CACHE_TTL.klines_poll : CACHE_TTL.klines_init;
     const key = _cacheKey('klines', { symbol, interval, limit: lim });
     try {
-        const data = await _proxyFetch(url, key, ttl, lim <= 2 ? 1 : 5);
-        res.json(data);
+        const r = await _proxyFetch(url, key, ttl, lim <= 2 ? 1 : 5);
+        if (r.stale) res.set('X-Zeus-Stale', String(r.ageMs));
+        res.json(r.data);
     } catch (err) {
         res.status(502).json({ error: 'Binance unavailable', detail: err.message });
     }
@@ -75,8 +99,9 @@ router.get('/ticker24hr', async (req, res) => {
         : `${FUTURES_BASE}/fapi/v1/ticker/24hr`;
     const key = _cacheKey('ticker24hr', { symbols: symbols || 'all' });
     try {
-        const data = await _proxyFetch(url, key, CACHE_TTL.ticker24hr, 40);
-        res.json(data);
+        const r = await _proxyFetch(url, key, CACHE_TTL.ticker24hr, 40);
+        if (r.stale) res.set('X-Zeus-Stale', String(r.ageMs));
+        res.json(r.data);
     } catch (err) {
         res.status(502).json({ error: 'Binance unavailable', detail: err.message });
     }
@@ -90,8 +115,9 @@ router.get('/topLongShort', async (req, res) => {
     const url = `${FUTURES_BASE}/futures/data/topLongShortPositionRatio?symbol=${sym}&period=${per}&limit=${lim}`;
     const key = _cacheKey('topLongShort', { symbol: sym, period: per, limit: lim });
     try {
-        const data = await _proxyFetch(url, key, CACHE_TTL.topLongShort, 1);
-        res.json(data);
+        const r = await _proxyFetch(url, key, CACHE_TTL.topLongShort, 1);
+        if (r.stale) res.set('X-Zeus-Stale', String(r.ageMs));
+        res.json(r.data);
     } catch (err) {
         res.status(502).json({ error: 'Binance unavailable', detail: err.message });
     }
@@ -104,8 +130,9 @@ router.get('/spot/klines', async (req, res) => {
     const url = `${SPOT_BASE}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${lim}`;
     const key = _cacheKey('spot_klines', { symbol, interval, limit: lim });
     try {
-        const data = await _proxyFetch(url, key, CACHE_TTL.spot_klines, 5);
-        res.json(data);
+        const r = await _proxyFetch(url, key, CACHE_TTL.spot_klines, 5);
+        if (r.stale) res.set('X-Zeus-Stale', String(r.ageMs));
+        res.json(r.data);
     } catch (err) {
         res.status(502).json({ error: 'Binance unavailable', detail: err.message });
     }
@@ -132,5 +159,8 @@ router.get('/oi', (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// [Phase A / Task A1] Pure-logic export for unit testing (no runtime use).
+router._serveTest = { resolveServe: _resolveServe };
 
 module.exports = router;
