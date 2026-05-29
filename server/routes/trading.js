@@ -218,6 +218,18 @@ router.get('/positions', async (req, res) => {
   }
 });
 
+// [Bug fix 2026-05-29] Stale-trade guard decision. The old guard blocked an order
+// whenever wsProxy.isSymbolStale was true — but wsProxy's per-symbol Binance WS can be
+// IP-blocked (no _healthState → staleness=Infinity) while marketFeed @bookTicker keeps
+// serverState fresh (the price actually used for SL/TP/PnL/brain). That wrongly refused
+// EVERY testnet/live order (HTTP 423). Now: block only when the wsProxy feed is stale
+// AND the canonical serverState live price is also stale/unknown (fail-closed).
+function _resolveStaleBlock(wsStale, ssAgeMs, thresholdMs) {
+    if (!wsStale) return false;                                   // primary feed fresh → allow
+    if (ssAgeMs == null || !Number.isFinite(ssAgeMs)) return true; // no live price → fail-closed (block)
+    return ssAgeMs > thresholdMs;                                 // block only if live source also stale
+}
+
 // ─── POST /api/order/place ───
 router.post('/order/place', validateOrderBody, async (req, res) => {
   // [M1.2 Cat D 2026-05-14] Demo mode bypass — demo entries NU touch Binance.
@@ -259,15 +271,24 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     if (MF.WS_PROXY_ENABLED) {
       const wsProxy = require('../services/wsMarketProxy');
       const symbol = req.body.symbol;
-      if (wsProxy.isSymbolStale(symbol)) {
-        const staleness = wsProxy.getStalenessMs(symbol);
-        try { audit.record('STALE_TRADE_BLOCKED', { userId: req.user.id, symbol, staleness_ms: staleness, threshold_ms: 10000 }, 'TRADE_BLOCKER', req.ip); } catch (_) {}
+      const wsStale = wsProxy.isSymbolStale(symbol);
+      // [Bug fix 2026-05-29] Consult the canonical live price (serverState, fed by
+      // marketFeed @bookTicker) — wsProxy's per-symbol WS may be IP-blocked while this
+      // is fresh. Block only if BOTH are stale (fail-closed when serverState unknown).
+      let ssAgeMs = null;
+      try {
+        const snap = require('../services/serverState').getSnapshotForSymbol(symbol);
+        if (snap && snap.priceTs) ssAgeMs = Date.now() - snap.priceTs;
+      } catch (_) { /* leave null → fail-closed */ }
+      if (_resolveStaleBlock(wsStale, ssAgeMs, 10000)) {
+        const staleness = (ssAgeMs != null && Number.isFinite(ssAgeMs)) ? ssAgeMs : wsProxy.getStalenessMs(symbol);
+        try { audit.record('STALE_TRADE_BLOCKED', { userId: req.user.id, symbol, staleness_ms: staleness, ss_age_ms: ssAgeMs, ws_stale: wsStale, threshold_ms: 10000 }, 'TRADE_BLOCKER', req.ip); } catch (_) {}
         return res.status(423).json({
           error: 'STALE_DATA',
           symbol,
-          staleness_ms: Math.round(staleness),
+          staleness_ms: Number.isFinite(staleness) ? Math.round(staleness) : null,
           threshold_ms: 10000,
-          message: `Trading paused — ${symbol} market data is ${Math.round(staleness / 1000)}s stale (max 10s)`,
+          message: `Trading paused — ${symbol} market data is stale (max 10s)`,
         });
       }
     }
@@ -1212,5 +1233,8 @@ router.get('/brain/exits', (req, res) => {
     res.status(500).json({ error: 'Exit analysis unavailable' });
   }
 });
+
+// [Bug fix 2026-05-29] Pure stale-guard decision exposed for unit testing.
+router._staleTest = { resolveStaleBlock: _resolveStaleBlock };
 
 module.exports = router;
