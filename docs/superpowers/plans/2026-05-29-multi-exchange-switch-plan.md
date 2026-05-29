@@ -1,147 +1,82 @@
-# Multi-Exchange One-Click Switch — Implementation Plan
+# Multi-Exchange One-Click Switch — Implementation Plan (CORRECTED v2)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement task-by-task. Steps use `- [ ]`. This is a MONEY-PATH feature: every task is TDD (test→red→green), backup the file before editing (`*.bak.pre-<task>-<date>`), and show code before commit (operator rule). Bite-sized code for Phases 2-5 is authored AT EXECUTION against the live file (read the file first), since exact diffs depend on current code; this plan fixes the interfaces, files, tasks, tests, and sequence "to the millimetre".
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans (inline, operator chose). Each task = TDD (test→red→green) + backup file before edit (`*.bak.pre-<task>-<date>`) + show code before commit (operator money-path rule). Bite-sized code for UI/large-file tasks is authored AT EXECUTION against the live file.
 
-**Goal:** Per-user one-click switch of the active exchange (Binance ⇄ Bybit ⇄ future OKX/MEXC/Hyperliquid), uniform across demo/testnet/real. New decisions (brain/AT/ML/manual) route to the active exchange; open positions on other exchanges stay DSL-managed on their own exchange exactly as if active, with a per-exchange label on every order.
+**Goal:** Per-user one-click switch of the active exchange (Binance ⇄ Bybit ⇄ future OKX/MEXC/Hyperliquid), uniform demo/testnet/real. New decisions (brain/AT/ML/manual) → active exchange; open positions on other exchanges stay DSL-managed on their own exchange exactly as if active, with a per-exchange label on every order.
 
-**Architecture:** Introduce `activeExchange` (new orders) vs `managedExchanges` (active ∪ exchanges-with-open-positions) in feedManager. serverAT routes new entries to active, close/SL/TP/DSL to `position.exchange`, and tells feedManager when a position opens/closes so an exchange stays "managed" (creds+feed alive) until its last position closes. DSL runs cross-exchange concurrently. Client shows all positions cross-exchange with exchange badges + a Switch button.
+**Architecture (CORRECTED after code verification 2026-05-29):** Active exchange is already `exchange_accounts.is_active` (DB); `/api/exchange/switch` already toggles it (exchange.js:370). The REAL gap: `credentialStore.getExchangeCreds(userId)` only loads the ACTIVE row → serverAT uses it for EVERY op (entry AND close/SL/DSL) → managing an old-exchange position after switch routes to the WRONG (new active) exchange. **Core fix = per-position creds routing:** new primitive `getExchangeCredsFor(userId, exchange)` + serverAT uses it (keyed by `position.exchange`, already stamped at serverAT.js:1176) for all close/SL/TP/DSL ops, while entries use the active creds. Switch stops blocking on open positions and keeps the old account row connected (is_active=0, not deleted) so its positions stay manageable.
 
-**Tech Stack:** Node.js + better-sqlite3 + PM2 (server), React + TS + Vite (client), Jest (server tests), vitest (client). Spec: `docs/superpowers/specs/2026-05-29-multi-exchange-switch-design.md`.
-
----
-
-## Interfaces (contracts locked here — all phases depend on these)
-
-**feedManager (Phase 1):**
-- `setActiveExchange(uid, exchange)` → sets active; previous active stays in managed IF it has open positions, else its feed grace-stops.
-- `getActiveExchange(uid)` → string | null.
-- `getManagedExchanges(uid)` → string[] (active ∪ exchanges with open positions).
-- `markPositionOpen(uid, exchange)` / `markPositionClosed(uid, exchange)` → maintain per-(uid,exchange) open-position counts; an exchange with count>0 is "managed" (feed+creds kept alive) even when not active.
-- `isManaged(uid, exchange)` → bool.
-
-**serverAT (Phase 2/3):**
-- New entry resolves target exchange = `feedManager.getActiveExchange(uid)`; refuse new entry on a non-active managed exchange ("blocked — not the active exchange").
-- Close/SL/TP/DSL use `position.exchange` (already stamped at entry).
-- On position open → `feedManager.markPositionOpen(uid, position.exchange)`; on close → `markPositionClosed`.
-- Every position/order carries `exchange` (already stamped — verify) used as the UI label key.
-
-**Client (Phase 5):** positions store aggregates across exchanges; each row has `exchange`; Switch action → `POST /api/exchange/switch {exchange}`.
+**Tech Stack:** Node + better-sqlite3 + PM2; React+TS+Vite; Jest (server), vitest (client). Spec: `docs/superpowers/specs/2026-05-29-multi-exchange-switch-design.md`.
 
 ---
 
-## File structure
-
-- `server/services/feedManager.js` — active/managed model + position-count tracking (Phase 1).
-- `server/routes/exchange.js` — `POST /api/exchange/switch` (confirm-flow, replace 409 block) (Phase 2).
-- `server/services/serverAT.js` — entry routing to active; markPositionOpen/Closed wiring; non-active-entry guard (Phase 2/3).
-- `server/services/serverBrain.js` — dispatch new decisions only to active exchange (Phase 3).
-- `server/services/serverDSL.js` — confirm cross-exchange concurrent management + per-order exchange tag (Phase 3).
-- `server/migrationFlags.js` — revise SERVER_AT_DEMO/BYBIT mutex for uniform modes (Phase 4).
-- Client positions panel + DSL UI + Exchange settings (Switch button/dialog) (Phase 5).
-
----
-
-## PHASE 1 — feedManager active/managed model (server, self-contained, START HERE)
-
-Pure-ish state model + unit-testable with the existing mocked-feed test harness (`tests/unit/feedManager.test.js` already mocks marketFeed/bybitFeed). No real exchange calls.
-
-### Task 1.1: position-count tracking (markPositionOpen / markPositionClosed / isManaged)
-
-**Files:** Modify `server/services/feedManager.js`; Test: `tests/unit/feedManager-managed.test.js` (create). Backup feedManager first.
-
-- [ ] **Step 1 — failing test:**
-```js
-const fm = require('../../server/services/feedManager');
-beforeEach(() => fm._resetForTest());
-test('exchange with open positions is managed even when not active', () => {
-  fm.activateForUser(1, 'binance');
-  fm.markPositionOpen(1, 'binance');
-  fm.setActiveExchange(1, 'bybit');           // switch away
-  expect(fm.getActiveExchange(1)).toBe('bybit');
-  expect(fm.isManaged(1, 'binance')).toBe(true);   // still managed (has position)
-  expect(fm.getManagedExchanges(1).sort()).toEqual(['binance', 'bybit']);
-});
-test('exchange drops from managed when last position closes', () => {
-  fm.activateForUser(1, 'binance');
-  fm.markPositionOpen(1, 'binance');
-  fm.setActiveExchange(1, 'bybit');
-  fm.markPositionClosed(1, 'binance');
-  expect(fm.isManaged(1, 'binance')).toBe(false);
-  expect(fm.getManagedExchanges(1)).toEqual(['bybit']);
-});
-test('active exchange is always managed even with no positions', () => {
-  fm.setActiveExchange(1, 'bybit');
-  expect(fm.isManaged(1, 'bybit')).toBe(true);
-});
-```
-- [ ] **Step 2 — run → FAIL** (`npx jest tests/unit/feedManager-managed.test.js --forceExit`): markPositionOpen/setActiveExchange/getManagedExchanges/isManaged undefined.
-- [ ] **Step 3 — implement** in feedManager.js: a `_posCounts` Map keyed `uid|exchange`→int; `markPositionOpen`/`markPositionClosed` (clamp ≥0); `setActiveExchange(uid,ex)` (set `_userExchange`, ensure feed started for ex via existing _startFeed/_cancelGrace, grace-stop the previous active ONLY if its posCount==0); `getActiveExchange`=_userExchange.get; `getManagedExchanges` = unique of [active] + exchanges with posCount>0; `isManaged`=active||posCount>0. Keep existing activate/deactivate working.
-- [ ] **Step 4 — run → PASS** + full `tests/unit/feedManager.test.js` (no regression on existing 18).
-- [ ] **Step 5 — commit** `feat(feedManager): active vs managed exchange model + position-count tracking`.
-
-### Task 1.2: switch keeps old feed alive while it has positions
-- [ ] Test: after `setActiveExchange` away from an exchange WITH posCount>0, that feed is NOT stopped (assert mock feed.stop NOT called for it); WITHOUT positions, it grace-stops (assert _scheduleGrace). Red → implement the grace gating in setActiveExchange → green → commit.
-
-**Phase 1 deliverable:** feedManager exposes active/managed + position tracking, fully unit-tested, no runtime wiring yet (safe).
+## Verified facts (from code, drives this plan)
+- `credentialStore.getExchangeCreds(userId)` = ACTIVE row only (`db.getExchangeAccount` + decrypt) — credentialStore.js:34.
+- serverAT uses `getExchangeCreds(userId)` for all ops (676, 798, 1163, 1266) — no per-position creds.
+- `exchangeOps` already has `exchangeOverride` (exchangeOps.js:111) to pick ops module per exchange — but needs the right CREDS too.
+- `entry.exchange` IS stamped at entry (serverAT.js:1176 from `_entryCreds.exchange`). `position.exchange` available.
+- `/api/exchange/switch` EXISTS (exchange.js:370): validates target, NO_TARGET_CREDENTIALS check, **409 OPEN_POSITIONS block at ~416** (the thing to change), `serverBrain._markPendingSwitch`, toggles `is_active`.
+- `serverDSL.attach(position, params)` keyed by `position.seq`; stores userId/symbol/side/SL — **NO exchange field** (serverDSL.js:78-96).
+- serverBrain dispatches via `serverAT.processBrainDecision(...)` (serverBrain.js:852); exchange resolved inside serverAT via active creds.
+- Client already has `positionsStore.ts`, `dslStore.ts`, `multiExchangeStore.ts`, `PositionTable.tsx`, `MultiExchangePage.tsx`, `liveApi.ts` — build ON these.
 
 ---
 
-## PHASE 2 — switch route + entry routing (server)
+## PHASE 1 — `getExchangeCredsFor(userId, exchange)` (FOUNDATION, START HERE)
 
-### Task 2.1: `POST /api/exchange/switch` route (replace 409 block)
-**Files:** `server/routes/exchange.js` (the current 409-on-positions block ~lines 157/176). Backup first. Authored at execution against live code.
-- Behavior: `POST /api/exchange/switch {exchange}` → validate exchange ∈ SUPPORTED + user has creds for it → call `feedManager.setActiveExchange(uid, exchange)` → return `{ok:true, active, managed, openPositionsOnPrevious:[{exchange,count}]}`. The confirm dialog is client-side (Phase 5); the route just performs the switch + returns the open-position summary so the client can confirm-then-call. Replace the hard "disconnect first" 409 with this.
-- TDD via supertest (pattern: existing e2e tests) OR a pure `_buildSwitchResult(uid)` helper unit-tested (preferred — avoids the auth/creds harness): given active+managed+posCounts → returns the summary object. Red → implement → green → commit `feat(exchange): /switch route + summary (replaces one-exchange block)`.
+**Files:** `server/services/credentialStore.js` (+ a `db.getExchangeAccountByExchange` query in database.js if absent); Test: `tests/unit/credsFor.test.js`. Backup both.
 
-### Task 2.2: new-entry routing to active exchange + non-active guard
-**Files:** `server/services/serverAT.js` entry path. Backup first.
-- Pure helper `_resolveEntryExchange(uid)` = `feedManager.getActiveExchange(uid)`; guard: refuse a new entry whose target exchange ≠ active (`ENTRY_BLOCKED_NOT_ACTIVE_EXCHANGE`). TDD the pure guard (`_isEntryAllowedOnExchange(target, active)` → target===active). Wire into the entry path. Red→green→commit.
+- [ ] Step 1 — failing test: `getExchangeCredsFor(uid, 'bybit')` returns the bybit row's creds even when binance is the active row; returns null if no such connected account; existing `getExchangeCreds` (active) unchanged.
+- [ ] Step 2 — run → FAIL (function undefined).
+- [ ] Step 3 — implement: extract the decrypt-from-account body of getExchangeCreds into `_credsFromAccount(account, userId)`; `getExchangeCreds(uid)` = `_credsFromAccount(db.getExchangeAccount(uid), uid)`; add `db.getExchangeAccountByExchange(uid, exchange)` (SELECT … WHERE user_id=? AND exchange=? AND status='verified'/'connected' LIMIT 1); `getExchangeCredsFor(uid, exchange)` = `_credsFromAccount(that, uid)`. Export `getExchangeCredsFor`.
+- [ ] Step 4 — run → PASS + no regression on existing cred tests.
+- [ ] Step 5 — commit `feat(creds): getExchangeCredsFor(userId, exchange) — per-exchange credential load`.
 
-### Task 2.3: markPositionOpen/Closed wiring
-**Files:** `server/services/serverAT.js` (where positions are pushed to `_positions` on open + `_closePosition`/`_handleLiveExit` on close). Backup first.
-- On open (entry registered LIVE) → `feedManager.markPositionOpen(uid, entry.exchange)`. On close → `markPositionClosed(uid, pos.exchange)`. Verify `entry.exchange`/`pos.exchange` is stamped (it is — Phase 12.A); if missing for any path, stamp it. TDD via the s6/positions test hooks. Red→green→commit.
+## PHASE 2 — serverAT per-position creds routing (THE core fix)
+
+**Files:** `server/services/serverAT.js` (close/SL/TP/DSL paths that call `getExchangeCreds(userId)`); Test: extend serverAT test hooks. Backup.
+
+- [ ] Pure helper `_credsForPosition(userId, pos)` = `pos.exchange ? getExchangeCredsFor(userId, pos.exchange) : getExchangeCreds(userId)`. TDD it (mock both creds fns).
+- [ ] Replace `getExchangeCreds(userId)` with `_credsForPosition(userId, pos)` in the EXIT/SL/TP/DSL-close paths (the recon/close/_handleLiveExit/DSL-trigger sites — NOT the entry path 1163, which stays active-creds). Identify each call site at execution; entry keeps active creds.
+- [ ] Verify close/SL routes to `pos.exchange` (test: a bybit position closes via bybit creds even when binance active). Red→green→commit `fix(serverAT): close/SL/TP/DSL use per-position exchange creds`.
+- [ ] Wire `feedManager.markPositionOpen/Closed` (Phase 5) at open/close so old exchange's feed stays alive while it has positions.
+
+## PHASE 3 — switch route: stop blocking, keep old account connected
+
+**Files:** `server/routes/exchange.js:370-` (the /switch route, 409 block ~416). Backup.
+
+- [ ] Replace the **409 OPEN_POSITIONS block** with: allow the switch; return `{ok:true, from, to, openPositionsOnPrevious:[{exchange,count}]}` (summary so client confirms). Keep the old account row CONNECTED (is_active=0, do NOT disconnect/delete) so its positions stay manageable via getExchangeCredsFor. Preserve `_markPendingSwitch` + is_active toggle. Keep NO_TARGET_CREDENTIALS check.
+- [ ] TDD a pure `_switchSummary(uid)` helper (active + per-exchange open-position counts from at_positions) → unit test. Wire into route. Red→green→commit `feat(exchange): switch keeps old positions managed (no open-position block)`.
+
+## PHASE 4 — serverDSL exchange tag + new-decision routing to active
+
+**Files:** `server/services/serverDSL.js` (attach), `server/services/serverAT.js` (entry uses active — confirm), `server/services/serverBrain.js` (dispatch). Backup.
+
+- [ ] `serverDSL.attach` stores `exchange: position.exchange` in DSL state + exposes it via getState (for the UI label + so any DSL-driven close knows the exchange). TDD attach carries exchange.
+- [ ] Confirm new entries (brain/AT/ML) use ACTIVE creds (getExchangeCreds) so they target the active exchange — add a guard test. Red→green→commit `feat(serverDSL): per-position exchange tag; new entries pinned to active exchange`.
+
+## PHASE 5 — feedManager keep-feed-for-managed
+
+**Files:** `server/services/feedManager.js`; Test: `tests/unit/feedManager-managed.test.js`. Backup.
+
+- [ ] Add per-(uid,exchange) open-position count: `markPositionOpen/markPositionClosed/isManaged`; on switch-away, keep the old exchange's feed alive if its count>0 (grace-stop only at count 0). TDD (existing mocked-feed harness). Red→green→commit `feat(feedManager): keep feed alive for exchanges with open positions`.
+
+## PHASE 6 — uniform-mode mutex revision
+
+**Files:** `server/migrationFlags.js:203-246`. Backup.
+
+- [ ] Loosen `SERVER_AT_DEMO && BYBIT_TESTNET_ENABLED` (238) + `SERVER_AT_DEMO && BYBIT_LIVE_ENABLED` (236) so demo (simulated) coexists with one real exchange env; KEEP `BYBIT_TESTNET && BYBIT_LIVE` (215) + `BYBIT_LIVE && DRY_RUN_ONLY` (221). TDD validateFlags new combos. Red→green→commit.
+
+## PHASE 7 — client (build on existing multi-exchange UI)
+
+**Files:** `client/src/stores/positionsStore.ts` (cross-exchange + exchange field), `PositionTable.tsx` (per-exchange badge + close→pos.exchange), `dslStore.ts`/DSL panel (exchange label), `MultiExchangePage.tsx`/`multiExchangeStore.ts` (Switch confirm dialog using `/switch` summary, replace any "disconnect first" copy). vitest per store/component + client rebuild (`npm run build`→public/app) + PM2 reload.
 
 ---
 
-## PHASE 3 — brain/ML dispatch + DSL cross-exchange + labels (server)
+## Sequencing
+P1 (creds primitive) → P2 (per-position routing, needs P1) → P3 (switch route) → P4 (DSL tag + active pin) → P5 (feed lifecycle) → P6 (mutex, parallel-able) → P7 (client, needs P1-P5 endpoints). Deploy (PM2 reload) after each server phase. Bybit execution enablement (BYBIT flags + canary) = separate operator step AFTER this lands.
 
-### Task 3.1: serverBrain dispatches new decisions only to active exchange
-**Files:** `server/services/serverBrain.js` (the dispatch where it hands decisions to serverAT). Authored at execution. TDD the dispatch-target resolution (uses feedManager.getActiveExchange). Red→green→commit.
-
-### Task 3.2: DSL cross-exchange concurrency + per-order exchange tag
-**Files:** `server/services/serverDSL.js`. Read fully at execution. Confirm DSL keys by `symbol|exchange` (memory: regime already does) so Binance + Bybit positions trail concurrently; ensure each DSL entry carries `exchange`; expose it for the UI. TDD the keying + tag. Red→green→commit. (No behavior change to a single-exchange setup — additive.)
-
----
-
-## PHASE 4 — uniform-mode mutex revision (server)
-
-### Task 4.1: revise SERVER_AT_DEMO/BYBIT mutex
-**Files:** `server/migrationFlags.js:203-246` (validation). Backup first.
-- Per spec: demo (simulated) coexists with one real exchange env. Remove/loosen `SERVER_AT_DEMO && BYBIT_TESTNET_ENABLED` (line 238) and `SERVER_AT_DEMO && BYBIT_LIVE_ENABLED` (236) so modes are uniform; KEEP the genuine safety mutexes (BYBIT_TESTNET && BYBIT_LIVE both true; BYBIT_LIVE && DRY_RUN_ONLY). TDD the validateFlags function with the new allowed/forbidden combos. Red→green→commit.
-
----
-
-## PHASE 5 — client (positions panel, DSL labels, Switch button)
-
-### Task 5.1: positions store aggregates cross-exchange + exchange field
-**Files:** client positions store + `/api/positions`/WS shape. Read at execution. TDD (vitest) the store reducer keeps positions from all managed exchanges + each has `exchange`. Red→green→commit.
-
-### Task 5.2: positions panel per-exchange badge + close routing
-**Files:** client positions panel component. Each row badge (🟡 BINANCE / 🟣 BYBIT / …); close routes to `position.exchange`. vitest + manual smoke. Commit.
-
-### Task 5.3: DSL UI per-order exchange label
-**Files:** client DSL panel. Show exchange badge per DSL order. Commit.
-
-### Task 5.4: Switch button + confirm dialog
-**Files:** client Exchange settings UI. Replace "disconnect first" with one-click Switch per exchange → on click, if `/switch` summary shows open positions on current → confirm dialog ("Switch to X? Y has N open positions — they stay active + DSL-managed") → confirm calls `/switch`. vitest + manual smoke. Commit. Client rebuild (`npm run build` → public/app) + PM2 reload.
-
----
-
-## Sequencing & dependencies
-
-1 (feedManager model) → 2 (route+routing, needs 1) → 3 (brain/DSL, needs 2) → 4 (mutex, independent, can parallel) → 5 (client, needs 1-3 server endpoints). Deploy after each server phase (PM2 reload, graceful now works). Bybit execution enablement (BYBIT flags + canary) is a SEPARATE operator step after the switch UX lands.
-
-## Self-review notes
-- Spec coverage: active/managed (P1), switch-block-not-disconnect (P1.2+P2.1), new→active routing (P2.2/P3.1), close/SL/TP→pos.exchange + old-position DSL-as-if-active (P2.3/P3.2), per-exchange labels (P3.2/P5.2/5.3), uniform modes/mutex (P4), positions panel + manual close cross-exchange (P5). ✅
-- Money-path: TDD + backup + show-before-commit per task; pure helpers unit-tested, wiring authored against live files at execution.
-- Real-money flip + Bybit execution enablement = out of scope (separate gated steps).
+## Self-review
+- Spec coverage: per-position close/SL "as if active" (P1+P2+P4-tag), new→active (P2 entry-stays-active + P4 guard), switch-no-block + keep-managed (P3+P5), labels (P4 tag + P7), uniform mutex (P6), cross-exchange panel + manual close (P7). ✅
+- Corrected mechanism: active=is_active(DB)+getExchangeCreds; NEW getExchangeCredsFor for per-position routing (was wrongly feedManager-centric in v1).
+- Money-path: TDD + backup + show-before-commit each task. Real-money flip + Bybit execution enablement out of scope.
