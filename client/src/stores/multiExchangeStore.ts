@@ -33,6 +33,20 @@ interface SaveResult {
   lastVerified?: string
 }
 
+// [P7a] Result of POST /api/exchange/switch. The server no longer 409s on open
+// positions — it switches and returns a per-exchange summary of the positions left
+// on the previous exchange(s), which stay DSL-managed there.
+export interface SwitchResult {
+  ok: boolean
+  from?: string
+  to?: string
+  openPositionsOnPrevious?: Array<{ exchange: string; count: number }>
+  message?: string
+  error?: string
+  code?: string
+  noOp?: boolean
+}
+
 interface MultiExchangeState {
   accounts: Record<string, ExchangeAccount>
   loading: boolean
@@ -44,6 +58,7 @@ interface MultiExchangeState {
   saveAccount(exchange: string, apiKey: string, apiSecret: string, mode: 'live' | 'testnet'): Promise<SaveResult>
   verifyAccount(exchange: string): Promise<SaveResult>
   disconnectAccount(exchange: string): Promise<{ ok: boolean; error?: string }>
+  switchExchange(targetExchange: string): Promise<SwitchResult>
 }
 
 async function _postJson(url: string, body: any) {
@@ -148,5 +163,13 @@ export const useMultiExchangeStore = create<MultiExchangeState>((set, get) => ({
       })
     }
     return r
+  },
+
+  // [P7a] One-click switch of the active exchange. Server toggles is_active and
+  // returns openPositionsOnPrevious (positions left on the old exchange, still
+  // DSL-managed there). Both accounts stay connected — nothing is removed here;
+  // the caller refreshes active-exchange truth (loadAccounts/uiStore) + toasts.
+  switchExchange: async (targetExchange) => {
+    return await _postJson('/api/exchange/switch', { targetExchange }) as SwitchResult
   },
 }))

@@ -127,6 +127,34 @@ describe('useMultiExchangeStore', () => {
     expect(state.accounts.binance).toBeUndefined()
   })
 
+  it('[P7a] switchExchange POSTs to /api/exchange/switch with targetExchange and returns the summary', async () => {
+    const mockFetch = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true, from: 'binance', to: 'bybit', openPositionsOnPrevious: [{ exchange: 'binance', count: 2 }], message: 'switch will apply at next brain cycle' }),
+    } as any)
+
+    const result = await useMultiExchangeStore.getState().switchExchange('bybit')
+    expect(mockFetch).toHaveBeenCalledWith('/api/exchange/switch', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ targetExchange: 'bybit' }),
+    }))
+    expect(result.ok).toBe(true)
+    expect(result.to).toBe('bybit')
+    expect(result.openPositionsOnPrevious).toEqual([{ exchange: 'binance', count: 2 }])
+  })
+
+  it('[P7a] switchExchange surfaces NO_TARGET_CREDENTIALS failure', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ ok: false, code: 'NO_TARGET_CREDENTIALS', error: 'Cannot switch to bybit: no saved API credentials. Add bybit credentials first.' }),
+    } as any)
+
+    const result = await useMultiExchangeStore.getState().switchExchange('bybit')
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe('NO_TARGET_CREDENTIALS')
+    expect(result.error).toMatch(/no saved API credentials/i)
+  })
+
   it('loadAccounts on fetch failure sets error and clears _loadInFlight', async () => {
     vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('network down'))
     await useMultiExchangeStore.getState().loadAccounts()
