@@ -16,6 +16,24 @@ const { credsForPosition } = require('./credsRouting');
 // New orders use getExchangeCreds (active); close/SL/TP/add-on of an open position
 // route to position.exchange so old-exchange positions stay managed after a switch.
 function _credsForPosition(userId, pos) { return credsForPosition(credentialStore, userId, pos); }
+// [P5b] Keep a live position's exchange feed alive while it's open (managed), so
+// DSL/SL keep ticking on the OLD exchange after a switch-away. Guarded to live +
+// real exchange + userId; lazy-require + try/catch so a feed-hold hiccup NEVER
+// breaks the entry/close path. Demo/legacy (no exchange) are skipped.
+function _trackLiveOpen(pos) {
+    try {
+        if (pos && pos.mode === 'live' && pos.exchange && pos.userId != null) {
+            require('./feedManager').markPositionOpen(pos.userId, pos.exchange);
+        }
+    } catch (_) { /* feed hold is best-effort */ }
+}
+function _trackLiveClose(pos) {
+    try {
+        if (pos && pos.mode === 'live' && pos.exchange && pos.userId != null) {
+            require('./feedManager').markPositionClosed(pos.userId, pos.exchange);
+        }
+    } catch (_) { /* feed hold is best-effort */ }
+}
 const { sendSignedRequest } = require('./binanceSigner');
 // [Task 40 — Bybit Phase 1A+1B] exchangeOps router: routes entry/close/balance
 // calls to the correct exchange (Binance or Bybit) based on per-user config.
@@ -617,6 +635,7 @@ function _restoreFromDb() {
                         continue;
                     }
                     _positions.push(pos);
+                    _trackLiveOpen(pos); // [P5b] hold feed for restored live position
                     // Re-attach DSL with saved params + restored progress (survives restart).
                     // [DSL-OFF] Skip attach if position was opened with DSL OFF (dslParams === null).
                     if (pos.dslParams) {
@@ -1228,6 +1247,7 @@ function processBrainDecision(decision, stc, userId, userIntent) {
 
     // ── Add to THE positions array ──
     _positions.push(entry);
+    _trackLiveOpen(entry); // [P5b] hold feed for this exchange while position is open
     us.stats.entries++;
     if (entry.mode !== 'live') us.demoStats.entries++;
 
@@ -2314,6 +2334,7 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     }
 
     serverDSL.detach(pos.seq);
+    _trackLiveClose(pos); // [P5b] release feed hold (grace-stop if last position on that exchange)
     us.dailyPnL = +(us.dailyPnL + pnl).toFixed(2);
     if (pos.mode === 'live') { us.dailyPnLLive = +(us.dailyPnLLive + pnl).toFixed(2); }
     else { us.dailyPnLDemo = +(us.dailyPnLDemo + pnl).toFixed(2); }
@@ -3731,6 +3752,7 @@ async function registerManualPosition(userId, data) {
                 const seq = ++us.seq;
                 coreResult.seq = seq;
                 _positions.push(coreResult);
+                _trackLiveOpen(coreResult); // [P5b]
                 try { _persistState(userId); } catch (_) { /* defensive */ }
                 return {
                     ok: true,
@@ -3876,6 +3898,7 @@ function _registerManualPositionLegacy(userId, data) {
     };
 
     _positions.push(entry);
+    _trackLiveOpen(entry); // [P5b]
     if (!_dslOff) {
         serverDSL.attach(entry, entry.dslParams);
     } else {
@@ -3933,6 +3956,7 @@ function _syncExternalPosition(data) {
         externalSync: true,
     };
     _positions.push(entry);
+    _trackLiveOpen(entry); // [P5b]
     try { _persistState(userId); } catch (_) {}
     logger.warn('AT_RECON', `External position synced uid=${userId} sym=${data.symbol} side=${data.side} qty=${data.qty} — no SL placement (pre-existing pe exchange, source=external)`);
     return {
