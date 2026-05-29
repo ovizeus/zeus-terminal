@@ -37,9 +37,24 @@ jest.mock('../../server/services/telegram', () => ({
 
 jest.mock('../../server/services/serverAT', () => ({ setGlobalHalt: jest.fn() }));
 
+// [BUG#5] migrationFlags lives at server/migrationFlags (one level up from services).
+// bybitOps._dispatchRequest must require it from '../migrationFlags' — a wrong './…'
+// path throws MODULE_NOT_FOUND on every real Bybit call. Mock the CORRECT path so a
+// real dispatch (no synthetic) reaches the DRY_RUN gate instead of crashing.
+jest.mock('../../server/migrationFlags', () => ({ flags: { BYBIT_DRY_RUN_ONLY: true } }));
+
 const bybitOps = require('../../server/services/bybitOps');
 
 const _validCreds = { exchange: 'bybit', mode: 'testnet', apiKey: 'k', apiSecret: 's' };
+
+describe('[BUG#5] _dispatchRequest migrationFlags require path', () => {
+    it('resolves migrationFlags from the correct path (reaches DRY_RUN gate, not MODULE_NOT_FOUND)', async () => {
+        // No synthetic enqueued → real dispatch path → hits require('../migrationFlags').
+        // With the wrong './migrationFlags' path this rejects with "Cannot find module".
+        await expect(bybitOps.getBalance(1, _validCreds)).rejects.toThrow(/DRY_RUN/i);
+        await expect(bybitOps.getBalance(1, _validCreds)).rejects.not.toThrow(/Cannot find module/i);
+    });
+});
 
 const _validEntryParams = (overrides = {}) => ({
     symbol: 'BTCUSDT', side: 'LONG', qty: '0.001', entryType: 'MARKET',
