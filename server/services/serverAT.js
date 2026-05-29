@@ -3294,6 +3294,18 @@ function _buildEntryFromOrderPlace(reqBody, userId) {
 //
 // Refs: ADR-001 §3.2 + §3.3; TEST_SCAFFOLDING_M1 §4.
 // ══════════════════════════════════════════════════════════════════
+
+// [Bug A fix 2026-05-29] Normalize exchange-side ('BUY'/'SELL') → position side
+// ('LONG'/'SHORT'). _executeLiveEntryCore's closeSide + 15%-OTM safety-SL branch
+// key off `=== 'LONG'`; a stray 'BUY' made a LONG take the SHORT branch → safety SL
+// ABOVE entry → "Order would immediately trigger" → SL fails → naked position.
+function _normalizePositionSide(side) {
+    const s = String(side || '').toUpperCase();
+    if (s === 'BUY') return 'LONG';
+    if (s === 'SELL') return 'SHORT';
+    return s; // 'LONG'/'SHORT' pass through; anything else surfaces to caller validation
+}
+
 async function _executeLiveEntryCore(entryInput, stc, creds) {
     if (!entryInput || typeof entryInput !== 'object') {
         const err = new Error('_executeLiveEntryCore: entry object required');
@@ -3454,6 +3466,12 @@ async function _placeProtectionForExistingEntry(entry, creds) {
     if (!entry.sl || !(entry.sl > 0)) throw new Error('Missing entry.sl (live entry requires SL)');
     if (!(entry.avgPrice > 0)) throw new Error('Missing entry.avgPrice');
     if (!(entry.executedQty > 0)) throw new Error('Missing entry.executedQty');
+
+    // [Bug A fix 2026-05-29] Normalize once so EVERY downstream `=== 'LONG'` check
+    // (closeSide, safety SL side, real SL, TP) computes the correct direction even
+    // if a caller passed exchange-side convention ('BUY'/'SELL'). Native SL placed on
+    // the correct side is what DSL later takes over on activation.
+    entry.side = _normalizePositionSide(entry.side);
 
     const userId = entry.userId;
     const liveSeq = entry.seq || Date.now();
@@ -5272,4 +5290,6 @@ module.exports = {
     _testDecPending: _decPending,
     // [Task L 2026-05-28] Pre-trade balance check (exported for testing)
     _checkBalanceForEntry,
+    // [Bug A fix 2026-05-29] Position-side normalizer (exported for testing)
+    _normalizePositionSide,
 };
