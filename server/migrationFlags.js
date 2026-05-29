@@ -232,12 +232,13 @@ function _validateMutex(f) {
     if (f.SERVER_BRAIN_DEMO && f.SERVER_BRAIN) {
         violations.push('SERVER_BRAIN_DEMO && SERVER_BRAIN both true — DEMO carve-out is redundant once full SERVER_BRAIN is enabled; disable one before enabling the other');
     }
-    if (f.SERVER_AT_DEMO && f.BYBIT_LIVE_ENABLED) {
-        violations.push('SERVER_AT_DEMO && BYBIT_LIVE_ENABLED both true — DEMO carve-out must not co-exist with Bybit live execution');
-    }
-    if (f.SERVER_AT_DEMO && f.BYBIT_TESTNET_ENABLED) {
-        violations.push('SERVER_AT_DEMO && BYBIT_TESTNET_ENABLED both true — DEMO carve-out must not co-exist with Bybit testnet execution');
-    }
+    // [P6 2026-05-29] Uniform-mode revision — the SERVER_AT_DEMO && BYBIT_*_ENABLED
+    // mutexes are LIFTED. Demo execution is SIMULATED by mode (mode==='demo' →
+    // registerManualPosition, _entryCreds=null → no real exchange order), NOT by the
+    // absence of Bybit flags. So demo (simulated) coexists with a real Bybit env in
+    // the same process — different users/modes route independently. The genuine
+    // Bybit-env safety mutexes (TESTNET⊕LIVE @214, LIVE⊕DRY_RUN @220) remain in force,
+    // as do the SERVER_AT_DEMO/SERVER_BRAIN_DEMO redundancy ratchets vs full server flags.
     // [Task C 2026-05-28] TESTNET carve-out mutex vs full SERVER_AT.
     // Full SERVER_AT covers TESTNET; the carve-out is redundant + confusing
     // if both flags ever flip true via manual edit or admin route race.
