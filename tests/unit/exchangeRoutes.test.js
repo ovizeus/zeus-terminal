@@ -322,7 +322,9 @@ describe('[BYBIT-VERIFY-FIX] /save verifies Bybit via UNIFIED wallet-balance', (
     });
     expect(res.status).toBe(400);
     expect(res.body.ok).toBe(false);
-    expect(res.body.error).toMatch(/Bybit verification failed|HTTP 401/i);
+    // [BYBIT-401-MSG] Actionable: a 401 empty body means the key was rejected — guide
+    // the operator to TESTNET keys (separate from mainnet) / no IP restriction.
+    expect(res.body.error).toMatch(/rejected the API key|TESTNET keys/i);
     expect(res.body.error).not.toMatch(/Unexpected end of JSON/i);
   });
 });

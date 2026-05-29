@@ -95,6 +95,12 @@ async function _testBybitKeys(apiKey, apiSecret, mode) {
     try {
         data = await res.json();
     } catch (_) {
+        // Bybit returns an empty-body 401 for a rejected key. Make it actionable:
+        // the #1 cause is using MAINNET keys in TESTNET mode (Bybit testnet keys are
+        // created separately at testnet.bybit.com), or an IP-restricted key.
+        if (res.status === 401) {
+            throw new Error('Bybit rejected the API key (401). Use TESTNET keys created at testnet.bybit.com (separate from mainnet), with no IP restriction.');
+        }
         throw new Error(`Bybit verification failed — HTTP ${res.status} (non-JSON response)`);
     }
     if (!data || data.retCode !== 0) throw new Error((data && data.retMsg) || `Bybit API error (HTTP ${res.status})`);
