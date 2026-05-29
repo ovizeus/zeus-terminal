@@ -31,11 +31,10 @@ function _resolveBaseUrl(exchange, mode) {
  * @param {number|string} userId
  * @returns {{ exchange: string, apiKey: string, apiSecret: string, baseUrl: string, mode: string } | null}
  */
-function getExchangeCreds(userId) {
-    if (!userId) return null;
-    const account = db.getExchangeAccount(userId);
+// Shared decrypt+normalize for a single exchange_accounts row. Identical output to the
+// previous inline getExchangeCreds body — preserves backward compatibility.
+function _credsFromAccount(account, userId) {
     if (!account) return null;
-
     try {
         const apiKey = decrypt(account.api_key_encrypted);
         const apiSecret = decrypt(account.api_secret_encrypted);
@@ -51,7 +50,7 @@ function getExchangeCreds(userId) {
         }
         const baseUrl = _resolveBaseUrl(exchange, mode);
         if (!baseUrl) {
-            console.error('[CRED] Unknown exchange in active row for user', userId, ':', exchange);
+            console.error('[CRED] Unknown exchange in row for user', userId, ':', exchange);
             return null;
         }
 
@@ -62,4 +61,18 @@ function getExchangeCreds(userId) {
     }
 }
 
-module.exports = { getExchangeCreds };
+// ACTIVE row's credentials (used for NEW orders → the active exchange). Unchanged behavior.
+function getExchangeCreds(userId) {
+    if (!userId) return null;
+    return _credsFromAccount(db.getExchangeAccount(userId), userId);
+}
+
+// [Multi-exchange switch P1] Credentials for a SPECIFIC exchange regardless of is_active.
+// Used to manage still-open positions on a NON-active exchange (close/SL/DSL) after a switch.
+// Returns null if no verified account exists for that exchange.
+function getExchangeCredsFor(userId, exchange) {
+    if (!userId || !exchange) return null;
+    return _credsFromAccount(db.getExchangeAccountByExchange(userId, exchange), userId);
+}
+
+module.exports = { getExchangeCreds, getExchangeCredsFor };

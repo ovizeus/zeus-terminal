@@ -10166,6 +10166,10 @@ const _stmts = {
     // Exchange accounts
     findExchange: db.prepare('SELECT * FROM exchange_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1'),
     findExchangeByName: db.prepare('SELECT * FROM exchange_accounts WHERE user_id = ? AND exchange = ? AND is_active = 1'),
+    // [Multi-exchange switch P1] Verified row for an exchange REGARDLESS of is_active —
+    // lets us load creds for a NON-active exchange to manage its still-open positions
+    // (close/SL/DSL) after a switch. Prefer the active row, then most-recently-verified.
+    findExchangeByNameAny: db.prepare("SELECT * FROM exchange_accounts WHERE user_id = ? AND exchange = ? AND status = 'verified' ORDER BY is_active DESC, last_verified_at DESC LIMIT 1"),
     findAllExchanges: db.prepare('SELECT * FROM exchange_accounts WHERE user_id = ? AND is_active = 1'),
     findExchangeById: db.prepare('SELECT * FROM exchange_accounts WHERE id = ? AND user_id = ?'),
     insertExchange: db.prepare('INSERT INTO exchange_accounts (user_id, exchange, api_key_encrypted, api_secret_encrypted, mode, status, last_verified_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))'),
@@ -10390,6 +10394,11 @@ function getExchangeAccount(userId) {
 
 function getExchangeByName(userId, exchange) {
     return _stmts.findExchangeByName.get(userId, exchange);
+}
+
+// [Multi-exchange switch P1] Verified account for an exchange regardless of is_active.
+function getExchangeAccountByExchange(userId, exchange) {
+    return _stmts.findExchangeByNameAny.get(userId, exchange);
 }
 
 function getAllExchanges(userId) {
@@ -11244,6 +11253,7 @@ module.exports = {
     unbanUser,
     getExchangeAccount,
     getExchangeByName,
+    getExchangeAccountByExchange,
     getAllExchanges,
     saveExchangeAccount,
     saveExchangeByName,
