@@ -85,3 +85,40 @@ describe('[P-A] _adoptWithProtection (SL-then-insert)', () => {
     expect(serverAT.getLivePositions(1).find(p => p.symbol === 'DOGEUSDT').live.slOrderId).toBe('existing-sl');
   });
 });
+
+describe('[P-A] _reconcileAndAdopt layers', () => {
+  beforeEach(() => { serverAT._resetAdoptionState(); _atState['global:halt'] = undefined; });
+  const held = (arr) => async () => arr;
+  const slOk = async () => ({ ok: true, slOrderId: 's' });
+
+  it('double-read: first call caches, second adopts', async () => {
+    const arr = [{ symbol: 'AVAXUSDT', side: 'SHORT', qty: '5', entryPrice: '30', markPrice: '30' }];
+    await serverAT._reconcileAndAdopt(30, 'bybit', 'TESTNET', held(arr), slOk);
+    expect(serverAT.getLivePositions(30).some(p => p.symbol === 'AVAXUSDT')).toBe(false); // 1st = cache only
+    await serverAT._reconcileAndAdopt(30, 'bybit', 'TESTNET', held(arr), slOk);
+    expect(serverAT.getLivePositions(30).some(p => p.symbol === 'AVAXUSDT')).toBe(true);  // 2nd = adopt
+  });
+
+  it('sanity-reject: qty<=0 / NaN never adopted', async () => {
+    const arr = [{ symbol: 'LINKUSDT', side: 'LONG', qty: '0', entryPrice: '15' }, { symbol: 'DOTUSDT', side: 'LONG', qty: 'x', entryPrice: '5' }];
+    await serverAT._reconcileAndAdopt(31, 'bybit', 'TESTNET', held(arr), slOk);
+    await serverAT._reconcileAndAdopt(31, 'bybit', 'TESTNET', held(arr), slOk);
+    expect(serverAT.getLivePositions(31).length).toBe(0);
+  });
+
+  it('circuit-breaker: >3 external → halt, no adoption', async () => {
+    const arr = ['MATIC', 'ATOM', 'NEAR', 'FTM', 'APT'].map(s => ({ symbol: s + 'USDT', side: 'LONG', qty: '1', entryPrice: '1', markPrice: '1' }));
+    await serverAT._reconcileAndAdopt(32, 'bybit', 'TESTNET', held(arr), slOk);
+    await serverAT._reconcileAndAdopt(32, 'bybit', 'TESTNET', held(arr), slOk);
+    expect(serverAT.getLivePositions(32).length).toBe(0);
+    expect(_atState['global:halt'] && _atState['global:halt'].active).toBe(true);
+  });
+
+  it('write-freeze: globalHalt armed → skip', async () => {
+    _atState['global:halt'] = { active: true, by: 1 };
+    const arr = [{ symbol: 'SUIUSDT', side: 'LONG', qty: '1', entryPrice: '1', markPrice: '1' }];
+    await serverAT._reconcileAndAdopt(33, 'bybit', 'TESTNET', held(arr), slOk);
+    await serverAT._reconcileAndAdopt(33, 'bybit', 'TESTNET', held(arr), slOk);
+    expect(serverAT.getLivePositions(33).some(p => p.symbol === 'SUIUSDT')).toBe(false);
+  });
+});

@@ -5356,9 +5356,54 @@ async function _adoptWithProtection(userId, exchange, env, pos, slPlacer) {
     return _adoptExternalPosition(userId, exchange, env, { ...pos, slOrderId });
 }
 
+// [P-A] Defensive recon caches. _adoptionDebounceCache: key→snapshot for the
+// double-read confirmation. _activeReconLocks: per-account mutex coordinating
+// recoveryBoot + _runReconciliation (complements the global _reconRunning guard
+// which covers only _runReconciliation, not recoveryBoot).
+const _adoptionDebounceCache = new Map();
+const _activeReconLocks = new Set();
+const ADOPT_MAX_EXTERNAL = 3; // circuit-breaker threshold per (user,exchange,env)
+function _resetAdoptionState() { _adoptionDebounceCache.clear(); _activeReconLocks.clear(); }
+
+// [P-A] The 8 defensive layers around adoption. fetchHeld() → exchange positions;
+// slPlacer(pos) → { ok, slOrderId } protective-SL placer (exchange-aware, injected).
+async function _reconcileAndAdopt(userId, exchange, env, fetchHeld, slPlacer) {
+    const key = `${userId}:${exchange}:${env}`;
+    if (_activeReconLocks.has(key)) { logger.warn('AT_ADOPT', `recon busy ${key} — skip`); return; }              // L8 mutex
+    const halt = db.atGetState && db.atGetState('global:halt');
+    if (halt && halt.active) { logger.info('AT_ADOPT', `write-freeze (halt) — skip ${key}`); return; }             // L3 write-freeze
+    try {
+        _activeReconLocks.add(key);
+        let raw;
+        try { raw = await fetchHeld(); } catch (e) { logger.warn('AT_ADOPT', `held read failed ${key}: ${e.message}`); return; } // fail-closed
+        if (!Array.isArray(raw)) return;
+        const valid = raw.filter(p => {                                                                            // L5 sanity-reject
+            const q = parseFloat(p.qty);
+            const en = parseFloat(p.entryPrice != null ? p.entryPrice : p.entry);
+            return Number.isFinite(q) && q > 0 && Number.isFinite(en) && en > 0 && p.symbol && p.side;
+        });
+        const external = valid.filter(ep => !_positions.some(tp => tp.userId === userId && tp.symbol === ep.symbol && tp.side === ep.side && tp.mode === 'live'));
+        if (external.length === 0) { _adoptionDebounceCache.delete(key); return; }
+        const snap = JSON.stringify(external.map(p => `${p.symbol}:${p.side}:${p.qty}`));                          // L1 double-read
+        if (_adoptionDebounceCache.get(key) !== snap) { _adoptionDebounceCache.set(key, snap); logger.info('AT_ADOPT', `first sighting ${key} — await confirm`); return; }
+        if (external.length > ADOPT_MAX_EXTERNAL) {                                                                // L6 circuit-breaker
+            try { setGlobalHalt(true, userId, `MASS_EXTERNAL ${external.length} on ${exchange}/${env}`); } catch (_) {}
+            try { if (telegram.alertCritical) telegram.alertCritical(`🚨 MASS-EXTERNAL on ${exchange} ${env}: ${external.length} untracked positions. Halt armed, adoption blocked.`); } catch (_) {}
+            logger.error('AT_ADOPT', `circuit-breaker tripped ${key}: ${external.length}`);
+            return;
+        }
+        for (const pos of external) {
+            await _adoptWithProtection(userId, exchange, env, pos, slPlacer);
+        }
+        _adoptionDebounceCache.delete(key);
+    } finally { _activeReconLocks.delete(key); }
+}
+
 module.exports = {
     _adoptExternalPosition,
     _adoptWithProtection,
+    _reconcileAndAdopt,
+    _resetAdoptionState,
     processBrainDecision,
     onPriceUpdate,
     // Getters
