@@ -5298,7 +5298,48 @@ setTimeout(() => {
     logger.info('WATCHDOG', `LIVE_NO_SL watchdog started — interval ${WATCHDOG_INTERVAL_MS / 1000}s`);
 }, 15000);
 
+// ══════════════════════════════════════════════════════════════════
+// [P-A] Position Adoption — bring untracked exchange positions into tracking.
+// See docs/superpowers/specs/2026-05-30-P-A-position-adoption-design.md (v2).
+// ══════════════════════════════════════════════════════════════════
+
+// Adopt an exchange position that has no tracked row. Mutates the in-memory
+// _positions (the getLivePositions source) + persists. Layer-4 idempotency: skip if
+// already tracked OPEN for (userId, symbol, side, mode='live'). Layer-2 Telegram.
+// SL is placed by the caller (recon) BEFORE this insert; slOrderId passed in pos.slOrderId.
+function _adoptExternalPosition(userId, exchange, env, pos) {
+    const symbol = pos.symbol, side = pos.side;
+    const already = _positions.find(p => p.userId === userId && p.symbol === symbol && p.side === side && p.mode === 'live');
+    if (already) return { ok: true, idempotent: true, seq: already.seq };
+    const us = _uState(userId);
+    const seq = ++us.seq;
+    const entry = {
+        seq, userId, symbol, side,
+        qty: Number(pos.qty), price: Number(pos.entryPrice), entry: Number(pos.entryPrice),
+        mode: 'live', env, exchange,
+        source: 'external', externalSync: true, autoTrade: 0, sourceMode: 'manual',
+        dslParams: null,
+        status: 'OPEN',
+        live: { status: 'LIVE', mainOrderId: null, slOrderId: pos.slOrderId || null, tpOrderId: null, avgPrice: Number(pos.entryPrice), executedQty: Number(pos.qty) },
+        ts: Date.now(),
+    };
+    try {
+        _positions.push(entry);
+        _persistPosition(entry); // db.atSavePosition (throws on UNIQUE backstop) + broadcast
+    } catch (e) {
+        const i = _positions.indexOf(entry); if (i >= 0) _positions.splice(i, 1);
+        if (String(e.message || '').includes('UNIQUE')) return { ok: true, idempotent: true };
+        logger.error('AT_ADOPT', `adopt persist failed ${symbol}: ${e.message}`);
+        return { ok: false, error: e.message };
+    }
+    try { audit.record('POSITION_ADOPTED', { userId, seq, symbol, side, qty: entry.qty, exchange, env }, 'SERVER_AT'); } catch (_) {}
+    try { telegram.sendToUser(userId, `🪙 *Position Adopted* (${exchange} ${env})\n${side} ${symbol}\nqty ${entry.qty} @ ${entry.price}\nSL: ${entry.live.slOrderId ? 'placed' : 'NONE'}`); } catch (_) {}
+    logger.info('AT_ADOPT', `adopted ${symbol} ${side} seq=${seq} (${exchange}/${env})`);
+    return { ok: true, seq };
+}
+
 module.exports = {
+    _adoptExternalPosition,
     processBrainDecision,
     onPriceUpdate,
     // Getters
