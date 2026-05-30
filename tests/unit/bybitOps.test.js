@@ -208,6 +208,64 @@ describe('bybitOps.getBalance', () => {
         expect(r.walletBalance).toBe('1000');
         expect(r.rawExchange).toBe('bybit');
     });
+
+    // [BUG bybit-unified] UNIFIED / cross-margin accounts return the per-coin
+    // availableToWithdraw as "" (empty string). The spendable figure lives at the
+    // account level (totalAvailableBalance). Without a fallback, getBalance maps
+    // `"" || '0'` → '0', so a funded account ($112k observed live) falsely reads as
+    // zero → pre-live checklist + margin checks block on "Zero USDT balance".
+    it('falls back to account totalAvailableBalance when per-coin availableToWithdraw is "" (UNIFIED)', async () => {
+        bybitOps._enqueueSynthetic({
+            retCode: 0,
+            result: {
+                list: [{
+                    accountType: 'UNIFIED',
+                    totalAvailableBalance: '112732.63',
+                    coin: [
+                        { coin: 'USDT', walletBalance: '112877.90', availableToWithdraw: '', equity: '112877.90', unrealisedPnl: '0' },
+                    ],
+                }],
+            },
+        });
+        const r = await bybitOps.getBalance(1, _validCreds);
+        expect(parseFloat(r.availableBalance)).toBeGreaterThan(0);
+        expect(parseFloat(r.availableBalance)).toBeCloseTo(112732.63, 1);
+        expect(r.walletBalance).toBe('112877.90');
+    });
+
+    it('still uses per-coin availableToWithdraw when it is present', async () => {
+        bybitOps._enqueueSynthetic({
+            retCode: 0,
+            result: {
+                list: [{
+                    accountType: 'UNIFIED',
+                    totalAvailableBalance: '9999',
+                    coin: [
+                        { coin: 'USDT', walletBalance: '600', availableToWithdraw: '500.5', unrealisedPnl: '0' },
+                    ],
+                }],
+            },
+        });
+        const r = await bybitOps.getBalance(1, _validCreds);
+        expect(parseFloat(r.availableBalance)).toBeCloseTo(500.5, 1);
+    });
+
+    it('falls back to walletBalance when both availableToWithdraw and totalAvailableBalance are empty', async () => {
+        bybitOps._enqueueSynthetic({
+            retCode: 0,
+            result: {
+                list: [{
+                    accountType: 'UNIFIED',
+                    totalAvailableBalance: '',
+                    coin: [
+                        { coin: 'USDT', walletBalance: '250', availableToWithdraw: '', unrealisedPnl: '0' },
+                    ],
+                }],
+            },
+        });
+        const r = await bybitOps.getBalance(1, _validCreds);
+        expect(parseFloat(r.availableBalance)).toBeCloseTo(250, 1);
+    });
 });
 
 describe('bybitOps.ping', () => {

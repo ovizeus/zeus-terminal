@@ -418,10 +418,21 @@ async function getBalance(uid, creds) {
     if (!Array.isArray(account.coin)) return empty;
     const usdt = account.coin.find(c => c.coin === 'USDT');
     if (!usdt) return empty;
+    // [BUG bybit-unified] UNIFIED / cross-margin accounts return the per-coin
+    // availableToWithdraw as "" — the spendable figure lives at the account level
+    // (totalAvailableBalance). Without this fallback `"" || '0'` → '0', so a funded
+    // account (observed live: $112k) falsely reads as zero and blocks the pre-live
+    // checklist + margin checks with "Zero USDT balance". Fall back:
+    //   per-coin availableToWithdraw → account.totalAvailableBalance → walletBalance.
+    let available = usdt.availableToWithdraw;
+    if (available === '' || available == null) {
+        const acctAvail = account.totalAvailableBalance;
+        available = (acctAvail !== '' && acctAvail != null) ? acctAvail : (usdt.walletBalance || '0');
+    }
     return {
         asset: 'USDT',
         walletBalance: usdt.walletBalance || '0',
-        availableBalance: usdt.availableToWithdraw || '0',
+        availableBalance: available || '0',
         totalUnrealizedPnL: usdt.unrealisedPnl || '0',
         rawExchange: 'bybit',
     };
