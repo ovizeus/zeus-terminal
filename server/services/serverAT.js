@@ -5369,6 +5369,7 @@ function _resetAdoptionState() { _adoptionDebounceCache.clear(); _activeReconLoc
 // slPlacer(pos) → { ok, slOrderId } protective-SL placer (exchange-aware, injected).
 async function _reconcileAndAdopt(userId, exchange, env, fetchHeld, slPlacer, opts) {
     const skipDoubleRead = !!(opts && opts.skipDoubleRead); // boot path = trusted, adopt immediately (no 60s SL gap)
+    const noAutoSL = !!(opts && opts.noAutoSL); // [P-A Option 1] live recon: adopt only, NO auto-SL (operator sets SL manually)
     const key = `${userId}:${exchange}:${env}`;
     if (_activeReconLocks.has(key)) { logger.warn('AT_ADOPT', `recon busy ${key} — skip`); return; }              // L8 mutex
     const halt = db.atGetState && db.atGetState('global:halt');
@@ -5394,7 +5395,17 @@ async function _reconcileAndAdopt(userId, exchange, env, fetchHeld, slPlacer, op
             return;
         }
         for (const pos of external) {
-            await _adoptWithProtection(userId, exchange, env, pos, slPlacer);
+            if (noAutoSL) {
+                // [P-A Option 1] Live adoption: adopt directly, NO auto-SL. Position
+                // displays + persists with its exchange SL (if any) or slOrderId:null;
+                // _adoptExternalPosition's Telegram says "SL: NONE" so the operator sets
+                // it manually. Marked live.status:'LIVE' (not LIVE_NO_SL) so the SL-repair
+                // _watchdogLiveNoSL leaves it alone. Still gated by all upstream layers
+                // (mutex, write-freeze, sanity, double-read, circuit-breaker).
+                _adoptExternalPosition(userId, exchange, env, pos);
+            } else {
+                await _adoptWithProtection(userId, exchange, env, pos, slPlacer);
+            }
         }
         _adoptionDebounceCache.delete(key);
     } finally { _activeReconLocks.delete(key); }

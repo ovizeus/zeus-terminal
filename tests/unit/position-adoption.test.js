@@ -120,6 +120,17 @@ describe('[P-A] _reconcileAndAdopt layers', () => {
     expect(serverAT.getLivePositions(34).some(p => p.symbol === 'INJUSDT')).toBe(true);
   });
 
+  it('noAutoSL (live Option 1): adopts directly, never calls slPlacer, status LIVE so watchdog ignores it', async () => {
+    const placer = jest.fn(async () => ({ ok: true, slOrderId: 'should-not-be-called' }));
+    const arr = [{ symbol: 'TIAUSDT', side: 'LONG', qty: '4', entryPrice: '10', markPrice: '10' }];
+    await serverAT._reconcileAndAdopt(35, 'bybit', 'TESTNET', held(arr), placer, { noAutoSL: true, skipDoubleRead: true });
+    const f = serverAT.getLivePositions(35).find(p => p.symbol === 'TIAUSDT');
+    expect(f).toBeTruthy();              // adopted → persists + displays
+    expect(placer).not.toHaveBeenCalled(); // NO auto-SL placed (operator sets SL manually)
+    expect(f.live.status).toBe('LIVE');  // NOT LIVE_NO_SL → _watchdogLiveNoSL leaves it alone
+    expect(f.live.slOrderId).toBe(null); // no SL linked; adoption Telegram says "SL: NONE"
+  });
+
   it('write-freeze: globalHalt armed → skip', async () => {
     _atState['global:halt'] = { active: true, by: 1 };
     const arr = [{ symbol: 'SUIUSDT', side: 'LONG', qty: '1', entryPrice: '1', markPrice: '1' }];
