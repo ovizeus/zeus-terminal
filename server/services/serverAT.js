@@ -1344,6 +1344,34 @@ function processBrainDecision(decision, stc, userId, userIntent) {
 // Response: algoId mapped to orderId for backward compat
 // ══════════════════════════════════════════════════════════════════
 async function _placeConditionalOrder(params, creds) {
+    // [Phase M] Exchange-aware conditional SL/TP. This is the shared chokepoint for
+    // ALL protection placement (manual Path-B + AT trailing/protection/addon/health),
+    // so routing it once makes every one of those work on Bybit. Bybit has no Binance
+    // algo endpoint — route to bybitOps. params.side is the ORDER (closing) side:
+    // SELL closes a LONG, BUY closes a SHORT → positionSide is its inverse. Return
+    // shape preserves `.orderId` (+ `.status`) that all callers read.
+    if (creds && creds.exchange === 'bybit') {
+        const bybitOps = require('./bybitOps');
+        const positionSide = params.side === 'SELL' ? 'LONG' : 'SHORT';
+        const uid = params.userId || 0;
+        if (params.type === 'TAKE_PROFIT_MARKET') {
+            const r = await bybitOps.placeTakeProfit(uid, {
+                symbol: params.symbol, side: positionSide,
+                triggerPrice: params.stopPrice, quantity: params.quantity,
+                clientOrderId: params.newClientOrderId,
+            }, creds);
+            if (!r || !r.ok) throw new Error((r && r.error && (r.error.message || r.error)) || 'bybit TP placement failed');
+            return { orderId: r.tpOrderId, status: r.status, rawExchange: 'bybit' };
+        }
+        const r = await bybitOps.placeStopLoss(uid, {
+            symbol: params.symbol, side: positionSide,
+            stopPrice: params.stopPrice,
+            decisionKey: params.newClientOrderId || `cond_${params.symbol}`,
+        }, creds);
+        if (!r || !r.ok) throw new Error((r && r.error && (r.error.message || r.error)) || 'bybit SL placement failed');
+        return { orderId: r.slOrderId, status: r.status, rawExchange: 'bybit' };
+    }
+
     const mapped = {
         algoType: 'CONDITIONAL',
         symbol: params.symbol,
@@ -5272,6 +5300,7 @@ module.exports = {
     getMode,
     isATActive,
     preLiveChecklist,
+    _placeConditionalOrder, // [Phase M] exported for exchange-routing tests
     toggleActive, // [F1] Per-user AT on/off
     activateKillSwitch,
     resetKill,
