@@ -16,7 +16,10 @@ mockDb.exec(`
   CREATE TABLE audit_log (id INTEGER PRIMARY KEY, user_id INTEGER, action TEXT, details TEXT, created_at TEXT DEFAULT (datetime('now')));
 `);
 const _atState = {};
+// serverAT does `const db = require('./database')` and calls db.atSavePosition /
+// db.atSetState directly — database.js exports those at top level + a `db` raw instance.
 const dbMock = {
+  db: mockDb,
   atSavePosition: (pos) => mockDb.prepare("INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (?,?,?,?,?) ON CONFLICT(seq) DO UPDATE SET data=excluded.data, status=excluded.status, user_id=excluded.user_id").run(pos.seq, JSON.stringify(pos), pos.status || 'OPEN', pos.userId || null, pos.exchange || 'binance'),
   atLoadOpenPositions: () => [],
   atSetState: (k, v) => { _atState[k] = v; },
@@ -26,7 +29,7 @@ const dbMock = {
   atArchiveClosed: () => {},
 };
 const tgMock = { sendToUser: jest.fn(() => Promise.resolve()), alertCritical: jest.fn(() => Promise.resolve()), alertOrderFilled: jest.fn(), sendToAll: jest.fn(), alertServerStart: jest.fn(), alertServerStop: jest.fn() };
-jest.mock('../../server/services/database', () => ({ db: dbMock }));
+jest.mock('../../server/services/database', () => dbMock);
 jest.mock('../../server/services/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }));
 jest.mock('../../server/services/audit', () => ({ record: jest.fn() }));
 jest.mock('../../server/services/telegram', () => tgMock);
@@ -55,5 +58,30 @@ describe('[P-A] _adoptExternalPosition', () => {
     serverAT._adoptExternalPosition(1, 'bybit', 'TESTNET', pos);
     const live = serverAT.getLivePositions(1).filter(p => p.symbol === 'ETHUSDT' && p.side === 'LONG');
     expect(live.length).toBe(1);
+  });
+});
+
+describe('[P-A] _adoptWithProtection (SL-then-insert)', () => {
+  it('SL-fail → halt armed + no tracked row', async () => {
+    const pos = { symbol: 'SOLUSDT', side: 'LONG', qty: '2', entryPrice: '150', markPrice: '150' };
+    const r = await serverAT._adoptWithProtection(1, 'bybit', 'TESTNET', pos, async () => ({ ok: false, error: 'sl down' }));
+    expect(r.ok).toBe(false);
+    expect(serverAT.getLivePositions(1).some(p => p.symbol === 'SOLUSDT')).toBe(false);
+    expect(_atState['global:halt'] && _atState['global:halt'].active).toBe(true);
+  });
+  it('SL-ok → row adopted with slOrderId', async () => {
+    const pos = { symbol: 'XRPUSDT', side: 'SHORT', qty: '10', entryPrice: '0.5', markPrice: '0.5' };
+    const r = await serverAT._adoptWithProtection(1, 'bybit', 'TESTNET', pos, async () => ({ ok: true, slOrderId: 's1' }));
+    expect(r.ok).toBe(true);
+    const f = serverAT.getLivePositions(1).find(p => p.symbol === 'XRPUSDT');
+    expect(f.live.slOrderId).toBe('s1');
+  });
+  it('position already has an exchange SL → adopts without calling slPlacer', async () => {
+    const placer = jest.fn(async () => ({ ok: true, slOrderId: 'should-not-be-used' }));
+    const pos = { symbol: 'DOGEUSDT', side: 'LONG', qty: '100', entryPrice: '0.1', markPrice: '0.1', slOrderId: 'existing-sl' };
+    const r = await serverAT._adoptWithProtection(1, 'bybit', 'TESTNET', pos, placer);
+    expect(r.ok).toBe(true);
+    expect(placer).not.toHaveBeenCalled();
+    expect(serverAT.getLivePositions(1).find(p => p.symbol === 'DOGEUSDT').live.slOrderId).toBe('existing-sl');
   });
 });

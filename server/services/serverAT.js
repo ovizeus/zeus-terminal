@@ -5338,8 +5338,27 @@ function _adoptExternalPosition(userId, exchange, env, pos) {
     return { ok: true, seq };
 }
 
+// Place protective SL first (so the adopted row never exists without an SL id), then
+// adopt. SL placement is the ONLY exchange write; failure → halt + alert, no row.
+async function _adoptWithProtection(userId, exchange, env, pos, slPlacer) {
+    let slOrderId = pos.slOrderId || null;
+    if (!slOrderId) {
+        let sl;
+        try { sl = await slPlacer(pos); } catch (e) { sl = { ok: false, error: e.message }; }
+        if (!sl || !sl.ok) {
+            try { setGlobalHalt(true, userId, `ADOPT_SL_FAILED ${pos.symbol} ${exchange}/${env}`); } catch (_) {}
+            try { if (telegram.alertCritical) telegram.alertCritical(`🚨 ADOPT SL FAILED — ${pos.side} ${pos.symbol} on ${exchange} UNPROTECTED. Halt armed.`); } catch (_) {}
+            logger.error('AT_ADOPT', `SL place failed for ${pos.symbol} — halt armed, no adoption`);
+            return { ok: false, unprotected: true, error: (sl && sl.error) || 'sl failed' };
+        }
+        slOrderId = sl.slOrderId || null;
+    }
+    return _adoptExternalPosition(userId, exchange, env, { ...pos, slOrderId });
+}
+
 module.exports = {
     _adoptExternalPosition,
+    _adoptWithProtection,
     processBrainDecision,
     onPriceUpdate,
     // Getters
