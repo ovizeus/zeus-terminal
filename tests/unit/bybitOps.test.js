@@ -355,6 +355,11 @@ describe('bybitOps.setLeverage', () => {
         const r = await bybitOps.setLeverage(1, { symbol: 'BTCUSDT', leverage: 5 }, _validCreds);
         expect(r.ok).toBe(true);
     });
+    it('10032 (Demo Trading not supported) treated as ok — demo keeps account default', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 10032, retMsg: 'Demo trading are not supported.', result: {} });
+        const r = await bybitOps.setLeverage(1, { symbol: 'BTCUSDT', leverage: 5 }, _validCreds);
+        expect(r.ok).toBe(true);
+    });
 });
 
 describe('bybitOps.ping', () => {

@@ -364,7 +364,7 @@ async function ensureSymbolReady(uid, params, creds) {
         category: 'linear', symbol: params.symbol,
         buyLeverage: String(params.leverage), sellLeverage: String(params.leverage),
     }, creds);
-    if (!_isOk(levResp) && levResp.retCode !== 110043 /* leverage not modified */ && levResp.retCode !== 110026) {
+    if (!_isOk(levResp) && levResp.retCode !== 110043 /* leverage not modified */ && levResp.retCode !== 110026 && levResp.retCode !== 10032 /* demo not supported */) {
         return { ok: false, error: bybitSigner.parseBybitError(levResp), rawExchange: 'bybit' };
     }
 
@@ -372,7 +372,7 @@ async function ensureSymbolReady(uid, params, creds) {
     const modeResp = await _dispatchRequest('POST', '/v5/position/switch-mode', {
         category: 'linear', symbol: params.symbol, mode: 0,
     }, creds);
-    if (!_isOk(modeResp) && modeResp.retCode !== 110025 && modeResp.retCode !== 110026) {
+    if (!_isOk(modeResp) && modeResp.retCode !== 110025 && modeResp.retCode !== 110026 && modeResp.retCode !== 10032 /* demo not supported */) {
         return { ok: false, error: bybitSigner.parseBybitError(modeResp), rawExchange: 'bybit' };
     }
 
@@ -383,7 +383,7 @@ async function ensureSymbolReady(uid, params, creds) {
         category: 'linear', symbol: params.symbol, tradeMode,
         buyLeverage: String(params.leverage), sellLeverage: String(params.leverage),
     }, creds);
-    if (!_isOk(marginResp) && marginResp.retCode !== 110026) {
+    if (!_isOk(marginResp) && marginResp.retCode !== 110026 && marginResp.retCode !== 10032 /* demo not supported */) {
         return { ok: false, error: bybitSigner.parseBybitError(marginResp), rawExchange: 'bybit' };
     }
 
@@ -508,7 +508,11 @@ async function setLeverage(uid, params, creds) {
         category: 'linear', symbol: params.symbol,
         buyLeverage: String(params.leverage), sellLeverage: String(params.leverage),
     }, creds);
+    // 110043 = "leverage not modified" (idempotent). 10032 = "Demo trading not
+    // supported" — Bybit Demo rejects leverage/margin management; the order itself
+    // still works at the account default, so treat as a soft success (skipped).
     if (_isOk(resp) || resp.retCode === 110043) return { ok: true, leverage: params.leverage, rawExchange: 'bybit' };
+    if (resp.retCode === 10032) return { ok: true, leverage: params.leverage, skipped: true, rawExchange: 'bybit' };
     return { ok: false, error: bybitSigner.parseBybitError(resp), rawExchange: 'bybit' };
 }
 
