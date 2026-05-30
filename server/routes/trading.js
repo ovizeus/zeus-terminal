@@ -669,11 +669,12 @@ router.post('/leverage', validateLeverageBody, async (req, res) => {
     return res.status(403).json({ error: 'Trading disabled' });
   }
   try {
-    const data = await sendSignedRequest('POST', '/fapi/v1/leverage', {
-      symbol: req.body.symbol,
-      leverage: req.body.leverage,
-    }, req.exchangeCreds);
-    res.json({ leverage: data.leverage, maxNotionalValue: data.maxNotionalValue });
+    // [Phase M] exchange-aware leverage (Binance /fapi/v1/leverage, Bybit set-leverage).
+    const _lev = await exchangeOps.setLeverage(req.user.id, { symbol: req.body.symbol, leverage: req.body.leverage });
+    if (!_lev || _lev.ok === false) {
+      return res.status(400).json({ error: _safeError(new Error((_lev && _lev.error) || 'leverage failed')) });
+    }
+    res.json({ leverage: _lev.leverage });
   } catch (err) {
     console.error('[API] leverage error:', err.message);
     res.status(err.status || 500).json({ error: _safeError(err) });
@@ -960,8 +961,8 @@ router.get('/openOrders', async (req, res) => {
       if (!/^[A-Z0-9]{2,20}$/.test(symbol)) return res.status(400).json({ error: 'Invalid symbol' });
       params.symbol = symbol;
     }
-    const data = await sendSignedRequest('GET', '/fapi/v1/openOrders', params, req.exchangeCreds);
-    // Return relevant fields only
+    // [Phase M] exchange-aware open orders (canonical shape from binanceOps/bybitOps).
+    const data = await exchangeOps.getOpenOrders(req.user.id, params);
     const orders = (Array.isArray(data) ? data : []).map(o => ({
       orderId: o.orderId,
       symbol: o.symbol,
@@ -969,8 +970,8 @@ router.get('/openOrders', async (req, res) => {
       type: o.type,
       status: o.status,
       price: parseFloat(o.price || 0),
-      stopPrice: parseFloat(o.stopPrice || 0),
-      origQty: parseFloat(o.origQty || 0),
+      stopPrice: parseFloat(o.stopPrice || o.triggerPrice || 0),
+      origQty: parseFloat(o.origQty != null ? o.origQty : (o.qty || 0)),
       executedQty: parseFloat(o.executedQty || 0),
       timeInForce: o.timeInForce,
       clientOrderId: o.clientOrderId || '',
@@ -1005,11 +1006,23 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
   // is gone and position is unprotected. We now: (a) audit cancel separately,
   // (b) attempt to re-place original on step-2 failure, (c) Telegram alert if
   // recovery also fails, (d) return structured error to UI for actionable display.
+  // [Phase M] exchange-aware. Cancel responses differ per exchange; fetch the order
+  // first (canonical getOpenOrders) for side/qty/price, then cancel via exchangeOps.
+  let _origOrder = null;
+  try {
+    const _open = await exchangeOps.getOpenOrders(req.user.id, { symbol });
+    _origOrder = (Array.isArray(_open) ? _open : []).find(o => String(o.orderId) === String(orderId)) || null;
+  } catch (_) { /* best-effort */ }
   let cancelData = null;
   try {
-    cancelData = await sendSignedRequest('DELETE', '/fapi/v1/order', {
-      symbol, orderId,
-    }, req.exchangeCreds);
+    const _c = await exchangeOps.cancelOrder(req.user.id, { symbol, orderId });
+    if (!_c || _c.ok === false) throw new Error((_c && _c.error && (_c.error.message || _c.error)) || 'cancel rejected');
+    cancelData = {
+      orderId,
+      side: (_origOrder && _origOrder.side) || req.body.side,
+      origQty: _origOrder ? (_origOrder.origQty != null ? _origOrder.origQty : _origOrder.qty) : undefined,
+      price: _origOrder ? _origOrder.price : undefined,
+    };
     audit.record('ORDER_MODIFY_CANCELLED', { userId: req.user.id, symbol, orderId, side: cancelData.side, qty: cancelData.origQty, price: cancelData.price }, 'MANUAL', req.ip);
   } catch (cancelErr) {
     console.error('[API] order/modify cancel failed:', cancelErr.message);
@@ -1033,7 +1046,9 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
   if (req.body.newClientOrderId) placeParams.newClientOrderId = req.body.newClientOrderId;
 
   try {
-    const placeData = await sendSignedRequest('POST', '/fapi/v1/order', placeParams, req.exchangeCreds);
+    const _pl = await exchangeOps.placeOrder(req.user.id, { symbol, side, type: 'LIMIT', quantity: String(_rounded.quantity || qty), price: String(np), clientOrderId: req.body.newClientOrderId });
+    if (!_pl || _pl.ok === false) throw new Error((_pl && _pl.error && (_pl.error.message || _pl.error)) || 'replace rejected');
+    const placeData = { orderId: _pl.orderId, status: _pl.status, symbol, side, origQty: _rounded.quantity || qty };
     logger.info('ORDER', `MODIFY LIMIT ${symbol} old=${orderId} new=${placeData.orderId} price=${np}`);
     audit.record('ORDER_MODIFIED', { userId: req.user.id, symbol, oldOrderId: orderId, newOrderId: placeData.orderId, newPrice: np }, 'MANUAL', req.ip);
     return res.json({
@@ -1060,7 +1075,9 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
           price: String(origPrice),
           timeInForce: 'GTC',
         };
-        const recoveryData = await sendSignedRequest('POST', '/fapi/v1/order', recoveryParams, req.exchangeCreds);
+        const _rec = await exchangeOps.placeOrder(req.user.id, { symbol, side, type: 'LIMIT', quantity: String(_rounded.quantity || qty), price: String(origPrice) });
+        if (!_rec || _rec.ok === false) throw new Error((_rec && _rec.error && (_rec.error.message || _rec.error)) || 'recovery rejected');
+        const recoveryData = { orderId: _rec.orderId };
         logger.warn('ORDER', `MODIFY recovery: re-placed original ${symbol} @ $${origPrice} → ${recoveryData.orderId}`);
         audit.record('ORDER_MODIFY_RECOVERY_OK', { userId: req.user.id, symbol, originalOrderId: orderId, recoveryOrderId: recoveryData.orderId, recoveredPrice: origPrice }, 'MANUAL', req.ip);
         return res.status(502).json({
@@ -1137,20 +1154,20 @@ router.post('/manual/protection', validateOrderBody, async (req, res) => {
       });
     }
 
-    // ── TP placement — Binance algo path (no exchangeOps.placeTakeProfit yet) ──
+    // ── TP placement — [Phase M] exchange-aware via exchangeOps.placeTakeProfit ──
+    // side is the ORDER (closing) side; position side is its inverse.
     const _rounded = roundOrderParams(symbol, parseFloat(quantity), parseFloat(stopPrice));
-    const algoParams = {
-      algoType: 'CONDITIONAL',
-      symbol,
-      side,
-      type,
-      quantity: String(_rounded.quantity || quantity),
+    const _posSideTp = side === 'SELL' ? 'LONG' : 'SHORT';
+    const _tpRes = await exchangeOps.placeTakeProfit(req.user.id, {
+      symbol, side: _posSideTp,
       triggerPrice: String(_rounded.stopPrice != null ? _rounded.stopPrice : stopPrice),
-      reduceOnly: 'true',
-    };
-    if (req.body.newClientOrderId) algoParams.clientAlgoId = req.body.newClientOrderId;
-    const data = await sendSignedRequest('POST', '/fapi/v1/algoOrder', algoParams, req.exchangeCreds);
-    if (data.algoId != null && data.orderId == null) data.orderId = data.algoId;
+      quantity: String(_rounded.quantity || quantity),
+      clientOrderId: req.body.newClientOrderId,
+    });
+    if (!_tpRes || _tpRes.ok === false) {
+      return res.status(400).json({ error: _safeError(new Error((_tpRes && _tpRes.error && (_tpRes.error.message || _tpRes.error)) || 'TP rejected')) });
+    }
+    const data = { orderId: _tpRes.tpOrderId, status: _tpRes.status };
     const protType = type === 'STOP_MARKET' ? 'SL' : 'TP';
     logger.info('ORDER', `MANUAL ${protType} SET ${symbol} triggerPrice=${stopPrice} algoId=${data.orderId}`);
     audit.record('PROTECTION_SET', { userId: req.user.id, symbol, type: protType, stopPrice, orderId: data.orderId }, 'MANUAL', req.ip);

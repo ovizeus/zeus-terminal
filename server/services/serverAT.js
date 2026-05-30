@@ -2029,6 +2029,22 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
 }
 
 async function _cancelOrderSafe(symbol, orderId, creds, userId) {
+    // [Phase M] Bybit has no Binance algo/order DELETE endpoints — route through
+    // bybitOps.cancelOrder. Treat already-gone orders as success (idempotent cleanup).
+    if (creds && creds.exchange === 'bybit') {
+        try {
+            const bybitOps = require('./bybitOps');
+            const r = await bybitOps.cancelOrder(userId || 0, { symbol, orderId }, creds);
+            if (r && r.ok) return true;
+            const em = (r && r.error && (r.error.message || r.error)) || '';
+            return /not found|unknown|too late|not exist|110001|order does not exist/i.test(String(em));
+        } catch (e) {
+            const m = (e && e.message) || '';
+            if (/not found|unknown|too late|not exist|110001/i.test(m)) return true;
+            logger.warn('AT_LIVE', `Bybit cancel ${orderId} failed: ${m}`);
+            return false;
+        }
+    }
     // [ALGO-FIX] SL/TP are now algo orders — try algo cancel first, then regular
     for (let attempt = 0; attempt < 2; attempt++) {
         // Try algo order cancel (SL/TP since Dec 2025)
