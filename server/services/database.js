@@ -10849,7 +10849,9 @@ function _runRestartCountCheck() {
         if (count > RESTART_ALERT_THRESHOLD) {
             const msg = `⚠️ Zeus restart count anomaly: ${count} SERVER_BOOT events în last 24h (threshold ${RESTART_ALERT_THRESHOLD})`;
             console.warn('[DB] ' + msg);
-            try { require('./telegram').send(msg); } catch (_) { }
+            // [P3] Escape Markdown specials (SERVER_BOOT has '_') so the Markdown-default
+            // send() doesn't fail-then-plain-retry with a "can't parse entities" log line.
+            try { const tg = require('./telegram'); tg.send(tg.escapeMarkdown(msg)); } catch (_) { }
         } else if (count > 0) {
             console.log(`[DB] Restart count OK: ${count}/24h (threshold ${RESTART_ALERT_THRESHOLD})`);
         }

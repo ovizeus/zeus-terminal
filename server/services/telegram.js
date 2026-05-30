@@ -275,8 +275,18 @@ function getAllUserIds() {
     }
 }
 
+// [P3] Escape legacy-Markdown specials (_ * ` [) so dynamic identifiers like
+// SERVER_BOOT don't break parse_mode='Markdown' (the send() default → a
+// "can't parse entities" first attempt + 2s plain-text retry). Apply to plain
+// informational alerts only — never to messages that intentionally use Markdown.
+function escapeMarkdown(text) {
+    if (text == null) return '';
+    return String(text).replace(/([_*`\[])/g, '\\$1');
+}
+
 module.exports = {
     send,
+    escapeMarkdown,
     sendToUser,
     sendToAll,
     getAllUserIds,
