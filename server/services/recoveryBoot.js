@@ -301,10 +301,37 @@ async function _reconcileUser(uid, exchange) {
             `user ${uid}: position ${symbol} on ${exchange} but not in DB — placing conservative auto-SL`
         );
 
-        // 3c.2 Auto-SL placement. Returns true if it left the position UNPROTECTED
-        // (auto-SL failed → armed globalHalt) — propagate so the caller keeps the halt.
+        // 3c.2 Auto-SL placement. Returns { haltArmed, slOrderId, invalid? }.
+        // haltArmed → auto-SL failed → globalHalt armed; propagate so the caller keeps the halt.
         const _slRes = await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos);
-        if (_slRes.haltArmed) haltArmed = true;
+        if (_slRes.haltArmed) { haltArmed = true; continue; } // UNPROTECTED + halted → do NOT adopt
+        if (_slRes.invalid) continue;                          // garbage data (no SL placed) → skip adoption
+
+        // 3c.3 [P-A Task 4] Adopt the now-protected position into serverAT tracking so it
+        // PERSISTS + DISPLAYS (getLivePositions reads _positions; an exchange-only position
+        // with no row flashes on refresh then vanishes — the operator-reported bug). Boot
+        // semantics: protect-each-first (above), then adopt — NO mass circuit-breaker here
+        // (legit post-crash multi-position recovery must not halt; each position is already
+        // individually protected). The periodic _runReconciliation path uses the full
+        // 8-layer _reconcileAndAdopt (double-read + circuit-breaker) for the API-glitch case.
+        try {
+            const serverAT = require('./serverAT');
+            let env = 'TESTNET';
+            try {
+                const c = require('./credentialStore').getExchangeCredsFor(uid, exchange);
+                env = (c && c.mode === 'testnet') ? 'TESTNET' : 'REAL';
+            } catch (_) { /* default TESTNET — fail-safe (never auto-mark a position REAL on lookup error) */ }
+            serverAT._adoptExternalPosition(uid, exchange, env, {
+                symbol,
+                side: exchPos.side,
+                qty: Math.abs(Number(exchPos.qty) || 0),
+                entryPrice: Number(exchPos.entryPrice) || Number(exchPos.markPrice) || 0,
+                slOrderId: _slRes.slOrderId,
+            });
+        } catch (e) {
+            // Adoption is non-fatal: the position is already protected by the auto-SL above.
+            _logWarn('RECOVERY_BOOT', `uid=${uid} ${symbol}: adoption failed (position still protected by auto-SL): ${e.message}`);
+        }
     }
 
     // [Task M 2026-05-28] Sweep orphan Zeus SL/TP orders. Runs BEFORE global

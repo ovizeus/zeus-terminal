@@ -97,6 +97,7 @@ jest.mock('../../server/services/database', () => ({ db: mockDb }));
 const mockGetPositions = jest.fn(async () => []);
 const mockPlaceStopLoss = jest.fn(async () => ({ ok: true, slOrderId: 'sl_recovery' }));
 const mockSetGlobalHalt = jest.fn();
+const mockAdoptExternal = jest.fn(() => ({ ok: true, seq: 99 }));
 const mockPositionEventsAppend = jest.fn();
 
 jest.mock('../../server/services/exchangeOps', () => ({
@@ -110,6 +111,13 @@ jest.mock('../../server/services/positionEvents', () => ({
 
 jest.mock('../../server/services/serverAT', () => ({
     setGlobalHalt: (...a) => mockSetGlobalHalt(...a),
+    _adoptExternalPosition: (...a) => mockAdoptExternal(...a),
+}));
+
+// [P-A Task 4] boot adoption resolves env from creds (testnet → TESTNET, else REAL)
+jest.mock('../../server/services/credentialStore', () => ({
+    getExchangeCredsFor: () => ({ exchange: 'binance', mode: 'testnet' }),
+    getExchangeCreds: () => ({ exchange: 'binance', mode: 'testnet' }),
 }));
 
 // [Task E 2026-05-28] Telegram mock for exchange-only auto-SL alerts
@@ -144,6 +152,7 @@ beforeEach(() => {
     mockGetPositions.mockReset().mockResolvedValue([]);
     mockPlaceStopLoss.mockReset().mockResolvedValue({ ok: true, slOrderId: 'sl_recovery' });
     mockSetGlobalHalt.mockReset();
+    mockAdoptExternal.mockReset().mockReturnValue({ ok: true, seq: 99 });
     mockPositionEventsAppend.mockReset();
     mockTelegramSendToUser.mockReset().mockResolvedValue({ ok: true });
 });
@@ -320,6 +329,40 @@ describe('recoveryBoot', () => {
             const slArg = mockPlaceStopLoss.mock.calls[0][1];
             // SL = 3000 * 1.02 = 3060 (markPrice-based)
             expect(Number(slArg.stopPrice)).toBeCloseTo(3060, -1);
+        });
+
+        it('[P-A] exchange-only SL success → position ADOPTED with slOrderId + env from creds', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01',
+                entryPrice: '50000', markPrice: '60000',
+            }]);
+
+            await recoveryBoot.run();
+
+            expect(mockPlaceStopLoss).toHaveBeenCalledTimes(1);
+            // [P-A] the protected position must now be adopted into tracking
+            expect(mockAdoptExternal).toHaveBeenCalledTimes(1);
+            const [uid, exch, env, pos] = mockAdoptExternal.mock.calls[0];
+            expect(uid).toBe(1);
+            expect(exch).toBe('binance');
+            expect(env).toBe('TESTNET');           // creds.mode === 'testnet'
+            expect(pos.symbol).toBe('BTCUSDT');
+            expect(pos.side).toBe('LONG');
+            expect(pos.slOrderId).toBe('sl_recovery'); // linked from the auto-SL
+        });
+
+        it('[P-A] exchange-only SL FAIL → halt armed, position NOT adopted (no row without protection)', async () => {
+            addExchangeAccount(1, 'binance');
+            mockGetPositions.mockResolvedValue([{
+                symbol: 'BTCUSDT', side: 'LONG', qty: '0.01', markPrice: '60000',
+            }]);
+            mockPlaceStopLoss.mockRejectedValue(new Error('exchange down'));
+
+            await recoveryBoot.run();
+
+            expect(mockSetGlobalHalt).toHaveBeenCalledWith(true, 1, expect.stringMatching(/RECOVERY_AUTOSL_FAILED/));
+            expect(mockAdoptExternal).not.toHaveBeenCalled();
         });
 
         it('non-trigger error (exchange down) → NO retry, immediate globalHalt + critical alert', async () => {
