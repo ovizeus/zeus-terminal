@@ -412,24 +412,23 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       // [Day 35 bugfix] Idempotent — Binance refuses redundant set when symbol
       // has open orders (-4144 / -4048); helper verifies actual marginType via
       // positionRisk and treats refusal as silent if state already CROSSED.
-      try {
-        const marginHelper = require('../services/marginTypeHelper');
-        await marginHelper.ensureCrossed(symbol, req.exchangeCreds, sendSignedRequest);
-      } catch (mtErr) {
-        console.error('[API] marginType set failed:', mtErr.message);
+      // [Phase M] exchange-aware: Binance via marginTypeHelper, Bybit UNIFIED no-op.
+      const _mt = await exchangeOps.setMarginType(req.user.id, { symbol });
+      if (_mt && _mt.ok === false) {
+        console.error('[API] marginType set failed:', _mt.error);
         if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] order never reached exchange
-        return res.status(500).json({ error: 'Failed to set margin type: ' + _safeError(mtErr) });
+        return res.status(500).json({ error: 'Failed to set margin type: ' + _safeError(new Error(_mt.error || 'unknown')) });
       }
     }
 
     // Set leverage first if provided
     if (leverage) {
-      try {
-        await sendSignedRequest('POST', '/fapi/v1/leverage', { symbol, leverage }, req.exchangeCreds);
-      } catch (levErr) {
-        console.error('[API] leverage set failed:', levErr.message);
+      // [Phase M] exchange-aware leverage (Binance /fapi/v1/leverage, Bybit set-leverage).
+      const _lev = await exchangeOps.setLeverage(req.user.id, { symbol, leverage });
+      if (_lev && _lev.ok === false) {
+        console.error('[API] leverage set failed:', _lev.error);
         if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] order never reached exchange
-        return res.status(500).json({ error: 'Failed to set leverage: ' + _safeError(levErr) });
+        return res.status(500).json({ error: 'Failed to set leverage: ' + _safeError(new Error(_lev.error || 'unknown')) });
       }
     }
 
@@ -460,19 +459,36 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       params.quantity = String(_closRound.quantity || quantity);
       params.reduceOnly = 'true';
     }
-    // [ALGO-FIX] Route STOP_MARKET/TAKE_PROFIT_MARKET to algo endpoint (Binance Dec 2025)
+    // [Phase M] Exchange-aware placement — route through exchangeOps so Bybit gets
+    // its /v5/order/create (was Binance-hardcoded /fapi/v1/order, which a Bybit-active
+    // user's manual order hit on the Bybit host → "non-JSON (HTTP 200)" → not taken).
     const _isConditional = type === 'STOP_MARKET' || type === 'TAKE_PROFIT_MARKET';
     let data;
     if (_isConditional) {
-      const algoParams = { algoType: 'CONDITIONAL', symbol: params.symbol, side: params.side, type: params.type };
-      if (params.stopPrice != null) algoParams.triggerPrice = params.stopPrice;
-      if (params.quantity != null) algoParams.quantity = params.quantity;
-      if (params.reduceOnly != null) algoParams.reduceOnly = String(params.reduceOnly);
-      if (params.newClientOrderId) algoParams.clientAlgoId = params.newClientOrderId;
-      data = await sendSignedRequest('POST', '/fapi/v1/algoOrder', algoParams, req.exchangeCreds);
-      if (data.algoId != null && data.orderId == null) data.orderId = data.algoId;
+      // Standalone manual SL/TP. side BUY/SELL is the ORDER (closing) side; the
+      // position side is its inverse (SELL closes a LONG, BUY closes a SHORT).
+      const _posSide = params.side === 'SELL' ? 'LONG' : 'SHORT';
+      const _cond = type === 'TAKE_PROFIT_MARKET'
+        ? await exchangeOps.placeTakeProfit(req.user.id, { symbol, side: _posSide, triggerPrice: params.stopPrice, quantity: params.quantity, clientOrderId: params.newClientOrderId })
+        : await exchangeOps.placeStopLoss(req.user.id, { symbol, side: _posSide, stopPrice: params.stopPrice, quantity: params.quantity, newClientOrderId: params.newClientOrderId, decisionKey: params.newClientOrderId || `cond_${symbol}` });
+      if (!_cond || _cond.ok === false) {
+        if (_idemKey) _idempotencyCache.delete(_idemKey);
+        return res.status(400).json({ error: 'Conditional order rejected: ' + _safeError(new Error((_cond && _cond.error && (_cond.error.message || _cond.error)) || 'unknown')) });
+      }
+      data = { orderId: _cond.slOrderId || _cond.tpOrderId || _cond.orderId, status: String(_cond.status || 'NEW').toUpperCase() };
     } else {
-      data = await sendSignedRequest('POST', '/fapi/v1/order', params, req.exchangeCreds);
+      const _ord = await exchangeOps.placeOrder(req.user.id, {
+        symbol, side, type: type || 'MARKET',
+        quantity: params.quantity, price: params.price,
+        reduceOnly: params.reduceOnly === true || params.reduceOnly === 'true',
+        closePosition: closePosition === true,
+        clientOrderId: params.newClientOrderId,
+      });
+      if (!_ord || _ord.ok === false) {
+        if (_idemKey) _idempotencyCache.delete(_idemKey);
+        return res.status(400).json({ error: 'Order rejected: ' + _safeError(new Error((_ord && _ord.error && (_ord.error.message || _ord.error)) || 'unknown')) });
+      }
+      data = { orderId: _ord.orderId, status: String(_ord.status || 'NEW').toUpperCase() };
     }
 
     // [ZT-AUD-002] Log actual status instead of assuming FILLED
@@ -558,8 +574,9 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
         // already-registered position so the UI reflects actual fill price.
         if (fillStatus !== 'FILLED' && regResult.ok && regResult.seq) {
           setTimeout(() => {
-            sendSignedRequest('GET', '/fapi/v1/order', { symbol, orderId: data.orderId }, req.exchangeCreds).then(fresh => {
-              if (!fresh || fresh.status !== 'FILLED') return;
+            // [Phase M] exchange-aware fill query (Bybit status is 'Filled', Binance 'FILLED').
+            exchangeOps.getOrder(req.user.id, { symbol, orderId: data.orderId }).then(fresh => {
+              if (!fresh || String(fresh.status).toUpperCase() !== 'FILLED') return;
               const _px = parseFloat(fresh.avgPrice) || parseFloat(fresh.price) || 0;
               const _qty = parseFloat(fresh.executedQty) || 0;
               if (_px > 0 && _qty > 0) {
