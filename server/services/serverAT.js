@@ -4676,6 +4676,25 @@ async function _runReconciliation(isStartup) {
             // Var name kept `binanceHeld` to minimize churn in the body below.
             const binanceHeld = buildHeldMap(held);
 
+            // [P-A Task 4c] Adopt untracked external positions held on THIS exchange so
+            // they PERSIST + DISPLAY (getLivePositions reads _positions; an exchange-only
+            // position with no tracked row flashes on refresh then vanishes — the
+            // operator-reported bug). Option 1: adopt-only, NO auto-SL (operator sets SL
+            // manually; the adoption Telegram says "SL: NONE"). Reuses the already-fetched
+            // `held` (no extra getPositions call — rate-limit friendly). Full 8-layer
+            // engine: per-key mutex, write-freeze on global halt, sanity-reject, double-read
+            // (~60s confirm), mass circuit-breaker (>3 → halt). Non-fatal: a failure here
+            // never blocks the tracked-position reconciliation below. NOTE: only runs for
+            // (user,exchange) pairs that already have ≥1 tracked position this cycle
+            // (byUserExchange is built from livePositions); cold-start adoption with zero
+            // tracked rows is handled by recoveryBoot at startup.
+            try {
+                const _adoptEnv = (creds && creds.mode === 'testnet') ? 'TESTNET' : 'REAL';
+                await _reconcileAndAdopt(userId, exchange, _adoptEnv, async () => held, null, { noAutoSL: true });
+            } catch (_adoptErr) {
+                logger.warn(label, `[P-A] adoption pass failed uid=${userId} ${exchange}: ${_adoptErr.message}`);
+            }
+
             // [Bug#3 STEP 3] Multi-seq collision reconciliation — if multiple OPEN
             // server seqs claim the same (symbol, side), Binance (ONE-WAY mode) holds
             // only ONE merged position. Without this pass, the per-seq check below
