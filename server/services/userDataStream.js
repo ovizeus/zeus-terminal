@@ -102,6 +102,16 @@ function resolveStreamFlag(mode) {
 
 async function connect(userId, creds, onEvent) {
     if (_ws) return;
+    // [BUG multi-exchange] The user-data stream is Binance-specific (listenKey +
+    // /fapi WS). A non-Binance active exchange (e.g. Bybit) has no listenKey — the
+    // createListenKey below would POST /fapi/v1/listenKey to that exchange's host
+    // (api-demo.bybit.com) and fail with "non-JSON response (HTTP 200)" on every
+    // reconnect. Skip gracefully; Bybit order/position updates are covered by recon
+    // polling until a native Bybit private WS exists.
+    if (creds && creds.exchange && creds.exchange !== 'binance') {
+        logger.info('USERDATA', `skip uid=${userId}: stream is Binance-only, active exchange=${creds.exchange}`);
+        return;
+    }
     try {
         _listenKey = await createListenKey(creds);
         _health.listenKeyCreatedAt = Date.now();

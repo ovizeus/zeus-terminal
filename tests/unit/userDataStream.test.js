@@ -64,6 +64,25 @@ describe('userDataStream', () => {
         expect(mockSendSigned).toHaveBeenCalledWith('DELETE', '/fapi/v1/listenKey', {}, expect.objectContaining({ apiKey: 'k' }));
     });
 
+    // [BUG multi-exchange] The user-data stream is Binance-specific (listenKey +
+    // /fapi WS). When the active exchange is Bybit, createListenKey POSTed
+    // /fapi/v1/listenKey to the Bybit host → "non-JSON response (HTTP 200)" on a
+    // reconnect loop. connect() must skip gracefully for any non-Binance exchange.
+    test('connect skips (no listenKey call, no WS) when active exchange is not Binance', async () => {
+        const uds = require('../../server/services/userDataStream');
+        await uds.connect(1, { exchange: 'bybit', apiKey: 'k', apiSecret: 's' }, () => {});
+        expect(mockSendSigned).not.toHaveBeenCalled();
+        expect(mockWsInstances.length).toBe(0);
+        expect(uds.getHealthStatus().connected).toBe(false);
+    });
+
+    test('connect proceeds normally when active exchange is Binance', async () => {
+        mockSendSigned.mockResolvedValueOnce({ listenKey: 'lk-binance' });
+        const uds = require('../../server/services/userDataStream');
+        await uds.connect(1, { exchange: 'binance', apiKey: 'k', apiSecret: 's' }, () => {});
+        expect(mockSendSigned).toHaveBeenCalledWith('POST', '/fapi/v1/listenKey', {}, expect.objectContaining({ apiKey: 'k' }));
+    });
+
     // ── Event parsing ──
 
     test('parseAccountUpdate extracts positions and balances', () => {
