@@ -301,37 +301,9 @@ async function _reconcileUser(uid, exchange) {
             `user ${uid}: position ${symbol} on ${exchange} but not in DB — placing conservative auto-SL`
         );
 
-        // 3c.2 Auto-SL placement. Returns { haltArmed, slOrderId, invalid? }.
-        // haltArmed → auto-SL failed → globalHalt armed; propagate so the caller keeps the halt.
-        const _slRes = await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos);
-        if (_slRes.haltArmed) { haltArmed = true; continue; } // UNPROTECTED + halted → do NOT adopt
-        if (_slRes.invalid) continue;                          // garbage data (no SL placed) → skip adoption
-
-        // 3c.3 [P-A Task 4] Adopt the now-protected position into serverAT tracking so it
-        // PERSISTS + DISPLAYS (getLivePositions reads _positions; an exchange-only position
-        // with no row flashes on refresh then vanishes — the operator-reported bug). Boot
-        // semantics: protect-each-first (above), then adopt — NO mass circuit-breaker here
-        // (legit post-crash multi-position recovery must not halt; each position is already
-        // individually protected). The periodic _runReconciliation path uses the full
-        // 8-layer _reconcileAndAdopt (double-read + circuit-breaker) for the API-glitch case.
-        try {
-            const serverAT = require('./serverAT');
-            let env = 'TESTNET';
-            try {
-                const c = require('./credentialStore').getExchangeCredsFor(uid, exchange);
-                env = (c && c.mode === 'testnet') ? 'TESTNET' : 'REAL';
-            } catch (_) { /* default TESTNET — fail-safe (never auto-mark a position REAL on lookup error) */ }
-            serverAT._adoptExternalPosition(uid, exchange, env, {
-                symbol,
-                side: exchPos.side,
-                qty: Math.abs(Number(exchPos.qty) || 0),
-                entryPrice: Number(exchPos.entryPrice) || Number(exchPos.markPrice) || 0,
-                slOrderId: _slRes.slOrderId,
-            });
-        } catch (e) {
-            // Adoption is non-fatal: the position is already protected by the auto-SL above.
-            _logWarn('RECOVERY_BOOT', `uid=${uid} ${symbol}: adoption failed (position still protected by auto-SL): ${e.message}`);
-        }
+        // 3c.2 Auto-SL placement. Returns true if it left the position UNPROTECTED
+        // (auto-SL failed → armed globalHalt) — propagate so the caller keeps the halt.
+        if (await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos)) haltArmed = true;
     }
 
     // [Task M 2026-05-28] Sweep orphan Zeus SL/TP orders. Runs BEFORE global
@@ -414,7 +386,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
                 symbol, side, qty: exchPos.qty, markPrice: exchPos.markPrice, entryPrice: exchPos.entryPrice, exchange,
             }));
         } catch (_) {}
-        return { haltArmed: false, slOrderId: null, invalid: true }; // [HALT-FIX] invalid data → no halt armed (Task E behavior preserved); [P-A] no SL id
+        return false; // [HALT-FIX] invalid data → no halt armed (Task E behavior preserved)
     }
 
     // Attempt 1: place SL at current mark ± 2%
@@ -458,7 +430,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
                 + (retried ? '_Initial SL would have triggered immediately — retried after markPrice refetch._\n' : '')
                 + '_Position opened on exchange but missing from Zeus DB — manual review recommended._');
         } catch (_) {}
-        return { haltArmed: false, slOrderId: result.slOrderId }; // [HALT-FIX] SL placed → protected, no halt; [P-A] return SL id for adoption row
+        return false; // [HALT-FIX] SL placed → protected, no halt
     }
 
     // FAIL path — UNPROTECTED. Halt + critical alert.
@@ -487,7 +459,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
             + 'Error: ' + result.error
             + (retried ? '\n_Retried after markPrice refetch but rejection persisted._' : ''));
     } catch (_) {}
-    return { haltArmed: true, slOrderId: null }; // [HALT-FIX] auto-SL failed → halt ARMED; caller must NOT disarm this user; [P-A] no SL id (unprotected)
+    return true; // [HALT-FIX] auto-SL failed → halt ARMED; caller must NOT disarm this user
 }
 
 module.exports = { run, _reconcileUser, _handleExchangeOnlyPosition };
