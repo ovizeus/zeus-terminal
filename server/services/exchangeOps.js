@@ -163,6 +163,22 @@ async function placeStopLoss(uid, params) {
     return ops.placeStopLoss(uid, params, creds);
 }
 
+// [Phase M] Manual-trading parity routers (generic order, TP, fill query).
+async function placeOrder(uid, params) {
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
+    return ops.placeOrder(uid, params, creds);
+}
+
+async function placeTakeProfit(uid, params) {
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
+    return ops.placeTakeProfit(uid, params, creds);
+}
+
+async function getOrder(uid, params) {
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
+    return ops.getOrder(uid, params, creds);
+}
+
 function _resetForTest() {
     _readyCache.clear();
 }
@@ -170,6 +186,6 @@ function _resetForTest() {
 module.exports = {
     placeEntry, closePosition, ensureSymbolReady, invalidateReady,
     getPositions, getBalance, getUserTrades, ping, cancelOrder, placeStopLoss,
-    getOpenOrders,
+    getOpenOrders, placeOrder, placeTakeProfit, getOrder,
     _resetForTest, CACHE_TTL_MS,
 };

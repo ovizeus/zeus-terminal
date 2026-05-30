@@ -501,10 +501,66 @@ async function placeStopLoss(uid, params, creds) {
     return { ok: true, slOrderId: resp.result.orderId, status: resp.result.orderStatus, ts: Date.now(), rawExchange: 'bybit' };
 }
 
+// [Phase M] Manual-trading parity. ── Generic order (open MARKET/LIMIT, reduce-only
+// close). NOT placeEntry (which owns the AT entry+SL/TP+DB-row lifecycle).
+async function placeOrder(uid, params, creds) {
+    const body = {
+        category: 'linear', symbol: params.symbol,
+        side: params.side === 'BUY' ? 'Buy' : 'Sell',
+        orderType: params.type === 'LIMIT' ? 'Limit' : 'Market',
+        qty: String(params.quantity), positionIdx: 0,
+    };
+    if (body.orderType === 'Limit') { body.timeInForce = 'GTC'; body.price = String(params.price); }
+    if (params.reduceOnly || params.closePosition) { body.reduceOnly = true; body.closeOnTrigger = !!params.closePosition; }
+    if (params.clientOrderId) body.orderLinkId = String(params.clientOrderId).slice(0, 36);
+    const resp = await _dispatchRequest('POST', '/v5/order/create', body, creds);
+    if (!_isOk(resp)) return { ok: false, error: bybitSigner.parseBybitError(resp), rawExchange: 'bybit' };
+    return { ok: true, orderId: String(resp.result.orderId), status: resp.result.orderStatus, ts: Date.now(), rawExchange: 'bybit' };
+}
+
+// ── Take-profit conditional (mirror of placeStopLoss but TP trigger direction:
+// LONG TP fires on price RISE → triggerDirection 1; SHORT TP on FALL → 2).
+async function placeTakeProfit(uid, params, creds) {
+    const resp = await _dispatchRequest('POST', '/v5/order/create', {
+        category: 'linear', symbol: params.symbol,
+        side: params.side === 'LONG' ? 'Sell' : 'Buy',
+        orderType: 'Market', qty: String(params.quantity), positionIdx: 0,
+        triggerPrice: String(params.triggerPrice),
+        triggerDirection: params.side === 'LONG' ? 1 : 2,
+        reduceOnly: true, closeOnTrigger: true,
+        orderLinkId: params.clientOrderId ? String(params.clientOrderId).slice(0, 36) : `tp_${Date.now()}`.slice(0, 36),
+    }, creds);
+    if (!_isOk(resp)) return { ok: false, error: bybitSigner.parseBybitError(resp), rawExchange: 'bybit' };
+    return { ok: true, tpOrderId: String(resp.result.orderId), status: resp.result.orderStatus, ts: Date.now(), rawExchange: 'bybit' };
+}
+
+// ── Open orders (manual UI panel + recon parity later).
+async function getOpenOrders(uid, params, creds) {
+    const query = { category: 'linear', openOnly: 0 };
+    if (params && params.symbol) query.symbol = params.symbol;
+    const resp = await _dispatchRequest('GET', '/v5/order/realtime', query, creds);
+    if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list)) return [];
+    return resp.result.list.map(o => ({
+        orderId: String(o.orderId), symbol: o.symbol,
+        side: o.side === 'Buy' ? 'BUY' : 'SELL', type: o.orderType,
+        price: o.price, qty: o.qty, status: o.orderStatus,
+        reduceOnly: !!o.reduceOnly, rawExchange: 'bybit',
+    }));
+}
+
+// ── Single-order fill query (manual fill-patch).
+async function getOrder(uid, params, creds) {
+    const resp = await _dispatchRequest('GET', '/v5/order/realtime', { category: 'linear', symbol: params.symbol, orderId: params.orderId }, creds);
+    if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list) || !resp.result.list.length) return null;
+    const o = resp.result.list[0];
+    return { orderId: String(o.orderId), status: o.orderStatus, avgPrice: o.avgPrice, executedQty: o.cumExecQty, rawExchange: 'bybit' };
+}
+
 module.exports = {
     placeEntry, closePosition,
     ensureSymbolReady, getPositions, getBalance, getUserTrades,
     ping, cancelOrder, placeStopLoss,
+    placeOrder, placeTakeProfit, getOpenOrders, getOrder,
     _emergencyClose,
     _enqueueSynthetic, _resetSyntheticQueue,
 };

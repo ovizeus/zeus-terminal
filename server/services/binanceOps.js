@@ -683,6 +683,50 @@ async function placeStopLoss(uid, params, creds) {
     };
 }
 
+// [Phase M] Manual-trading parity. ── Generic order (open MARKET/LIMIT, reduce-only
+// close). NOT placeEntry (which owns the AT entry+SL/TP+DB-row lifecycle).
+async function placeOrder(uid, params, creds) {
+    const body = { symbol: params.symbol, side: params.side, type: params.type, quantity: String(params.quantity), recvWindow: 5000 };
+    if (params.type === 'LIMIT') { body.price = String(params.price); body.timeInForce = 'GTC'; }
+    if (params.reduceOnly) body.reduceOnly = 'true';
+    if (params.closePosition) body.closePosition = 'true';
+    if (params.clientOrderId) body.newClientOrderId = String(params.clientOrderId);
+    try {
+        const resp = await sendSignedRequest('POST', '/fapi/v1/order', body, creds);
+        return { ok: true, orderId: String(resp.orderId), status: resp.status, ts: Date.now(), rawExchange: 'binance' };
+    } catch (err) {
+        return { ok: false, error: err.message, rawExchange: 'binance' };
+    }
+}
+
+// ── Take-profit conditional via the algo endpoint (TAKE_PROFIT_MARKET).
+// LONG TP closes with a SELL, SHORT TP with a BUY.
+async function placeTakeProfit(uid, params, creds) {
+    try {
+        const resp = await _placeConditionalAlgo({
+            symbol: params.symbol,
+            side: params.side === 'LONG' ? 'SELL' : 'BUY',
+            type: 'TAKE_PROFIT_MARKET',
+            triggerPrice: params.triggerPrice,
+            quantity: params.quantity,
+            clientAlgoId: params.clientOrderId || `tp_${Date.now()}`,
+        }, creds);
+        return { ok: true, tpOrderId: String(resp.algoId != null ? resp.algoId : resp.orderId), status: resp.algoStatus || resp.status, ts: Date.now(), rawExchange: 'binance' };
+    } catch (err) {
+        return { ok: false, error: err.message, rawExchange: 'binance' };
+    }
+}
+
+// ── Single-order fill query (manual fill-patch).
+async function getOrder(uid, params, creds) {
+    try {
+        const resp = await sendSignedRequest('GET', '/fapi/v1/order', { symbol: params.symbol, orderId: params.orderId, recvWindow: 5000 }, creds);
+        return { orderId: String(resp.orderId), status: resp.status, avgPrice: resp.avgPrice, executedQty: resp.executedQty, rawExchange: 'binance' };
+    } catch (_) {
+        return null;
+    }
+}
+
 module.exports = {
     placeEntry,
     closePosition,
@@ -693,6 +737,9 @@ module.exports = {
     ping,
     cancelOrder,
     placeStopLoss,
+    placeOrder,
+    placeTakeProfit,
+    getOrder,
     getOpenOrders,
     _emergencyClose,
 };

@@ -26,6 +26,10 @@ const mockBinanceOps = {
     ping: jest.fn(async () => ({ ok: true, latencyMs: 50 })),
     cancelOrder: jest.fn(async () => ({ ok: true, status: 'CANCELED', ts: 3 })),
     placeStopLoss: jest.fn(async () => ({ ok: true, slOrderId: 'sl2' })),
+    placeOrder: jest.fn(async () => ({ ok: true, orderId: 'bo1', status: 'NEW', rawExchange: 'binance' })),
+    placeTakeProfit: jest.fn(async () => ({ ok: true, tpOrderId: 'btp1', rawExchange: 'binance' })),
+    getOrder: jest.fn(async () => ({ orderId: 'bo1', status: 'FILLED', rawExchange: 'binance' })),
+    getOpenOrders: jest.fn(async () => []),
 };
 const mockBybitOps = {
     placeEntry: jest.fn(async () => ({ ok: true, orderId: 'by1', clientOrderId: 'dk2', status: 'FILLED', filledQty: '0.001', avgFillPrice: '50000', slOrderId: 'bysl1', ts: 1, rawExchange: 'bybit' })),
@@ -37,6 +41,10 @@ const mockBybitOps = {
     ping: jest.fn(async () => ({ ok: true, latencyMs: 30 })),
     cancelOrder: jest.fn(async () => ({ ok: true, status: 'CANCELED', ts: 3 })),
     placeStopLoss: jest.fn(async () => ({ ok: true, slOrderId: 'bysl2' })),
+    placeOrder: jest.fn(async () => ({ ok: true, orderId: 'byo1', status: 'Filled', rawExchange: 'bybit' })),
+    placeTakeProfit: jest.fn(async () => ({ ok: true, tpOrderId: 'bytp1', rawExchange: 'bybit' })),
+    getOrder: jest.fn(async () => ({ orderId: 'byo1', status: 'Filled', rawExchange: 'bybit' })),
+    getOpenOrders: jest.fn(async () => []),
 };
 jest.mock('../../server/services/binanceOps', () => mockBinanceOps);
 jest.mock('../../server/services/bybitOps', () => mockBybitOps);
@@ -72,6 +80,27 @@ describe('exchangeOps', () => {
 
         it('throws on user without creds', async () => {
             await expect(exchangeOps.placeEntry(99999, _validParams())).rejects.toThrow(/no creds/i);
+        });
+
+        // [Phase M] Manual-trading parity routers.
+        it('placeOrder routes binance(1)/bybit(2)', async () => {
+            await exchangeOps.placeOrder(1, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.001' });
+            expect(mockBinanceOps.placeOrder).toHaveBeenCalled();
+            expect(mockBybitOps.placeOrder).not.toHaveBeenCalled();
+            await exchangeOps.placeOrder(2, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.001' });
+            expect(mockBybitOps.placeOrder).toHaveBeenCalled();
+        });
+        it('placeTakeProfit routes binance(1)/bybit(2)', async () => {
+            await exchangeOps.placeTakeProfit(1, { symbol: 'BTCUSDT', side: 'LONG', triggerPrice: '60000', quantity: '0.001' });
+            expect(mockBinanceOps.placeTakeProfit).toHaveBeenCalled();
+            await exchangeOps.placeTakeProfit(2, { symbol: 'BTCUSDT', side: 'LONG', triggerPrice: '60000', quantity: '0.001' });
+            expect(mockBybitOps.placeTakeProfit).toHaveBeenCalled();
+        });
+        it('getOrder routes binance(1)/bybit(2)', async () => {
+            await exchangeOps.getOrder(1, { symbol: 'BTCUSDT', orderId: 'x' });
+            expect(mockBinanceOps.getOrder).toHaveBeenCalled();
+            await exchangeOps.getOrder(2, { symbol: 'BTCUSDT', orderId: 'x' });
+            expect(mockBybitOps.getOrder).toHaveBeenCalled();
         });
     });
 

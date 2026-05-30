@@ -458,3 +458,60 @@ describe('binanceOps.getUserTrades', () => {
         expect(r[0].rawExchange).toBe('binance');
     });
 });
+
+// [Phase M] Manual-trading parity methods.
+describe('binanceOps.placeOrder', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+    it('places MARKET BUY → canonical shape', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'm1', status: 'NEW' });
+        const r = await binanceOps.placeOrder(1, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.001' }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.orderId).toBe('m1');
+        expect(r.rawExchange).toBe('binance');
+        const call = mockSendSignedRequest.mock.calls[0];
+        expect(call[1]).toBe('/fapi/v1/order');
+    });
+    it('reduce-only close maps reduceOnly:true', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'm2', status: 'NEW' });
+        const r = await binanceOps.placeOrder(1, { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.001', reduceOnly: true }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(mockSendSignedRequest.mock.calls[0][2].reduceOnly).toBe('true');
+    });
+    it('signer throw → ok:false', async () => {
+        mockSendSignedRequest.mockRejectedValueOnce(new Error('insufficient balance'));
+        const r = await binanceOps.placeOrder(1, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '9' }, _validCreds);
+        expect(r.ok).toBe(false);
+        expect(r.error).toMatch(/insufficient/);
+    });
+});
+
+describe('binanceOps.placeTakeProfit', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+    it('places TAKE_PROFIT_MARKET via algoOrder (LONG→SELL)', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ algoId: 'tp1', algoStatus: 'NEW' });
+        const r = await binanceOps.placeTakeProfit(1, { symbol: 'BTCUSDT', side: 'LONG', triggerPrice: '60000', quantity: '0.001' }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.tpOrderId).toBe('tp1');
+        expect(r.rawExchange).toBe('binance');
+        const call = mockSendSignedRequest.mock.calls[0];
+        expect(call[1]).toBe('/fapi/v1/algoOrder');
+        expect(call[2].type).toBe('TAKE_PROFIT_MARKET');
+        expect(call[2].side).toBe('SELL');
+    });
+});
+
+describe('binanceOps.getOrder', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+    it('returns canonical fill info', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'g1', status: 'FILLED', avgPrice: '50000', executedQty: '0.001' });
+        const r = await binanceOps.getOrder(1, { symbol: 'BTCUSDT', orderId: 'g1' }, _validCreds);
+        expect(r.status).toBe('FILLED');
+        expect(r.avgPrice).toBe('50000');
+        expect(r.rawExchange).toBe('binance');
+    });
+    it('returns null on signer throw', async () => {
+        mockSendSignedRequest.mockRejectedValueOnce(new Error('Unknown order'));
+        const r = await binanceOps.getOrder(1, { symbol: 'BTCUSDT', orderId: 'x' }, _validCreds);
+        expect(r).toBeNull();
+    });
+});

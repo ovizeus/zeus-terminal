@@ -268,6 +268,80 @@ describe('bybitOps.getBalance', () => {
     });
 });
 
+// [Phase M] Manual-trading parity methods.
+describe('bybitOps.getOpenOrders', () => {
+    beforeEach(() => bybitOps._resetSyntheticQueue());
+    it('returns canonical open-order list', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { list: [
+            { orderId: 'o1', symbol: 'BTCUSDT', side: 'Buy', orderType: 'Limit', price: '50000', qty: '0.01', orderStatus: 'New', reduceOnly: false },
+        ] } });
+        const r = await bybitOps.getOpenOrders(1, { symbol: 'BTCUSDT' }, _validCreds);
+        expect(Array.isArray(r)).toBe(true);
+        expect(r[0].orderId).toBe('o1');
+        expect(r[0].side).toBe('BUY');
+        expect(r[0].rawExchange).toBe('bybit');
+    });
+    it('returns [] when no result list', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: {} });
+        const r = await bybitOps.getOpenOrders(1, {}, _validCreds);
+        expect(r).toEqual([]);
+    });
+});
+
+describe('bybitOps.placeOrder', () => {
+    beforeEach(() => bybitOps._resetSyntheticQueue());
+    it('places a MARKET BUY (linear) and returns canonical shape', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { orderId: 'm1', orderStatus: 'Filled' } });
+        const r = await bybitOps.placeOrder(1, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.01' }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.orderId).toBe('m1');
+        expect(r.rawExchange).toBe('bybit');
+    });
+    it('places a reduce-only close', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { orderId: 'm2', orderStatus: 'Filled' } });
+        const r = await bybitOps.placeOrder(1, { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.01', reduceOnly: true }, _validCreds);
+        expect(r.ok).toBe(true);
+    });
+    it('surfaces bybit error on retCode!=0', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 110007, retMsg: 'insufficient balance', result: {} });
+        const r = await bybitOps.placeOrder(1, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '999' }, _validCreds);
+        expect(r.ok).toBe(false);
+        expect(r.error).toBeTruthy();
+    });
+});
+
+describe('bybitOps.placeTakeProfit', () => {
+    beforeEach(() => bybitOps._resetSyntheticQueue());
+    it('places TP conditional reduce-only (LONG)', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { orderId: 'tp1', orderStatus: 'New' } });
+        const r = await bybitOps.placeTakeProfit(1, { symbol: 'BTCUSDT', side: 'LONG', triggerPrice: '60000', quantity: '0.01' }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.tpOrderId).toBe('tp1');
+        expect(r.rawExchange).toBe('bybit');
+    });
+    it('errors on retCode!=0', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 110001, retMsg: 'tp fail', result: {} });
+        const r = await bybitOps.placeTakeProfit(1, { symbol: 'BTCUSDT', side: 'SHORT', triggerPrice: '40000', quantity: '0.01' }, _validCreds);
+        expect(r.ok).toBe(false);
+    });
+});
+
+describe('bybitOps.getOrder', () => {
+    beforeEach(() => bybitOps._resetSyntheticQueue());
+    it('returns canonical fill info', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { list: [{ orderId: 'g1', orderStatus: 'Filled', avgPrice: '50000', cumExecQty: '0.01' }] } });
+        const r = await bybitOps.getOrder(1, { symbol: 'BTCUSDT', orderId: 'g1' }, _validCreds);
+        expect(r.status).toBe('Filled');
+        expect(r.avgPrice).toBe('50000');
+        expect(r.rawExchange).toBe('bybit');
+    });
+    it('returns null when order not found', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { list: [] } });
+        const r = await bybitOps.getOrder(1, { symbol: 'BTCUSDT', orderId: 'nope' }, _validCreds);
+        expect(r).toBeNull();
+    });
+});
+
 describe('bybitOps.ping', () => {
     it('returns ok + latencyMs', async () => {
         bybitOps._enqueueSynthetic({ retCode: 0, result: { timeSecond: '1234567', timeNano: '...' } });
