@@ -515,3 +515,17 @@ describe('binanceOps.getOrder', () => {
         expect(r).toBeNull();
     });
 });
+
+describe('binanceOps.setLeverage', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+    it('ok → canonical', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ leverage: '5', symbol: 'BTCUSDT' });
+        const r = await binanceOps.setLeverage(1, { symbol: 'BTCUSDT', leverage: 5 }, _validCreds);
+        expect(r.ok).toBe(true); expect(r.leverage).toBe(5); expect(r.rawExchange).toBe('binance');
+    });
+    it('signer throw → ok:false', async () => {
+        mockSendSignedRequest.mockRejectedValueOnce(new Error('bad lev'));
+        const r = await binanceOps.setLeverage(1, { symbol: 'BTCUSDT', leverage: 99 }, _validCreds);
+        expect(r.ok).toBe(false);
+    });
+});

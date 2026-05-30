@@ -342,6 +342,21 @@ describe('bybitOps.getOrder', () => {
     });
 });
 
+// [Phase M] setLeverage (manual route + dedicated endpoint).
+describe('bybitOps.setLeverage', () => {
+    beforeEach(() => bybitOps._resetSyntheticQueue());
+    it('ok on retCode 0', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: {} });
+        const r = await bybitOps.setLeverage(1, { symbol: 'BTCUSDT', leverage: 5 }, _validCreds);
+        expect(r.ok).toBe(true); expect(r.rawExchange).toBe('bybit');
+    });
+    it('110043 (not modified) treated as ok', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 110043, retMsg: 'leverage not modified', result: {} });
+        const r = await bybitOps.setLeverage(1, { symbol: 'BTCUSDT', leverage: 5 }, _validCreds);
+        expect(r.ok).toBe(true);
+    });
+});
+
 describe('bybitOps.ping', () => {
     it('returns ok + latencyMs', async () => {
         bybitOps._enqueueSynthetic({ retCode: 0, result: { timeSecond: '1234567', timeNano: '...' } });

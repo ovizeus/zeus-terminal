@@ -501,6 +501,17 @@ async function placeStopLoss(uid, params, creds) {
     return { ok: true, slOrderId: resp.result.orderId, status: resp.result.orderStatus, ts: Date.now(), rawExchange: 'bybit' };
 }
 
+// [Phase M] Leverage set (manual /order/place pre-step + dedicated endpoint).
+// 110043 = "leverage not modified" — already at target, idempotent success.
+async function setLeverage(uid, params, creds) {
+    const resp = await _dispatchRequest('POST', '/v5/position/set-leverage', {
+        category: 'linear', symbol: params.symbol,
+        buyLeverage: String(params.leverage), sellLeverage: String(params.leverage),
+    }, creds);
+    if (_isOk(resp) || resp.retCode === 110043) return { ok: true, leverage: params.leverage, rawExchange: 'bybit' };
+    return { ok: false, error: bybitSigner.parseBybitError(resp), rawExchange: 'bybit' };
+}
+
 // [Phase M] Manual-trading parity. ── Generic order (open MARKET/LIMIT, reduce-only
 // close). NOT placeEntry (which owns the AT entry+SL/TP+DB-row lifecycle).
 async function placeOrder(uid, params, creds) {
@@ -560,7 +571,7 @@ module.exports = {
     placeEntry, closePosition,
     ensureSymbolReady, getPositions, getBalance, getUserTrades,
     ping, cancelOrder, placeStopLoss,
-    placeOrder, placeTakeProfit, getOpenOrders, getOrder,
+    setLeverage, placeOrder, placeTakeProfit, getOpenOrders, getOrder,
     _emergencyClose,
     _enqueueSynthetic, _resetSyntheticQueue,
 };

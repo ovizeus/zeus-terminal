@@ -683,6 +683,16 @@ async function placeStopLoss(uid, params, creds) {
     };
 }
 
+// [Phase M] Leverage set (manual /order/place pre-step + dedicated endpoint).
+async function setLeverage(uid, params, creds) {
+    try {
+        const resp = await sendSignedRequest('POST', '/fapi/v1/leverage', { symbol: params.symbol, leverage: params.leverage, recvWindow: 5000 }, creds);
+        return { ok: true, leverage: resp && resp.leverage != null ? Number(resp.leverage) : params.leverage, rawExchange: 'binance' };
+    } catch (err) {
+        return { ok: false, error: err.message, rawExchange: 'binance' };
+    }
+}
+
 // [Phase M] Manual-trading parity. ── Generic order (open MARKET/LIMIT, reduce-only
 // close). NOT placeEntry (which owns the AT entry+SL/TP+DB-row lifecycle).
 async function placeOrder(uid, params, creds) {
@@ -737,6 +747,7 @@ module.exports = {
     ping,
     cancelOrder,
     placeStopLoss,
+    setLeverage,
     placeOrder,
     placeTakeProfit,
     getOrder,

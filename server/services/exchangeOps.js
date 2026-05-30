@@ -179,6 +179,27 @@ async function getOrder(uid, params) {
     return ops.getOrder(uid, params, creds);
 }
 
+async function setLeverage(uid, params) {
+    const { ops, creds } = _resolveOpsFor(uid, params && params.exchangeOverride);
+    return ops.setLeverage(uid, params, creds);
+}
+
+// [Phase M] CROSSED margin enforcement. Binance routes through the existing
+// idempotent marginTypeHelper; Bybit UNIFIED accounts are cross-margin by account
+// config (no per-symbol marginType call), so it's a safe no-op there.
+async function setMarginType(uid, params) {
+    const { creds } = _resolveOps(uid);
+    if (creds.exchange !== 'binance') return { ok: true, skipped: true, rawExchange: creds.exchange };
+    const marginHelper = require('./marginTypeHelper');
+    const { sendSignedRequest } = require('./binanceSigner');
+    try {
+        await marginHelper.ensureCrossed(params.symbol, creds, sendSignedRequest);
+        return { ok: true, rawExchange: 'binance' };
+    } catch (err) {
+        return { ok: false, error: err.message, rawExchange: 'binance' };
+    }
+}
+
 function _resetForTest() {
     _readyCache.clear();
 }
@@ -186,6 +207,6 @@ function _resetForTest() {
 module.exports = {
     placeEntry, closePosition, ensureSymbolReady, invalidateReady,
     getPositions, getBalance, getUserTrades, ping, cancelOrder, placeStopLoss,
-    getOpenOrders, placeOrder, placeTakeProfit, getOrder,
+    getOpenOrders, placeOrder, placeTakeProfit, getOrder, setLeverage, setMarginType,
     _resetForTest, CACHE_TTL_MS,
 };

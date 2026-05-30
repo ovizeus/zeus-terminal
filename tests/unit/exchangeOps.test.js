@@ -30,6 +30,7 @@ const mockBinanceOps = {
     placeTakeProfit: jest.fn(async () => ({ ok: true, tpOrderId: 'btp1', rawExchange: 'binance' })),
     getOrder: jest.fn(async () => ({ orderId: 'bo1', status: 'FILLED', rawExchange: 'binance' })),
     getOpenOrders: jest.fn(async () => []),
+    setLeverage: jest.fn(async () => ({ ok: true, leverage: 5, rawExchange: 'binance' })),
 };
 const mockBybitOps = {
     placeEntry: jest.fn(async () => ({ ok: true, orderId: 'by1', clientOrderId: 'dk2', status: 'FILLED', filledQty: '0.001', avgFillPrice: '50000', slOrderId: 'bysl1', ts: 1, rawExchange: 'bybit' })),
@@ -45,7 +46,11 @@ const mockBybitOps = {
     placeTakeProfit: jest.fn(async () => ({ ok: true, tpOrderId: 'bytp1', rawExchange: 'bybit' })),
     getOrder: jest.fn(async () => ({ orderId: 'byo1', status: 'Filled', rawExchange: 'bybit' })),
     getOpenOrders: jest.fn(async () => []),
+    setLeverage: jest.fn(async () => ({ ok: true, leverage: 5, rawExchange: 'bybit' })),
 };
+const mockMarginHelper = { ensureCrossed: jest.fn(async () => {}) };
+jest.mock('../../server/services/marginTypeHelper', () => mockMarginHelper);
+jest.mock('../../server/services/binanceSigner', () => ({ sendSignedRequest: jest.fn() }));
 jest.mock('../../server/services/binanceOps', () => mockBinanceOps);
 jest.mock('../../server/services/bybitOps', () => mockBybitOps);
 
@@ -101,6 +106,20 @@ describe('exchangeOps', () => {
             expect(mockBinanceOps.getOrder).toHaveBeenCalled();
             await exchangeOps.getOrder(2, { symbol: 'BTCUSDT', orderId: 'x' });
             expect(mockBybitOps.getOrder).toHaveBeenCalled();
+        });
+        it('setLeverage routes binance(1)/bybit(2)', async () => {
+            await exchangeOps.setLeverage(1, { symbol: 'BTCUSDT', leverage: 5 });
+            expect(mockBinanceOps.setLeverage).toHaveBeenCalled();
+            await exchangeOps.setLeverage(2, { symbol: 'BTCUSDT', leverage: 5 });
+            expect(mockBybitOps.setLeverage).toHaveBeenCalled();
+        });
+        it('setMarginType: bybit→skipped(no-op), binance→marginHelper.ensureCrossed', async () => {
+            const rb = await exchangeOps.setMarginType(2, { symbol: 'BTCUSDT' });
+            expect(rb.ok).toBe(true); expect(rb.skipped).toBe(true);
+            expect(mockMarginHelper.ensureCrossed).not.toHaveBeenCalled();
+            const rn = await exchangeOps.setMarginType(1, { symbol: 'BTCUSDT' });
+            expect(rn.ok).toBe(true);
+            expect(mockMarginHelper.ensureCrossed).toHaveBeenCalled();
         });
     });
 
