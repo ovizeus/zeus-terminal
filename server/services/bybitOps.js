@@ -36,7 +36,11 @@ function _resetSyntheticQueue() {
     _syntheticQueue.length = 0;
 }
 
+let _lastDispatch = null; // [test hook] last (method,path,params) for query-shape assertions
+function _getLastDispatch() { return _lastDispatch; }
+
 async function _dispatchRequest(method, path, params, creds) {
+    _lastDispatch = { method, path, params };
     if (_syntheticQueue.length > 0) {
         return _syntheticQueue.shift();
     }
@@ -391,8 +395,14 @@ async function ensureSymbolReady(uid, params, creds) {
 }
 
 async function getPositions(uid, params, creds) {
+    // [BUG bybit-positions 2026-05-30] Bybit v5 /v5/position/list REQUIRES either
+    // `symbol` OR `settleCoin` — querying with only {category:'linear'} returns
+    // retCode 10001 "Missing... symbol or settleCoin" → empty → Zeus saw 0 bybit
+    // positions and orphaned/lost every real open Bybit position. Default to
+    // settleCoin:'USDT' for the no-symbol case (all our linear pairs settle USDT).
     const query = { category: 'linear' };
     if (params && params.symbol) query.symbol = params.symbol;
+    else query.settleCoin = 'USDT';
     const resp = await _dispatchRequest('GET', '/v5/position/list', query, creds);
     if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list)) return [];
     return resp.result.list
@@ -577,5 +587,5 @@ module.exports = {
     ping, cancelOrder, placeStopLoss,
     setLeverage, placeOrder, placeTakeProfit, getOpenOrders, getOrder,
     _emergencyClose,
-    _enqueueSynthetic, _resetSyntheticQueue,
+    _enqueueSynthetic, _resetSyntheticQueue, _getLastDispatch,
 };

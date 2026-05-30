@@ -187,6 +187,25 @@ describe('bybitOps.getPositions', () => {
         expect(r[0].side).toBe('LONG');
         expect(r[0].rawExchange).toBe('bybit');
     });
+
+    // [BUG bybit-positions] Bybit v5 /v5/position/list requires symbol OR settleCoin;
+    // querying only {category:'linear'} returns retCode 10001 → empty → Zeus orphaned
+    // every real open Bybit position.
+    it('queries with settleCoin=USDT when no symbol (bybit v5 requirement)', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { list: [] } });
+        await bybitOps.getPositions(1, {}, _validCreds);
+        const call = bybitOps._getLastDispatch();
+        expect(call.path).toBe('/v5/position/list');
+        expect(call.params.category).toBe('linear');
+        expect(call.params.settleCoin).toBe('USDT');
+    });
+    it('queries with symbol (no settleCoin) when a symbol is given', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { list: [] } });
+        await bybitOps.getPositions(1, { symbol: 'BTCUSDT' }, _validCreds);
+        const call = bybitOps._getLastDispatch();
+        expect(call.params.symbol).toBe('BTCUSDT');
+        expect(call.params.settleCoin).toBeUndefined();
+    });
 });
 
 describe('bybitOps.getBalance', () => {
