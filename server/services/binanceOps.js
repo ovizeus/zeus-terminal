@@ -301,6 +301,55 @@ async function placeEntry(uid, params, creds) {
  * 8. Close FILLED → state CLOSING→CLOSED + move at_positions→at_closed + positionEvents
  * 9. Return canonical CloseResult
  */
+// [P2 close-desync fix] Row-independent close used when the at_positions row was already
+// archived (optimistic _persistClose race) but the position may still be OPEN on the exchange.
+// Cancels caller-provided protective orders (best-effort) then sends a reduce-only MARKET close.
+// reduceOnly guarantees we can only close/shrink, never open exposure. Never throws on missing row.
+async function _closeWithoutLocalRow(uid, params, creds) {
+    const cancelTasks = [];
+    if (params.slOrderId) {
+        cancelTasks.push(cancelOrder(uid, { symbol: params.symbol, orderId: params.slOrderId }, creds).catch(() => {}));
+    }
+    if (params.tpOrderId) {
+        cancelTasks.push(cancelOrder(uid, { symbol: params.symbol, orderId: params.tpOrderId }, creds).catch(() => {}));
+    }
+    if (cancelTasks.length > 0) await Promise.all(cancelTasks);
+
+    const closeBody = {
+        symbol: params.symbol,
+        side: _oppositeSide(params.side),
+        type: params.closeType || 'MARKET',
+        quantity: params.qty,
+        reduceOnly: 'true',
+        newClientOrderId: `close_${params.decisionKey}`.slice(0, 36),
+        recvWindow: 5000,
+    };
+    if ((params.closeType || 'MARKET') === 'LIMIT') {
+        closeBody.timeInForce = 'GTC';
+        closeBody.price = params.closePrice;
+    }
+    const closeResp = await sendSignedRequest('POST', '/fapi/v1/order', closeBody, creds);
+    if (!closeResp || closeResp.code) {
+        const err = canonicalErrors.translateBinance(closeResp) || canonicalErrors.create('ErrUnknown', 'close rejected (no local row)');
+        try {
+            positionEvents.append({
+                position_seq: params.seq, user_id: uid, exchange: 'binance',
+                event_type: 'CLOSE_ROW_MISSING_REJECTED',
+                payload: { source: params.source, reason: 'reduce-only rejected — position likely already closed', err: { code: err.code, message: err.message } },
+            });
+        } catch (_) {}
+        return { ok: false, error: err, seq: params.seq, rowMissingFallback: true };
+    }
+    try {
+        positionEvents.append({
+            position_seq: params.seq, user_id: uid, exchange: 'binance',
+            event_type: 'CLOSED_ROW_MISSING_FALLBACK',
+            payload: { source: params.source, orderId: closeResp.orderId, reason: 'local row archived before exchange close (race) — closed via reduce-only fallback' },
+        });
+    } catch (_) {}
+    return { ok: true, orderId: closeResp.orderId, rawExchange: 'binance', seq: params.seq, ts: Date.now(), rowMissingFallback: true };
+}
+
 async function closePosition(uid, params, creds) {
     const lockKey = `${uid}|${params.symbol}`;
     const lockAcquired = await orderLock.acquire(lockKey, LOCK_TIMEOUT_MS);
@@ -315,7 +364,11 @@ async function closePosition(uid, params, creds) {
         // Read position row
         const row = db.prepare('SELECT seq, data, status, user_id, exchange FROM at_positions WHERE seq=? AND user_id=?').get(params.seq, uid);
         if (!row) {
-            throw canonicalErrors.create('ErrNotFound', `position seq=${params.seq} not found for uid=${uid}`);
+            // [P2 close-desync fix 2026-05-30] Row optimistically archived by serverAT
+            // _closePosition's synchronous _persistClose while this fire-and-forget exchange
+            // close was still pending (race). Fall back to a row-independent reduce-only close
+            // so the still-open exchange position is never orphaned. NO throw.
+            return await _closeWithoutLocalRow(uid, params, creds);
         }
 
         // Race check: SL may have already closed it

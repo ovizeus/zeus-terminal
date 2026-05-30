@@ -74,29 +74,42 @@ describe('[P2 REPRO] manual Bybit close — structural path', () => {
         expect(r.ok).toBe(true);
     });
 
-    it('THE BUG: row already archived (deleted from at_positions) → close throws "not found" → exchange position orphaned', async () => {
-        // Simulate recon/phantom-close having archived the position locally (atInsertClosed + atDeletePos)
-        // while it is STILL OPEN on the exchange. at_positions no longer has the row.
+    it('FIX: row archived (race) but caller passes SL/qty → cancels known SL + reduce-only close, no orphan', async () => {
+        // The optimistic _persistClose race archived the row to at_closed (deleted from
+        // at_positions) while this fire-and-forget exchange close was still pending. The
+        // position is STILL OPEN on the exchange. The caller (serverAT _handleLiveExit) now
+        // passes slOrderId + qty in params, so closePosition must fall back to a row-independent
+        // close: cancel the known SL + reduce-only MARKET (reduceOnly = can only close, never open).
         mockDb.prepare(
             `INSERT INTO at_closed (seq, data, user_id, exchange) VALUES (?, ?, 1, 'bybit')`
         ).run(SERVERAT_SEQ, JSON.stringify({ seq: SERVERAT_SEQ, userId: 1, symbol: 'BTCUSDT', side: 'SHORT', qty: '0.054', mode: 'live', exchange: 'bybit' }));
         // (at_positions intentionally has NO row for SERVERAT_SEQ)
 
-        // Characterization of the CURRENT (broken) behavior: closePosition throws ErrNotFound
-        // with the exact production message and never attempts the exchange close. canonicalErrors
-        // throws a non-Error object, so capture + assert on the value (jest .rejects.toThrow only
-        // matches Error instances).
-        let outcome;
-        try {
-            const r = await bybitOps.closePosition(1, { seq: SERVERAT_SEQ, symbol: 'BTCUSDT', side: 'SHORT', qty: '0.054', closeType: 'MARKET', decisionKey: 'cdk_bug', source: 'MANUAL_CLIENT' }, _validCreds);
-            outcome = { kind: 'resolved', value: r };
-        } catch (e) {
-            outcome = { kind: 'threw', message: e && e.message, code: e && e.code };
-        }
-        expect(outcome.kind).toBe('threw');
-        expect(outcome.code).toBe('ErrNotFound');
-        expect(outcome.message).toMatch(/not found for uid=1/);
-        // The smoking gun: NO close order was even attempted → exchange position orphaned.
-        expect(mockSendSignedRequest).not.toHaveBeenCalled();
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { orderId: 'sl_known', orderStatus: 'Cancelled' } }); // SL cancel
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { orderId: 'byclose_fb', orderStatus: 'Filled', cumExecQty: '0.054', avgPrice: '73000' } }); // reduce-only close
+
+        const r = await bybitOps.closePosition(1, {
+            seq: SERVERAT_SEQ, symbol: 'BTCUSDT', side: 'SHORT', qty: '0.054',
+            closeType: 'MARKET', decisionKey: 'cdk_fix', source: 'MANUAL_CLIENT',
+            slOrderId: 'sl_known', // caller-provided (from in-memory pos.live.slOrderId)
+        }, _validCreds);
+
+        expect(r.ok).toBe(true);
+        expect(r.rowMissingFallback).toBe(true);    // took the row-independent path
+        expect(r.orderId).toBe('byclose_fb');        // reduce-only close actually placed
+    });
+
+    it('FIX: row archived + position genuinely gone on exchange (reduce-only rejected) → ok:false, no throw', async () => {
+        mockDb.prepare(
+            `INSERT INTO at_closed (seq, data, user_id, exchange) VALUES (?, ?, 1, 'bybit')`
+        ).run(SERVERAT_SEQ, JSON.stringify({ seq: SERVERAT_SEQ, userId: 1, symbol: 'BTCUSDT', side: 'SHORT', qty: '0.054', mode: 'live', exchange: 'bybit' }));
+        // reduce-only rejected because there is no position left to reduce
+        bybitOps._enqueueSynthetic({ retCode: 110017, retMsg: 'reduce-only no position', result: {} });
+
+        const r = await bybitOps.closePosition(1, {
+            seq: SERVERAT_SEQ, symbol: 'BTCUSDT', side: 'SHORT', qty: '0.054',
+            closeType: 'MARKET', decisionKey: 'cdk_fix2', source: 'MANUAL_CLIENT',
+        }, _validCreds);
+        expect(r.ok).toBe(false);   // genuinely closed already; recon reconciles. No throw.
     });
 });

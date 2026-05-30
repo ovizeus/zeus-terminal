@@ -1954,6 +1954,12 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                         decisionKey: closeDecisionKey,
                         source: exitType,         // audit trail: DSL_PL, MANUAL_CLIENT, RESET, etc.
                         exchangeOverride: pos.exchange,  // [P2b] close on the position's OWN exchange
+                        // [P2 close-desync fix 2026-05-30] Pass the known protective order ids from
+                        // the in-memory pos so the ops layer can cancel SL/TP + reduce-only close even
+                        // when the at_positions row was already optimistically archived (the
+                        // _persistClose race below removes it before this fire-and-forget close runs).
+                        slOrderId: pos.live && pos.live.slOrderId,
+                        tpOrderId: pos.live && pos.live.tpOrderId,
                     });
                     if (closeResult && closeResult.ok) break; // success
                     // ok:false (e.g. lock timeout, close rejected) — treat as retriable error

@@ -277,9 +277,15 @@ describe('binanceOps.closePosition', () => {
         expect(pos.status).toBe('OPEN');
     });
 
-    it('position not found → throws ErrNotFound', async () => {
-        await expect(binanceOps.closePosition(1, _validCloseParams({ seq: 99999 }), _validCreds))
-            .rejects.toMatchObject({ code: 'ErrNotFound' });
+    it('row missing (archived by close race) → reduce-only fallback close, no throw [P2 fix]', async () => {
+        // [P2 close-desync fix 2026-05-30] A missing at_positions row no longer throws
+        // ErrNotFound + orphans the still-open exchange position. It falls back to a
+        // row-independent reduce-only MARKET close so the position is always closeable.
+        mockSendSignedRequest.mockReset().mockResolvedValueOnce({ orderId: 'fb_close', avgPrice: '50000', status: 'FILLED' });
+        const r = await binanceOps.closePosition(1, _validCloseParams({ seq: 99999 }), _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.rowMissingFallback).toBe(true);
+        expect(r.orderId).toBe('fb_close');
     });
 
     it('order lock timeout → ErrLockTimeout', async () => {

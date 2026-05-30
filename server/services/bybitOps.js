@@ -248,6 +248,56 @@ async function placeEntry(uid, params, creds) {
     }
 }
 
+// [P2 close-desync fix] Row-independent close used when the at_positions row was already
+// archived (optimistic _persistClose race) but the position may still be OPEN on the exchange.
+// Cancels caller-provided protective orders (best-effort) then sends a reduce-only MARKET close.
+// reduceOnly guarantees we can only close/shrink, never open exposure. Returns the same shape as
+// closePosition's success/failure paths; never throws on a missing local row.
+async function _closeWithoutLocalRow(uid, params, creds) {
+    const cancelTasks = [];
+    if (params.slOrderId) {
+        cancelTasks.push(_dispatchRequest('POST', '/v5/order/cancel', { category: 'linear', symbol: params.symbol, orderId: params.slOrderId }, creds).catch(() => {}));
+    }
+    if (params.tpOrderId) {
+        cancelTasks.push(_dispatchRequest('POST', '/v5/order/cancel', { category: 'linear', symbol: params.symbol, orderId: params.tpOrderId }, creds).catch(() => {}));
+    }
+    if (cancelTasks.length > 0) await Promise.all(cancelTasks);
+
+    const closeResp = await _dispatchRequest('POST', '/v5/order/create', {
+        category: 'linear',
+        symbol: params.symbol,
+        side: _oppositeBybitSide(params.side),
+        orderType: params.closeType === 'LIMIT' ? 'Limit' : 'Market',
+        qty: params.qty,
+        reduceOnly: true,
+        positionIdx: 0,
+        orderLinkId: `close_${params.decisionKey}`.slice(0, 36),
+        ...(params.closeType === 'LIMIT' ? { timeInForce: 'GTC', price: params.closePrice } : {}),
+    }, creds);
+
+    if (!_isOk(closeResp)) {
+        const err = bybitSigner.parseBybitError(closeResp) || canonicalErrors.create('ErrUnknown', 'close rejected (no local row)');
+        try {
+            positionEvents.append({
+                position_seq: params.seq, user_id: uid, exchange: 'bybit',
+                event_type: 'CLOSE_ROW_MISSING_REJECTED',
+                payload: { source: params.source, reason: 'reduce-only rejected — position likely already closed', err: { code: err.code, message: err.message } },
+            });
+        } catch (_) {}
+        return { ok: false, error: err, seq: params.seq, rowMissingFallback: true };
+    }
+
+    const result = closeResp.result || {};
+    try {
+        positionEvents.append({
+            position_seq: params.seq, user_id: uid, exchange: 'bybit',
+            event_type: 'CLOSED_ROW_MISSING_FALLBACK',
+            payload: { source: params.source, orderId: result.orderId, reason: 'local row archived before exchange close (race) — closed via reduce-only fallback' },
+        });
+    } catch (_) {}
+    return { ok: true, orderId: result.orderId, rawExchange: 'bybit', seq: params.seq, ts: Date.now(), rowMissingFallback: true };
+}
+
 async function closePosition(uid, params, creds) {
     const lockKey = `${uid}|${params.symbol}`;
     const lockAcquired = await orderLock.acquire(lockKey, LOCK_TIMEOUT_MS);
@@ -257,7 +307,16 @@ async function closePosition(uid, params, creds) {
 
     try {
         const row = db.prepare('SELECT seq, data, status FROM at_positions WHERE seq=? AND user_id=?').get(params.seq, uid);
-        if (!row) throw canonicalErrors.create('ErrNotFound', `position seq=${params.seq} not found for uid=${uid}`);
+        if (!row) {
+            // [P2 close-desync fix 2026-05-30] The at_positions row may have been optimistically
+            // archived (DELETE) by serverAT._closePosition's synchronous _persistClose while THIS
+            // fire-and-forget exchange close was still pending — a race that previously threw
+            // "not found" and orphaned the still-open exchange position. Fall back to a
+            // row-independent close: cancel the caller-provided SL/TP + reduce-only MARKET.
+            // reduceOnly can only shrink/close, never open exposure → safe even if the position
+            // is already gone (exchange rejects → ok:false, recon reconciles). NO throw.
+            return await _closeWithoutLocalRow(uid, params, creds);
+        }
 
         if (row.status === 'CLOSED') {
             positionEvents.append({
