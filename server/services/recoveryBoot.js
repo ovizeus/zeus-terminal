@@ -303,7 +303,8 @@ async function _reconcileUser(uid, exchange) {
 
         // 3c.2 Auto-SL placement. Returns true if it left the position UNPROTECTED
         // (auto-SL failed → armed globalHalt) — propagate so the caller keeps the halt.
-        if (await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos)) haltArmed = true;
+        const _slRes = await _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos);
+        if (_slRes.haltArmed) haltArmed = true;
     }
 
     // [Task M 2026-05-28] Sweep orphan Zeus SL/TP orders. Runs BEFORE global
@@ -386,7 +387,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
                 symbol, side, qty: exchPos.qty, markPrice: exchPos.markPrice, entryPrice: exchPos.entryPrice, exchange,
             }));
         } catch (_) {}
-        return false; // [HALT-FIX] invalid data → no halt armed (Task E behavior preserved)
+        return { haltArmed: false, slOrderId: null, invalid: true }; // [HALT-FIX] invalid data → no halt armed (Task E behavior preserved); [P-A] no SL id
     }
 
     // Attempt 1: place SL at current mark ± 2%
@@ -430,7 +431,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
                 + (retried ? '_Initial SL would have triggered immediately — retried after markPrice refetch._\n' : '')
                 + '_Position opened on exchange but missing from Zeus DB — manual review recommended._');
         } catch (_) {}
-        return false; // [HALT-FIX] SL placed → protected, no halt
+        return { haltArmed: false, slOrderId: result.slOrderId }; // [HALT-FIX] SL placed → protected, no halt; [P-A] return SL id for adoption row
     }
 
     // FAIL path — UNPROTECTED. Halt + critical alert.
@@ -459,7 +460,7 @@ async function _handleExchangeOnlyPosition(uid, exchange, symbol, exchPos) {
             + 'Error: ' + result.error
             + (retried ? '\n_Retried after markPrice refetch but rejection persisted._' : ''));
     } catch (_) {}
-    return true; // [HALT-FIX] auto-SL failed → halt ARMED; caller must NOT disarm this user
+    return { haltArmed: true, slOrderId: null }; // [HALT-FIX] auto-SL failed → halt ARMED; caller must NOT disarm this user; [P-A] no SL id (unprotected)
 }
 
 module.exports = { run, _reconcileUser, _handleExchangeOnlyPosition };
