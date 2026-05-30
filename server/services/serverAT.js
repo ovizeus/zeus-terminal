@@ -5367,7 +5367,8 @@ function _resetAdoptionState() { _adoptionDebounceCache.clear(); _activeReconLoc
 
 // [P-A] The 8 defensive layers around adoption. fetchHeld() → exchange positions;
 // slPlacer(pos) → { ok, slOrderId } protective-SL placer (exchange-aware, injected).
-async function _reconcileAndAdopt(userId, exchange, env, fetchHeld, slPlacer) {
+async function _reconcileAndAdopt(userId, exchange, env, fetchHeld, slPlacer, opts) {
+    const skipDoubleRead = !!(opts && opts.skipDoubleRead); // boot path = trusted, adopt immediately (no 60s SL gap)
     const key = `${userId}:${exchange}:${env}`;
     if (_activeReconLocks.has(key)) { logger.warn('AT_ADOPT', `recon busy ${key} — skip`); return; }              // L8 mutex
     const halt = db.atGetState && db.atGetState('global:halt');
@@ -5385,7 +5386,7 @@ async function _reconcileAndAdopt(userId, exchange, env, fetchHeld, slPlacer) {
         const external = valid.filter(ep => !_positions.some(tp => tp.userId === userId && tp.symbol === ep.symbol && tp.side === ep.side && tp.mode === 'live'));
         if (external.length === 0) { _adoptionDebounceCache.delete(key); return; }
         const snap = JSON.stringify(external.map(p => `${p.symbol}:${p.side}:${p.qty}`));                          // L1 double-read
-        if (_adoptionDebounceCache.get(key) !== snap) { _adoptionDebounceCache.set(key, snap); logger.info('AT_ADOPT', `first sighting ${key} — await confirm`); return; }
+        if (!skipDoubleRead && _adoptionDebounceCache.get(key) !== snap) { _adoptionDebounceCache.set(key, snap); logger.info('AT_ADOPT', `first sighting ${key} — await confirm`); return; }
         if (external.length > ADOPT_MAX_EXTERNAL) {                                                                // L6 circuit-breaker
             try { setGlobalHalt(true, userId, `MASS_EXTERNAL ${external.length} on ${exchange}/${env}`); } catch (_) {}
             try { if (telegram.alertCritical) telegram.alertCritical(`🚨 MASS-EXTERNAL on ${exchange} ${env}: ${external.length} untracked positions. Halt armed, adoption blocked.`); } catch (_) {}

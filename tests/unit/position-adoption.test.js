@@ -114,6 +114,12 @@ describe('[P-A] _reconcileAndAdopt layers', () => {
     expect(_atState['global:halt'] && _atState['global:halt'].active).toBe(true);
   });
 
+  it('skipDoubleRead (boot): adopts on the first call (immediate SL+row, no 60s gap)', async () => {
+    const arr = [{ symbol: 'INJUSDT', side: 'SHORT', qty: '3', entryPrice: '25', markPrice: '25' }];
+    await serverAT._reconcileAndAdopt(34, 'bybit', 'TESTNET', held(arr), slOk, { skipDoubleRead: true });
+    expect(serverAT.getLivePositions(34).some(p => p.symbol === 'INJUSDT')).toBe(true);
+  });
+
   it('write-freeze: globalHalt armed → skip', async () => {
     _atState['global:halt'] = { active: true, by: 1 };
     const arr = [{ symbol: 'SUIUSDT', side: 'LONG', qty: '1', entryPrice: '1', markPrice: '1' }];
