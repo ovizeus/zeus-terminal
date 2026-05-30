@@ -63,3 +63,37 @@ Then `getDemoPositions` (`mode!=='live'`) excludes testnet, `getLivePositions` i
 
 ## Money-path risk summary
 Adoption creates tracked positions from exchange state + places SL. Mitigated by: still-open re-check, idempotency, userId isolation, `source:'external'` marking, DSL-off, fail-closed on read errors, and preserving the existing SL-fail→halt guard. No new execution path (no orders placed except the protective SL that already exists today).
+
+---
+
+# v2 — Hardening layers (operator + review) + technical corrections to real codebase
+
+Operator + secondary review added defensive layers; this section integrates ALL of them and corrects the proposed pseudocode against the **real** Zeus codebase (verified live). Architecture of the 8 layers is accepted in full; the implementation specifics below override the pseudocode where it diverged.
+
+## The 8 defensive layers (final, mandatory)
+1. **Double-read confirmation (debounce).** An external position must appear in **2 consecutive recon reads** (snapshot match in a volatile `adoptionDebounceCache` keyed `userId:exchange:env`) before adoption OR before tripping the mass circuit-breaker. Kills false-positives from a single API glitch (e.g. the Binance 418 we hit). First detection caches + waits for the next poll.
+2. **Telegram notify on EVERY adoption** (not only mass) — `telegram.sendToUser(uid, …)` with symbol/side/qty/SL-status. Full transparency on the operator's account.
+3. **Respect `globalHalt` — write-freeze.** If `globalHalt` is armed, adoption is **blocked** (log + skip). System is in manual-intervention state; never auto-write.
+4. **DB-level idempotency backstop.** In-memory check first (does `_positions` already hold this `user/symbol/side/mode` OPEN?); the partial UNIQUE index `idx_at_pos_user_sym_side_mode_open` is the final backstop — a duplicate INSERT throws `SQLITE_CONSTRAINT` → caught + treated as already-adopted. Survives restart-mid-adoption.
+5. **Sanity-reject (not just sanitize).** Reject the position BEFORE opening the txn if `qty<=0 / NaN`, `entryPrice<=0 / NaN`, or missing `symbol/side`. Circuit-breaker catches the COUNT; this catches per-position GARBAGE.
+6. **Mass-adoption circuit breaker.** If confirmed external positions for `(user, exchange)` exceed a configurable threshold (default **3**) → **block adoption**, `setGlobalHalt(true, uid, reason)`, `telegram.alertCritical`. Manual review beats auto-adopting a mass-polluted account.
+7. **"Adopted but unprotected" watchdog.** If a protective SL could not be placed (and we didn't halt), register with `_watchdogLiveNoSL` → continuous alert until protected or closed.
+8. **Concurrency mutex (per `userId:exchange:env`).** A shared in-memory lock both `recoveryBoot` AND `_runReconciliation` respect (bail-out if held; release in `finally`). Complements the existing global `_reconRunning` guard (which covers only `_runReconciliation`, NOT `recoveryBoot`) — prevents boot + periodic recon racing the same account.
+
+## Technical corrections vs the proposed pseudocode (verified against live code)
+- **C1 (critical): adoption must mutate in-memory `_positions`, not only the DB.** `getLivePositions` (serverAT.js:3034) reads `_positions` (in-memory). Adoption MUST: `const seq = ++us.seq; const entry = {…}; _positions.push(entry); _persistPosition(entry);` (serverAT.js pattern at 1198/1257, 3887/3952). It therefore lives **inside serverAT** (e.g. `serverAT.adoptExternalPosition(uid, exchange, pos)`), called by `recoveryBoot` + `_runReconciliation`. A detached DB-only INSERT would NOT fix the display (the exact bug).
+- **C2 (critical): better-sqlite3 transactions are SYNCHRONOUS.** Use `db.transaction(() => { … })()` (pattern: database.js:50/209/223/245), NOT `await db.transaction(async …)`. The async SL exchange call must run **OUTSIDE** the txn.
+- **C3: reuse real persistence.** `_persistPosition(entry)` → `db.atSavePosition(entry)` (`atUpsertPos`, columns `seq,data,status,user_id`) + `_broadcastPositions`. Real column is `user_id`. Position object carries `exchange/env/source` in its JSON.
+- **C4: keep the protective SL (Option 1 = "has auto-SL").** Reuse `_handleExchangeOnlyPosition` (2% adverse SL). **Ordering to avoid the corrupt "row-without-SL" state:** (a) if the exchange position already has an SL → adopt with its `slOrderId`; else place the protective SL (async) → get `slOrderId`; (b) atomic sync txn: `_positions.push` + `_persistPosition` with `slOrderId`. If SL placement fails → `setGlobalHalt` + `alertCritical`, do NOT insert (position stays on exchange, halted + alerted, operator intervenes). If the txn then hits the UNIQUE backstop → the placed SL is harmless (protective) and next recon is idempotent.
+- **C5: wire to real services** — `setGlobalHalt(active, byUserId, reason)` (serverAT.js:328), `telegram.sendToUser`/`alertCritical`, `_watchdogLiveNoSL`, `exchangeOps.getPositions(uid,{exchangeOverride:exchange})`.
+- **C6: the layer-8 mutex is retained** as above (coordinates boot + periodic; finer than `_reconRunning`).
+
+## Un-adopt (manual reversal) — confirmed
+A clean exit for a wrong adoption: mark the row CLOSED in the DB with `externalSync:false`, **no destructive exchange call** (the operator manages the exchange side). Exposed as an operator action.
+
+## Pre-Code Protocol (applied — final)
+1. **Requirements:** all 8 layers + concurrency mutex mapped; Option-1 (manual mgmt, DSL/trailing OFF, autoTrade:0); exchange = source of truth, DB = persistence registry.
+2. **Security:** strict numeric/string validation pre-insert; **parameterized prepared statements only** (existing `atUpsertPos`); adoption bound to the credential-owner `userId`; un-adopt is local-only (no exchange writes).
+3. **Impact:** extends `recoveryBoot.js` + a new `serverAT.adoptExternalPosition`; **0 breaking changes** (at_positions schema unchanged; `source:'external'`/`externalSync` stored in the flexible `data` JSON; native flows ignore `external` rows for autonomous decisions).
+4. **Edge cases:** API glitch → double-read evicts unconfirmed snapshot, no DB change; garbage data → sanity-reject before txn; position closed mid-recon → qty>0 re-check aborts; restart mid-adoption → ACID txn + UNIQUE backstop; SL-fail → halt + watchdog.
+5. **Pseudocode → real:** see C1–C6 (adoption inside serverAT, sync txn, real helpers, SL-then-insert ordering).
