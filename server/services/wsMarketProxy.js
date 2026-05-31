@@ -437,7 +437,27 @@ async function _pollWatchlistREST() {
     }
 }
 
+// [LAG-FIX 2026-05-31] The proxy's per-symbol upstream is Binance fstream, which Hetzner
+// BLOCKS (frames=0) → no live prices to relay → the client's WS_PROXY price path is frozen
+// until an HTTP refresh. Bridge the server's FRESH marketFeed prices (fed by the 3s REST
+// ticker poller) onto /ws/sync as market.price so the client stays live without fstream.
+let _priceBridgeWired = false;
+function _wirePriceBridge() {
+    if (_priceBridgeWired) return;
+    try {
+        const marketFeed = require('./marketFeed');
+        marketFeed.on('price', (d) => {
+            if (d && d.symbol && Number.isFinite(d.price) && d.price > 0) {
+                try { _broadcast(d.symbol, { type: 'market.price', symbol: d.symbol, price: d.price, ts: Date.now() }); } catch (_) {}
+            }
+        });
+        _priceBridgeWired = true;
+        try { require('./logger').info('WS_PROXY', 'Price bridge wired: marketFeed price → /ws/sync market.price (fstream-independent)'); } catch (_) {}
+    } catch (_) { /* marketFeed not ready — retry on next start */ }
+}
+
 function startWatchlistREST() {
+    _wirePriceBridge();
     if (_wlPollTimer) return;
     try { require('./logger').info('WS_PROXY', `Watchlist REST poller started — 10s for ${WATCHLIST_SYMBOLS.join(',')}`); } catch (_) {}
     _pollWatchlistREST().then(() => {
