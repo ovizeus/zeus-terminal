@@ -8,7 +8,6 @@ const router = express.Router();
 const config = require('../config');
 const { sendSignedRequest } = require('../services/binanceSigner');
 const exchangeOps = require('../services/exchangeOps');
-const { withTimeout } = require('../utils/promiseTimeout');
 const decisionKeyService = require('../services/decisionKey');
 const { validateOrder, recordClosedPnL } = require('../services/riskGuard');
 const { roundOrderParams } = require('../services/exchangeInfo');
@@ -524,13 +523,7 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
         let _protection = { slOrderId: null, tpOrderId: null, status: 'LIVE_NO_SL' };
         if (_sl && _sl > 0 && req.body.mode !== 'demo') {
           try {
-            // [BUG-MULTI 2026-05-31] Bound the protection step with a timeout. A stalled
-            // real-SL placement (observed on the 2nd rapid position) must NOT block the
-            // registration below — else the filled exchange position becomes an untracked
-            // orphan. On timeout this rejects → caught here → registration proceeds as
-            // LIVE_NO_SL (the 15% OTM safety SL placed inside protection is the backstop;
-            // the watchdog repairs the real SL).
-            _protection = await withTimeout(_getServerAT()._placeProtectionForExistingEntry({
+            _protection = await _getServerAT()._placeProtectionForExistingEntry({
               userId: req.user.id,
               symbol, side,
               sl: _sl, tp: _tp,
@@ -539,7 +532,7 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
               dslParams: req.body.dslParams,
               leverage: parseInt(leverage, 10) || 1,
               seq: data.orderId,
-            }, req.exchangeCreds), 12000, 'PB_PROTECTION_TIMEOUT');
+            }, req.exchangeCreds);
           } catch (protErr) {
             logger.error('ORDER', `Path B protection failed: ${protErr.message}`, { symbol, side, orderId: data.orderId });
             audit.record('PB_PROTECTION_FAILED', { userId: req.user.id, symbol, side, orderId: data.orderId, error: protErr.message }, 'PATH_B', req.ip);
