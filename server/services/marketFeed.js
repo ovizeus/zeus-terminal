@@ -46,6 +46,18 @@ let _timeframes = [];   // active timeframes ['5m', '1h', '4h']
 // bookTicker/trade streams take over price + aggTrade emission.
 const ALT_KLINE_POLL_MS = 30000;    // 30s — gateway rateLimiter + circuitBreaker protect against ban. Fresh klines every 30s.
 const _altKlinePollers = {};        // { 'BTCUSDT|5m': { timer, lastOpenTs } }
+// [LAG-FIX 2026-05-31] When ALT_WS_FEEDS is ON the live-price bookTicker WS is on the
+// Hetzner-blocked fstream → price only refreshed at the 30s kline poll → "data lag → staled".
+// A lightweight REST ticker poll (weight 1) keeps price fresh without the blocked WS.
+const ALT_PRICE_POLL_MS = 3000;     // 3s — fast price freshness (fapi REST is not blocked)
+const _altPricePollers = {};        // { 'BTCUSDT': { timer } }
+
+// Pure parse of a /fapi/v1/ticker/price response → finite positive number, else null.
+function _parseTickerPrice(json) {
+    if (!json) return null;
+    const p = parseFloat(json.price);
+    return (Number.isFinite(p) && p > 0) ? p : null;
+}
 
 // [BIN-TELEM Phase B 2026-05-19] Ref-counting for symbol subscriptions.
 // Each symbol holds a Set of refKeys. refKey = "userId|env|posSeq" for
@@ -212,6 +224,11 @@ function _unsubscribeSymbolReal(symbol) {
             if (state && state.timer) clearInterval(state.timer);
             delete _altKlinePollers[key];
         }
+    }
+    // [LAG-FIX] Stop the ALT price poller for this symbol
+    if (_altPricePollers[sym]) {
+        if (_altPricePollers[sym].timer) clearInterval(_altPricePollers[sym].timer);
+        delete _altPricePollers[sym];
     }
     _activeSymbols.delete(sym);
     _symbolRefs.delete(sym);
@@ -487,6 +504,28 @@ async function _altFetchKlinesLatest(symbol, interval, limit) {
     }));
 }
 
+// [LAG-FIX 2026-05-31] Fast REST price poller — one per symbol. Polls the lightweight
+// /fapi/v1/ticker/price (weight 1) every ALT_PRICE_POLL_MS and emits 'price' on the same
+// path the (blocked) bookTicker WS would, keeping price fresh (<3s) under ALT_WS_FEEDS.
+function _altStartPricePoller(symUpper) {
+    if (_altPricePollers[symUpper]) return;
+    const state = { timer: null };
+    _altPricePollers[symUpper] = state;
+    const tick = async () => {
+        try {
+            const url = `${BINANCE_REST}/fapi/v1/ticker/price?symbol=${encodeURIComponent(symUpper)}`;
+            const res = await _telemFetch(url, { signal: AbortSignal.timeout(6000), __src: 'marketFeed:altPrice', __weight: 1 });
+            if (!res.ok) return; // quiet — next tick retries
+            const price = _parseTickerPrice(await res.json());
+            if (price != null) _emit('price', { symbol: symUpper, price });
+        } catch (_) { /* quiet failure — next tick retries */ }
+    };
+    let _firstFireDelay = 700;
+    try { _firstFireDelay = bootJitter(`marketFeed.altPrice.${symUpper}`); } catch (_) {}
+    setTimeout(tick, _firstFireDelay);
+    state.timer = setInterval(tick, ALT_PRICE_POLL_MS);
+}
+
 function _altStartKlinePoller(symUpper, tf) {
     const key = `${symUpper}|${tf}`;
     if (_altKlinePollers[key]) return;
@@ -599,6 +638,10 @@ async function subscribe(symbol, timeframes) {
         for (const tf of _timeframes) {
             _altStartKlinePoller(symUpper, tf);
         }
+
+        // 3b) [LAG-FIX] Fast REST price poller — one per symbol. The bookTicker WS below
+        // is on the Hetzner-blocked fstream; without this, price only refreshed every 30s.
+        _altStartPricePoller(symUpper);
 
         // 4a) bookTicker stream → mid price emit (via combined WS)
         _addToCombinedStream(`${symLower}@bookTicker`, (data) => {
@@ -780,6 +823,7 @@ function getPollerStats() {
 }
 
 module.exports = {
+    _parseTickerPrice, // [LAG-FIX 2026-05-31] exposed for unit test
     subscribe,
     subscribeMulti,    // [MULTI-SYM]
     subscribeMultiWithBootRef,  // [BIN-TELEM Phase B 2026-05-19]
