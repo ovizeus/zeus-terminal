@@ -1531,60 +1531,70 @@ function _runShadowCycle() {
     if (!MF.PARITY_SHADOW_ENABLED || _shouldRunMainCycle()) return;
     _shadowRunning = true;
     try {
-        const readySymbols = serverState.getReadySymbols();
-        if (!readySymbols || readySymbols.length === 0) return;
-        if (_stcMap.size === 0) return;
-
-        for (const symbol of readySymbols) {
-            const snap = serverState.getSnapshotForSymbol(symbol);
-            if (!snap || !snap.indicators) continue;
-            if (snap.stale || (Date.now() - snap.priceTs) > STALE_DATA_MS) continue;
-
-            const ind = snap.indicators;
-            let confluence, regime, bars;
-            try {
-                // [Phase 2 S3.1c] Use client-mirror confluence for shadow rows
-                // so parity agreement is computed on matching formula +
-                // matching indicator set (RSI/ST/LS/FR/OI, not MACD).
-                confluence = _calcConfluenceParity(snap, ind);
-                regime = {
-                    regime: ind.regime || 'RANGE',
-                    confidence: ind.regimeConf || 0,
-                    trendBias: ind.trendBias || 'neutral',
-                    volatilityState: ind.volatilityState || 'normal',
-                    trapRisk: ind.trapRisk || 0,
-                };
-                bars = serverState.getBarsForSymbol(symbol);
-            } catch (_e) { continue; }
-
-            for (const [userId, stc] of _stcMap) {
-                if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
-                try {
-                    // [Phase 2 S3.1e] Shadow-pure fusion — mirrors client
-                    // computeFusionDecision exactly, with NO per-user
-                    // modifiers and NO gates. Live _computeFusion stays
-                    // untouched (still drives SERVER_BRAIN live path when
-                    // that flag is on). This removes the journal/KNN/
-                    // session/drawdown modifier-induced divergence that
-                    // was producing 25/27 BTCUSDT mismatches on the admin
-                    // user during S3.1 re-soak.
-                    const fusion = _computeFusionParity(snap, ind, confluence, regime, bars);
-                    if (!fusion) continue;
-                    db.logParityRow(userId, symbol, 'server', {
-                        dir: fusion.dir,
-                        decision: fusion.decision,
-                        confidence: fusion.confidence,
-                        score: fusion.score,
-                        reasons: fusion.reasons,
-                    }, _cycleCount);
-                } catch (_userErr) { /* per-user shadow failure is non-fatal */ }
-            }
-        }
+        _runShadowForUsers(null); // null filter = all users in _stcMap
     } catch (err) {
         // Top-level guard: log once per N minutes if needed, but never throw.
         logger.warn('BRAIN', '[S3] Shadow cycle error: ' + (err && err.message));
     } finally {
         _shadowRunning = false;
+    }
+}
+
+// [SP1] Shared shadow body — extracted verbatim from the old _runShadowCycle
+// loop so the testnet shadow (_runTestnetShadowCycle) uses the IDENTICAL
+// formula path (DRY: no drift between the two shadows). includeUserFn:
+// (userId) => boolean, or null to include all _stcMap users. Writes
+// source='server' parity rows ONLY — no execution / telegram / persist.
+function _runShadowForUsers(includeUserFn) {
+    const readySymbols = serverState.getReadySymbols();
+    if (!readySymbols || readySymbols.length === 0) return;
+    if (_stcMap.size === 0) return;
+
+    for (const symbol of readySymbols) {
+        const snap = serverState.getSnapshotForSymbol(symbol);
+        if (!snap || !snap.indicators) continue;
+        if (snap.stale || (Date.now() - snap.priceTs) > STALE_DATA_MS) continue;
+
+        const ind = snap.indicators;
+        let confluence, regime, bars;
+        try {
+            // [Phase 2 S3.1c] Use client-mirror confluence for shadow rows
+            // so parity agreement is computed on matching formula +
+            // matching indicator set (RSI/ST/LS/FR/OI, not MACD).
+            confluence = _calcConfluenceParity(snap, ind);
+            regime = {
+                regime: ind.regime || 'RANGE',
+                confidence: ind.regimeConf || 0,
+                trendBias: ind.trendBias || 'neutral',
+                volatilityState: ind.volatilityState || 'normal',
+                trapRisk: ind.trapRisk || 0,
+            };
+            bars = serverState.getBarsForSymbol(symbol);
+        } catch (_e) { continue; }
+
+        for (const [userId, stc] of _stcMap) {
+            if (includeUserFn && !includeUserFn(userId)) continue;
+            if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
+            try {
+                // [Phase 2 S3.1e] Shadow-pure fusion — mirrors client
+                // computeFusionDecision exactly, with NO per-user
+                // modifiers and NO gates. Live _computeFusion stays
+                // untouched (still drives SERVER_BRAIN live path when
+                // that flag is on). This removes the journal/KNN/
+                // session/drawdown modifier-induced divergence that
+                // was producing 25/27 BTCUSDT mismatches on the admin
+                // user during S3.1 re-soak.
+                const fusion = _computeFusionParity(snap, ind, confluence, regime, bars);
+                if (!fusion) continue;
+                db.logParityRow(userId, symbol, 'server', {
+                    dir: fusion.dir,
+                    decision: fusion.decision,
+                    confidence: fusion.confidence,
+                    score: fusion.score,
+                    reasons: fusion.reasons,
+                }, _cycleCount);
+            } catch (_userErr) { /* per-user shadow failure is non-fatal */ }
+        }
     }
 }
 
@@ -2413,5 +2423,7 @@ module.exports = {
     // because the test hooks seed _stcMap / override main-cycle state.
     __sp1: {
         isTestnetShadowTarget: _isTestnetShadowTarget,
+        runShadowForUsers: _runShadowForUsers,
+        setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },
     },
 };
