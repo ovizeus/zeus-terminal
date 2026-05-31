@@ -463,7 +463,17 @@ async function getPositions(uid, params, creds) {
     if (params && params.symbol) query.symbol = params.symbol;
     else query.settleCoin = 'USDT';
     const resp = await _dispatchRequest('GET', '/v5/position/list', query, creds);
-    if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list)) return [];
+    // [SYNC-5 2026-05-30] Do NOT swallow an errored/failed poll into []. Returning []
+    // on a non-ok response made recon read an empty held-map and FALSE-phantom-close real
+    // Bybit positions (→ orphans → AT SUSPENDED). On error/malformed THROW so callers
+    // (all already try/catch — recon → continue, no phantom) defer instead of closing.
+    // Only a genuine ok+empty list returns [] (real "no positions", phantom allowed).
+    if (!_isOk(resp)) {
+        throw canonicalErrors.create('ErrExchangeQuery', `bybit getPositions failed: retCode=${resp && resp.retCode} ${(resp && resp.retMsg) || ''}`.trim());
+    }
+    if (!resp.result || !Array.isArray(resp.result.list)) {
+        throw canonicalErrors.create('ErrExchangeQuery', 'bybit getPositions: malformed response (no result.list)');
+    }
     return resp.result.list
         .filter(p => Math.abs(Number(p.size || 0)) > 0)
         .map(p => ({

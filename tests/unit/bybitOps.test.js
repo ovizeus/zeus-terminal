@@ -206,6 +206,32 @@ describe('bybitOps.getPositions', () => {
         expect(call.params.symbol).toBe('BTCUSDT');
         expect(call.params.settleCoin).toBeUndefined();
     });
+
+    // [SYNC-5 2026-05-30] An ERRORED poll must NOT masquerade as "zero positions".
+    // Returning [] on a non-ok response made recon see an empty held-map and
+    // FALSE-phantom-close real Bybit positions (→ orphans → AT SUSPENDED). On error
+    // getPositions must THROW so callers (recon) defer instead of closing.
+    it('[SYNC-5] throws on a non-ok response (retCode != 0) — does NOT return []', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 10001, retMsg: 'query error', result: {} });
+        let threw = false; let result;
+        try { result = await bybitOps.getPositions(1, {}, _validCreds); }
+        catch (_) { threw = true; }
+        expect(threw).toBe(true);
+        expect(result).toBeUndefined();
+    });
+
+    it('[SYNC-5] throws on a malformed ok response (no result.list)', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: {} });
+        let threw = false;
+        try { await bybitOps.getPositions(1, {}, _validCreds); } catch (_) { threw = true; }
+        expect(threw).toBe(true);
+    });
+
+    it('[SYNC-5] genuine empty (ok + empty list) still returns [] (valid no-positions, phantom allowed)', async () => {
+        bybitOps._enqueueSynthetic({ retCode: 0, result: { list: [] } });
+        const r = await bybitOps.getPositions(1, {}, _validCreds);
+        expect(r).toEqual([]);
+    });
 });
 
 describe('bybitOps.getBalance', () => {
