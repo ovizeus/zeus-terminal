@@ -1,7 +1,7 @@
 # SP1 — Server Shadow for Testnet (uid=1) — Design Spec
 
 **Date:** 2026-05-31 · **Sub-project:** SP1 of the server-side AT execution migration (P-B).
-**Status:** design approved (operator + Termius validation of mobile-Claude review). Awaiting spec review → writing-plans.
+**Status:** design approved (operator + Termius validation of mobile-Claude review). **Scope locked 2026-05-31 (Option A):** SP1 proves **direction parity** (`brain_parity_log`, exists today) + **replay equivalence** (the strong proof of fusion identity). Full-decision **sizing** parity (entry/qty/SL/TP) is deferred to **SP1.5** — see code-grounded rationale in Unit 2. Writing-plans next.
 
 ## Goal
 
@@ -22,25 +22,27 @@ For uid=1 (testnet, `engineMode='live'`, Bybit demo creds):
 A **dedicated testnet-shadow** that computes uid=1's decisions and logs them, **coexisting** with the demo main cycle (it is NOT suppressed for testnet users). Reuses the existing shadow-pure fusion (`_computeFusionParity`, which by construction mirrors the client's `computeFusionDecision` — but that mirroring is **proven by Unit 4, not assumed**).
 
 For each ready symbol × each testnet user in `_stcMap`:
-- Compute the **full shadow decision**: direction (`LONG`/`SHORT`/`NO_TRADE`), confidence, score, **and the execution params the AT would derive** — entry zone, qty/size, SL, TP (mirroring the client AT/DSL sizing + SL logic).
-- Write a `source='server'` row to `brain_parity_log` for the direction decision, and the execution params to `dsl_parity_log` (or an extended shadow record — see Unit 2).
+- Compute the shadow **direction decision** via `_computeFusionParity` (the existing shadow-pure fusion): direction (`LONG`/`SHORT`/`NO_TRADE`), decision tier, confidence, score, reasons.
+- Write a `source='server'` row to `brain_parity_log` via `db.logParityRow(userId, symbol, 'server', fusion, cycle)`.
 - **Hard no-side-effects** (same guarantee as `_runShadowCycle`, serverBrain.js:1506-1510): never call `serverAT.processBrainDecision`, never send Telegram, never persist regime, never size/execute, never re-enter. Wrapped so a shadow failure never contaminates the runtime.
 
-**Isolation:** a distinct path/timer for testnet shadow — NOT a global "un-suppress" of `_runShadowCycle` (which would risk double-processing the demo main cycle). One clear responsibility: produce comparable testnet shadow rows.
+**Isolation:** a distinct path for testnet shadow — NOT a global "un-suppress" of `_runShadowCycle` (which would risk double-processing the demo main cycle). The constraint: today `start()` is XOR — if `_shouldRunMainCycle()` is true (it is, `SERVER_BRAIN_DEMO=true`), the shadow branch never starts, so uid=1 gets zero server rows. SP1 adds a path that runs the testnet shadow **alongside** the demo main cycle, scoped to testnet-authoritative users only, with one clear responsibility: produce comparable testnet shadow rows.
 
-### Unit 2 — Full-decision capture (parity completeness) — [Review adjustment #1]
-Direction-match alone is too weak a gate: the money is in entry/qty/SL/TP. The shadow must capture the **complete decision** so SP2's gate can compare it:
-- **Direction** — `brain_parity_log` (`dir`, `decision`) — already present.
-- **Execution params** — entry zone, qty, SL, TP — `brain_parity_log` lacks these columns; they come from the AT/DSL layer (covered today by `dsl_parity_log`). SP1 captures the server-shadow execution params alongside the direction so the gate spans **both** the brain decision **and** the derived order shape.
+### Unit 2 — Direction-only parity in SP1; sizing parity deferred to SP1.5 — [Review adjustment #1, re-scoped on code 2026-05-31]
+Adjustment #1 asked the gate to span the **full decision** (direction + entry/qty/SL/TP). Verified against the live schema, that is **not implementable in SP1** as a shadow:
+- `brain_parity_log` carries direction only (dir/decision/confidence/score/reasons) — no entry/qty/SL/TP.
+- `dsl_parity_log` is **not** the order-shape-at-decision; it is the **dynamic-stop-loss lifecycle of an already-open position** (phase, current_sl, pivot, impulse, entry_price, tick_price). It has **no qty, no TP, no `cycle`**, is keyed on `pos_id`, and only exists once a position is open. SP1 is shadow — it **opens nothing** server-side → zero server `dsl_parity_log` rows → nothing to compare.
+- The **client** does not log decision-time qty/SL/TP anywhere either. So sizing parity is missing evidence on **both** sides, not just the server.
+
+Therefore SP1's gate is **direction parity** (what exists) **plus** the replay-equivalence proof (Unit 4), which proves the **decision engine** is bit-identical — the highest-value half. The **sizing layer** (entry/qty/SL/TP) gets its own sub-project **SP1.5**: a new decision-time capture table + client emission + server-shadow emission + its own soak. SP2 (cutover) is gated on **both** SP1 (direction + replay) and SP1.5 (sizing) being green. This keeps SP1 honestly shadow-only and avoids bolting sizing data onto a table that structurally cannot hold it.
 
 ### Unit 3 — Parity report (measurement)
-A query/report that, per `(symbol, cycle)` paired server-vs-client rows for uid=1, computes the **full-decision agreement** (all four within tolerance):
-- direction: exact match
-- entry zone: within ±X ticks
-- qty/size: within ±X%
-- SL/TP: within ±X ticks
+Reuse the existing `db.queryParityReport({ userId: 1, since })` (database.js:10950), which pairs each `source='client'` row with the nearest `source='server'` row for the same `(user, symbol)` within a ±15s window and returns `paired`, `unpaired`, `matched`, `mismatched`, `primaryAgreementPct` (PRIMARY track only — coverage rows excluded). SP1 adds a thin gate-evaluation wrapper over this report for uid=1.
 
-Gate condition (SP2 prerequisite): **all four within tolerance on ≥ N% of paired cycles, sustained over M days.** The thresholds (X, N, M) are **fixed in this spec BEFORE the soak starts** — never tuned post-hoc to pass. Proposed defaults to confirm with operator: direction 100% required; entry ±2 ticks; qty ±2%; SL/TP ±2 ticks; **N ≥ 98%**; **M ≥ 3 days** with a minimum paired-sample floor (e.g. ≥ 500 paired cycles) so the % is statistically meaningful.
+Gate condition (SP2 prerequisite), thresholds **fixed in this spec BEFORE the soak starts** — never tuned post-hoc to pass:
+- **direction+tier agreement** `primary.agreementPct ≥ N` — proposed **N ≥ 98%**.
+- **pairing-integrity floor** (review adjustment #2 / operator note): `primary.paired ≥ P` AND `unpaired / (paired + unpaired) ≤ U`. Pairing is **intra-table** (client↔server within `brain_parity_log`, ±15s), and `queryParityReport` **excludes `unpaired` from the agreement denominator** — so without this floor a handful of paired rows could read 100% while most cycles never paired. Proposed **P ≥ 500 paired cycles**, **U ≤ 5%**.
+- **sustained** over **M ≥ 3 days**.
 
 ### Unit 4 — Replay equivalence test (proof, not assumption) — [Review adjustment #2]
 The entire SP1 rests on "server-fusion == client-brain". That is an **assumption** until proven. Before any soak starts:
@@ -59,7 +61,7 @@ The "no-confirm → no-exec" rule applies to the **ambiguous handover window**, 
 
 ## Data flow
 
-`serverState (fresh indicators)` → testnet-shadow path → `_computeFusionParity` + shadow AT-param derivation → write `source='server'` rows (direction + exec params). The client independently writes `source='client'` rows (unchanged). The parity report joins them per `(symbol, cycle)` → full-decision agreement → SP2 gate.
+`serverState (fresh indicators)` → testnet-shadow path → `_computeFusionParity` → `db.logParityRow(userId, symbol, 'server', fusion, cycle)`. The client independently POSTs its decision to `/api/brain/parity/client` → `source='client'` rows (unchanged). `queryParityReport({userId:1})` pairs client↔server within ±15s → direction+tier agreement + pairing-integrity → SP2 gate. (Sizing parity is SP1.5, separate flow.)
 
 ## Error handling / edge cases
 
@@ -71,20 +73,26 @@ The "no-confirm → no-exec" rule applies to the **ambiguous handover window**, 
 
 ## Testing (TDD)
 
-1. Testnet shadow produces `source='server'` rows for uid=1 with direction == `_computeFusionParity` output.
-2. The shadow captures the full decision (direction + entry/qty/SL/TP), not just direction.
-3. **Zero side-effects**: assert the shadow path never calls `processBrainDecision` / telegram / persist / size-execute (spies asserted not-called).
-4. Parity report computes full-decision agreement correctly (all-four-within-tolerance on a fixture).
-5. Replay equivalence test (Unit 4): server-fusion == client-brain on N historical cycles, decision bit-identical.
-6. Demo main cycle unaffected (uid=2 path unchanged).
+1. Testnet shadow produces `source='server'` rows for uid=1 with direction/decision == `_computeFusionParity` output.
+2. **Zero side-effects**: assert the shadow path never calls `processBrainDecision` / telegram / persist-regime / size-execute (spies asserted not-called).
+3. **Pairing integrity** (operator note #2, reshaped): on a fixture of client+server rows, the gate-evaluation wrapper reports `paired`/`unpaired` correctly and **fails the gate when `paired < P` or unpaired-ratio > U even if agreementPct is 100%** (the false-high guard).
+4. Replay equivalence test (Unit 4): server-fusion == client-brain on N historical cycles, decision bit-identical (confidence/score within threshold-safe epsilon).
+5. Demo main cycle unaffected (uid=2 path unchanged) — the testnet shadow only ADDS rows.
+6. Shadow runs for testnet-authoritative users only (uid=1) and is skipped for non-testnet users.
 
-## Out of scope (SP2)
+## Out of scope
 
+**SP1.5 (sizing parity — prerequisite for SP2 alongside SP1):**
+- New decision-time capture table (dir + entry + qty + SL + TP per user×symbol×cycle).
+- **Client emission** of decision-time sizing (the client is the authoritative executor; today it logs direction only).
+- Server-shadow sizing emission + a sizing-agreement report + its own soak.
+
+**SP2 (cutover):**
 - ENG-1 gate fix (`serverAT.js:951` testnet-aware).
 - Server **execution** for uid=1 testnet.
-- The client **lockout mechanism** (heartbeat/ACK) — only its fail-closed *contract* is fixed here.
+- The client **lockout mechanism** (heartbeat) — only its fail-closed *contract* is fixed here (Unit 5). **The heartbeat-timeout value is a critical safety parameter fixed pre-soak like X/N/M — never a code default** (operator note #1): too short → a phone net hiccup reads as "app closed" → server wrongly takes over; too long → a large no-trade gap at real cutover. (No SP1 task — SP1 has no heartbeat — recorded here so SP2 builds it in.)
 - Real-money (`_SRV_POS_REAL_ENABLED`) — a separate, later, more-gated project.
 
 ## Risk summary
 
-SP1 executes nothing → no money-path risk. The only runtime cost is extra shadow CPU + parity-log writes (bounded, like the existing shadow). The value: it converts "the server probably matches the client" into **proven evidence** (replay equivalence + soaked full-decision parity) that gates the risky SP2 cutover.
+SP1 executes nothing → no money-path risk. The only runtime cost is extra shadow CPU + parity-log writes (bounded, like the existing shadow). The value: it converts "the server probably matches the client" into **proven evidence** (replay equivalence proving the fusion engine is bit-identical + soaked direction parity) that — together with SP1.5 sizing parity — gates the risky SP2 cutover.
