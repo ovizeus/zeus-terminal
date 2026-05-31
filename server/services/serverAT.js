@@ -4770,7 +4770,16 @@ async function _runReconciliation(isStartup) {
                         continue;
                     }
                     _phantomCandidates.delete(_pk);
-                    logger.warn(label, `[${pos.seq}] PHANTOM DETECTED uid=${userId}: ${pos.side} ${pos.symbol} not found on Binance — closing locally`);
+                    // [PHANTOM-DIAG 2026-05-31] Capture WHY the held-map missed this position
+                    // so the next phantom reveals the trigger: empty held-map (heldCount=0 → poll
+                    // returned nothing) vs key-mismatch (position present under a different key) vs
+                    // genuinely-closed (heldCount>0, key absent). exchange = the exchange actually
+                    // polled for this group (NOT necessarily Binance, despite legacy var/log names).
+                    try {
+                        const _heldKeys = Array.from(binanceHeld.keys());
+                        logger.warn(label, `[${pos.seq}] PHANTOM-DIAG uid=${userId} ${pos.side} ${pos.symbol} polledExchange=${exchange} lookupKey=${pos.symbol}_${pos.side} heldCount=${_heldKeys.length} heldKeys=[${_heldKeys.join(',') || '<empty>'}]`);
+                    } catch (_) { /* diag must never break recon */ }
+                    logger.warn(label, `[${pos.seq}] PHANTOM DETECTED uid=${userId}: ${pos.side} ${pos.symbol} not found on ${exchange} — closing locally`);
 
                     // Query userTrades for real fill price (best-effort)
                     let realExitPrice = null;
@@ -4793,7 +4802,7 @@ async function _runReconciliation(isStartup) {
                     }
 
                     telegram.sendToUser(userId,
-                        `🔍 *RECON: Phantom Position Removed*\n${pos.side} ${pos.symbol} seq=${pos.seq}\nPosition not found on Binance — likely closed externally (SL/TP hit, liquidation, or manual close).\nRemoving from server tracker.`
+                        `🔍 *RECON: Phantom Position Removed*\n${pos.side} ${pos.symbol} seq=${pos.seq}\nPosition not found on ${exchange} — likely closed externally (SL/TP hit, liquidation, or manual close).\nRemoving from server tracker.`
                     );
                     const idx = _positions.findIndex(p => p.seq === pos.seq && p.userId === userId);
                     let estimatedClose = false;
