@@ -350,6 +350,18 @@ function _isServerAuthoritativeForUser(userId) {
     return false;
 }
 
+// [SP1] Testnet shadow target: a live-mode user whose execution env is TESTNET.
+// Flag-independent (purely "is this a testnet-live user") — the SP1 testnet
+// shadow runs for these users alongside the demo main cycle, writing parity
+// rows only (never execution). Never throws.
+function _isTestnetShadowTarget(userId) {
+    try {
+        if (serverAT.getMode(userId) !== 'live') return false;
+        const execEnv = serverAT._resolveExecutionEnv(userId);
+        return !!(execEnv && execEnv.env === 'TESTNET');
+    } catch (_) { return false; }
+}
+
 // ── Decision log (ring buffer) ──
 const DECISION_LOG_MAX = 200;
 const _decisionLog = [];
@@ -2395,4 +2407,11 @@ module.exports = {
     _markPendingSwitch,
     _applyPendingSwitches,
     _invalidateUserExchangeCache,
+    // [SP1] Test-only hooks for the testnet parity shadow. Exposed via require
+    // but never referenced by any runtime path (start/_runCycle/shadow cycles
+    // use the local function symbols, not these exports). Mutable (not frozen)
+    // because the test hooks seed _stcMap / override main-cycle state.
+    __sp1: {
+        isTestnetShadowTarget: _isTestnetShadowTarget,
+    },
 };
