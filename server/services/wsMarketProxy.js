@@ -448,7 +448,12 @@ function _wirePriceBridge() {
         const marketFeed = require('./marketFeed');
         marketFeed.on('price', (d) => {
             if (d && d.symbol && Number.isFinite(d.price) && d.price > 0) {
-                try { _broadcast(d.symbol, { type: 'market.price', symbol: d.symbol, price: d.price, ts: Date.now() }); } catch (_) {}
+                // [LAG-FIX] _broadcastAll (not _broadcast) — the client connects to /ws/sync but
+                // _subs.size is observed 0 (it may not register a per-symbol market.subscribe in
+                // the deployed build). _broadcastAll reaches every connected /ws/sync client; the
+                // client already filters market.price by its own symbol. Guarantees fresh price
+                // delivery → clears the client DATA_STALL/AT-paused gate without a client rebuild.
+                try { _broadcastAll({ type: 'market.price', symbol: d.symbol, price: d.price, ts: Date.now() }); } catch (_) {}
             }
         });
         _priceBridgeWired = true;
