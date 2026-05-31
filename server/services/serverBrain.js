@@ -228,6 +228,9 @@ let _timer = null;
 let _shadowTimer = null;  // [Phase 2 S3] separate timer for parity harness shadow cycle
 let _running = false;
 let _shadowRunning = false;  // [Phase 2 S3] re-entry guard for shadow cycle
+let _testnetShadowTimer = null;   // [SP1] separate timer for testnet parity shadow
+let _testnetShadowRunning = false; // [SP1] re-entry guard for testnet shadow
+let _mainCycleActiveOverrideForTest = null; // [SP1] test-only; null in production
 let _cycleCount = 0;
 let _lastDecision = null;
 const _prevRegimes = new Map();  // [MULTI-SYM] `${symbol}|${exchange}` → last regime (composite key, Task 23)
@@ -395,7 +398,7 @@ function getRecentBlocks(userId, sinceTs) {
 // Start / Stop
 // ══════════════════════════════════════════════════════════════════
 function start() {
-    if (_timer || _shadowTimer) return;
+    if (_timer || _shadowTimer || _testnetShadowTimer) return;
     // ── Restore persisted state from SQLite ──
     _restoreStcFromDb();
     _restoreCooldowns();
@@ -430,6 +433,14 @@ function start() {
         logger.info('BRAIN', '[S3] Server brain starting in shadow-only mode (parity harness, 30s cycle)');
         _shadowTimer = setInterval(_runShadowCycle, CYCLE_INTERVAL_MS);
         setTimeout(_runShadowCycle, 5000);
+    }
+    if (_shouldRunMainCycle() && MF.PARITY_SHADOW_ENABLED) {
+        // [SP1] The demo main cycle suppresses _runShadowCycle → testnet users
+        // get no parity rows. This additive shadow restores them, execution-free,
+        // scoped to testnet-live users only (_isTestnetShadowTarget).
+        logger.info('BRAIN', '[SP1] Testnet parity shadow starting alongside main cycle (testnet-live users, 30s cycle)');
+        _testnetShadowTimer = setInterval(_runTestnetShadowCycle, CYCLE_INTERVAL_MS);
+        setTimeout(_runTestnetShadowCycle, 7000);
     }
     // [ML] Daily prune of old decision snapshots
     setInterval(() => { try { brainLogger.prune(); } catch (_) {} }, 86400000);
@@ -614,8 +625,13 @@ function stop() {
         clearInterval(_shadowTimer);
         _shadowTimer = null;
     }
+    if (_testnetShadowTimer) {
+        clearInterval(_testnetShadowTimer);
+        _testnetShadowTimer = null;
+    }
     _running = false;
     _shadowRunning = false;
+    _testnetShadowRunning = false;
     logger.info('BRAIN', 'Server brain stopped');
 }
 
@@ -1598,6 +1614,27 @@ function _runShadowForUsers(includeUserFn) {
     }
 }
 
+// [SP1] Testnet parity shadow — runs ALONGSIDE the demo main cycle (which
+// suppresses _runShadowCycle), scoped to testnet-live users. Writes
+// source='server' parity rows only; zero execution / telegram / persist.
+// Only fills the gap left by the suppressed regular shadow: when the main
+// cycle is NOT active, _runShadowCycle already covers every user, so this is
+// a no-op then. Never rethrows.
+function _runTestnetShadowCycle() {
+    if (_testnetShadowRunning) return;
+    const mainActive = _mainCycleActiveOverrideForTest != null
+        ? _mainCycleActiveOverrideForTest : _shouldRunMainCycle();
+    if (!MF.PARITY_SHADOW_ENABLED || !mainActive) return;
+    _testnetShadowRunning = true;
+    try {
+        _runShadowForUsers(_isTestnetShadowTarget);
+    } catch (err) {
+        logger.warn('BRAIN', '[SP1] Testnet shadow cycle error: ' + (err && err.message));
+    } finally {
+        _testnetShadowRunning = false;
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // [Phase 2 S3.1c] Parity Confluence — mirrors client calcConfluenceScore
 // Used ONLY by _runShadowCycle for parity rows; the live _calcConfluence
@@ -2424,6 +2461,8 @@ module.exports = {
     __sp1: {
         isTestnetShadowTarget: _isTestnetShadowTarget,
         runShadowForUsers: _runShadowForUsers,
+        runTestnetShadowCycle: _runTestnetShadowCycle,
         setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },
+        setMainCycleActiveForTest: (v) => { _mainCycleActiveOverrideForTest = v; },
     },
 };
