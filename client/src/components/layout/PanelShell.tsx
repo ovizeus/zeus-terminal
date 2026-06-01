@@ -4,6 +4,7 @@ import { ChartControls } from '../chart/ChartControls'
 import { TradingChart } from '../chart/TradingChart'
 import { BrainCockpit } from '../brain/BrainCockpit'
 import { ErrorBoundary } from '../ErrorBoundary'
+import { KillSwitchOverlay } from '../KillSwitchOverlay'
 import { StatusBar } from './StatusBar'
 import WatchlistBar from './WatchlistBar'
 import { ZeusDock } from './ZeusDock'
@@ -410,6 +411,7 @@ export function PanelShell() {
       )}
 
       {/* ── Modal Overlays (global, outside main flow) ── */}
+      <KillSwitchOverlay />
       <NotificationsModal visible={activeModal === 'notifications'} onClose={closeModal} />
       <CloudSyncModal visible={activeModal === 'cloud'} onClose={closeModal} />
       <AlertsModal visible={activeModal === 'alerts'} onClose={closeModal} />
