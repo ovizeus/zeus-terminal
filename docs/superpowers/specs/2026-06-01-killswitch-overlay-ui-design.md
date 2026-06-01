@@ -39,18 +39,20 @@ Triggered from the expanded overlay's Deactivate button. Shows a **detailed** me
 - `StatusBar.tsx`: remove the `zsbKill` item (:56).
 - Leave the dev trigger (AnalysisSections.tsx:847) and the Telegram settings text mention (SettingsHubModal) — not displays.
 
-## Part B — Re-arm logic (server, money-path)
+## Part B — Re-arm logic (server) — ALREADY IMPLEMENTED (verified 2026-06-01)
 
-After a manual reset, the daily-loss kill must not immediately re-fire on the same loss that is still ≥ limit. Ratchet the effective threshold by one increment per acknowledgement.
+**Correction after code verification:** the overlay's kill state is `serverAT` `us.killActive` (NOT riskGuard's separate per-order daily-loss block). serverAT ALREADY implements exactly the re-arm the operator wants — no new server code, no riskGuard change (that would have been a redundant/conflicting money-path edit):
+- `_checkKillSwitch` (serverAT.js:2587) triggers on `lossSinceReset = us.dailyPnL - (us.pnlAtReset || 0) <= -lossLimit` — loss measured **since the last reset**, not absolute.
+- `resetKill` (serverAT.js:2640) sets `us.pnlAtReset = us.dailyPnL` on reset → `lossSinceReset` restarts at 0 → the kill only re-fires after **another full `lossLimit`** of loss from the reset point. This IS "won't re-appear on the same loss; only if you lose that much again."
+- Daily UTC rollover resets `pnlAtReset` (serverAT.js:2543-2552). `lossLimit = balRef * killPct/100` (killPct default 5%).
+- There is a 5-min reset cooldown (serverAT.js:2629) — fine; the overlay's Deactivate respects it (show the cooldown error if it returns one).
 
-- Add per-user, per-owner (AT/ARES) daily state `killAckLoss` (absolute USDT loss level at the moment of the last reset; default 0; cleared by `_resetIfNewDay`).
-- Change the trigger condition (riskGuard.js:232) from `abs(realizedPnL) >= lossLimit` to `abs(realizedPnL) >= (killAckLoss || 0) + lossLimit`.
-- On `POST /api/at/kill/reset` (→ riskGuard reset path): set `killAckLoss = abs(tracker.realizedPnL)` (the current loss level) so the next trigger is one full `lossLimit` deeper.
-- Daily rollover clears `killAckLoss` back to 0 (next day starts fresh at `lossLimit`).
-- **Safety note (operator-acknowledged):** this lets the user keep trading past the daily-loss line after acknowledging, each acknowledgement buying one more `lossLimit` of room. Operator explicitly accepts this trade-off. The `emergencyKill` hard-kill (manual/critical) is NOT re-armed this way — it stays a hard stop until explicitly reset (no auto-escalation).
+**Part B work = verification only:** a unit test documenting the re-arm invariant (after reset at loss L, no re-trigger until L + lossLimit; daily rollover re-baselines). No production change to the kill logic.
+
+**Safety note (operator-acknowledged):** each Deactivate buys one more `lossLimit` of room before the next halt — this is the existing, intended behavior; operator accepts it.
 
 ## Data flow
-`riskGuard` daily-loss trigger (or emergencyKill) → server marks kill state → synced to client `atStore.killTriggered` + `killReason` (+ loss/limit numbers for the message). `KillSwitchOverlay` renders from the store. Deactivate → `POST /api/at/kill/reset` → server clears kill + sets `killAckLoss` (Part B) → next sync flips `killTriggered` false → overlay disappears.
+`serverAT._checkKillSwitch` sets `us.killActive=true` + `killReason='daily_loss'` + `killLoss`/`killLimit`/`killBalRef`/`killModeAtTrigger` (serverAT.js:2589-2595) → all already synced to the client (serverAT.js:507-516) → client `atStore.killTriggered` + `killReason` (+ the loss/limit/pct fields). `KillSwitchOverlay` renders the message from these. Deactivate → `POST /api/at/kill/reset` → `serverAT.resetKill` clears `killActive` + re-baselines `pnlAtReset` (Part B, already there) → next sync flips `killTriggered` false → overlay disappears. **Implementation note:** confirm the client `atStore` maps the already-synced `killLoss`/`killLimit`/`killPct`/`killBalRef`/`killModeAtTrigger` fields (add to the store mapping if only `killTriggered`/`killReason` are currently exposed) so the overlay message has the numbers.
 
 ## Error handling / edge cases
 - Kill clears server-side (e.g. daily reset) while overlay is minimized → overlay disappears on next sync (driven by `killTriggered`, not local state).
@@ -62,7 +64,7 @@ After a manual reset, the daily-loss kill must not immediately re-fire on the sa
 - A1: overlay renders expanded when `killTriggered` true; hidden when false; minimize→badge→expand cycle; blinking class present.
 - A2: confirmation dialog shows the reason + re-arm text; Deactivate calls `/api/at/kill/reset`; Cancel returns.
 - A3: ATPanel no longer renders the kill banner/button; StatusBar no longer renders `zsbKill`.
-- B: unit-test the ratchet — trigger fires at `lossLimit`; after reset at loss L, does NOT fire until `L + lossLimit`; daily rollover resets to `lossLimit`; emergencyKill not auto-escalated.
+- B (verification only — no prod change): unit-test the EXISTING re-arm invariant on `_checkKillSwitch`/`resetKill` — fires when `dailyPnL - pnlAtReset <= -lossLimit`; after `resetKill` (pnlAtReset←dailyPnL) does NOT fire until another `lossLimit` drop; daily rollover re-baselines pnlAtReset.
 
 ## Out of scope
 - Changing the loss-limit value or the kill-trigger criteria themselves (only the re-arm offset).
