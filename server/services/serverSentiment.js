@@ -133,13 +133,19 @@ async function _pollSymbol(symbol) {
     // Score: -100 (very bearish signal) to +100 (very bullish signal)
     const compositeScore = Math.round(-avgCrowd * 100); // flip sign = contrarian
 
-    _cache.set(symbol, {
+    const _sent = {
         compositeScore,
         crowdPosition: avgCrowd > 0.2 ? 'bullish' : avgCrowd < -0.2 ? 'bearish' : 'neutral',
         fundingTrend: fundingTrend > 0.2 ? 'positive' : fundingTrend < -0.2 ? 'negative' : 'neutral',
         rawCrowd: Math.round(avgCrowd * 100),
         ts: Date.now(),
-    });
+    };
+    _cache.set(symbol, _sent);
+    // [RADAR-FIX 2026-06-01] Also publish to marketCache so the radar endpoint
+    // (/api/market/sentiment → mc.get('sentiment', 'binance:'+sym)) gets it. Without
+    // this the computed sentiment lived only in serverSentiment's private _cache (used
+    // by the brain) and the radar always read null → sentiment showed 0.
+    try { mc.set('sentiment', 'binance:' + symbol, _sent, { caller: 'serverSentiment' }); } catch (_) { /* mc best-effort */ }
 }
 
 // ══════════════════════════════════════════════════════════════════
