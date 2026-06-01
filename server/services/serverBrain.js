@@ -444,6 +444,21 @@ function start() {
     }
     // [ML] Daily prune of old decision snapshots
     setInterval(() => { try { brainLogger.prune(); } catch (_) {} }, 86400000);
+    // [PERF-2 2026-06-01] Parity-log retention prune (keep 7 days) — batched + yielding,
+    // never blocks the live writer, NO VACUUM. Runs every 30 min so the existing backlog
+    // (~2.9M dsl rows) drains over a few runs, then maintains. First run 2 min after boot.
+    const _PARITY_RETENTION_DAYS = 7;
+    const _runParityPrune = () => {
+        try {
+            db.pruneParityLogs(_PARITY_RETENTION_DAYS).then((r) => {
+                if (r && (r.dsl_parity_log || r.brain_parity_log)) {
+                    logger.info('BRAIN', `[PERF-2] parity prune: dsl=${r.dsl_parity_log} brain=${r.brain_parity_log} (keep ${_PARITY_RETENTION_DAYS}d)`);
+                }
+            }).catch((e) => logger.warn('BRAIN', '[PERF-2] parity prune error: ' + (e && e.message)));
+        } catch (e) { logger.warn('BRAIN', '[PERF-2] parity prune sync error: ' + (e && e.message)); }
+    };
+    setTimeout(_runParityPrune, 120000);
+    setInterval(_runParityPrune, 1800000);
 }
 
 function _restoreStcFromDb() {

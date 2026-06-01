@@ -10705,6 +10705,57 @@ function atPruneClosed(userId) {
     _stmts.atPruneClosed.run(userId, userId);
 }
 
+// ─── [PERF-2 2026-06-01] Parity-log retention prune (batched, no VACUUM) ───
+// dsl_parity_log + brain_parity_log are shadow/validation harnesses that grow
+// unbounded (no prune existed). At ~970MB / +178MB per 3 days the DB would bloat.
+// Strategy: delete rows older than `retentionDays` in SMALL batches keyed on the
+// id PK (fast, index-backed), yielding between batches so the live trading writer
+// is never blocked for long. NO VACUUM (a 970MB VACUUM would lock the DB) — freed
+// pages are reused, so the file stops growing instead of shrinking. Safe on a live DB.
+const _PARITY_TABLES = ['dsl_parity_log', 'brain_parity_log'];
+
+// One batch: delete up to `batchLimit` rows with id <= cutoffId. Returns rows deleted.
+// `handle` is injectable for tests; defaults to the live db.
+function _parityPruneBatch(table, cutoffId, batchLimit, handle) {
+    const h = handle || db;
+    if (!cutoffId || cutoffId <= 0) return 0;
+    // id is the PK (AUTOINCREMENT) → index-backed, no full scan.
+    return h.prepare(
+        `DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE id <= ? ORDER BY id LIMIT ?)`
+    ).run(cutoffId, batchLimit).changes;
+}
+
+// Resolve the highest id whose created_at is older than the cutoff (the prune boundary).
+function _parityCutoffId(table, cutoffMs, handle) {
+    const h = handle || db;
+    try {
+        const r = h.prepare(`SELECT MAX(id) m FROM ${table} WHERE created_at < ?`).get(cutoffMs);
+        return (r && r.m) ? Number(r.m) : 0;
+    } catch (_) { return 0; }
+}
+
+// Async runner: prune both parity tables older than retentionDays, batched + yielding.
+// maxBatchesPerTable bounds work per call so a single invocation can't run away;
+// the daily schedule + this cap drain the backlog over a few runs.
+async function pruneParityLogs(retentionDays = 7, batchLimit = 5000, maxBatchesPerTable = 200, yieldMs = 80) {
+    const cutoffMs = Date.now() - retentionDays * 24 * 3600 * 1000;
+    const result = {};
+    for (const table of _PARITY_TABLES) {
+        const cutoffId = _parityCutoffId(table, cutoffMs);
+        let total = 0;
+        for (let i = 0; i < maxBatchesPerTable && cutoffId > 0; i++) {
+            let n = 0;
+            try { n = _parityPruneBatch(table, cutoffId, batchLimit); }
+            catch (e) { console.warn('[PERF-2] parity prune batch failed', table, e.message); break; }
+            total += n;
+            if (n < batchLimit) break; // caught up
+            await new Promise(r => setTimeout(r, yieldMs)); // let the live writer through
+        }
+        result[table] = total;
+    }
+    return result;
+}
+
 // ─── Graceful close ───
 function closeDb() {
     try { db.close(); } catch (_) { }
@@ -11338,6 +11389,10 @@ module.exports = {
     atSetState,
     atGetStateByUser,
     atPruneClosed,
+    // [PERF-2 2026-06-01] Parity-log retention prune (batched, no VACUUM)
+    pruneParityLogs,
+    _parityPruneBatch,
+    _parityCutoffId,
     // [Task M 2026-05-28] Orphan order sweeper helper
     getZeusOrderIds,
     // [B2] Startup ghost cleanup helpers
