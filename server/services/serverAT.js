@@ -2700,6 +2700,16 @@ function _isSLBreached(side, price, effectiveSL) {
     return side === 'LONG' ? price <= effectiveSL : price >= effectiveSL;
 }
 
+// [SYNC-2 2026-06-01] Resolve the exchange a live position belongs to, so recon/close
+// route to its OWN exchange. The order/place manual-live path builds the entry without
+// an exchange (_buildEntryFromOrderPlace), so without this a Bybit live position would
+// be persisted with the at_positions schema default 'binance' and reconcile/close on the
+// WRONG exchange. Keep an already-set exchange; else take the creds' exchange; else null.
+function _resolveEntryExchange(pos, creds) {
+    if (pos && pos.exchange) return pos.exchange;
+    return (creds && creds.exchange) || null;
+}
+
 function onPriceUpdate(symbol, price) {
     if (!price || price <= 0) return;
 
@@ -3834,6 +3844,9 @@ async function registerManualPosition(userId, data) {
                 const us = _uState(userId);
                 const seq = ++us.seq;
                 coreResult.seq = seq;
+                // [SYNC-2 2026-06-01] Thread the position's OWN exchange from the creds used,
+                // so recon/close route correctly (else schema default 'binance' mislabels Bybit).
+                coreResult.exchange = _resolveEntryExchange(coreResult, _creds);
                 _positions.push(coreResult);
                 _trackLiveOpen(coreResult); // [P5b]
                 try { _persistState(userId); } catch (_) { /* defensive */ }
@@ -5484,4 +5497,6 @@ module.exports = {
     _uStateForTest: _uState,
     _checkKillSwitchForTest: _checkKillSwitch,
     _clearKillCooldownForTest: (uid) => { _killResetCooldown.delete(uid); },
+    // [SYNC-2 2026-06-01] Exchange-threading resolver (exported for testing)
+    __sync2: { resolveEntryExchange: _resolveEntryExchange },
 };
