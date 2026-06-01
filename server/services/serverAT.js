@@ -5480,4 +5480,8 @@ module.exports = {
     _computeProtectiveStop,
     // [DSL-FIX 2026-06-01] Skip-decision + SL-breach predicates (exported for testing)
     __dslfix: { isExplicitUserControl: _isExplicitUserControl, isSLBreached: _isSLBreached },
+    // [KS-UI 2026-06-01] Test-only hooks for the kill re-arm characterization test.
+    _uStateForTest: _uState,
+    _checkKillSwitchForTest: _checkKillSwitch,
+    _clearKillCooldownForTest: (uid) => { _killResetCooldown.delete(uid); },
 };
