@@ -1739,10 +1739,47 @@ function _calcConfluenceParity(snap, ind) {
 // serverAT, telegram, db (other than via the caller's logParityRow),
 // reflection, multi-entry, or any modifier service.
 // ══════════════════════════════════════════════════════════════════
+// [SP1] Pure fusion math — steps 7–9 of client computeFusionDecision and server
+// _computeFusionParity, identical formula, no service reads / no Date.now. Inputs
+// are the resolved scalars; used by both the live shadow and the replay
+// equivalence test so "server == client" is provable on captured vectors.
+// Returns dirScore too so the caller can keep its reasons/score payload identical.
+function _fuseDecision(inp) {
+    const conf = Number.isFinite(inp.conf) ? inp.conf : 50;
+    const confN = Math.max(0, Math.min(1, (conf - 50) / 50));
+    const ofi = Number.isFinite(inp.ofi) ? inp.ofi : 0;
+    const ofiN = (ofi + 1) / 2;
+    const probN = Number.isFinite(inp.probN) ? inp.probN : 0.5;
+    const regimeN = Number.isFinite(inp.regimeN) ? inp.regimeN : 0.5;
+    const liqDangerN = Number.isFinite(inp.liqDangerN) ? inp.liqDangerN : 0.2;
+    const sigDirBonus = Number.isFinite(inp.sigDirBonus) ? inp.sigDirBonus : 0;
+
+    let dirScore = 0;
+    dirScore += ofi * 0.55;
+    dirScore += ((conf - 50) / 50) * 0.30;
+    dirScore += sigDirBonus;
+    dirScore = Math.max(-1, Math.min(1, dirScore));
+    const dir = dirScore > 0.15 ? 'long' : dirScore < -0.15 ? 'short' : 'neutral';
+
+    const alignN = dir === 'neutral' ? 0 : (dir === 'long' ? ofiN : (1 - ofiN));
+    let confF = (confN * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20);
+    confF *= (1 - (liqDangerN * 0.55));
+    confF = Math.max(0, Math.min(1, confF));
+    const confidence = Math.round(confF * 100);
+
+    let decision;
+    if (dir === 'neutral') decision = 'NO_TRADE';
+    else if (confidence >= 82 && conf >= 75 && regimeN >= 0.55) decision = 'LARGE';
+    else if (confidence >= 72 && conf >= 68) decision = 'MEDIUM';
+    else if (confidence >= 62 && conf >= 60) decision = 'SMALL';
+    else decision = 'NO_TRADE';
+
+    return { dir, decision, confidence, score: Math.round(dirScore * confidence), dirScore };
+}
+
 function _computeFusionParity(snap, ind, confluence, regime, bars) {
     // Confluence value (0-100) — mirrors client BM.confluenceScore
     const conf = Number.isFinite(confluence && confluence.score) ? confluence.score : 50;
-    const confN = Math.max(0, Math.min(1, (conf - 50) / 50));
 
     // 4) OFI from server orderflow — mirrors client BM.ofi.{buy,sell}
     let ofi = 0;
@@ -1754,7 +1791,6 @@ function _computeFusionParity(snap, ind, confluence, regime, bars) {
         totalVol = buy + sell;
         if (totalVol > 0) ofi = (buy - sell) / totalVol;
     } catch (_) { /* OFI=0 on failure, matches client neutral */ }
-    const ofiN = (ofi + 1) / 2;
 
     // 2) Scenario / probScore — server has no computeProbScore equivalent.
     // Client defaults probN=0.5 when prob is null; mirror that here.
@@ -1781,35 +1817,14 @@ function _computeFusionParity(snap, ind, confluence, regime, bars) {
         }
     } catch (_) { /* keep default 0.2, matches client */ }
 
-    // 7) Direction score — mirrors client formula exactly.
-    // Server has no LAST_SCAN.sigDir equivalent → bonus is 0.
-    let dirScore = 0;
-    dirScore += ofi * 0.55;
-    dirScore += ((conf - 50) / 50) * 0.30;
-    dirScore = Math.max(-1, Math.min(1, dirScore));
-
-    const dir = dirScore > 0.15 ? 'long' : dirScore < -0.15 ? 'short' : 'neutral';
-
-    // 8) Confidence fusion — mirrors client formula exactly (no modifiers).
-    const alignN = dir === 'neutral' ? 0 : (dir === 'long' ? ofiN : (1 - ofiN));
-    let confF = (confN * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20);
-    confF *= (1 - (liqDangerN * 0.55));
-    confF = Math.max(0, Math.min(1, confF));
-    const confidence = Math.round(confF * 100);
-
-    // 9) Entry tier — mirrors client thresholds exactly.
-    let decision;
-    if (dir === 'neutral') {
-        decision = 'NO_TRADE';
-    } else if (confidence >= 82 && conf >= 75 && regimeN >= 0.55) {
-        decision = 'LARGE';
-    } else if (confidence >= 72 && conf >= 68) {
-        decision = 'MEDIUM';
-    } else if (confidence >= 62 && conf >= 60) {
-        decision = 'SMALL';
-    } else {
-        decision = 'NO_TRADE';
-    }
+    // [SP1] Steps 7–9 delegated to the pure _fuseDecision. The server always
+    // feeds probN=0.5 (no Scenario) and sigDirBonus=0 (no multi-scan dir bonus),
+    // so this is behavior-identical to the previous inline math.
+    const fused = _fuseDecision({ conf, ofi, probN, regimeN, liqDangerN, sigDirBonus: 0 });
+    const dirScore = fused.dirScore;
+    const dir = fused.dir;
+    const confidence = fused.confidence;
+    const decision = fused.decision;
 
     // Reasons payload — informational, mirrors client format. Parity
     // matching uses dir+decision only; reasons help debugging.
@@ -1827,7 +1842,7 @@ function _computeFusionParity(snap, ind, confluence, regime, bars) {
         dir,
         decision,
         confidence,
-        score: Math.round(dirScore * confidence),
+        score: fused.score,
         reasons,
     };
 }
@@ -2462,6 +2477,7 @@ module.exports = {
         isTestnetShadowTarget: _isTestnetShadowTarget,
         runShadowForUsers: _runShadowForUsers,
         runTestnetShadowCycle: _runTestnetShadowCycle,
+        fuseDecision: _fuseDecision,
         setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },
         setMainCycleActiveForTest: (v) => { _mainCycleActiveOverrideForTest = v; },
     },
