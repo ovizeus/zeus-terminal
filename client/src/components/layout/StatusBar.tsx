@@ -15,7 +15,7 @@ export function StatusBar() {
   const sbAtEnabled = useUiStore((s) => s.sbAtEnabled)
   const sbWsReady = useUiStore((s) => s.sbWsReady)
   const sbDataState = useUiStore((s) => s.sbDataState)
-  const sbKillActive = useUiStore((s) => s.sbKillActive)
+  // [KS-UI 2026-06-01] sbKillActive read removed — kill status moved to KillSwitchOverlay.
   const sbPosCount = useUiStore((s) => s.sbPosCount)
   const sbPnl = useUiStore((s) => s.sbPnl)
   const openModal = useUiStore((s) => s.openModal)
@@ -51,14 +51,6 @@ export function StatusBar() {
         <span className={`zsb-dot ${dataDot}`}></span>{dataTxt}
       </div>
       <div className="zsb-sep"></div>
-      {sbKillActive && (
-        <>
-          <div className="zsb-item" id="zsbKill" title="Kill Switch">
-            <span className="zsb-dot zsb-warn"></span>KILL ACTIVE
-          </div>
-          <div className="zsb-sep" id="zsbKillSep"></div>
-        </>
-      )}
       <div
         className="zsb-item"
         id="zsbPos"
