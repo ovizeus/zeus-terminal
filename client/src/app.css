@@ -7341,3 +7341,41 @@ select option {
 .multi-exchange-detail {
   animation: multi-exchange-fade-up 0.2s ease-out;
 }
+
+/* [KS-UI 2026-06-01] Kill switch overlay — non-blocking (container ignores clicks,
+   only its controls capture them) so the app stays visible/usable underneath. */
+@keyframes ksBlink { 0%, 100% { opacity: 1 } 50% { opacity: .3 } }
+.ks-overlay {
+  position: fixed; inset: 0; z-index: 100000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; pointer-events: none; background: transparent;
+}
+.ks-overlay > * { pointer-events: auto; }
+.ks-title {
+  font-size: clamp(40px, 9vw, 140px); font-weight: 900; color: #ff2525;
+  letter-spacing: 3px; text-shadow: 0 0 24px rgba(255,0,0,.7);
+  animation: ksBlink 1s steps(1,end) infinite; user-select: none;
+}
+.ks-msg { max-width: 640px; text-align: center; color: #fff;
+  background: rgba(10,0,0,.72); padding: 14px 20px; border-radius: 12px;
+  border: 1px solid rgba(255,40,40,.5); }
+.ks-msg p { margin: 6px 0; }
+.ks-min { position: fixed; top: 12px; right: 16px; width: 34px; height: 34px;
+  border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; border: 1px solid #ff3b3b;
+  cursor: pointer; font-size: 16px; line-height: 1; }
+.ks-deact { background: #c0392b; color: #fff; border: none; border-radius: 8px;
+  padding: 12px 22px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.ks-deact:disabled { opacity: .6; cursor: default; }
+.ks-cancel { background: #333; color: #fff; border: none; border-radius: 8px;
+  padding: 12px 18px; margin-left: 10px; cursor: pointer; }
+.ks-confirm { max-width: 560px; text-align: center; color: #fff;
+  background: rgba(10,0,0,.9); padding: 18px 22px; border-radius: 12px;
+  border: 1px solid #ff3b3b; }
+.ks-confirm-btns { margin-top: 12px; }
+.ks-err { color: #ffcf3b; font-weight: 600; }
+.ks-badge {
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 100000;
+  background: #c0392b; color: #fff; border: 1px solid #ff7b7b; border-radius: 8px;
+  padding: 6px 14px; font-weight: 800; letter-spacing: 1px; cursor: pointer;
+  animation: ksBlink 1s steps(1,end) infinite;
+}
