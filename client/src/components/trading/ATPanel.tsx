@@ -6,11 +6,7 @@ import { switchGlobalMode } from '../../data/marketDataTrading'
 export function ATPanel() {
   const enabled = useATStore((s) => s.enabled)
   const mode = useATStore((s) => s.mode)
-  const killTriggered = useATStore((s) => s.killTriggered)
-  const killReason = useATStore((s) => s.killReason)
-  const killLoss = useATStore((s) => s.killLoss)
-  const killLimit = useATStore((s) => s.killLimit)
-  const killModeAtTrigger = useATStore((s) => s.killModeAtTrigger)
+  const killTriggered = useATStore((s) => s.killTriggered) // kept: gates the AT toggle. Kill UI moved to KillSwitchOverlay.
   const totalTrades = useATStore((s) => s.totalTrades)
   const wins = useATStore((s) => s.wins)
   const losses = useATStore((s) => s.losses)
@@ -34,20 +30,6 @@ export function ATPanel() {
     switchGlobalMode(newMode)
   }
 
-  async function handleKillReset() {
-    setLoading('kill')
-    const res = await api.post('/api/at/kill/reset')
-    setLoading('')
-    if (!res.ok) {
-      const err = res.error || 'unknown error'
-      const w = window as unknown as { toast?: (msg: string) => void }
-      if (typeof w.toast === 'function') w.toast('Cannot reset: ' + err)
-      else alert('Cannot reset: ' + err)
-    }
-  }
-
-  const reasonLabel = killReason === 'daily_loss' ? 'Daily loss limit' : killReason === 'manual' ? 'Manual stop' : killReason || 'Active'
-
   return (
     <div className="zr-at-panel">
       <div className="zr-at-controls">
@@ -65,26 +47,7 @@ export function ATPanel() {
         >
           {loading === 'mode' ? '...' : mode.toUpperCase()}
         </button>
-        {killTriggered && (
-          <button
-            className="zr-at-btn zr-at-btn--kill"
-            onClick={handleKillReset}
-            disabled={loading === 'kill'}
-          >
-            {loading === 'kill' ? '...' : 'RESET KILL SWITCH'}
-          </button>
-        )}
       </div>
-
-      {killTriggered && (
-        <div className="zr-at-kill-banner">
-          KILL SWITCH ACTIVE — {reasonLabel}
-          {killLoss > 0 && killLimit > 0 && (
-            <> · loss ${killLoss.toFixed(2)} / limit ${killLimit.toFixed(2)}</>
-          )}
-          {killModeAtTrigger && <> · {String(killModeAtTrigger).toUpperCase()}</>}
-        </div>
-      )}
 
       <div className="zr-at-stats">
         <div className="zr-kv">

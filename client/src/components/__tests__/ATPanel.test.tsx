@@ -22,12 +22,13 @@ describe('ATPanel', () => {
     expect(screen.getByText('AT OFF')).toBeInTheDocument()
   })
 
-  it('shows kill banner when kill switch is active', () => {
+  // [KS-UI 2026-06-01] kill banner removed from ATPanel — moved to KillSwitchOverlay
+  // (tested in KillSwitchOverlay.test.tsx). ATPanel only keeps the AT-toggle gating.
+
+  it('disables the AT toggle while the kill switch is active', () => {
     useATStore.setState({ killTriggered: true })
     render(<ATPanel />)
-    // [FIX1] Banner renders "KILL SWITCH ACTIVE — <reasonLabel>" on one
-    // element, so exact-text lookup fails. Match the stable prefix.
-    expect(screen.getByText(/KILL SWITCH ACTIVE/)).toBeInTheDocument()
+    expect(screen.getByText('AT OFF')).toBeDisabled()
   })
 
   it('shows win rate stats', () => {
