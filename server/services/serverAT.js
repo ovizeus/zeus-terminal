@@ -2680,6 +2680,17 @@ function setLiveBalanceRef(userId, balance) {
 // ══════════════════════════════════════════════════════════════════
 // Price Update — check SL/TP/DSL exits
 // ══════════════════════════════════════════════════════════════════
+// [DSL-FIX 2026-06-01] Should the server skip its managed exits/DSL for this
+// position? ONLY when the user EXPLICITLY took control — take-control sets
+// _controlModeTs (serverAT setControlMode, ~line 4523). Born-manual positions
+// have controlMode='user' but NO _controlModeTs; they MUST be server-managed
+// (they enabled DSL and otherwise never get a trailing SL placed → zero
+// protection, the bug found 2026-06-01). `now` is passed for testability.
+function _isExplicitUserControl(pos, now) {
+    if (!pos || pos.controlMode !== 'user' || !pos._controlModeTs) return false;
+    return (now - pos._controlModeTs) <= 1800000; // within the 30-min window
+}
+
 function onPriceUpdate(symbol, price) {
     if (!price || price <= 0) return;
 
@@ -2695,20 +2706,21 @@ function onPriceUpdate(symbol, price) {
         if (!pos._minPrice || price < pos._minPrice) pos._minPrice = price;
         if (!pos._maxPrice || price > pos._maxPrice) pos._maxPrice = price;
 
-        // [BUG3 FIX] Skip server-side automated exits when user has manual control
-        // [F3] Safety timeout — revert to 'auto' after 30min of user control
-        if (pos.controlMode === 'user') {
-            if (pos._controlModeTs && (Date.now() - pos._controlModeTs) > 1800000) {
-                pos.controlMode = 'auto';
-                delete pos._controlModeTs;
-                logger.warn('AT_ENGINE', `[${pos.seq}] controlMode reverted to auto — 30min timeout (uid=${pos.userId})`);
-                telegram.sendToUser(pos.userId, `⚠️ *Take Control Expired*\nPosition #${pos.seq} — reverted to AUTO after 30min safety timeout`);
-                _persistPosition(pos);
-                // Don't continue — let exit logic run on this tick
-            } else {
-                continue;
-            }
+        // [F3] Safety timeout — an EXPLICIT take-control reverts to 'auto' after
+        // 30min so the server resumes management. (Only take-control sets
+        // _controlModeTs; born-manual positions never enter this branch.)
+        if (pos.controlMode === 'user' && pos._controlModeTs && (Date.now() - pos._controlModeTs) > 1800000) {
+            pos.controlMode = 'auto';
+            delete pos._controlModeTs;
+            logger.warn('AT_ENGINE', `[${pos.seq}] controlMode reverted to auto — 30min timeout (uid=${pos.userId})`);
+            telegram.sendToUser(pos.userId, `⚠️ *Take Control Expired*\nPosition #${pos.seq} — reverted to AUTO after 30min safety timeout`);
+            _persistPosition(pos);
         }
+        // [DSL-FIX 2026-06-01] Skip ONLY active explicit take-control. Born-manual
+        // positions (controlMode='user' without _controlModeTs) fall through and
+        // get full server DSL/SL/TP management — previously they were skipped here
+        // forever, so their DSL never activated and no trailing SL was ever placed.
+        if (_isExplicitUserControl(pos, Date.now())) continue;
 
         // [TL-04] Skip positions where live entry is still in-flight on Binance
         if (pos._livePending) continue;
@@ -5453,4 +5465,6 @@ module.exports = {
     _normalizePositionSide,
     // [Fix #2 safety net 2026-05-29] Protective-stop computation (exported for testing)
     _computeProtectiveStop,
+    // [DSL-FIX 2026-06-01] Skip-decision predicate (exported for testing)
+    __dslfix: { isExplicitUserControl: _isExplicitUserControl },
 };
