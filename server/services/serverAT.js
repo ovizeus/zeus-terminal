@@ -2691,6 +2691,15 @@ function _isExplicitUserControl(pos, now) {
     return (now - pos._controlModeTs) <= 1800000; // within the 30-min window
 }
 
+// [DSL-FIX2 2026-06-01] Is the stop-loss breached? Guards against null/0/NaN
+// effectiveSL — otherwise `price >= null` coerces to `price >= 0` (always true
+// for a SHORT) and falsely closes a position that simply has no SL set yet
+// (e.g. DSL not yet activated). A position without a valid SL is never "breached".
+function _isSLBreached(side, price, effectiveSL) {
+    if (!(Number(effectiveSL) > 0)) return false;
+    return side === 'LONG' ? price <= effectiveSL : price >= effectiveSL;
+}
+
 function onPriceUpdate(symbol, price) {
     if (!price || price <= 0) return;
 
@@ -2790,8 +2799,12 @@ function onPriceUpdate(symbol, price) {
         // [B7-FIX] Always compute actual PnL from real exit price, not preset slPnl.
         // Old code used pos.slPnl (estimated at entry) during DSL WAITING phase —
         // inaccurate when price gaps past SL level.
+        // [DSL-FIX2 2026-06-01] Guard the SL check with _isSLBreached so a null/0
+        // effectiveSL never triggers a false HIT_SL. Without it, a SHORT with no SL
+        // set (DSL not yet activated) hit `price >= null` → `price >= 0` → true →
+        // instant bogus close (found via live probe: seq ...109 closed HIT_SL @open).
         if (pos.side === 'LONG') {
-            if (price <= effectiveSL) {
+            if (_isSLBreached('LONG', price, effectiveSL)) {
                 pnl = +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
@@ -2801,7 +2814,7 @@ function onPriceUpdate(symbol, price) {
                 closed = true;
             }
         } else {
-            if (price >= effectiveSL) {
+            if (_isSLBreached('SHORT', price, effectiveSL)) {
                 pnl = +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
@@ -5465,6 +5478,6 @@ module.exports = {
     _normalizePositionSide,
     // [Fix #2 safety net 2026-05-29] Protective-stop computation (exported for testing)
     _computeProtectiveStop,
-    // [DSL-FIX 2026-06-01] Skip-decision predicate (exported for testing)
-    __dslfix: { isExplicitUserControl: _isExplicitUserControl },
+    // [DSL-FIX 2026-06-01] Skip-decision + SL-breach predicates (exported for testing)
+    __dslfix: { isExplicitUserControl: _isExplicitUserControl, isSLBreached: _isSLBreached },
 };
