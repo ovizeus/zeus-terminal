@@ -26,20 +26,22 @@ try {
     const gate = { pass: gateRaw.pass && daysOk, failures: gateRaw.failures.concat(daysOk ? [] : ['days']) };
     const t = report.totals || {};
     const pairs = t.primaryPairs || 0;
-    const agree = t.primaryAgreementPct;
+    const actPairs = t.primaryActionablePairs || 0;
+    const actAgree = t.primaryActionableAgreementPct;
     const unpaired = t.primaryUnpaired || 0;
     const dayStr = `day ${Math.min(win.daysElapsed, SP1_THRESHOLDS.M).toFixed(1)}/${SP1_THRESHOLDS.M}`;
 
     if (gate.pass) {
         msg = `✅ *SP1 SOAK PASSED* (${dayStr})\n`
-            + `Pairs ${pairs} (≥${SP1_THRESHOLDS.P}) · Agreement ${agree}% (≥${SP1_THRESHOLDS.N}%) · Unpaired ${unpaired}\n`
-            + `Server brain matches the app. Ready for SP1.5 / SP2 — tell Claude.`;
+            + `Real-trade agreement ${actAgree}% on ${actPairs} actionable cycles (≥${SP1_THRESHOLDS.A}) · Pairs ${pairs} · Unpaired ${unpaired}\n`
+            + `Server brain matches the app on what matters. Ready for SP1.5 / SP2 — tell Claude.`;
     } else {
         const need = gate.failures.map(f => f === 'paired' ? `more pairs (${pairs}/${SP1_THRESHOLDS.P})`
-            : f === 'agreement' ? `agreement (${agree}%/${SP1_THRESHOLDS.N}%)`
+            : f === 'actionable' ? `more real-trade cycles (${actPairs}/${SP1_THRESHOLDS.A})`
+            : f === 'agreement' ? `real-trade agreement (${actAgree == null ? 'n/a' : actAgree + '%'}/${SP1_THRESHOLDS.N}%)`
             : f === 'unpairedRatio' ? `lower unpaired-ratio` : f === 'days' ? `more time (${dayStr})` : f).join(', ');
         msg = `⏳ *SP1 soak in progress* (${dayStr})\n`
-            + `Pairs ${pairs}/${SP1_THRESHOLDS.P} · Agreement ${agree == null ? 'n/a' : agree + '%'} · Unpaired ${unpaired}\n`
+            + `Real-trade agreement ${actAgree == null ? 'n/a (no trades yet)' : actAgree + '%'} on ${actPairs} actionable cycles · Pairs ${pairs} · Unpaired ${unpaired}\n`
             + `Still need: ${need}. (Keep the app open with AT on so pairs accumulate.)`;
     }
 } catch (e) {

@@ -3,31 +3,39 @@
 // Direction-only parity gate (spec 2026-05-31, Option A): sizing parity is SP1.5.
 
 // Locked pre-soak. DO NOT tune these to make a soak pass.
-//   N = min direction+tier agreement %
-//   P = min paired cycles (pairing-integrity floor — a few paired rows must not
-//       read false-100%; queryParityReport excludes unpaired from the denominator)
+//   N = min ACTIONABLE agreement % (over cycles where ≥1 side trades — the
+//       parity that matters for execution; dir-lean noise on mutual NO_TRADE
+//       is ignored, and no-trade regimes cannot inflate it)
+//   A = min actionable cycles (so the % is statistically meaningful; the most
+//       likely threshold to revisit depending on how many real-trade signals
+//       actually occur during the soak)
+//   P = min paired cycles overall (sample sufficiency + makes the unpaired
+//       ratio meaningful; queryParityReport excludes unpaired from the denom)
 //   U = max unpaired ratio = unpaired / (paired + unpaired)
 //   M = sustained days (evaluated by the caller over the window)
-const SP1_THRESHOLDS = { N: 98, P: 500, U: 0.05, M: 3 };
+const SP1_THRESHOLDS = { N: 98, P: 500, U: 0.05, M: 3, A: 50 };
 
 function evaluateParityGate(report, thresholds) {
     const t = thresholds || SP1_THRESHOLDS;
     const tot = (report && report.totals) || {};
-    const pct = Number(tot.primaryAgreementPct);
+    const actPctRaw = tot.primaryActionableAgreementPct;
+    const actPct = actPctRaw == null ? null : Number(actPctRaw);
+    const actPairs = Number(tot.primaryActionablePairs) || 0;
     const pairs = Number(tot.primaryPairs) || 0;
     const unpaired = Number(tot.primaryUnpaired) || 0;
     const denom = pairs + unpaired;
     const unpairedRatio = denom > 0 ? unpaired / denom : 1;
 
     const failures = [];
-    if (!(pct >= t.N)) failures.push('agreement');
+    if (actPct == null || !(actPct >= t.N)) failures.push('agreement');
+    if (!(actPairs >= t.A)) failures.push('actionable');
     if (!(pairs >= t.P)) failures.push('paired');
     if (!(unpairedRatio <= t.U)) failures.push('unpairedRatio');
 
     return {
         pass: failures.length === 0,
         failures,
-        metrics: { agreementPct: pct, pairs, unpaired, unpairedRatio: Number(unpairedRatio.toFixed(4)) },
+        metrics: { actionableAgreementPct: actPct, actionablePairs: actPairs, pairs, unpaired, unpairedRatio: Number(unpairedRatio.toFixed(4)) },
         thresholds: t,
     };
 }

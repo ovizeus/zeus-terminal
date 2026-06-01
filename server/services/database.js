@@ -10987,6 +10987,12 @@ function queryParityReport(opts) {
     const _mkBucket = () => ({
         matched: 0, mismatched: 0, unpaired: 0,
         adjMatched: 0, adjMismatched: 0, ntDirOnly: 0,
+        // [SP1] Actionable subset — cycles where at least one side would trade
+        // (decision != NO_TRADE). actionableMatched = full dir+tier agreement
+        // among those. This is the parity that matters for execution: it ignores
+        // direction-lean noise on mutual NO_TRADE, but (unlike adjusted) does NOT
+        // count NO_TRADE/NO_TRADE as agreement, so no-trade regimes can't inflate it.
+        actionable: 0, actionableMatched: 0,
         mismatchReasons: new Map(),
         bySymbol: new Map(),
         byUser: new Map(),
@@ -11014,6 +11020,11 @@ function queryParityReport(opts) {
         if (isMatch) bucket.matched++; else bucket.mismatched++;
         if (isAdjMatch) bucket.adjMatched++; else bucket.adjMismatched++;
         if (isNtDirOnly) bucket.ntDirOnly++;
+        // [SP1] Actionable: at least one side has a real (non-NO_TRADE) decision.
+        if (cdec !== 'NO_TRADE' || sdec !== 'NO_TRADE') {
+            bucket.actionable++;
+            if (isMatch) bucket.actionableMatched++;
+        }
 
         if (!isMatch) {
             const parts = [];
@@ -11038,6 +11049,8 @@ function queryParityReport(opts) {
         const paired = bucket.matched + bucket.mismatched;
         const agreementPct = paired > 0 ? Number((100 * bucket.matched / paired).toFixed(2)) : null;
         const adjAgreementPct = paired > 0 ? Number((100 * bucket.adjMatched / paired).toFixed(2)) : null;
+        // [SP1] Actionable agreement — over cycles where at least one side trades.
+        const actionableAgreementPct = bucket.actionable > 0 ? Number((100 * bucket.actionableMatched / bucket.actionable).toFixed(2)) : null;
         const topMismatches = Array.from(bucket.mismatchReasons.entries())
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10)
@@ -11077,6 +11090,9 @@ function queryParityReport(opts) {
             adjMismatched: bucket.adjMismatched,
             adjAgreementPct,
             ntDirOnly: bucket.ntDirOnly,
+            actionable: bucket.actionable,
+            actionableMatched: bucket.actionableMatched,
+            actionableAgreementPct,
             topMismatches,
             bySymbol,
             byUser,
@@ -11106,6 +11122,12 @@ function queryParityReport(opts) {
             primaryMatched: primaryStats.matched,
             primaryMismatched: primaryStats.mismatched,
             primaryAgreementPct: primaryStats.agreementPct,
+            // [SP1] Primary ACTIONABLE — agreement over cycles where ≥1 side trades.
+            // This is the SP1 gate metric: it ignores dir-lean noise on mutual
+            // NO_TRADE yet (unlike adjusted) cannot be inflated by no-trade regimes.
+            primaryActionablePairs: primaryStats.actionable,
+            primaryActionableMatched: primaryStats.actionableMatched,
+            primaryActionableAgreementPct: primaryStats.actionableAgreementPct,
             // Primary ADJUSTED — NO_TRADE/NO_TRADE dir-only counted as match
             primaryAdjMatched: primaryStats.adjMatched,
             primaryAdjMismatched: primaryStats.adjMismatched,

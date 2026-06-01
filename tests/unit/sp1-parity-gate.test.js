@@ -1,36 +1,56 @@
 const { evaluateParityGate, SP1_THRESHOLDS, soakWindow } = require('../../server/services/parityGate');
 
-function mkReport({ pct, pairs, unpaired }) {
-  return { totals: { primaryAgreementPct: pct, primaryPairs: pairs, primaryUnpaired: unpaired } };
+// Gate judges ACTIONABLE agreement (cycles where ≥1 side trades), with an
+// actionable-cycle floor (A) + overall pairing-integrity floors (P, U).
+function mkReport({ actPct, actPairs, pairs, unpaired }) {
+  return { totals: {
+    primaryActionableAgreementPct: actPct,
+    primaryActionablePairs: actPairs,
+    primaryPairs: pairs,
+    primaryUnpaired: unpaired,
+  } };
 }
 
 describe('SP1 evaluateParityGate', () => {
-  test('PASS when agreement, pairs, and unpaired-ratio all clear thresholds', () => {
-    const r = evaluateParityGate(mkReport({ pct: 99.1, pairs: 800, unpaired: 10 }));
+  test('PASS when actionable agreement, actionable floor, pairs, and unpaired all clear', () => {
+    const r = evaluateParityGate(mkReport({ actPct: 99.1, actPairs: 80, pairs: 800, unpaired: 10 }));
     expect(r.pass).toBe(true);
     expect(r.failures).toEqual([]);
   });
 
-  test('FAIL on insufficient pairs even at 100% agreement (false-high guard)', () => {
-    const r = evaluateParityGate(mkReport({ pct: 100, pairs: 3, unpaired: 0 }));
+  test('FAIL on too few actionable cycles even at 100% actionable agreement', () => {
+    const r = evaluateParityGate(mkReport({ actPct: 100, actPairs: 5, pairs: 800, unpaired: 10 }));
+    expect(r.pass).toBe(false);
+    expect(r.failures).toContain('actionable');
+  });
+
+  test('FAIL when actionable agreement below N (real-trade disagreement)', () => {
+    const r = evaluateParityGate(mkReport({ actPct: 80, actPairs: 100, pairs: 800, unpaired: 10 }));
+    expect(r.pass).toBe(false);
+    expect(r.failures).toContain('agreement');
+  });
+
+  test('FAIL on insufficient overall pairs (sample sufficiency)', () => {
+    const r = evaluateParityGate(mkReport({ actPct: 100, actPairs: 60, pairs: 100, unpaired: 0 }));
     expect(r.pass).toBe(false);
     expect(r.failures).toContain('paired');
   });
 
   test('FAIL when unpaired ratio exceeds U', () => {
-    const r = evaluateParityGate(mkReport({ pct: 99, pairs: 600, unpaired: 400 }));
+    const r = evaluateParityGate(mkReport({ actPct: 100, actPairs: 60, pairs: 600, unpaired: 400 }));
     expect(r.pass).toBe(false);
     expect(r.failures).toContain('unpairedRatio');
   });
 
-  test('FAIL when agreement below N', () => {
-    const r = evaluateParityGate(mkReport({ pct: 90, pairs: 800, unpaired: 5 }));
+  test('agreement fails when no actionable cycles yet (null pct)', () => {
+    const r = evaluateParityGate(mkReport({ actPct: null, actPairs: 0, pairs: 800, unpaired: 5 }));
     expect(r.pass).toBe(false);
     expect(r.failures).toContain('agreement');
+    expect(r.failures).toContain('actionable');
   });
 
   test('thresholds are the locked SP1 values', () => {
-    expect(SP1_THRESHOLDS).toEqual({ N: 98, P: 500, U: 0.05, M: 3 });
+    expect(SP1_THRESHOLDS).toEqual({ N: 98, P: 500, U: 0.05, M: 3, A: 50 });
   });
 });
 
