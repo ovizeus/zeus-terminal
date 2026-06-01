@@ -1,0 +1,4 @@
+[
+  { "input": { "conf": 50, "ofi": 0, "probN": 0.5, "regimeN": 0.5, "liqDangerN": 0.2, "sigDirBonus": 0 },
+    "output": { "dir": "neutral", "decision": "NO_TRADE", "confidence": 20, "score": 0 } }
+]
