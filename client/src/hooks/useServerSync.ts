@@ -126,6 +126,36 @@ function applyATUpdate(data: ServerATState) {
   }
 }
 
+// [JOURNAL-FIX 2026-06-01] Map a server at_closed row → the bottom-journal
+// (positionsStore.journal / <JournalRow>) entry shape. The bottom journal was
+// fed ONLY by client-side addTradeToJournal (client closes), so SERVER-side
+// closes (DSL_PL/HIT_SL/RECON_PHANTOM) never showed there. at_closed has no
+// explicit exitPrice → fall back to _lastPrice (last tracked price at close).
+export function serverRowToPanelEntry(raw: unknown): Record<string, unknown> {
+  const row = raw as Record<string, unknown>
+  const closeTs = Number(row.closeTs || 0)
+  let time = ''
+  try { if (closeTs) time = new Date(closeTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) } catch { /* ignore */ }
+  return {
+    id: String(row.seq || row.id || ''),
+    time,
+    side: String(row.side || 'LONG'),
+    sym: String(row.symbol || ''),
+    entry: Number(row.price || row.entryPrice || 0),
+    exit: Number(row.exitPrice || row.closePrice || row._lastPrice || 0),
+    size: Number(row.size || 0),
+    pnl: Number(row.closePnl || row.pnl || 0),
+    reason: String(row.closeReason || row.reason || ''),
+    lev: Number(row.lev || row.leverage || 0),
+    autoTrade: !!row.autoTrade,
+    journalEvent: 'CLOSE',
+    isLive: String(row.mode || '') === 'live',
+    openTs: Number(row.ts || row.openTs || 0),
+    closedAt: closeTs,
+    mode: String(row.mode || 'demo'),
+  }
+}
+
 /** Pull journal entries from server */
 async function pullJournal() {
   try {
@@ -154,6 +184,17 @@ async function pullJournal() {
         })
         }),
       )
+      // [JOURNAL-FIX 2026-06-01] Also feed the BOTTOM journal (positionsStore.journal),
+      // which was previously client-close-only and missed all server-side closes.
+      // at_closed is the single source of truth (superset). Merge so a just-
+      // client-closed trade not yet synced isn't dropped (dedupe by id).
+      try {
+        const panelEntries = res.data.map(serverRowToPanelEntry)
+        const serverIds = new Set(panelEntries.map((e) => String(e.id)))
+        const ps = usePositionsStore.getState()
+        const localOnly = (ps.journal || []).filter((e: { id?: unknown }) => !serverIds.has(String(e.id)))
+        ps.setJournal([...panelEntries, ...localOnly])
+      } catch { /* bottom-journal merge is best-effort */ }
     }
   } catch {
     // Journal pull failed — not critical
