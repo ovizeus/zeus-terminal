@@ -5,6 +5,7 @@ import { closeAllDemoPos } from '../../trading/autotrade'
 import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds, _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { attachConfirmClose } from '../../engine/events'
 import { DemoPositionRow, LivePositionRow, PendingOrderRow, JournalRow } from './PositionRows'
+import { computeManualClosedStats } from '../../utils/manualStats'
 
 const w = window as any
 
@@ -69,10 +70,10 @@ export function ManualTradePanel() {
 
   const demoBalance = usePositionsStore((s) => s.demoBalance)
   const liveBalanceTotal = usePositionsStore((s) => s.liveBalance.totalBalance)
-  const manualPnl = usePositionsStore((s) => s.manualPnl)
-  const manualPnlClass = usePositionsStore((s) => s.manualPnlClass)
-  const manualWr = usePositionsStore((s) => s.manualWr)
-  const manualTrades = usePositionsStore((s) => s.manualTrades)
+  // [STATS-FIX 2026-06-01] Total PnL / Win Rate / Trades are now computed from the
+  // SAME journal entries displayed below (manual + current mode + closed), so the
+  // numbers always coincide with the list. (Was: positionsStore.manualPnl/Wr/Trades,
+  // computed from a different array → mismatched after server-side closes showed.)
   // [R9] Reactive arrays that replace the old `dangerouslySetInnerHTML` divs
   const demoPositions = usePositionsStore((s) => s.demoPositions)
   const livePositions = usePositionsStore((s) => s.livePositions)
@@ -107,10 +108,15 @@ export function ManualTradePanel() {
   // changes, not on every ManualTradePanel re-render (which fires on each
   // useUiStore / useATStore / useMarketStore selector tick — many times
   // per second during live updates).
-  const journalSorted = useMemo(
-    () => journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0))),
-    [journal]
+  const _manualStats = useMemo(
+    () => computeManualClosedStats(journal, engineMode),
+    [journal, engineMode]
   )
+  const journalSorted = _manualStats.entries
+  const manualPnl = _manualStats.pnl
+  const manualPnlClass = _manualStats.pnlClass
+  const manualWr = _manualStats.wr
+  const manualTrades = _manualStats.trades
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
   const setSide = useCallback((s: 'LONG' | 'SHORT') => {
