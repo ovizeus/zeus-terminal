@@ -4046,6 +4046,10 @@ function _syncExternalPosition(data) {
         qty: parseFloat(data.qty),
         mode: 'live',
         source: 'external',
+        // [ENG-3 2026-06-01] Thread the exchange the external position was found on (recon
+        // knows it via per-exchange grouping) so recon/close route correctly — else the
+        // at_positions schema default 'binance' would mislabel a Bybit external position.
+        exchange: data.exchange || null,
         // External position has NO SL placement responsibility — pre-existing on exchange
         live: { status: 'EXTERNAL', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false },
         ts: Date.now(),
