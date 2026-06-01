@@ -634,6 +634,25 @@ export function computeFusionDecision(): any {
   out.score = Math.round(dirScore * out.confidence)
   // [P0.4] Decision log — fusion decision
   if (typeof w.DLog !== 'undefined') w.DLog.record('fusion', { dir: out.dir, decision: out.decision, confidence: out.confidence, score: out.score })
+
+  // [SP1] Golden-vector capture for the server replay-equivalence test.
+  // Read-only, gated on window.__SP1_CAPTURE (default unset → zero behavior
+  // change). Records the resolved scalar inputs + the output. KillSwitch-vetoed
+  // ticks return early above and are excluded (server has no killswitch).
+  try {
+    if ((w as any).__SP1_CAPTURE) {
+      const _sigDir = (() => { try { return w.LAST_SCAN?.sigDir } catch (_) { return null } })()
+      const sigDirBonus = _sigDir === 'bull' ? 0.25 : _sigDir === 'bear' ? -0.25 : 0
+      if (!Array.isArray((w as any).__SP1_VECTORS)) (w as any).__SP1_VECTORS = []
+      const buf = (w as any).__SP1_VECTORS
+      buf.push({
+        input: { conf, ofi, probN, regimeN, liqDangerN, sigDirBonus },
+        output: { dir: out.dir, decision: out.decision, confidence: out.confidence, score: out.score },
+      })
+      if (buf.length > 2000) buf.splice(0, buf.length - 2000)
+    }
+  } catch (_) { /* capture must never affect the decision */ }
+
   return { ...out, reasons }
 }
 
