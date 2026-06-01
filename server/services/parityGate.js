@@ -32,4 +32,26 @@ function evaluateParityGate(report, thresholds) {
     };
 }
 
-module.exports = { evaluateParityGate, SP1_THRESHOLDS };
+// [SP1] Compute the soak window for a user. The window STARTS at the explicit
+// soak-start timestamp (when the *continuous* server emission began on deploy) —
+// client rows from before that can never pair (server emitted nothing then) and
+// would poison the unpaired ratio, so they are excluded. soakStartTs is passed
+// by the caller (read from the marker file); if null, falls back to the first
+// server row in the DB. `now` is passed for determinism in tests.
+function soakWindow(db, userId, now, soakStartTs, thresholds) {
+    const t = thresholds || SP1_THRESHOLDS;
+    let start = (soakStartTs != null && !isNaN(Number(soakStartTs))) ? Number(soakStartTs) : null;
+    if (start == null) {
+        const row = db.db.prepare(
+            "SELECT MIN(created_at) AS firstTs FROM brain_parity_log WHERE source='server' AND user_id=?"
+        ).get(userId);
+        start = row && row.firstTs ? Number(row.firstTs) : null;
+    }
+    const mWindowStart = now - t.M * 24 * 3600 * 1000;
+    // since = the later of (M-day rolling window, soak start)
+    const since = start != null ? Math.max(mWindowStart, start) : mWindowStart;
+    const daysElapsed = start != null ? (now - start) / (24 * 3600 * 1000) : 0;
+    return { since, soakStart: start, daysElapsed: Number(daysElapsed.toFixed(2)) };
+}
+
+module.exports = { evaluateParityGate, SP1_THRESHOLDS, soakWindow };

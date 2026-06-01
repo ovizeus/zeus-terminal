@@ -1,4 +1,4 @@
-const { evaluateParityGate, SP1_THRESHOLDS } = require('../../server/services/parityGate');
+const { evaluateParityGate, SP1_THRESHOLDS, soakWindow } = require('../../server/services/parityGate');
 
 function mkReport({ pct, pairs, unpaired }) {
   return { totals: { primaryAgreementPct: pct, primaryPairs: pairs, primaryUnpaired: unpaired } };
@@ -31,5 +31,40 @@ describe('SP1 evaluateParityGate', () => {
 
   test('thresholds are the locked SP1 values', () => {
     expect(SP1_THRESHOLDS).toEqual({ N: 98, P: 500, U: 0.05, M: 3 });
+  });
+});
+
+describe('SP1 soakWindow', () => {
+  const DAY = 24 * 3600 * 1000;
+  const mkDb = (firstTs) => ({ db: { prepare: () => ({ get: () => ({ firstTs }) }) } });
+
+  test('explicit soakStart used as floor when more recent than M-day rolling', () => {
+    const now = 1000 * DAY;
+    const soakStart = now - 1 * DAY; // soak started 1 day ago
+    const w = soakWindow(mkDb(now - 40 * DAY), 1, now, soakStart);
+    expect(w.since).toBe(soakStart); // floor is the explicit soak start, not old server rows
+    expect(w.daysElapsed).toBe(1);
+  });
+
+  test('window is the M-day rolling start once the soak is older than M days', () => {
+    const now = 1000 * DAY;
+    const soakStart = now - 10 * DAY; // soak started 10 days ago
+    const w = soakWindow(mkDb(null), 1, now, soakStart);
+    expect(w.since).toBe(now - SP1_THRESHOLDS.M * DAY); // rolling 3-day window
+    expect(w.daysElapsed).toBe(10);
+  });
+
+  test('falls back to first server row when no explicit soakStart', () => {
+    const now = 1000 * DAY;
+    const firstTs = now - 2 * DAY;
+    const w = soakWindow(mkDb(firstTs), 1, now, null);
+    expect(w.since).toBe(firstTs);
+    expect(w.daysElapsed).toBe(2);
+  });
+
+  test('no soakStart and no server rows → daysElapsed 0', () => {
+    const now = 1000 * DAY;
+    const w = soakWindow(mkDb(null), 1, now, null);
+    expect(w.daysElapsed).toBe(0);
   });
 });
