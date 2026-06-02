@@ -151,6 +151,18 @@ source='server'. The same `_isTestnetShadowTarget` gating as SP1 applies.
   number is the deliverable). The report prints the band; the A/B decision uses it.
 - Floors (reuse SP1 pattern): `actionablePairs ≥ A`, `unpaired ≤ U`, soak `≥ M` days.
 
+> **Timid-client starvation (2026-06-02, same class as the SP2 gate #1 deadlock):** paired
+> sizing comparison needs the client to be **actionable** (it only computes sizing on a trade
+> decision). With a conservative uid=1 client, `actionablePairs` can stay near 0 → the SL/TP
+> gate cannot accumulate samples, same dynamic the SP2 entry gate hit. Mitigations, in order:
+> (1) the **server shadow rows accumulate regardless** (the server brain is actionable even when
+> the client is timid) — so the *size-divergence band* (the actual deliverable) can be measured
+> against any client rows that DO appear, and the server-side distribution is informative on its
+> own; (2) if paired samples stay starved, apply the **same treatment as SP2 gate #1**: SL/TP
+> parity becomes **advisory** on whatever pairs exist (no blocking floor), and the data source
+> shifts toward users who actually trade. This is a known risk to confirm during the soak, not a
+> blocker to designing the harness.
+
 ## 5. Data flow
 
 ```

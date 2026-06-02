@@ -20,11 +20,23 @@ per-user special-casing). Reached via a **two-stage cutover flip**, not all-at-o
 
 ## 2. Hard gates (no code until ALL green)
 
-1. **SP1 soak GREEN** — `parityGate.js` reports actionable agreement ≥ threshold over the
-   full soak window (3 days + sufficient actionable/real-trade pairs).
+> **2026-06-02 (mobile review #2):** the original gate #1 ("SP1 client-parity actionable
+> agreement, A=50 actionable cycles") was a **deadlock** — with a conservative uid=1 client,
+> `actionablePairs` stays 0 and `evaluateParityGate` (`parityGate.js:31`) fails `'actionable'`
+> forever → SP2 unreachable. Resolved (operator decision A): **demo-soak is the primary proof;
+> client-parity is demoted to advisory.**
+
+1. **Demo-soak GREEN (primary proof)** — the server **already executes competently
+   server-side** for a real engine=demo user (uid=2: real demo trades flowing, e.g. +$613/18
+   trades/day). This proves the entry+exit machinery end-to-end with live decisions. The gate
+   requires the demo-soak healthy over the window (trades executing, no abnormal error/restart
+   rate). **Client-direction-parity is ADVISORY only:** report the agreement on whatever
+   actionable pairs accumulate (no blocking count floor — A=50 removed as a blocker); use it as
+   a confidence signal, not a gate. uid=1's own real proof is the **SP2-a staged soak itself**
+   (uid=1-only, rollback-safe — see §9), not a pre-cutover client-parity count.
 2. **SP1.5 (sizing parity) GREEN** — server sizes entries (qty / SL / TP) identically to
-   the client. SP2 server-opened entries depend on this; without it, parity breaks the
-   instant the server opens its first real position.
+   the client (within the SP1.5-defined tolerance). SP2 server-opened entries depend on this;
+   without it, sizing diverges the instant the server opens its first real position.
 3. **Load/latency gate (S)** — before widening to all users (SP2-b), confirm per-tick
    SL-check latency stays tight under all-users load (better-sqlite3 is synchronous; more
    active users = more synchronous DB writes per tick that could delay the SL check).
@@ -205,8 +217,11 @@ Reuses [P-A position adoption](2026-05-30-P-A-position-adoption-design.md).
   real cutover on ONE account, on his skin, not users'.
 - **SP2-b:** after SP2-a is green AND the load/latency gate (S) passes, flip to all testnet
   users. Identical code — only the target widens. One explicit PROCEED.
-- **Go/no-go (I):** reuse `parityGate.js` as the cutover semaphore. The SP2-a flip is
-  permitted only when shadow actionable-agreement is green. Zero new code — just the link.
+- **Go/no-go (I):** the SP2-a flip semaphore is **gate #1 (demo-soak healthy) + SP1.5 green**
+  (per §2, operator decision A — NOT the client-parity count, which deadlocks on a timid uid=1
+  client). `parityGate.js` / client-direction-agreement remains an **advisory** confidence
+  reading surfaced alongside, not a blocker. SP2-a itself is the uid=1 proof; rollback (P) is
+  the safety valve if it misbehaves.
 - **Rollback semantics (P):** flipping `SP2_CUTOVER_USERS` back to `[]` returns **entry**
   ownership to the client **instantly**. The always-on SL net is **independent of the cutover
   flag** and STAYS ON — so rollback never orphans a position. Fast, safe abort.
@@ -296,7 +311,7 @@ Reuses [P-A position adoption](2026-05-30-P-A-position-adoption-design.md).
   (original/catastrophic SL, never null) even under take-control, suppressing only active
   management. #3 cold-start grace made explicitly ENTRIES-ONLY; exits/backstop are fail-safe
   always, independent of grace; post-reload exit net + reconciliation run immediately. ✅
-- **OPEN (2026-06-02): SP2 hard-gate #1 (SP1 client-parity)** — flagged as a deadlock risk
-  (A=50 actionable cycles unreachable with a timid uid=1 client). Resolution pending operator
-  decision: demo-soak (uid=2) as primary proof vs redefined satisfiable parity threshold.
-  §2 gate wording to be updated once decided.
+- **2026-06-02 #2 RESOLVED (operator decision A):** SP2 hard-gate #1 was a deadlock
+  (client-parity A=50 unreachable with a timid uid=1 client). Now: **demo-soak (uid=2) =
+  primary proof**, client-direction-parity demoted to **advisory** (no blocking count floor),
+  uid=1's real proof = the staged rollback-safe SP2-a soak. §2 and §9 (I) updated.
