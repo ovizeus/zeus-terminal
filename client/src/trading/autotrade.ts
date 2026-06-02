@@ -83,6 +83,7 @@ import { api } from '../services/api'
 import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage } from '../trading/liveApi'
 import { getTimeUTC, getCurrentADX, isCurrentTimeOK, renderDHF } from '../ui/render'
 import { runPostMortem } from '../engine/postMortem'
+import { computeOrderGeometry } from './orderGeometry'
 import { onTradeExecuted } from '../trading/positions'
 import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
 import { _isExecAllowed , _safePnl } from '../utils/guards'
@@ -1077,18 +1078,10 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Daca utilizatorul modifica atRR intre decizie si executie, ordinul ar fi plasat cu parametri diferiti
   const rr = (Number.isFinite(_snap.rr) && _snap.rr > 0) ? _snap.rr : 2 // [v119-p6 FIX1] snapshot-only, NO DOM fallback
 
-  const slDist = entry * slPct / 100
-  const tpDist = slDist * rr
-
-  const sl = side === 'LONG' ? entry - slDist : entry + slDist
-  const tp = side === 'LONG' ? entry + tpDist : entry - tpDist
+  // [SP2-1 gate 2] Shared pure order geometry — identical transform on client & server.
+  const { qty, sl, tp, slPnl, tpPnl } = computeOrderGeometry({ side, price: entry, margin: adaptFinalSize, lev, slPct, rr })
   const liq = calcLiqPrice(entry, lev, side)
-
-  // [FIX P8] QTY = notional / price (with leverage), margin = adaptFinalSize (IS the margin)
-  const qty = (adaptFinalSize * lev) / entry   // contracts/coins (notional / price)
   const margin = adaptFinalSize                  // adaptFinalSize IS the margin deducted from balance
-  const tpPnl = (tpDist / entry) * adaptFinalSize * lev   // $ profit at TP
-  const slPnl = -(slDist / entry) * adaptFinalSize * lev  // $ loss at SL (negative)
 
   // ── EXECUTION FAIL-SAFE ──────────────────────────────────────────
   // Check entry price sanity (slippage guard)

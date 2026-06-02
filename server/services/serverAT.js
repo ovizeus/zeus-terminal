@@ -40,6 +40,7 @@ const { sendSignedRequest } = require('./binanceSigner');
 // Replaces direct sendSignedRequest calls in _executeLiveEntry + _executeLiveEntryCore.
 const exchangeOps = require('./exchangeOps');
 const { roundOrderParams, getFilters: _getExchangeFilters } = require('./exchangeInfo');
+const { computeOrderGeometry } = require('./orderGeometry');
 const { validateOrder, recordClosedPnL } = require('./riskGuard');
 const telegram = require('./telegram');
 const audit = require('./audit');
@@ -1143,14 +1144,9 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         return null;
     }
 
-    const slDist = price * slPct / 100;
-    const tpDist = slDist * rr;
-
-    let sl, tp;
-    if (side === 'LONG') { sl = price - slDist; tp = price + tpDist; }
-    else { sl = price + slDist; tp = price - tpDist; }
-
-    const qty = (finalSize * lev) / price;
+    // [SP2-1 gate 2] Shared pure order geometry — identical transform on client & server.
+    // slDist/tpDist destructured because they are reused below for _grossTpPnl/_grossSlPnl.
+    const { qty, sl, tp, slDist, tpDist } = computeOrderGeometry({ side, price, margin: finalSize, lev, slPct, rr });
     // [BUG-TM-8] Align qty + size to LOT_SIZE BEFORE entry creation — never store unsafe toFixed(6).
     const _tm8 = _alignQtyToLotSize(decision.symbol, qty, price, lev, 'MAIN_ENTRY');
     if (!_tm8) {

@@ -1,0 +1,8 @@
+[
+  { "in": { "side": "LONG",  "price": 67000, "margin": 200, "lev": 5, "slPct": 1.5, "rr": 2 },
+    "out": { "qty": 0.014925373134328358, "sl": 65995, "tp": 69010, "slPnl": -15, "tpPnl": 30 } },
+  { "in": { "side": "SHORT", "price": 67000, "margin": 200, "lev": 5, "slPct": 1.5, "rr": 2 },
+    "out": { "qty": 0.014925373134328358, "sl": 68005, "tp": 64990, "slPnl": -15, "tpPnl": 30 } },
+  { "in": { "side": "LONG",  "price": 2500,  "margin": 100, "lev": 10, "slPct": 2, "rr": 3 },
+    "out": { "qty": 0.4, "sl": 2450, "tp": 2650, "slPnl": -20, "tpPnl": 60 } }
+]
