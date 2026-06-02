@@ -109,6 +109,7 @@ const _pendingLiveCloses = new Map(); // [LIVE-PARITY] seq → { pos, exitType, 
 // lazily on first isCloseCooldownActive() call per user (no module-load
 // boot hook in this file — the cost of restoring is paid at decision time).
 const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → deadlineMs
+const _lastEntryOwner = new Map();  // [SP2 Task 8] userId → last entryOwner ('CLIENT'|'SERVER') for handover flip detection
 const CLOSE_COOLDOWN_MS = 180000;   // [RE-ENTRY] 3 min cooldown after any close (was 10min — reduced for faster DEMO cycling + bandit learning)
 const _closeCooldownsRestoredFor = new Set();  // uids whose rows have been lazy-restored
 
@@ -978,6 +979,11 @@ function processBrainDecision(decision, stc, userId, userIntent) {
             cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
             underTakeControl: false,
         });
+        const _prevOwner = _lastEntryOwner.get(userId) || 'CLIENT';
+        if (_own.entryOwner !== _prevOwner) {
+            _lastEntryOwner.set(userId, _own.entryOwner);
+            try { require('./database').logHandover(userId, _prevOwner, _own.entryOwner, _own.entryOwner === 'SERVER' ? 'client_absent' : 'client_present'); } catch (_) {}
+        }
         if (_own.entryOwner !== 'SERVER') {
             _recordMissedTrade(userId, decision, 'ENTRY_OWNED_BY_CLIENT');
             return null;

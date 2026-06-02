@@ -10146,6 +10146,20 @@ migrate('405_position_classifications_exchange', () => {
     db.exec(`ALTER TABLE position_classifications ADD COLUMN exchange TEXT DEFAULT 'binance'`);
 });
 
+migrate('406_handover_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS handover_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            from_owner  TEXT,
+            to_owner    TEXT,
+            reason      TEXT,
+            created_at  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_handover_user_ts ON handover_log(user_id, created_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -10983,6 +10997,18 @@ function logParityRow(userId, symbol, source, fusion, cycle) {
     } catch (_err) { /* shadow must never throw */ }
 }
 
+// ─── [SP2 Task 8] Handover observability — record entry-ownership flips ───
+const _handoverInsert = db.prepare(
+    'INSERT INTO handover_log (user_id, from_owner, to_owner, reason, created_at) VALUES (?,?,?,?,?)'
+);
+
+function logHandover(userId, fromOwner, toOwner, reason) {
+    try {
+        if (!userId) return;
+        _handoverInsert.run(Number(userId), String(fromOwner || ''), String(toOwner || ''), reason ? String(reason).slice(0, 64) : null, Date.now());
+    } catch (_e) { /* observability must never throw */ }
+}
+
 // [Phase 2 S3.1b-fix] Parity report — PRIMARY vs COVERAGE split.
 // Client emits two kinds of rows:
 //   1. PRIMARY: chart symbol via autotrade.ts::computeFusionDecision — runs
@@ -11367,6 +11393,8 @@ module.exports = {
     // [Phase 2 S3] Parity harness
     logParityRow,
     queryParityReport,
+    // [SP2 Task 8] Handover observability
+    logHandover,
     // [S7] DSL Parity harness
     logDslParityRow,
     queryDslParityReport,
