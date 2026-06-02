@@ -948,10 +948,46 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     // missing engineMode is treated as live for fail-safety. The demo
     // branch (engineMode === 'demo') passes through to the existing
     // demo paper-fill path below, untouched.
+    // [SP2] testnet-aware gate. demo passes through (unchanged). For non-demo:
+    // allow when full SERVER_AT, OR when SP2 testnet-exec is on for a cutover user on
+    // a testnet exchange. REAL never reaches here (resolved-env gating upstream).
+    if (us.engineMode !== 'demo') {
+        const _creds = getExchangeCreds(userId);
+        const _isTestnet = !!_creds && (_creds.mode === 'testnet');
+        const _sp2Allowed = MF.SERVER_AT_TESTNET_EXEC === true && _isTestnet
+            && require('./sp2Cutover').isCutoverUser(userId);
+        if (MF.SERVER_AT !== true && !_sp2Allowed) {
+            logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — SERVER_AT_REQUIRED_FOR_LIVE (mode=${us.engineMode || 'unknown'})`);
+            _recordMissedTrade(userId, decision, 'SERVER_AT_REQUIRED_FOR_LIVE');
+            return null;
+        }
+    }
+
+    // [SP2] entry exclusivity + idempotency — ONLY on the SP2 testnet-exec path.
+    // Gated on MF.SERVER_AT !== true so legacy full-SERVER_AT behavior is byte-for-byte
+    // unchanged. Demo (engineMode === 'demo') is also untouched. With the flag OFF the
+    // gate above already returned null for non-demo, so this block is unreachable then.
     if (us.engineMode !== 'demo' && MF.SERVER_AT !== true) {
-        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — SERVER_AT_REQUIRED_FOR_LIVE (mode=${us.engineMode || 'unknown'})`);
-        _recordMissedTrade(userId, decision, 'SERVER_AT_REQUIRED_FOR_LIVE');
-        return null;
+        const _heartbeat = require('./heartbeatTracker');
+        const { resolveOwnership } = require('./ownership');
+        const _creds2 = getExchangeCreds(userId);
+        const _own = resolveOwnership({
+            clientPresent: _heartbeat.isClientPresent(userId, Date.now()),
+            atActive: _isATActiveForMode(us, us.engineMode),
+            credsValid: !!_creds2,
+            cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
+            underTakeControl: false,
+        });
+        if (_own.entryOwner !== 'SERVER') {
+            _recordMissedTrade(userId, decision, 'ENTRY_OWNED_BY_CLIENT');
+            return null;
+        }
+        const _dedup = require('./entryDedup');
+        if (_dedup.shouldBlockOpen(userId, decision.symbol, Date.now(), 8000)) {
+            _recordMissedTrade(userId, decision, 'ENTRY_DEDUP');
+            return null;
+        }
+        _dedup.markOpened(userId, decision.symbol, Date.now());
     }
 
     // [BUG-T7 2026-05-13] Per-mode AT-active gate. Pre-T7 used global atActive

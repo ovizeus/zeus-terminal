@@ -99,6 +99,9 @@ const DEFAULTS = {
     // engineMode='live' + exchangeMode='testnet'. REAL stays blocked.
     // Separate from SERVER_AT to prevent accidental real-money AT.
     SERVER_AT_TESTNET: false,
+    // SP2: master toggle to allow serverAT to EXECUTE testnet entries (not just
+    // shadow). Gated additionally per-user by data/sp2_cutover_users.json. OFF by default.
+    SERVER_AT_TESTNET_EXEC: false,
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path (registerManualPosition
     // delegates la _executeLiveEntryCore + hard SafetyAssertionError pre-fill).
@@ -336,6 +339,8 @@ module.exports = {
     get SERVER_BRAIN_DEMO() { return flags.SERVER_BRAIN_DEMO; },
     get SERVER_AT_DEMO() { return flags.SERVER_AT_DEMO; },
     get SERVER_AT_TESTNET() { return flags.SERVER_AT_TESTNET; },
+    // SP2 testnet-exec master toggle (per-user gated by sp2_cutover_users.json).
+    get SERVER_AT_TESTNET_EXEC() { return flags.SERVER_AT_TESTNET_EXEC; },
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED — controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path.
     get LIVE_ENTRY_UNIFIED() { return flags.LIVE_ENTRY_UNIFIED; },
