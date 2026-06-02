@@ -1136,6 +1136,8 @@ export const ZState = (() => {
       }
       _lastAppliedFrameSeq = state.seq
     }
+    // [SP2-9] Stash ownership state for future "SERVER/YOU DRIVING / SAFETY NET ON" indicator (data-only).
+    if (state.ownership) { try { (window as any).ZEUS_OWNERSHIP = state.ownership } catch (_) {} }
     const TP = w.TP
     const AT = getATObject()
     const Intervals = w.Intervals

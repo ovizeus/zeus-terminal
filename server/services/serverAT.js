@@ -3230,6 +3230,11 @@ function _resolveExecutionEnv(userId) {
     return { env: null, blockedReason: reason };
 }
 
+/** [SP2-9] Pure ownership resolver for sync payload (observability J). */
+function _computeUserOwnership(ctx) {
+    return require('./ownership').resolveOwnership(Object.assign({ underTakeControl: false }, ctx));
+}
+
 /** Full state snapshot for API/WebSocket consumers (per-user) */
 function getFullState(userId) {
     // [M2] Lazy UTC day rollover — ensures kill switch reset propagates to clients
@@ -3269,6 +3274,13 @@ function getFullState(userId) {
         atActiveDemo: us.atActiveDemo, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
         atActiveLive: us.atActiveLive, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
         serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
+        // [SP2-9] Ownership state for client "SERVER/YOU DRIVING / SAFETY NET ON" indicator (data-only).
+        ownership: _computeUserOwnership({
+            clientPresent: require('./heartbeatTracker').isClientPresent(userId, Date.now()),
+            atActive: _isATActiveForMode(us, us.engineMode),
+            credsValid: !!creds,
+            cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
+        }),
         // [Phase 2 S6-B4] Demo-only authority signals — see derivation above.
         serverATDemoEnabled,
         serverBrainDemoEnabled,
@@ -5466,6 +5478,7 @@ module.exports = {
     getLivePositions,
     getDemoBalance,
     getFullState,
+    _computeUserOwnership, // [SP2-9] pure ownership resolver for sync payload
     // Mode control
     setMode,
     getMode,
