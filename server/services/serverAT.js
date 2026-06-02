@@ -1233,6 +1233,7 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         dslModeAtOpen: us.dslEnabled === false ? null : (stc.dslMode || null),
         // ── Add-on tracking (Faza 2 Batch A) ──
         originalEntry: price,
+        originalSL: _slAligned,        // [SP2 fix #1] disaster backstop reference (immutable entry SL)
         originalSize: _alignedSize,    // [BUG-TM-8] LOT_SIZE-adjusted
         originalQty: _alignedQty,      // [BUG-TM-8] LOT_SIZE-aligned
         addOnCount: 0,
@@ -2700,6 +2701,21 @@ function _isSLBreached(side, price, effectiveSL) {
     return side === 'LONG' ? price <= effectiveSL : price >= effectiveSL;
 }
 
+// [SP2 fix #1] Disaster backstop — the original SL set at entry, or a derived
+// fallback from slPct. NEVER null/0 (today's null-SL → instant-HIT_SL bug).
+function _disasterStopPrice(pos) {
+    if (Number(pos.originalSL) > 0) return Number(pos.originalSL);
+    const slPct = Number(pos.slPct) > 0 ? Number(pos.slPct) : 0;
+    if (slPct <= 0) return 0; // unknown → guard below refuses to close
+    const dist = pos.price * slPct / 100;
+    return pos.side === 'LONG' ? pos.price - dist : pos.price + dist;
+}
+function _shouldDisasterClose(pos, price) {
+    const stop = _disasterStopPrice(pos);
+    if (!(stop > 0)) return false; // never close on null/0 (no false HIT_SL)
+    return pos.side === 'LONG' ? price <= stop : price >= stop;
+}
+
 // [SYNC-2 2026-06-01] Resolve the exchange a live position belongs to, so recon/close
 // route to its OWN exchange. The order/place manual-live path builds the entry without
 // an exchange (_buildEntryFromOrderPlace), so without this a Bybit live position would
@@ -2739,7 +2755,18 @@ function onPriceUpdate(symbol, price) {
         // positions (controlMode='user' without _controlModeTs) fall through and
         // get full server DSL/SL/TP management — previously they were skipped here
         // forever, so their DSL never activated and no trailing SL was ever placed.
-        if (_isExplicitUserControl(pos, Date.now())) continue;
+        // [SP2 fix #1] Under explicit take-control, suppress ACTIVE management (DSL
+        // trailing / TP-tighten) but ALWAYS enforce the disaster backstop — never orphan.
+        if (_isExplicitUserControl(pos, Date.now())) {
+            if (_shouldDisasterClose(pos, price)) {
+                const dPnl = pos.side === 'LONG'
+                    ? +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                    : +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
+                _closePosition(i, pos, 'DISASTER_SL', price, dPnl);
+                if (pos.userId) dslChangedUsers.add(pos.userId);
+            }
+            continue; // still skip active management (trailing/TP) for this position
+        }
 
         // [TL-04] Skip positions where live entry is still in-flight on Binance
         if (pos._livePending) continue;
@@ -5358,6 +5385,8 @@ setTimeout(() => {
 module.exports = {
     processBrainDecision,
     onPriceUpdate,
+    _disasterStopPrice,
+    _shouldDisasterClose,
     // Getters
     getOpenPositions,
     getOpenCount,
