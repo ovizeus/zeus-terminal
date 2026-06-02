@@ -18,4 +18,8 @@ describe('disaster backstop (fix #1)', () => {
   test('never closes on null/0 derived stop guard (no instant HIT_SL)', () => {
     expect(_shouldDisasterClose({ side: 'LONG', price: 100, originalSL: null, slPct: 0 }, 100)).toBe(false);
   });
+  test('SHORT closes when price >= disaster stop', () => {
+    expect(_shouldDisasterClose({ side: 'SHORT', price: 100, originalSL: 106, slPct: 1.5 }, 107)).toBe(true);
+    expect(_shouldDisasterClose({ side: 'SHORT', price: 100, originalSL: 106, slPct: 1.5 }, 105)).toBe(false);
+  });
 });

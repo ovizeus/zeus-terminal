@@ -2708,6 +2708,7 @@ function _disasterStopPrice(pos) {
     const slPct = Number(pos.slPct) > 0 ? Number(pos.slPct) : 0;
     if (slPct <= 0) return 0; // unknown → guard below refuses to close
     const dist = pos.price * slPct / 100;
+    if (!(dist > 0)) return 0; // guard: tiny/corrupt slPct or price → no false stop-at-entry
     return pos.side === 'LONG' ? pos.price - dist : pos.price + dist;
 }
 function _shouldDisasterClose(pos, price) {
