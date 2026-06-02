@@ -54,23 +54,16 @@ router.get('/ticker/all', (req, res) => {
     res.json({ ok: true, data: filtered, count: Object.keys(filtered).length });
 });
 
-// [RADAR-FIX 2026-06-01] OI / funding / sentiment are GLOBAL market metrics (sourced
-// from Binance), NOT per-exchange. The producers write them under the 'binance:' key.
-// A user on Bybit requested 'bybit:'+sym → null → radar showed 0. Fall back to the
-// binance key so these global metrics show on any active exchange. (depth stays
-// exchange-specific — order book IS per-exchange.)
-const _mcGlobal = (kind, exch, sym) => mc.get(kind, exch + ':' + sym) || mc.get(kind, 'binance:' + sym) || null;
-
 router.get('/funding', (req, res) => {
     const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
     const exch = req.query.exchange || 'binance';
-    res.json({ ok: true, data: _mcGlobal('funding', exch, sym) });
+    res.json({ ok: true, data: mc.get('funding', exch + ':' + sym) || null });
 });
 
 router.get('/oi', (req, res) => {
     const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
     const exch = req.query.exchange || 'binance';
-    res.json({ ok: true, data: _mcGlobal('oi', exch, sym) });
+    res.json({ ok: true, data: mc.get('oi', exch + ':' + sym) || null });
 });
 
 router.get('/depth', (req, res) => {
@@ -82,7 +75,7 @@ router.get('/depth', (req, res) => {
 router.get('/sentiment', (req, res) => {
     const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
     const exch = req.query.exchange || 'binance';
-    res.json({ ok: true, data: _mcGlobal('sentiment', exch, sym) });
+    res.json({ ok: true, data: mc.get('sentiment', exch + ':' + sym) || null });
 });
 
 router.get('/time', (req, res) => {
