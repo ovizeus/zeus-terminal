@@ -1983,7 +1983,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
         // [Task 41] Direct sendSignedRequest replaced with exchangeOps.closePosition router.
         // binanceOps.closePosition has NO internal retry — serverAT retry wrapper PRESERVED.
         // binanceOps.closePosition cancels SL+TP internally — manual cancel loop REMOVED.
-        if (exitType !== 'RECON_PHANTOM' && exitType !== 'RECON_EXCHANGE_CLOSED' && pos.live.executedQty) {
+        if (exitType !== 'RECON_PHANTOM' && exitType !== 'RECON_EXCHANGE_CLOSED' && exitType !== 'EXTERNAL_CLOSE' && pos.live.executedQty) {
             const rounded = roundOrderParams(pos.symbol, pos.live.executedQty);
             // [LIVE-PARITY] Retry loop for market close — PRESERVED (exchangeOps has no retry)
             const CLOSE_RETRIES = [1000, 3000, 5000];
@@ -5308,7 +5308,6 @@ function onUserDataEvent(userId, event) {
                         const exitPrice = p.entryPrice || existing.entry || existing.price || 0;
                         logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${existing.side} — closed externally, PnL=${pnl}`);
                         _closePosition(existingIdx, existing, 'EXTERNAL_CLOSE', exitPrice, +pnl.toFixed(2));
-                        _handleLiveExit(existing, 'EXTERNAL_CLOSE', exitPrice, +pnl.toFixed(2)).catch(_ => {});
                     }
                 } else if (!existing) {
                     // Position OPENED externally — but skip if Zeus JUST registered one
