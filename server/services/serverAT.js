@@ -1884,7 +1884,11 @@ async function _executeLiveEntry(entry, stc) {
 // Live Exit — cancel remaining SL or TP
 // ══════════════════════════════════════════════════════════════════
 async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
-    if (!pos.live || (pos.live.status !== 'LIVE' && pos.live.status !== 'LIVE_NO_SL')) return;
+    // [SP2-7b] EXTERNAL (adopted) positions are now allowed through. The server net's
+    // protective SL is the ONLY protection for an adopted position — its trigger MUST
+    // reach the exchange (reduce-only MARKET close), else the position stays open +
+    // unprotected (phantom).
+    if (!pos.live || (pos.live.status !== 'LIVE' && pos.live.status !== 'LIVE_NO_SL' && pos.live.status !== 'EXTERNAL')) return;
 
     // [MULTI-USER] Hard guard — no fallback to user 1
     if (!pos.userId) { logger.error('AT_LIVE', 'handleLiveExit without pos.userId — aborting'); return; }
@@ -1893,8 +1897,15 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
     const creds = _credsForPosition(userId, pos);
     if (!creds) return;
 
+    // [SP2-7b] EXTERNAL positions have NO resting SL/TP order on the exchange — the
+    // HIT_SL/HIT_TP "the exchange already closed us" assumption is FALSE for adopted
+    // positions. Route every EXTERNAL exit through the reduce-only MARKET close path
+    // (the `else` branch below) so the close actually executes. _isExternal forces the
+    // market-close branch regardless of exitType.
+    const _isExternal = pos.live.status === 'EXTERNAL';
+
     // [FIX-EXPIRY] EXPIRED handling removed — no code path produces EXPIRED anymore
-    if (exitType === 'HIT_SL') {
+    if (!_isExternal && exitType === 'HIT_SL') {
         // SL triggered on exchange — cancel remaining TP
         // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
         if (pos.live.tpOrderId) {
@@ -1958,7 +1969,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                 logger.info('AT_LIVE_EXIT', `SL fill price query skipped for ${userExchange} user=${userId} — deferred to Phase 2`);
             }
         }
-    } else if (exitType === 'HIT_TP') {
+    } else if (!_isExternal && exitType === 'HIT_TP') {
         // TP triggered on exchange — cancel remaining SL
         // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
         if (pos.live.slOrderId) {
@@ -2424,7 +2435,10 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     );
 
     // ── Live: handle exchange exit ──
-    if (pos.live && (pos.live.status === 'LIVE' || pos.live.status === 'LIVE_NO_SL')) {
+    // [SP2-7b] EXTERNAL (adopted) positions included — the server net's protective-SL
+    // trigger MUST reach the exchange (reduce-only MARKET close); else the adopted
+    // position is marked closed in Zeus but stays open + unprotected on the exchange.
+    if (pos.live && (pos.live.status === 'LIVE' || pos.live.status === 'LIVE_NO_SL' || pos.live.status === 'EXTERNAL')) {
         _handleLiveExit(pos, exitType, price, pnl).catch(err => {
             logger.error('AT_LIVE', `Live exit handler failed [${pos.seq}]: ${err.message}`);
         });
@@ -4117,6 +4131,52 @@ function _registerManualPositionLegacy(userId, data) {
 //
 // Refs: ADR-001 §3.1 + §3.3; TEST_SCAFFOLDING_M1 §5; BUG-T2c root cause.
 // ══════════════════════════════════════════════════════════════════
+// [SP2-7b] Pure builder for the EXTERNAL (adopted) position entry object. Extracted
+// from _syncExternalPosition so the entry shape is unit-testable in isolation.
+//
+// CRITICAL money-path invariants the entry MUST satisfy so the server net can both
+// protect AND actually close this adopted position on the exchange:
+//   - `price` alias of `entry` — the PnL math reads pos.price, not pos.entry.
+//   - `lev:1` + `size = qty*entry` (notional) — makes size*lev = qty*entry, so the
+//     PnL formula (exit-entry)/entry * size * lev = (exit-entry)*qty (correct, finite).
+//     External positions have unknown margin/lev split, but PnL depends only on
+//     qty×priceMove, so this is exact, not an approximation.
+//   - `live.executedQty` set — _handleLiveExit's reduce-only MARKET close is sized off
+//     executedQty; without it the close is skipped and the position stays phantom.
+function _buildExternalEntry(data, seq, adoptedSL) {
+    const _entryPrice = parseFloat(data.entryPrice);
+    const _qty = parseFloat(data.qty);
+    return {
+        seq,
+        userId: data.userId,
+        symbol: data.symbol,
+        side: data.side,
+        entry: _entryPrice,
+        // [SP2-7b] price alias — the PnL math (and many guards) read pos.price.
+        price: _entryPrice,
+        qty: _qty,
+        // [SP2-7b] notional size + lev=1 so size*lev = qty*entry → PnL = (exit-entry)*qty (finite).
+        size: _qty * _entryPrice,
+        lev: 1,
+        sl: adoptedSL,
+        originalSL: adoptedSL,
+        slPct: 2, // 2 = 2% (matches _disasterStopPrice slPct/100 convention)
+        mode: 'live',
+        source: 'external',
+        // [ENG-3 2026-06-01] Thread the exchange the external position was found on (recon
+        // knows it via per-exchange grouping) so recon/close route correctly — else the
+        // at_positions schema default 'binance' would mislabel a Bybit external position.
+        exchange: data.exchange || null,
+        // [SP2-7b] EXTERNAL status + executedQty so the server net's reduce-only MARKET
+        // close (_handleLiveExit) actually reaches the exchange. No resting SL/TP orders
+        // exist for an adopted position (slOrderId/tpOrderId null) — the close path treats
+        // null order ids as safe no-ops.
+        live: { status: 'EXTERNAL', executedQty: _qty, slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false },
+        ts: Date.now(),
+        externalSync: true,
+    };
+}
+
 function _syncExternalPosition(data) {
     if (!data || typeof data !== 'object') {
         return { ok: false, error: 'Missing data object' };
@@ -4133,27 +4193,7 @@ function _syncExternalPosition(data) {
     // EXCHANGE stop placement fails (flaky on testnet). 0 → caller guards refuse to
     // close (no false close). No exchange order is placed here.
     const _adoptedSL = _adoptedProtectiveStop(data.side, data.markPrice, data.entryPrice);
-    const entry = {
-        seq,
-        userId,
-        symbol: data.symbol,
-        side: data.side,
-        entry: parseFloat(data.entryPrice),
-        qty: parseFloat(data.qty),
-        sl: _adoptedSL,
-        originalSL: _adoptedSL,
-        slPct: 2, // 2 = 2% (matches _disasterStopPrice slPct/100 convention)
-        mode: 'live',
-        source: 'external',
-        // [ENG-3 2026-06-01] Thread the exchange the external position was found on (recon
-        // knows it via per-exchange grouping) so recon/close route correctly — else the
-        // at_positions schema default 'binance' would mislabel a Bybit external position.
-        exchange: data.exchange || null,
-        // External position has NO SL placement responsibility — pre-existing on exchange
-        live: { status: 'EXTERNAL', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false },
-        ts: Date.now(),
-        externalSync: true,
-    };
+    const entry = _buildExternalEntry(data, seq, _adoptedSL);
     _positions.push(entry);
     _trackLiveOpen(entry); // [P5b]
     try { _persistState(userId); } catch (_) {}
@@ -5298,22 +5338,49 @@ function onUserDataEvent(userId, event) {
                             // (belt-and-suspenders) so the position is protected even if the server process is down.
                             // Fire-and-forget (don't block recon); DSL takes over this native SL on activation.
                             (async () => {
-                                try {
-                                    const _mark = Number(p.markPrice) || Number(p.entryPrice) || 0;
-                                    const _stop = _computeProtectiveStop(side, _mark, 0.02);
-                                    if (!_stop) return;
-                                    const r = await require('./exchangeOps').placeStopLoss(userId, {
-                                        symbol: p.symbol, side, stopPrice: _stop,
-                                        decisionKey: require('./decisionKey').generate(),
-                                    });
-                                    if (r && r.ok) {
-                                        logger.info('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} ${side} protective SL @ $${_stop.toFixed(2)} (slOrderId=${r.slOrderId})`);
-                                        try { audit.record('RECON_SAFETY_SL_PLACED', { userId, symbol: p.symbol, side, stopPrice: _stop, slOrderId: r.slOrderId }, 'AT_RECON'); } catch (_) {}
-                                    } else {
-                                        logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} placeStopLoss not ok: ${r && r.error}`);
+                                const _mark = Number(p.markPrice) || Number(p.entryPrice) || 0;
+                                const _stop = _computeProtectiveStop(side, _mark, 0.02);
+                                if (!_stop) return;
+                                // [SP2-7b] The EXCHANGE-side stop is the PRIMARY protection for an
+                                // adopted position (survives server-process death); the server-net
+                                // SL is the backstop. Make placement robust: retry up to 3 attempts,
+                                // and on persistent failure ALERT the operator (telegram + audit) so
+                                // they know the position is relying on the server-net backstop ONLY.
+                                // Fire-and-forget (don't block recon).
+                                const SAFETY_SL_ATTEMPTS = 3;
+                                let _placed = false;
+                                let _lastErr = null;
+                                for (let _att = 1; _att <= SAFETY_SL_ATTEMPTS; _att++) {
+                                    try {
+                                        const r = await require('./exchangeOps').placeStopLoss(userId, {
+                                            symbol: p.symbol, side, stopPrice: _stop,
+                                            decisionKey: require('./decisionKey').generate(),
+                                        });
+                                        if (r && r.ok) {
+                                            logger.info('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} ${side} protective SL @ $${_stop.toFixed(2)} (slOrderId=${r.slOrderId}, attempt ${_att}/${SAFETY_SL_ATTEMPTS})`);
+                                            try { audit.record('RECON_SAFETY_SL_PLACED', { userId, symbol: p.symbol, side, stopPrice: _stop, slOrderId: r.slOrderId, attempt: _att }, 'AT_RECON'); } catch (_) {}
+                                            _placed = true;
+                                            break;
+                                        }
+                                        _lastErr = (r && r.error) || 'not ok';
+                                        logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} placeStopLoss not ok (attempt ${_att}/${SAFETY_SL_ATTEMPTS}): ${_lastErr}`);
+                                    } catch (_e) {
+                                        _lastErr = (_e && _e.message) || String(_e);
+                                        logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} failed (attempt ${_att}/${SAFETY_SL_ATTEMPTS}): ${_lastErr}`);
                                     }
-                                } catch (_e) {
-                                    logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} failed: ${_e && _e.message}`);
+                                    if (_att < SAFETY_SL_ATTEMPTS) {
+                                        await new Promise(r => setTimeout(r, 1500 * _att));
+                                    }
+                                }
+                                if (!_placed) {
+                                    // [SP2-7b] Persistent failure — the exchange-side primary protection
+                                    // is NOT in place. Alert operator: position is on the server-net
+                                    // backstop only (server-process death = unprotected).
+                                    logger.error('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} ${side} EXCHANGE stop FAILED after ${SAFETY_SL_ATTEMPTS} attempts — relying on server-net backstop ONLY. lastErr=${_lastErr}`);
+                                    try {
+                                        telegram.sendToUser(userId, `🚨 *RECON SAFETY-SL FAILED*\n${side} ${p.symbol} @ ~$${_mark.toFixed(2)}\nExchange protective stop could NOT be placed after ${SAFETY_SL_ATTEMPTS} attempts.\n*Position is protected by the server-net SL ONLY (no exchange-side stop). Place a manual stop on the exchange.*\nlastErr: ${_lastErr}`);
+                                    } catch (_) {}
+                                    try { audit.record('RECON_SAFETY_SL_FAILED', { userId, symbol: p.symbol, side, stopPrice: _stop, attempts: SAFETY_SL_ATTEMPTS, lastErr: String(_lastErr) }, 'AT_RECON'); } catch (_) {}
                                 }
                             })();
                         } else {
@@ -5514,6 +5581,11 @@ module.exports = {
     // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
     // source='external' marker, NO SL placement responsibility, warning log.
     _syncExternalPosition,
+    // [SP2-7b] Pure builder for the EXTERNAL entry object (finite-PnL + closable shape).
+    _buildExternalEntry,
+    // [SP2-7b] Exported for integration test — proves an EXTERNAL SL-triggered close
+    // reaches exchangeOps.closePosition (reduce-only MARKET).
+    _handleLiveExit,
     // [BUG-T2c FIX 2026-05-14] Path B SL placement helper (trading.js).
     // Called from /api/order/place after main MARKET order success. Places SL HARD
     // + TP conditional on !dslParams (DSL ON skip per regulă). Returns
