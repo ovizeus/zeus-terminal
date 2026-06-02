@@ -3465,6 +3465,18 @@ function _computeProtectiveStop(side, markPrice, adversePct) {
     return _normalizePositionSide(side) === 'LONG' ? m * (1 - pct) : m * (1 + pct);
 }
 
+// [SP2 policy L] Protective stop for an adopted/external position. Current-price-
+// relative (markPrice ∓2%), entryPrice fallback. Reuses _computeProtectiveStop.
+// Returns 0 when no usable price (caller's _isSLBreached/disaster guards refuse to
+// close on 0 → no false close). Makes the server net protect adopted positions even
+// if the best-effort EXCHANGE stop placement fails (flaky on testnet).
+function _adoptedProtectiveStop(side, markPrice, entryPrice) {
+    const ref = Number(markPrice) > 0 ? Number(markPrice) : Number(entryPrice);
+    if (!(ref > 0)) return 0;
+    const stop = _computeProtectiveStop(side, ref, 0.02);
+    return Number(stop) > 0 ? Number(stop) : 0;
+}
+
 async function _executeLiveEntryCore(entryInput, stc, creds) {
     if (!entryInput || typeof entryInput !== 'object') {
         const err = new Error('_executeLiveEntryCore: entry object required');
@@ -4065,6 +4077,12 @@ function _syncExternalPosition(data) {
     const userId = data.userId;
     const us = _uState(userId);
     const seq = ++us.seq;
+    // [SP2 policy L] Attach a SERVER-side protective SL (markPrice ∓2%, entryPrice
+    // fallback) so the server net (onPriceUpdate) + disaster backstop (reads
+    // originalSL) protect this adopted position even if the recon caller's best-effort
+    // EXCHANGE stop placement fails (flaky on testnet). 0 → caller guards refuse to
+    // close (no false close). No exchange order is placed here.
+    const _adoptedSL = _adoptedProtectiveStop(data.side, data.markPrice, data.entryPrice);
     const entry = {
         seq,
         userId,
@@ -4072,6 +4090,9 @@ function _syncExternalPosition(data) {
         side: data.side,
         entry: parseFloat(data.entryPrice),
         qty: parseFloat(data.qty),
+        sl: _adoptedSL,
+        originalSL: _adoptedSL,
+        slPct: 2,
         mode: 'live',
         source: 'external',
         // [ENG-3 2026-06-01] Thread the exchange the external position was found on (recon
@@ -4086,11 +4107,11 @@ function _syncExternalPosition(data) {
     _positions.push(entry);
     _trackLiveOpen(entry); // [P5b]
     try { _persistState(userId); } catch (_) {}
-    logger.warn('AT_RECON', `External position synced uid=${userId} sym=${data.symbol} side=${data.side} qty=${data.qty} — no SL placement (pre-existing pe exchange, source=external)`);
+    logger.warn('AT_RECON', `External position synced uid=${userId} sym=${data.symbol} side=${data.side} qty=${data.qty} — no exchange SL placed here (pre-existing pe exchange, source=external); protective server SL @ ${_adoptedSL}`);
     return {
         ok: true,
         seq,
-        warning: 'External position registered without SL placement on exchange (pre-existing position, source=external)',
+        warning: `External position registered without exchange SL placement (pre-existing position, source=external); protective server SL @ ${_adoptedSL}`,
     };
 }
 
@@ -5213,6 +5234,7 @@ function onUserDataEvent(userId, event) {
                         _syncExternalPosition({
                             userId, symbol: p.symbol, side,
                             entryPrice: p.entryPrice,
+                            markPrice: p.markPrice,
                             qty: Math.abs(p.positionAmt),
                         });
                         _broadcastPositions(userId);
@@ -5525,6 +5547,8 @@ module.exports = {
     _normalizePositionSide,
     // [Fix #2 safety net 2026-05-29] Protective-stop computation (exported for testing)
     _computeProtectiveStop,
+    // [SP2 policy L] Adopted-position protective stop (exported for testing)
+    _adoptedProtectiveStop,
     // [DSL-FIX 2026-06-01] Skip-decision + SL-breach predicates (exported for testing)
     __dslfix: { isExplicitUserControl: _isExplicitUserControl, isSLBreached: _isSLBreached },
     // [KS-UI 2026-06-01] Test-only hooks for the kill re-arm characterization test.
