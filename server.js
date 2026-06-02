@@ -1759,6 +1759,7 @@ wss.on('connection', (ws, req) => {
     const set = _wsClients.get(uid);
     if (set) { set.delete(ws); if (set.size === 0) _wsClients.delete(uid); }
     try { require('./server/services/wsMarketProxy').handleClientDisconnect(ws); } catch (_) {}
+    try { require('./server/services/heartbeatTracker').markAbsent(uid); } catch (_) {}
   });
   ws.on('error', () => { try { ws.close(); } catch (_) { } });
 

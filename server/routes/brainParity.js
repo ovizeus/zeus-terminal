@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const MF = require('../migrationFlags');
+const heartbeatTracker = require('../services/heartbeatTracker');
 
 function _requireAdmin(req, res, next) {
     if (!req.user || req.user.role !== 'admin') {
@@ -47,6 +48,13 @@ router.post('/client', (req, res) => {
         reasons: body.reasons,
     }, body.cycle);
     return res.status(200).json({ ok: true, logged: true });
+});
+
+// POST /api/brain/parity/heartbeat — client AT-tick liveness. Server-stamped.
+router.post('/heartbeat', (req, res) => {
+    if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    heartbeatTracker.recordBeat(req.user.id, Date.now());
+    return res.status(200).json({ ok: true });
 });
 
 // GET /api/brain/parity/report

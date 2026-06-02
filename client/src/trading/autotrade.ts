@@ -746,6 +746,9 @@ export function runAutoTradeCheck(): void {
               ts: Date.now(),
             }).catch(() => { /* parity harness is best-effort */ })
           }
+          // [SP2] Trading-loop liveness — server stamps receive-time. Best-effort.
+          api.raw<any>('POST', '/api/brain/parity/heartbeat', { ts: Date.now() })
+            .catch(() => { /* heartbeat is best-effort */ })
         } catch (_) { /* api missing — silent */ }
       }
     } catch (_fcErr: any) { try { console.warn('[AT/FUSION_CACHE]', _fcErr?.message || _fcErr) } catch (_) {} /* non-blocking */ }
