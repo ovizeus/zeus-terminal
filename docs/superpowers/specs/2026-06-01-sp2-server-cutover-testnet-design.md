@@ -50,7 +50,8 @@ The code never branches on *which* user. Only one target variable changes:
 A single pure function is the heart of SP2:
 
 ```
-resolveOwnership(userId, position, now) → { entryOwner, exitOwner }
+resolveOwnership(userId, position, now)
+  → { entryOwner, exitOwner: { activeManager, disasterBackstop } }
 ```
 
 It separates the two asymmetric risks:
@@ -71,12 +72,19 @@ exclusive: exactly one side opens.
 
 ### 4.2 Exits (SL / TP / trailing / liquidation) — ALWAYS-ON SAFETY NET (Variant A)
 
+`exitOwner` is **two-tier** — active management and disaster backstop are separate:
+
 ```
-position under explicit take-control (≤30 min, _controlModeTs) → exitOwner = USER
-                                                                  (server defers on THIS position)
-otherwise → exitOwner = SERVER, ALWAYS
-            (client also runs exits when present — redundant)
-            ALL closes use reduceOnly → second close on a flat position is a no-op
+position under explicit take-control (≤30 min, _controlModeTs):
+    activeManager   = USER    (server suppresses trailing / TP-tighten / add-ons on THIS position)
+    disasterBackstop = SERVER  (server ALWAYS enforces a hard catastrophic stop — NEVER deferred)
+
+otherwise:
+    activeManager   = SERVER, ALWAYS   (full exit: SL / TP / trailing / liquidation)
+    disasterBackstop = SERVER
+
+(client also runs exits when present — redundant)
+ALL closes use reduceOnly → second close on a flat position is a no-op
 ```
 
 Double-close is normally harmless (`reduceOnly` rejects the second), so exits are
@@ -87,10 +95,23 @@ on SL, even during a net-cut transition window.** This is the operator's #1 pain
 **Exit net = FULL exit (M):** SL **and** TP **and** trailing **and** liquidation-proximity.
 Closing the phone must still take profits, not just stop losses.
 
-**Take-control is a human override, not a net blip:** `_isExplicitUserControl` (a deliberate
-human action, ≤30 min) suppresses the server net on that specific position. A stale heartbeat
-(net cut) does NOT — the net stays on. These two are distinct signals and must not be
-conflated. After 30 min, take-control lapses and the net resumes.
+**Take-control suppresses ACTIVE management only — never the disaster backstop (fix #1, money-path):**
+`_isExplicitUserControl` (a deliberate human action, ≤30 min) means "let me manage this trade by
+hand" — so the server suppresses *active* management (trailing, TP-tightening, add-ons) on that
+position. It does **NOT** mean "abandon my safety net." The server **always** enforces a hard
+**disaster backstop** on the position: the **original SL set at entry** (or, if none, a configured
+catastrophic max-loss stop from entry) — **never null/0** (today's null-SL → instant-HIT_SL bug).
+Without this, the exact Variant-A failure mode would reappear inside the manual window: user takes
+control → net cuts → price crosses SL → server defers up to 30 min → **orphan**. The disaster
+backstop closes that gap. A stale heartbeat (net cut) is a *distinct* signal from take-control and
+never suppresses anything. After 30 min, take-control lapses and the server resumes full active
+management.
+
+**Why the backstop must be server-synthetic, not exchange-resting:** on testnet the exchange-side
+SL order frequently fails to place (the Binance testnet REST `openOrders` non-JSON issue, roadmap
+§3e), so `slOrderId` is often null. The server cannot rely on a resting stop existing — its
+synthetic price-watch disaster stop **is** the real protection, which is exactly why it must run
+even under take-control.
 
 ### 4.3 Fail directions — opposite, both safe (defense-in-depth)
 
@@ -118,10 +139,18 @@ Entries fail toward *not acting* (no duplicate position); exits fail toward *act
   entry* ownership — the orphan-SL risk does not depend on it.
 - **Hysteresis (C):** require **N consecutive** present/absent beats before flipping
   entry ownership, to stop control flapping at the timeout boundary.
-- **Cold-start grace (B):** on server start/reload, `lastHeartbeat` is empty. Treat all
-  users as **client-present** until a fresh heartbeat arrives (+ a short grace window).
-  Without this, a PM2 reload makes every client look "absent" → server opens over live
-  clients → duplicate positions. This is a classic reload-triggered bug; B prevents it.
+- **Cold-start grace (B) — ENTRIES ONLY (fix #3, money-path):** on server start/reload,
+  `lastHeartbeat` is empty. Treat all users as **client-present** until a fresh heartbeat
+  arrives (+ a short grace window). Without this, a PM2 reload makes every client look
+  "absent" → server opens over live clients → duplicate positions. This is a classic
+  reload-triggered bug; B prevents it.
+  **Grace applies ONLY to entry ownership (the fail-closed axis). It NEVER touches exits.**
+  The exit net and the disaster backstop are **fail-safe and run ALWAYS**, independent of
+  heartbeat/presence and therefore independent of grace. A grace window that suppressed exits
+  would orphan positions on SL right after a reload — exactly when ENG-3 client↔server desyncs
+  are most likely. Concretely, post-reload the server **immediately** runs the exit net **and**
+  reconciliation (N) on all known/adopted positions regardless of grace; grace only delays the
+  server *claiming entry ownership*, never *protecting* a position.
 
 ## 6. Entry execution path (server-opens)
 
@@ -245,8 +274,13 @@ Reuses [P-A position adoption](2026-05-30-P-A-position-adoption-design.md).
   default SL% from entry.
 - **Integration — net-cut during SL hit:** the Section-4 scenario — server net closes at the
   planned SL while the client is frozen; no orphan, no double position.
-- **Integration — reload:** PM2 reload mid-session does NOT trigger takeover over live
-  clients (cold-start grace holds).
+- **Integration — take-control + net-cut (fix #1):** position under explicit take-control,
+  net cuts, price crosses SL → the server **disaster backstop fires** (closes at the original
+  SL); active management (trailing/TP) stayed suppressed but the catastrophic stop did NOT.
+  Proves the manual window cannot orphan a position.
+- **Integration — reload (fix #3):** PM2 reload mid-session does NOT trigger takeover over
+  live clients (cold-start grace holds on *entries*), AND the exit net + reconciliation run
+  **immediately** on all known positions despite grace (grace never suppresses exits).
 - **Integration — rollback:** flipping cutover off returns entries to client instantly while
   positions stay protected by the net.
 - Server suite: `jest --forceExit --runInBand`, output redirected to file (per project rule).
@@ -257,3 +291,12 @@ Reuses [P-A position adoption](2026-05-30-P-A-position-adoption-design.md).
 - SL ownership: **Variant A** — server always SL safety net; `reduceOnly` is a hard
   requirement. ✅ (chosen after the concrete net-cut-during-SL-hit walkthrough)
 - Upgrades A–J approved; second deep-pass K–S folded in (vetoable at spec review). ✅
+- **2026-06-02 mobile-review fixes:** #1 take-control no longer orphans — `exitOwner` split
+  into `{activeManager, disasterBackstop}`; server always enforces a hard disaster stop
+  (original/catastrophic SL, never null) even under take-control, suppressing only active
+  management. #3 cold-start grace made explicitly ENTRIES-ONLY; exits/backstop are fail-safe
+  always, independent of grace; post-reload exit net + reconciliation run immediately. ✅
+- **OPEN (2026-06-02): SP2 hard-gate #1 (SP1 client-parity)** — flagged as a deadlock risk
+  (A=50 actionable cycles unreachable with a timid uid=1 client). Resolution pending operator
+  decision: demo-soak (uid=2) as primary proof vs redefined satisfiable parity threshold.
+  §2 gate wording to be updated once decided.
