@@ -249,6 +249,13 @@ function _validateMutex(f) {
     if (f.SERVER_AT_TESTNET && f.SERVER_AT) {
         violations.push('SERVER_AT_TESTNET && SERVER_AT both true — TESTNET carve-out is redundant once full SERVER_AT is enabled; disable one before enabling the other');
     }
+    // [SP2-5 2026-06-02] TESTNET_EXEC carve-out mutex vs full SERVER_AT.
+    // Same one-way ratchet rationale as SERVER_AT_TESTNET above — full
+    // SERVER_AT subsumes the testnet-exec carve-out, so both true is
+    // incoherent and must never boot into dual-execution.
+    if (f.SERVER_AT_TESTNET_EXEC && f.SERVER_AT) {
+        violations.push('SERVER_AT_TESTNET_EXEC && SERVER_AT both true — TESTNET_EXEC carve-out is redundant once full SERVER_AT is enabled; disable one before enabling the other');
+    }
     return { ok: violations.length === 0, violations };
 }
 

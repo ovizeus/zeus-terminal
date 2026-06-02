@@ -58,6 +58,26 @@ describe('migrationFlags._validateMutex — SERVER_AT_TESTNET vs SERVER_AT', () 
         expect(v.ok).toBe(true);
     });
 
+    test('SERVER_AT_TESTNET_EXEC && SERVER_AT both true is rejected', () => {
+        const f = Object.assign({}, SAFE, {
+            CLIENT_AT: false, // required to satisfy SERVER_AT mutex
+            SERVER_AT: true,
+            SERVER_AT_TESTNET_EXEC: true,
+        });
+        const v = validateMutex(f);
+        expect(v.ok).toBe(false);
+        expect(v.violations.some(m => /SERVER_AT_TESTNET_EXEC && SERVER_AT/.test(m))).toBe(true);
+    });
+
+    test('SERVER_AT_TESTNET_EXEC alone is allowed', () => {
+        const f = Object.assign({}, SAFE, {
+            CLIENT_AT: false,
+            SERVER_AT_TESTNET_EXEC: true,
+        });
+        const v = validateMutex(f);
+        expect(v.ok).toBe(true);
+    });
+
     test('both TESTNET + DEMO with full SERVER_AT triggers two violations', () => {
         const f = Object.assign({}, SAFE, {
             CLIENT_AT: false,
