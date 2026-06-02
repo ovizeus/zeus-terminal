@@ -65,6 +65,7 @@ export function _computeFillQtyFallback(
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 import { AT } from '../engine/events'
+import { confNDirectional } from '../engine/fusionMath'
 import { TP } from '../core/state'
 import { BM } from '../core/config'
 import { useBrainStore } from '../stores/brainStore'
@@ -546,7 +547,8 @@ export function computeFusionDecision(): any {
 
   // 1) Confluence (0..100)
   const conf = Number.isFinite(+BM?.confluenceScore) ? +BM.confluenceScore : 50
-  const confN = _clampFB01((conf - 50) / 50)
+  // [FEEDFIX Lever C] confN is computed later (step 8) once out.dir is known, so
+  // it can reward conviction in EITHER direction. See confNDirectional.
   reasons.push('Confluence:' + conf.toFixed(0))
 
   // 2) Scenario / ProbScore
@@ -609,7 +611,7 @@ export function computeFusionDecision(): any {
 
   // 8) Confidence fusion
   const alignN = out.dir === 'neutral' ? 0 : (out.dir === 'long' ? ofiN : (1 - ofiN))
-  let confF = (confN * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20)
+  let confF = (confNDirectional(conf, out.dir) * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20)
   confF *= (1 - (liqDangerN * 0.55))
   confF = _clampFB01(confF)
   out.confidence = Math.round(confF * 100)

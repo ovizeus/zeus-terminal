@@ -4,6 +4,7 @@
 // [8B-mini] READS migrated to stateAccessors. WRITES remain on window.* (bridge).
 
 import { getATEnabled, getSignalData, getRSI, getLS, getFR, getOI } from '../services/stateAccessors'
+import { dirFactorLive } from './fusionMath'
 import { el } from '../utils/dom'
 import { updateBrainArc } from './brain'
 
@@ -41,8 +42,10 @@ export function calcConfluenceScore(): void {
   // [FIX R1] Neutral fallback when OI data is missing — prevents hidden bear bias
   const oiDir = (oiStale || (oi.oi == null && oi.oiPrev == null)) ? 'neut' : ((oi.oi || 0) > (oi.oiPrev || 0) ? 'bull' : 'bear')
   const dirs = [rsiDir, stDir, lsDir, frDir, oiDir]
-  const bullDirs = dirs.filter((d: string) => d === 'bull').length
-  const dirFactor = bullDirs / dirs.length
+  // [FEEDFIX Lever B] Count only LIVE feeds in the denominator — a dead feed
+  // ('neut', e.g. LS from the broken sentiment endpoint) must not drag the score
+  // down. Fail-closed to neutral (0.5) if fewer than 3 feeds are live.
+  const dirFactor = dirFactorLive(dirs)
   const baseScore = dirFactor * 100
   const signalBoost = total >= 4 ? 20 : total >= 2 ? 10 : 0
   const finalScore = Math.round(Math.max(0, Math.min(100, bullCount > bearCount ? baseScore + signalBoost : bullCount < bearCount ? baseScore - signalBoost : baseScore)))
