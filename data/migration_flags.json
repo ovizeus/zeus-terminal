@@ -14,6 +14,7 @@
   "SERVER_BRAIN_DEMO": true,
   "SERVER_AT_DEMO": true,
   "SERVER_AT_TESTNET": true,
+  "SERVER_AT_TESTNET_EXEC": false,
   "LIVE_ENTRY_UNIFIED": true,
   "LIQ_FEED_VIA_SERVER": true,
   "ML_INGEST_ENABLED": true,
