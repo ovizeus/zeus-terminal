@@ -3474,7 +3474,7 @@ function _adoptedProtectiveStop(side, markPrice, entryPrice) {
     const ref = Number(markPrice) > 0 ? Number(markPrice) : Number(entryPrice);
     if (!(ref > 0)) return 0;
     const stop = _computeProtectiveStop(side, ref, 0.02);
-    return Number(stop) > 0 ? Number(stop) : 0;
+    return Number(stop) > 0 ? Number(stop) : 0; // _computeProtectiveStop can't be null/0 given ref>0; guard kept for safety
 }
 
 async function _executeLiveEntryCore(entryInput, stc, creds) {
@@ -4092,7 +4092,7 @@ function _syncExternalPosition(data) {
         qty: parseFloat(data.qty),
         sl: _adoptedSL,
         originalSL: _adoptedSL,
-        slPct: 2,
+        slPct: 2, // 2 = 2% (matches _disasterStopPrice slPct/100 convention)
         mode: 'live',
         source: 'external',
         // [ENG-3 2026-06-01] Thread the exchange the external position was found on (recon
@@ -5231,36 +5231,44 @@ function onUserDataEvent(userId, event) {
                         logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} — skipped (recent registration ${_recentReg.seq})`);
                     } else {
                         logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} ${side} amt=${p.positionAmt} — opened externally`);
-                        _syncExternalPosition({
+                        // [SP2] POSITION_OPENED fires at open time → entryPrice ≈ current
+                        // price, so the entryPrice-relative protective SL is correct here
+                        // (ACCOUNT_UPDATE carries no markPrice). Gate follow-up on a
+                        // successful sync — never place an exchange SL for an unregistered position.
+                        const _syncRes = _syncExternalPosition({
                             userId, symbol: p.symbol, side,
                             entryPrice: p.entryPrice,
-                            markPrice: p.markPrice,
                             qty: Math.abs(p.positionAmt),
                         });
-                        _broadcastPositions(userId);
-                        // [Fix #2 safety net 2026-05-29] Never leave a recon-discovered live
-                        // position naked. _syncExternalPosition registers WITHOUT an SL; place a
-                        // correct-side protective stop (markPrice ±2%) so no position is unprotected.
-                        // Fire-and-forget (don't block recon); DSL takes over this native SL on activation.
-                        (async () => {
-                            try {
-                                const _mark = Number(p.markPrice) || Number(p.entryPrice) || 0;
-                                const _stop = _computeProtectiveStop(side, _mark, 0.02);
-                                if (!_stop) return;
-                                const r = await require('./exchangeOps').placeStopLoss(userId, {
-                                    symbol: p.symbol, side, stopPrice: _stop,
-                                    decisionKey: require('./decisionKey').generate(),
-                                });
-                                if (r && r.ok) {
-                                    logger.info('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} ${side} protective SL @ $${_stop.toFixed(2)} (slOrderId=${r.slOrderId})`);
-                                    try { audit.record('RECON_SAFETY_SL_PLACED', { userId, symbol: p.symbol, side, stopPrice: _stop, slOrderId: r.slOrderId }, 'AT_RECON'); } catch (_) {}
-                                } else {
-                                    logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} placeStopLoss not ok: ${r && r.error}`);
+                        if (_syncRes && _syncRes.ok) {
+                            _broadcastPositions(userId);
+                            // [Fix #2 safety net 2026-05-29] Never leave a recon-discovered live
+                            // position naked. _syncExternalPosition now sets a server-side protective SL
+                            // (markPrice ∓2%, entryPrice fallback); ALSO place a correct-side EXCHANGE stop
+                            // (belt-and-suspenders) so the position is protected even if the server process is down.
+                            // Fire-and-forget (don't block recon); DSL takes over this native SL on activation.
+                            (async () => {
+                                try {
+                                    const _mark = Number(p.markPrice) || Number(p.entryPrice) || 0;
+                                    const _stop = _computeProtectiveStop(side, _mark, 0.02);
+                                    if (!_stop) return;
+                                    const r = await require('./exchangeOps').placeStopLoss(userId, {
+                                        symbol: p.symbol, side, stopPrice: _stop,
+                                        decisionKey: require('./decisionKey').generate(),
+                                    });
+                                    if (r && r.ok) {
+                                        logger.info('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} ${side} protective SL @ $${_stop.toFixed(2)} (slOrderId=${r.slOrderId})`);
+                                        try { audit.record('RECON_SAFETY_SL_PLACED', { userId, symbol: p.symbol, side, stopPrice: _stop, slOrderId: r.slOrderId }, 'AT_RECON'); } catch (_) {}
+                                    } else {
+                                        logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} placeStopLoss not ok: ${r && r.error}`);
+                                    }
+                                } catch (_e) {
+                                    logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} failed: ${_e && _e.message}`);
                                 }
-                            } catch (_e) {
-                                logger.warn('AT_RECON', `[SAFETY-SL] uid=${userId} ${p.symbol} failed: ${_e && _e.message}`);
-                            }
-                        })();
+                            })();
+                        } else {
+                            logger.warn('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} sync failed: ${_syncRes && _syncRes.error} — no exchange SL placed`);
+                        }
                     }
                 } else {
                     // Position MODIFIED (partial fill, scale in/out)
