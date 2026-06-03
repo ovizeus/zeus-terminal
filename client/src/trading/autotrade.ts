@@ -65,7 +65,7 @@ export function _computeFillQtyFallback(
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 import { AT } from '../engine/events'
-import { confNDirectional } from '../engine/fusionMath'
+import { confNDirectional, classifyEntryTier } from '../engine/fusionMath'
 import { TP } from '../core/state'
 import { BM } from '../core/config'
 import { useBrainStore } from '../stores/brainStore'
@@ -617,18 +617,11 @@ export function computeFusionDecision(): any {
   confF = _clampFB01(confF)
   out.confidence = Math.round(confF * 100)
 
-  // 9) Entry tier
-  if (out.dir === 'neutral') {
-    out.decision = 'NO_TRADE'
-  } else if (out.confidence >= 82 && conf >= 75 && regimeN >= 0.55) {
-    out.decision = 'LARGE'
-  } else if (out.confidence >= 72 && conf >= 68) {
-    out.decision = 'MEDIUM'
-  } else if (out.confidence >= 62 && conf >= 60) {
-    out.decision = 'SMALL'
-  } else {
-    out.decision = 'NO_TRADE'
-  }
+  // 9) Entry tier — direction-aware on the confluence axis. `conf` is a
+  // bull-magnitude metric (low for shorts); classifyEntryTier mirrors it for
+  // shorts so a strong bearish setup clears the same bars as a strong long.
+  // LONG behaviour is unchanged (dirConf === conf for longs). See fusionMath.
+  out.decision = classifyEntryTier(out.dir, out.confidence, conf, regimeN)
 
   // [P0.1] ARES wallet is 100% independent — never veto AT decisions.
   // ARES manages its own capital, AT manages its own. No cross-interference.

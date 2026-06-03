@@ -14,6 +14,7 @@ import { clearAllSessionOverlays } from '../ui/panels'
 import { llvRequestRender, renderHeatmapOverlay, renderSROverlay, clearSR } from './marketDataOverlays'
 import { resetForecast } from '../engine/forecast'
 import { trackOIDelta } from '../services/storage'
+import { oiHistory } from '../core/state'
 import { PhaseFilter } from '../engine/phaseFilter'
 import { RegimeEngine } from '../engine/regime'
 import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
@@ -379,6 +380,11 @@ export function setSymbol(sym: string): void {
     w.S.klines = []; w.S.btcClusters = {}; w.S.events = []
     w.S.price = 0; w.S.totalUSD = 0; w.S.longUSD = 0; w.S.shortUSD = 0; w.S.cnt = 0; w.S.longCnt = 0; w.S.shortCnt = 0
     w.S.bids = []; w.S.asks = []
+    // [OIFIX] Start the OI window fresh per symbol — otherwise the 5-min OI
+    // history (dtoic/dtois + oiDelta5m badge) compares the new symbol's OI
+    // against the previous symbol's values. oiTs=0 → confluence oiDir reads
+    // 'neut' (stale) until a fresh OI poll lands.
+    w.S.oi = 0; w.S.oiPrev = 0; w.S.oiTs = 0; oiHistory.length = 0
     if (typeof RegimeEngine !== 'undefined' && RegimeEngine.reset) RegimeEngine.reset()
     if (typeof PhaseFilter !== 'undefined' && PhaseFilter.reset) PhaseFilter.reset()
     if (typeof resetForecast === 'function') resetForecast()

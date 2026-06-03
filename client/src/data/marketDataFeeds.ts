@@ -12,6 +12,8 @@ import { getChartH } from './marketDataChart'
 import { updateMainMetrics, sendAlert } from './marketDataWS'
 import { updateLiveLiqPrice } from './marketDataTrading'
 import { updateDeepDive } from '../engine/indicators'
+import { lsRatioToSplit, oiWindowDeltaPct } from '../engine/fusionMath'
+import { oiHistory } from '../core/state'
 const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
@@ -221,7 +223,10 @@ export async function fetchLS(): Promise<void> {
     const r = await fetch('/api/market/sentiment?symbol=' + sym, { credentials: 'include' })
     const j = await r.json()
     if (j.ok && j.data && j.data.ls != null) {
-      w.S.ls = { l: j.data.ls, s: 1 / j.data.ls }; updateMetrics(); updateMainMetrics()
+      // j.data.ls is the raw global long/short ACCOUNT RATIO (R = longs/shorts).
+      // Convert to long%/short% (sum 100) for the widget + confluence LS vote.
+      const split = lsRatioToSplit(+j.data.ls)
+      if (split) { w.S.ls = split; updateMetrics(); updateMainMetrics() }
     }
   } catch (e: any) { console.warn('[fetchLS]', e.message) }
 }
@@ -256,8 +261,14 @@ export function updateMetrics(): void {
   if (dtps) { dtps.textContent = w.S.price > w.S.prevPrice ? 'BULL' : 'BEAR'; dtps.style.color = w.S.price > w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
   const dtoi = el('dtoi'), dtoic = el('dtoic'), dtois = el('dtois')
   if (dtoi) dtoi.textContent = w.S.oi ? '$' + fmt(w.S.oi) : '\u2014'
-  if (dtoic) dtoic.textContent = w.S.oiPrev && w.S.oi ? (((w.S.oi - w.S.oiPrev) / w.S.oiPrev) * 100).toFixed(2) + '%' : '\u2014'
-  if (dtois) { const s = w.S.oi > w.S.oiPrev ? 'RISING' : 'FALLING'; dtois.textContent = s; dtois.style.color = s === 'RISING' ? 'var(--grn)' : 'var(--red)' }
+  // OI change over a real 5-minute window (the server refreshes OI ~60s, so the
+  // old last-poll delta was ~0%). null \u2192 "\u2014" rather than a fake 0.
+  const _oiPct = w.S.oi ? oiWindowDeltaPct(oiHistory as any, w.S.oi, Date.now(), 300000) : null
+  if (dtoic) dtoic.textContent = _oiPct != null ? _oiPct.toFixed(2) + '%' : '\u2014'
+  if (dtois) {
+    if (_oiPct == null) { dtois.textContent = '\u2014'; dtois.style.color = 'var(--dim)' }
+    else { const s = _oiPct >= 0 ? 'RISING' : 'FALLING'; dtois.textContent = s; dtois.style.color = s === 'RISING' ? 'var(--grn)' : 'var(--red)' }
+  }
   const dtfr = el('dtfr'), dtfrc = el('dtfrc'), dtfrs = el('dtfrs')
   if (dtfr) dtfr.textContent = w.S.fr !== null && w.S.fr !== undefined ? (w.S.fr * 100).toFixed(4) + '%' : '\u2014'
   if (dtfrc) dtfrc.textContent = calcFrCd()

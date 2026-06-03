@@ -43,3 +43,76 @@ export function confNDirectional(confluence: number, dir: string): number {
         : 0
   return Math.max(0, Math.min(1, signed))
 }
+
+export type EntryTier = 'LARGE' | 'MEDIUM' | 'SMALL' | 'NO_TRADE'
+
+/**
+ * Entry-tier classification — direction-aware on the confluence axis.
+ *
+ * The tier gate has two conditions per tier: a `confidence` bar (already
+ * direction-aware, via confNDirectional inside the fusion) AND a `confluence`
+ * bar. The bug: the confluence bar used the RAW bull-magnitude confluence
+ * (`confluence >= 60/68/75`). Confluence is high for bullish setups and low for
+ * bearish ones, so a SHORT — even a strong one (high confidence, confluence ≈0)
+ * — could never clear the confluence bar. Result: AT stopped taking shorts.
+ *
+ * Fix: mirror the confluence for shorts (`dirConf = 100 - confluence`) so a
+ * strongly bearish setup clears the SAME bars a strongly bullish LONG does.
+ * For LONGs `dirConf === confluence`, so long behaviour is byte-for-byte
+ * unchanged. Thresholds and the `regimeN` LARGE-gate are preserved exactly.
+ *
+ * @param dir        'long' | 'short' | 'neutral' (anything else → NO_TRADE)
+ * @param confidence fused confidence 0..100
+ * @param confluence raw bull-magnitude confluence 0..100
+ * @param regimeN    regime strength 0..1 (LARGE requires ≥0.55)
+ */
+export function classifyEntryTier(
+  dir: string,
+  confidence: number,
+  confluence: number,
+  regimeN: number,
+): EntryTier {
+  if (dir !== 'long' && dir !== 'short') return 'NO_TRADE'
+  const dirConf = dir === 'long' ? confluence : 100 - confluence
+  if (confidence >= 82 && dirConf >= 75 && regimeN >= 0.55) return 'LARGE'
+  if (confidence >= 72 && dirConf >= 68) return 'MEDIUM'
+  if (confidence >= 62 && dirConf >= 60) return 'SMALL'
+  return 'NO_TRADE'
+}
+
+/**
+ * Convert a global long/short ACCOUNT RATIO (R = longs / shorts) into the
+ * long%/short% split the LS widget + confluence vote expect (they read
+ * `ls.l`/`ls.s` as percentages that sum to 100). Returns null for a
+ * non-positive / non-finite ratio so the caller leaves the feed untouched
+ * (fail-safe — no fake data).
+ */
+export function lsRatioToSplit(ratio: number): { l: number; s: number } | null {
+  const R = +ratio
+  if (!Number.isFinite(R) || R <= 0) return null
+  const l = (R / (1 + R)) * 100
+  return { l, s: 100 - l }
+}
+
+/**
+ * Windowed open-interest change %, computed against the OLDEST sample still
+ * inside `windowMs` (mirrors trackOIDelta's 5-minute look-back). The naive
+ * (oi - oiPrev)/oiPrev display compared the last two 30s polls, but the server
+ * refreshes OI only every 60s, so consecutive polls were near-identical → ~0%.
+ *
+ * `history` is the chronological ring buffer of { oi, ts }. Returns null when
+ * there is no usable in-window sample (caller shows "—", never a fake 0).
+ */
+export function oiWindowDeltaPct(
+  history: Array<{ oi: number; ts: number }>,
+  oiNow: number,
+  now: number,
+  windowMs: number,
+): number | null {
+  if (!Array.isArray(history) || !Number.isFinite(+oiNow)) return null
+  const cutoff = now - windowMs
+  // history is chronological (push-appended) → first match is the oldest in window
+  const base = history.find((h) => h && h.ts >= cutoff && Number.isFinite(+h.oi))
+  if (!base || !(base.oi > 0)) return null
+  return ((+oiNow - base.oi) / base.oi) * 100
+}
