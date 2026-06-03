@@ -281,8 +281,11 @@ function getSnapshot() {
     }
     const byHost = _aggregateByHost();
     const quotaPressure = {};
-    for (const [host, v] of Object.entries(byHost)) {
-        quotaPressure[host] = v.lastUsedWeight != null ? v.lastUsedWeight / QUOTA_CAP : 0;
+    for (const host of Object.keys(byHost)) {
+        // Mirror the LIVE gate (freshness-filtered) so the diagnostic snapshot
+        // can't show a stale-high 104% while the gate is actually passing
+        // traffic — that mismatch is what made the deadlock hard to read.
+        quotaPressure[host] = getQuotaPressure(host);
     }
     let schedulerStats = null;
     let activeCriticalSections = 0;
