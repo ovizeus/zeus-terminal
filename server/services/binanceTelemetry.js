@@ -55,11 +55,27 @@ const QUOTA_CAP = _intEnv('BINANCE_QUOTA_CAP', 6000);
 const BLOCK_PUBLIC_PCT = _intEnv('BINANCE_QUOTA_BLOCK_PUBLIC_PCT', 95);
 const BLOCK_SIGNED_PCT = _intEnv('BINANCE_QUOTA_BLOCK_SIGNED_PCT', 97);
 
+// X-MBX-USED-WEIGHT-1M is Binance's 1-MINUTE rolling counter. The telemetry ring
+// keeps RING_WINDOW_MS = 1h of history, so trusting the "last reading" over that
+// whole window let a single momentary spike (e.g. a reload boot burst at 104%)
+// gate ALL analytics for up to an hour — and since blocked requests record
+// usedWeight:null, no fresh reading ever arrived to clear it (self-sustaining
+// deadlock). Only trust a reading from within ~1 Binance window (+margin).
+const QUOTA_FRESHNESS_MS = 75 * 1000;
+
 function getQuotaPressure(host) {
     _prune();
-    const hostData = _aggregateByHost()[host];
-    if (!hostData || hostData.lastUsedWeight == null) return 0;
-    return hostData.lastUsedWeight / QUOTA_CAP;
+    const cutoff = _ts() - QUOTA_FRESHNESS_MS;
+    // Most-recent usedWeight reading for this host. If it's stale (older than one
+    // counter window) treat pressure as unknown (0) so a real probe can go out
+    // and refresh it, instead of blocking forever on an hour-old number.
+    for (let i = _ring.length - 1; i >= 0; i--) {
+        const e = _ring[i];
+        if (e.host === host && e.usedWeight != null) {
+            return e.ts >= cutoff ? e.usedWeight / QUOTA_CAP : 0;
+        }
+    }
+    return 0;
 }
 
 function isSignedSource(src) {
