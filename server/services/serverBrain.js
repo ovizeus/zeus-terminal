@@ -2012,6 +2012,38 @@ function _calcMTFAlignment(snap, confluence) {
     return Math.min(1, weightedAgree / totalWeight);
 }
 
+// [SP2-a soak] Entry tier classification. `soakFloor` (when provided AND < 62)
+// lowers ONLY the SMALL-tier confidence bar — used for testnet cutover users so
+// the soak exercises the execution machinery. Never raises any bar; never touches
+// MEDIUM/LARGE or the confluence.score gates. Real-money/demo pass soakFloor=null.
+function _classifyTier(confidence, confScore, soakFloor) {
+    const smallBar = (typeof soakFloor === 'number' && soakFloor < 62) ? soakFloor : 62;
+    if (confidence >= 82 && confScore >= 75) return 'LARGE';
+    if (confidence >= 72 && confScore >= 68) return 'MEDIUM';
+    if (confidence >= smallBar && confScore >= 60) return 'SMALL';
+    return 'NO_TRADE';
+}
+
+// [SP2-a soak] pure: only a cutover testnet user under an active flag gets the
+// soak floor; every other combination returns null → standard 62 SMALL bar.
+function _resolveSoakFloor(flagOn, isCutover, isTestnet, floorVal) {
+    return (flagOn && isCutover && isTestnet) ? floorVal : null;
+}
+
+// [SP2-a soak] wires the real gating deps into the pure resolver. Returns a
+// numeric floor only for (flag ON + cutover + TESTNET); null otherwise. Any
+// error → null (fail-closed to the standard 62 bar).
+function _soakConfFloorFor(userId) {
+    try {
+        const flagOn = MF.SERVER_AT_TESTNET_EXEC === true;
+        const sp2 = require('./sp2Cutover');
+        const isCutover = sp2.isCutoverUser(userId);
+        let isTestnet = false;
+        try { const e = serverAT._resolveExecutionEnv(userId); isTestnet = !!(e && e.env === 'TESTNET'); } catch (_) {}
+        return _resolveSoakFloor(flagOn, isCutover, isTestnet, sp2.soakConfFloor());
+    } catch (_) { return null; }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Fusion Decision (mirrors client computeFusionDecision)
 // ══════════════════════════════════════════════════════════════════
@@ -2163,21 +2195,15 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
     const dir = confluence.isBull ? 'LONG' : confluence.isBear ? 'SHORT' : 'neutral';
 
     // ── Entry tier classification (matches client tiers) ──
-    let decision;
+    // [SP2-a soak] lower SMALL bar ONLY for cutover testnet users (flag-gated);
+    // _soakFloor is null for demo/real/non-cutover/flag-off → standard 62 bar.
+    const _soakFloor = _soakConfFloorFor(userId);
+    const decision = _classifyTier(confidence, confluence.score, _soakFloor);
     const reasons = [];
-    if (confidence >= 82 && confluence.score >= 75) {
-        decision = 'LARGE';
-        reasons.push('high_conf', 'strong_alignment');
-    } else if (confidence >= 72 && confluence.score >= 68) {
-        decision = 'MEDIUM';
-        reasons.push('good_conf');
-    } else if (confidence >= 62 && confluence.score >= 60) {
-        decision = 'SMALL';
-        reasons.push('min_conf');
-    } else {
-        decision = 'NO_TRADE';
-        reasons.push('conf_insufficient');
-    }
+    if (decision === 'LARGE') reasons.push('high_conf', 'strong_alignment');
+    else if (decision === 'MEDIUM') reasons.push('good_conf');
+    else if (decision === 'SMALL') reasons.push('min_conf');
+    else reasons.push('conf_insufficient');
 
     return {
         ts: Date.now(),
@@ -2452,6 +2478,11 @@ module.exports = {
     updateConfig,
     getSTC,
     getBrainVision,
+    // [SP2-a soak] Tier classifier + gating helpers. Pure/thin readers exported
+    // for unit tests; runtime path (_computeFusion) references the local symbols.
+    _classifyTier,
+    _resolveSoakFloor,
+    _soakConfFloorFor,
     get STC() { return Object.assign({}, DEFAULT_STC); },
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path (start/_runCycle/_runShadowCycle do not reference them).
