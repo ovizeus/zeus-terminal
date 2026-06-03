@@ -1672,9 +1672,17 @@ server.on('upgrade', (req, socket, head) => {
   }
   _wsIpPending.set(ip, pending + 1);
   const _ipCleanup = () => { const c = _wsIpPending.get(ip) || 0; if (c <= 1) _wsIpPending.delete(ip); else _wsIpPending.set(ip, c - 1); };
-  // Handshake timeout — 5s to complete auth or get dropped
-  const _hsTimeout = setTimeout(() => { _ipCleanup(); socket.destroy(); }, WS_HANDSHAKE_TIMEOUT_MS);
-  socket.on('close', () => { clearTimeout(_hsTimeout); _ipCleanup(); });
+  // [WS-FLAP-FIX 2026-06-03] Handshake timeout — 5s to COMPLETE the handshake or get
+  // dropped (slowloris guard). _settle() is idempotent: cancels the timer AND releases
+  // the per-IP pending slot, and runs when the handshake RESOLVES — success (handleUpgrade
+  // callback below), close-during-handshake, or timeout. The prior code cleared the timer
+  // ONLY on socket 'close', so a SUCCESSFUL upgrade never cancelled it → the 5s timer fired
+  // and destroyed every healthy connection at exactly 5s → reconnect flap for every client.
+  let _hsSettled = false;
+  let _hsTimeout = null;
+  const _settle = () => { if (_hsSettled) return; _hsSettled = true; if (_hsTimeout) clearTimeout(_hsTimeout); _ipCleanup(); };
+  _hsTimeout = setTimeout(() => { _settle(); try { socket.destroy(); } catch (_) {} }, WS_HANDSHAKE_TIMEOUT_MS);
+  socket.on('close', _settle);
   // [SEC-20] Origin allowlist on WS upgrade — defense-in-depth vs cross-site
   // WebSocket hijacking. SameSite=lax cookie already prevents browser cross-
   // origin cookie attach (primary defense), but absent Origin or unknown
@@ -1702,6 +1710,7 @@ server.on('upgrade', (req, socket, head) => {
     return;
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
+    _settle(); // [WS-FLAP-FIX] handshake completed → cancel the 5s slowloris-destroy timer + release pending slot
     wss.emit('connection', ws, req);
   });
 });
