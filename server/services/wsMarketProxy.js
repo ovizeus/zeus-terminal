@@ -515,11 +515,16 @@ async function _pollQuantData() {
                 );
                 if (oiRes && oiRes.ok) {
                     const d = await oiRes.json();
-                    if (d && d.openInterest) {
-                        mc.set('oi', 'binance:' + sym, {
-                            value: +d.openInterest,
-                            ts: Date.now(),
-                        }, { caller: 'marketRadar' });
+                    if (d && d.openInterest != null) {
+                        // [OIFIX] The marketCache 'oi' validator requires a plain
+                        // number (typeof === 'number'). The old { value, ts }
+                        // object was rejected (reject_schema) on every 60s poll —
+                        // this writer never landed (only marketRadar's number
+                        // write did). Store the number, matching marketRadar.
+                        const oiNum = +d.openInterest;
+                        if (Number.isFinite(oiNum)) {
+                            mc.set('oi', 'binance:' + sym, oiNum, { caller: 'marketRadar' });
+                        }
                     }
                 }
             } catch (_) {}
