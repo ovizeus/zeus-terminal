@@ -81,6 +81,7 @@ async function _pollSymbol(symbol) {
 
     let crowdBullish = 0; // -1 to +1 (positive = crowd is bullish)
     let dataPoints = 0;
+    let lsRatio = null;   // raw global long/short account ratio (>1 = crowd net long)
 
     // Global L/S ratio — >1 means more longs
     if (lsGlobal.status === 'fulfilled' && lsGlobal.value.length > 0) {
@@ -88,6 +89,7 @@ async function _pollSymbol(symbol) {
         const ratio = parseFloat(latest.longShortRatio);
         if (!isNaN(ratio)) {
             // ratio 1.0 = balanced. >1.5 = very bullish crowd, <0.67 = very bearish crowd
+            lsRatio = ratio; // exposed raw for the client LS feed (fetchLS reads j.data.ls)
             crowdBullish += Math.max(-1, Math.min(1, (ratio - 1) * 2));
             dataPoints++;
         }
@@ -133,13 +135,24 @@ async function _pollSymbol(symbol) {
     // Score: -100 (very bearish signal) to +100 (very bullish signal)
     const compositeScore = Math.round(-avgCrowd * 100); // flip sign = contrarian
 
-    _cache.set(symbol, {
+    const entry = {
         compositeScore,
         crowdPosition: avgCrowd > 0.2 ? 'bullish' : avgCrowd < -0.2 ? 'bearish' : 'neutral',
         fundingTrend: fundingTrend > 0.2 ? 'positive' : fundingTrend < -0.2 ? 'negative' : 'neutral',
         rawCrowd: Math.round(avgCrowd * 100),
+        ls: lsRatio,   // raw global L/S ratio for the client LS feed (null if feed missing → fetchLS skips, fail-safe)
         ts: Date.now(),
-    });
+    };
+    _cache.set(symbol, entry);
+
+    // [SENTFIX] Bridge to the shared market cache. serverSentiment is the
+    // declared owner of the 'sentiment' key (marketCache OWNERS) but never wrote
+    // it — so /api/market/sentiment (client LS feed + radar display + LS
+    // confluence vote) read null forever. Best-effort; failure must not break
+    // the poll loop.
+    try {
+        require('./marketCache').set('sentiment', 'binance:' + symbol, entry, { caller: 'serverSentiment' });
+    } catch (_) {}
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -189,4 +202,5 @@ module.exports = {
     stop,
     getSentiment,
     getSentimentScore,
+    _pollSymbol, // exported for unit tests (cache-bridge coverage)
 };
