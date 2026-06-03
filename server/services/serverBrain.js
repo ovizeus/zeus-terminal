@@ -1198,7 +1198,7 @@ function _runCycle() {
                                 fusion.layeredBy = 'ring5-influence-applied';
                                 // Tier re-eval on cut. Boost never upgrades tier (sizing
                                 // stays at Phase 2 authoritative level for safety).
-                                if (fusion.confidence < 62 && fusion.decision !== 'NO_TRADE') {
+                                if (_belowSmallBar(fusion.confidence, _soakConfFloorFor(userId)) && fusion.decision !== 'NO_TRADE') {
                                     fusion.decision = 'NO_TRADE';
                                 } else if (fusion.confidence < 72 &&
                                            (fusion.decision === 'MEDIUM' || fusion.decision === 'LARGE')) {
@@ -1251,7 +1251,7 @@ function _runCycle() {
                     if (questioning.totalPenalty) {
                         decision.fusion.confidence = Math.max(0, decision.fusion.confidence + questioning.totalPenalty);
                         // Re-evaluate tier after penalty
-                        if (decision.fusion.confidence < 62) {
+                        if (_belowSmallBar(decision.fusion.confidence, _soakConfFloorFor(userId))) {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('reflection_penalty');
                             _pushBlock(userId, symbol, ['reflection_penalty:conf=' + decision.fusion.confidence], 'reflection_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
@@ -1312,7 +1312,7 @@ function _runCycle() {
                     const corrMod = serverCorrelationGuard.getCorrelationModifier(snap.symbol, fusion.dir, openPos);
                     if (corrMod < 1.0) {
                         decision.fusion.confidence = Math.round(decision.fusion.confidence * corrMod);
-                        if (decision.fusion.confidence < 62) {
+                        if (_belowSmallBar(decision.fusion.confidence, _soakConfFloorFor(userId))) {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('correlation_penalty');
                             _pushBlock(userId, symbol, ['correlation_penalty:conf=' + decision.fusion.confidence], 'correlation_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
@@ -2024,6 +2024,15 @@ function _classifyTier(confidence, confScore, soakFloor) {
     return 'NO_TRADE';
 }
 
+// [SP2-a soak] true if confidence is BELOW the effective SMALL bar. soakFloor
+// (when a number < 62) lowers the bar; otherwise the standard 62 applies. Used by
+// the post-fusion re-tier demotions so they honor the soak floor for cutover
+// testnet users (must match _classifyTier's smallBar).
+function _belowSmallBar(confidence, soakFloor) {
+    const smallBar = (typeof soakFloor === 'number' && soakFloor < 62) ? soakFloor : 62;
+    return confidence < smallBar;
+}
+
 // [SP2-a soak] pure: only a cutover testnet user under an active flag gets the
 // soak floor; every other combination returns null → standard 62 SMALL bar.
 function _resolveSoakFloor(flagOn, isCutover, isTestnet, floorVal) {
@@ -2481,6 +2490,7 @@ module.exports = {
     // [SP2-a soak] Tier classifier + gating helpers. Pure/thin readers exported
     // for unit tests; runtime path (_computeFusion) references the local symbols.
     _classifyTier,
+    _belowSmallBar,
     _resolveSoakFloor,
     _soakConfFloorFor,
     get STC() { return Object.assign({}, DEFAULT_STC); },
