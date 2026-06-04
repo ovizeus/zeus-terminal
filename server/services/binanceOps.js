@@ -63,6 +63,42 @@ async function _placeConditionalAlgo({ symbol, side, type, triggerPrice, quantit
     return resp;
 }
 
+// [FILL-RESULT 2026-06-04] POST /fapi/v1/order defaults to newOrderRespType=ACK:
+// Binance acks instantly with status=NEW, avgPrice="0.00", executedQty="0" WITHOUT
+// waiting for the matching engine. Every SP2-a entry hit serverAT's ZT-AUD-002 gate
+// (avgFillPrice 0/0) and was force-closed despite having actually filled (proof:
+// the reduceOnly force-close succeeded — Binance rejects reduceOnly with no
+// position, -2022). RESULT makes MARKET orders return the final FILLED response
+// with real avgPrice/executedQty. Applied to ALL order POSTs: entry, close,
+// row-missing fallback close, and emergency close (whose status==='FILLED' check
+// was dead under ACK — a filled emergency close read as failure).
+const FILL_QUERY_RETRIES = 3;
+const FILL_QUERY_BACKOFFS_MS = [250, 750, 2000];
+
+function _isConfirmedFill(r) {
+    const px = parseFloat(r && r.avgPrice);
+    const q = parseFloat(r && r.executedQty);
+    return Number.isFinite(px) && px > 0 && Number.isFinite(q) && q > 0;
+}
+
+// Defense-in-depth: if the entry response is still ACK-shaped (avgPrice 0 —
+// e.g. proxy strips the param, or rare engine lag), query the order before
+// giving up. Returns the confirmed order object, or the original response
+// unchanged so serverAT's FILL_UNVERIFIED gate fires (fail-closed preserved).
+async function _confirmEntryFill(entryResp, symbol, creds) {
+    if (_isConfirmedFill(entryResp)) return entryResp;
+    for (let i = 0; i < FILL_QUERY_RETRIES; i++) {
+        await new Promise(r => setTimeout(r, FILL_QUERY_BACKOFFS_MS[i]));
+        try {
+            const q = await sendSignedRequest('GET', '/fapi/v1/order', {
+                symbol, orderId: entryResp.orderId, recvWindow: 5000,
+            }, creds);
+            if (_isConfirmedFill(q)) return q;
+        } catch (_) { /* transient — keep polling */ }
+    }
+    return entryResp; // unverified — serverAT FILL_UNVERIFIED handles it
+}
+
 async function _emergencyClose(uid, params, creds, seq) {
     const closeSide = _oppositeSide(params.side);
     for (let i = 0; i < EMERGENCY_RETRIES; i++) {
@@ -73,6 +109,7 @@ async function _emergencyClose(uid, params, creds, seq) {
                 type: 'MARKET',
                 quantity: params.qty,
                 reduceOnly: 'true',
+                newOrderRespType: 'RESULT',
                 newClientOrderId: `emerg_${params.decisionKey}_${i}`.slice(0, 36),
                 recvWindow: 5000,
             }, creds);
@@ -140,6 +177,12 @@ async function placeEntry(uid, params, creds) {
             side: _sideToBinance(params.side),
             type: params.entryType,
             quantity: rounded.quantity,
+            // [FILL-RESULT] final fill data, not ACK. NOTE: callers pass MARKET only
+            // (serverAT hard-codes it). For plain GTC LIMIT, RESULT returns NEW
+            // immediately (no fill data) — the _confirmEntryFill fallback would poll
+            // ~3s then serverAT's FILL_UNVERIFIED gate would force-close the resting
+            // order. If LIMIT entries are ever added, rework fill confirmation first.
+            newOrderRespType: 'RESULT',
             newClientOrderId: params.decisionKey,
             recvWindow: 5000,
         };
@@ -257,13 +300,19 @@ async function placeEntry(uid, params, creds) {
             }
         }
 
+        // [FILL-RESULT] Confirm fill data. RESULT carries it directly for MARKET;
+        // if the response is still ACK-shaped (avgPrice 0), poll GET /fapi/v1/order.
+        // Runs AFTER SL/TP placement so protection lands first (and grants the
+        // matching engine settle time for free).
+        const fillResp = await _confirmEntryFill(entryResp, params.symbol, creds);
+
         // Update position data with order IDs
         const updatedData = {
             ...positionData,
             entryOrderId: entryResp.orderId,
             slOrderId,
             tpOrderId,
-            avgFillPrice: entryResp.avgPrice,
+            avgFillPrice: fillResp.avgPrice,
         };
         db.prepare(`UPDATE at_positions SET data = ? WHERE seq = ?`).run(JSON.stringify(updatedData), seq);
         positionStateMachine.transition(seq, 'OPENING', 'OPEN', { slOrderId, tpOrderId });
@@ -272,9 +321,9 @@ async function placeEntry(uid, params, creds) {
             ok: true,
             orderId: entryResp.orderId,
             clientOrderId: params.decisionKey,
-            status: entryResp.status || 'FILLED',
-            filledQty: entryResp.executedQty || rounded.quantity,
-            avgFillPrice: entryResp.avgPrice,
+            status: fillResp.status || 'FILLED',
+            filledQty: fillResp.executedQty || rounded.quantity,
+            avgFillPrice: fillResp.avgPrice,
             slOrderId,
             tpOrderId,
             ts: Date.now(),
@@ -321,6 +370,7 @@ async function _closeWithoutLocalRow(uid, params, creds) {
         type: params.closeType || 'MARKET',
         quantity: params.qty,
         reduceOnly: 'true',
+        newOrderRespType: 'RESULT', // [FILL-RESULT] real close fill price, not ACK zeros
         newClientOrderId: `close_${params.decisionKey}`.slice(0, 36),
         recvWindow: 5000,
     };
@@ -436,6 +486,7 @@ async function closePosition(uid, params, creds) {
             type: params.closeType || 'MARKET',
             quantity: params.qty,
             reduceOnly: 'true',
+            newOrderRespType: 'RESULT', // [FILL-RESULT] real close fill price, not ACK zeros
             newClientOrderId: `close_${params.decisionKey}`.slice(0, 36),
             recvWindow: 5000,
         };
