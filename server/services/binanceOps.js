@@ -509,14 +509,29 @@ async function ensureSymbolReady(uid, params, creds) {
         return { ok: false, error: canonicalErrors.translateBinance(levResp), rawExchange: 'binance' };
     }
 
-    // Set margin mode
+    // Set margin mode. -4046 ("No need to change margin type") is an idempotent
+    // success: the symbol is ALREADY on the requested margin type. Note
+    // sendSignedRequest THROWS on Binance error codes (binanceSigner.js:294,
+    // err.code preserved), so the redundant returned-`.code` check below is dead
+    // on the throw path — we must tolerate -4046 in the catch. Any other error
+    // still blocks the entry (wrong margin type = wrong risk math).
     const marginMode = params.marginMode || 'CROSSED';
-    const marginResp = await sendSignedRequest('POST', '/fapi/v1/marginType', {
-        symbol: params.symbol, marginType: marginMode, recvWindow: 5000,
-    }, creds);
-    // -4046 is idempotent success ("No need to change margin type")
-    if (marginResp && marginResp.code && marginResp.code < 0 && marginResp.code !== -4046) {
-        return { ok: false, error: canonicalErrors.translateBinance(marginResp), rawExchange: 'binance' };
+    try {
+        const marginResp = await sendSignedRequest('POST', '/fapi/v1/marginType', {
+            symbol: params.symbol, marginType: marginMode, recvWindow: 5000,
+        }, creds);
+        if (marginResp && marginResp.code && marginResp.code < 0 && marginResp.code !== -4046) {
+            return { ok: false, error: canonicalErrors.translateBinance(marginResp), rawExchange: 'binance' };
+        }
+    } catch (marginErr) {
+        if (!marginErr || marginErr.code !== -4046) {
+            return {
+                ok: false,
+                error: canonicalErrors.translateBinance({ code: marginErr && marginErr.code, msg: marginErr && marginErr.message }),
+                rawExchange: 'binance',
+            };
+        }
+        // -4046 → already on the requested margin type → idempotent no-op, proceed.
     }
 
     return {
