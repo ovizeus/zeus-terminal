@@ -1431,17 +1431,39 @@ async function _placeConditionalOrder(params, creds) {
 // ══════════════════════════════════════════════════════════════════
 // Live Execution — Binance API calls (only for live-mode positions)
 // ══════════════════════════════════════════════════════════════════
+// [SP2-a exec gate 2026-06-04] Pure predicate: may _executeLiveEntry place a
+// live order under the current flags for this entry? Full SERVER_AT enables all
+// live exec (legacy). Otherwise the SP2 testnet-exec carve-out applies — cutover
+// user, TESTNET env AND testnet creds — mirroring the DISPATCH gate (~958) which
+// already routes these entries to the server. Fail-closed: missing/odd env or
+// creds → false. REAL is impossible here (env+creds gates) and Layer 2
+// (_realBlocked) independently blocks REAL again (defense in depth).
+function _liveExecAllowed({ serverAt, testnetExec, env, isCutover, credsMode }) {
+    if (serverAt === true) return true;
+    return testnetExec === true
+        && String(env).toUpperCase() === 'TESTNET'
+        && isCutover === true
+        && credsMode === 'testnet';
+}
+
 async function _executeLiveEntry(entry, stc) {
-    // [Phase 2 S6-B2] PARANOID LIVE EXECUTION GATE — fires as the FIRST
+    // [Phase 2 S6-B2 / SP2-a] PARANOID LIVE EXECUTION GATE — fires as the FIRST
     // executable statement, before any state mutation (no _livePending
     // flag set), before any in-flight lock acquisition, before any
     // _persistPosition / _persistClose write, and before any signed
-    // exchange request. _executeLiveEntry must NEVER fire unless the
-    // FULL SERVER_AT flag is on; SERVER_AT_DEMO is a demo-only carve-out
-    // (per S6-B1) and must not reach Binance/Bybit/any real exchange.
-    // This guard is independent of engineMode (defense in depth) — even
-    // a misrouted demo entry that somehow lands here cannot escape.
-    if (MF.SERVER_AT !== true) {
+    // exchange request. Must NEVER fire unless either the FULL SERVER_AT flag is
+    // on, OR the SP2 testnet-exec carve-out holds (cutover user, TESTNET env +
+    // testnet creds) — see _liveExecAllowed. SERVER_AT_DEMO is a demo-only
+    // carve-out (per S6-B1) and must not reach a real exchange. This guard is
+    // independent of engineMode (defense in depth); REAL can never execute here.
+    const _execAllowed = _liveExecAllowed({
+        serverAt: MF.SERVER_AT === true,
+        testnetExec: MF.SERVER_AT_TESTNET_EXEC === true,
+        env: entry && entry.env,
+        isCutover: !!(entry && entry.userId != null && require('./sp2Cutover').isCutoverUser(entry.userId)),
+        credsMode: (() => { try { const c = getExchangeCreds(entry && entry.userId); return c && c.mode; } catch (_) { return null; } })(),
+    });
+    if (!_execAllowed) {
         try { logger.error('AT_LIVE', `[${entry && entry.seq}] LIVE_ENTRY_REQUIRES_FULL_SERVER_AT — refusing live entry uid=${entry && entry.userId} sym=${entry && entry.symbol}`); } catch (_) {}
         const err = new Error('LIVE_ENTRY_REQUIRES_FULL_SERVER_AT');
         err.code = 'LIVE_ENTRY_REQUIRES_FULL_SERVER_AT';
@@ -5577,6 +5599,7 @@ module.exports = {
     // Extracted din _executeLiveEntry pattern; reusable pentru BOTH Path A (Brain dispatch)
     // AND Path B (registerManualPosition post-M1 unification) per ADR-001 Decision 3.1.
     _executeLiveEntryCore,
+    _liveExecAllowed, // [SP2-a] pure live-exec gate predicate (unit-tested)
     // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
     // source='external' marker, NO SL placement responsibility, warning log.
     _syncExternalPosition,
