@@ -16,7 +16,15 @@ let _loadPromise = null;
 async function loadExchangeInfo() {
     try {
         const url = config.binance.baseUrl + '/fapi/v1/exchangeInfo';
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        // [BOOT-STAGGER B 2026-06-05] Was a direct fetch() — the ONLY boot-time
+        // Binance call bypassing the gateway (10 weight, invisible to the quota
+        // gate/telemetry). Route through binanceGateway like everything else;
+        // lane P2 in binanceScheduler (required for order rounding, must
+        // survive boot-blind pressure). Failure behaviour unchanged: throw →
+        // catch below → keep stale cache + caller's 30/60/120s retries.
+        const res = await require('./binanceGateway').fetch(url, {
+            signal: AbortSignal.timeout(10000), __weight: 10, __src: 'exchangeInfo:snapshot',
+        });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         const fresh = {};

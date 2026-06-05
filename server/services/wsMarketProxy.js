@@ -464,13 +464,20 @@ function _wirePriceBridge() {
 function startWatchlistREST() {
     _wirePriceBridge();
     if (_wlPollTimer) return;
-    try { require('./logger').info('WS_PROXY', `Watchlist REST poller started — 10s for ${WATCHLIST_SYMBOLS.join(',')}`); } catch (_) {}
-    _pollWatchlistREST().then(() => {
-        try { require('./logger').info('WS_PROXY', 'Watchlist first poll complete'); } catch (_) {}
-    }).catch(e => {
-        try { require('./logger').error('WS_PROXY', `Watchlist poll error: ${e.message}`); } catch (_) {}
-    });
-    _wlPollTimer = setInterval(_pollWatchlistREST, WATCHLIST_POLL_MS);
+    // [BOOT-STAGGER A 2026-06-05] First poll fired at t=0ms (8 parallel
+    // ticker calls), synchronized with quant poller + klines-init + recovery
+    // → boot burst → 418-ban class incidents. Deterministic jitter spreads
+    // the first fire; interval starts after it (same pattern as marketRadar).
+    const jitterMs = require('../utils/bootJitter').bootJitter('wsproxy.watchlist');
+    try { require('./logger').info('WS_PROXY', `Watchlist REST poller starting in ${Math.round(jitterMs / 1000)}s (boot jitter) — 10s for ${WATCHLIST_SYMBOLS.join(',')}`); } catch (_) {}
+    _wlPollTimer = setTimeout(() => {
+        _pollWatchlistREST().then(() => {
+            try { require('./logger').info('WS_PROXY', 'Watchlist first poll complete'); } catch (_) {}
+        }).catch(e => {
+            try { require('./logger').error('WS_PROXY', `Watchlist poll error: ${e.message}`); } catch (_) {}
+        });
+        _wlPollTimer = setInterval(_pollWatchlistREST, WATCHLIST_POLL_MS);
+    }, jitterMs);
 }
 
 function stopWatchlistREST() {
@@ -534,9 +541,14 @@ async function _pollQuantData() {
 
 function startQuantPoller() {
     if (_quantPollTimer) return;
-    console.log('[WS_PROXY] Quant poller started — funding+OI every 60s for', QUANT_SYMBOLS.join(','));
-    _pollQuantData().then(() => console.log('[WS_PROXY] Quant first poll complete')).catch(e => console.error('[WS_PROXY] Quant first poll error:', e.message));
-    _quantPollTimer = setInterval(_pollQuantData, QUANT_POLL_MS);
+    // [BOOT-STAGGER A 2026-06-05] Same jitter treatment as the watchlist
+    // poller (distinct key → distinct deterministic offset, no collision).
+    const jitterMs = require('../utils/bootJitter').bootJitter('wsproxy.quant');
+    console.log(`[WS_PROXY] Quant poller starting in ${Math.round(jitterMs / 1000)}s (boot jitter) — funding+OI every 60s for`, QUANT_SYMBOLS.join(','));
+    _quantPollTimer = setTimeout(() => {
+        _pollQuantData().then(() => console.log('[WS_PROXY] Quant first poll complete')).catch(e => console.error('[WS_PROXY] Quant first poll error:', e.message));
+        _quantPollTimer = setInterval(_pollQuantData, QUANT_POLL_MS);
+    }, jitterMs);
 }
 
 function stopQuantPoller() {

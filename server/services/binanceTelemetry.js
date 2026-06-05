@@ -14,10 +14,11 @@ const ONE_MIN_MS = 60 * 1000;
 const FIVE_MIN_MS = 5 * 60 * 1000;
 const TOP_ENDPOINTS_N = 10;
 
-const _bootTs = Date.now();
+let _bootTs = Date.now();
 let _now = null;  // override for tests
 let _ring = [];   // { ts, host, path, source, weight, status, latencyMs, usedWeight }
 let _pollersProvider = null;
+let _lastRateLogTs = {};  // 'host|status' → ts of last 429/418 WARN (anti log-spam)
 
 function _ts() { return _now == null ? Date.now() : _now; }
 
@@ -63,18 +64,32 @@ const BLOCK_SIGNED_PCT = _intEnv('BINANCE_QUOTA_BLOCK_SIGNED_PCT', 97);
 // deadlock). Only trust a reading from within ~1 Binance window (+margin).
 const QUOTA_FRESHNESS_MS = 75 * 1000;
 
+// [BOOT-STAGGER C 2026-06-05] The gate is otherwise BLIND at boot: pressure
+// comes from response headers, but at t=0 nothing has responded yet → 0 →
+// every lane fires freely → boot burst (the 418-ban class of incident,
+// 2026-06-04/05). While the process is young AND no fresh reading exists for
+// the host, assume conservative pressure: P5 defers, P4 sheds
+// probabilistically, P0-P3 unaffected (0.85 < their thresholds). First real
+// header for the host immediately replaces the assumption with truth.
+const BOOT_BLIND_MS = 120 * 1000;
+const BOOT_BLIND_PRESSURE = 0.85;
+
 function getQuotaPressure(host) {
     _prune();
     const cutoff = _ts() - QUOTA_FRESHNESS_MS;
     // Most-recent usedWeight reading for this host. If it's stale (older than one
-    // counter window) treat pressure as unknown (0) so a real probe can go out
+    // counter window) treat pressure as unknown so a real probe can go out
     // and refresh it, instead of blocking forever on an hour-old number.
     for (let i = _ring.length - 1; i >= 0; i--) {
         const e = _ring[i];
         if (e.host === host && e.usedWeight != null) {
-            return e.ts >= cutoff ? e.usedWeight / QUOTA_CAP : 0;
+            if (e.ts >= cutoff) return e.usedWeight / QUOTA_CAP;
+            break; // most-recent reading is stale → pressure unknown
         }
     }
+    // Unknown pressure: conservative during the boot-blind window, 0 after
+    // (0 = let a probe refresh it — the stale-reading deadlock fix).
+    if ((_ts() - _bootTs) < BOOT_BLIND_MS) return BOOT_BLIND_PRESSURE;
     return 0;
 }
 
@@ -103,6 +118,21 @@ function parseUsedWeight(headers) {
     if (raw == null || raw === '') return null;
     const n = parseInt(raw, 10);
     return Number.isFinite(n) ? n : null;
+}
+
+// [BOOT-STAGGER D] Rate-limited (10s per host+status) persistent WARN for
+// real rate-limit responses. Keep cheap and non-throwing.
+const RATE_LOG_INTERVAL_MS = 10 * 1000;
+function _logRateEvent(status, host, src, path, usedWeight) {
+    try {
+        const key = host + '|' + status;
+        const now = _ts();
+        if (_lastRateLogTs[key] != null && (now - _lastRateLogTs[key]) < RATE_LOG_INTERVAL_MS) return;
+        _lastRateLogTs[key] = now;
+        require('./logger').warn('BINANCE_RATE',
+            `HTTP ${status} from ${host}${path} src=${src} usedWeight=${usedWeight != null ? usedWeight : '?'}/${QUOTA_CAP}` +
+            (status === 418 ? ' — IP BAN response' : ' — rate limited'));
+    } catch (_) { /* logging must never break the request path */ }
 }
 
 async function wrapFetch(fetchFn, url, opts) {
@@ -152,7 +182,10 @@ async function wrapFetch(fetchFn, url, opts) {
             };
         }
         // P0 accepted by scheduler — skip A.1 gate (order execution is sacred,
-        // must never be blocked even at extreme quota pressure)
+        // must never be blocked even at extreme quota pressure).
+        // NOTE: P1 (recon/listenKey) deliberately does NOT skip A.1 — at ≥97%
+        // signed pressure even recon pauses to avoid earning the 418 ban
+        // (behaviour pinned by binanceTelemetry.test.js "P1 DOES block at 97%").
         if (decision.lane === 'P0') _skipA1 = true;
     }
 
@@ -192,6 +225,12 @@ async function wrapFetch(fetchFn, url, opts) {
             latencyMs,
             usedWeight,
         });
+        // [BOOT-STAGGER D 2026-06-05] Real 429/418 were INVISIBLE in logs —
+        // the 2026-06-05 06:06 pre-restart ban left zero trace of who earned
+        // it. WARN-log them persistently (rate-limited per host+status).
+        if (res && (res.status === 429 || res.status === 418)) {
+            _logRateEvent(res.status, host, src, path, usedWeight);
+        }
         return res;
     } catch (err) {
         const latencyMs = Date.now() - t0;
@@ -287,6 +326,14 @@ function getSnapshot() {
         // traffic — that mismatch is what made the deadlock hard to read.
         quotaPressure[host] = getQuotaPressure(host);
     }
+    // [BOOT-STAGGER review fix] During boot-blind there may be NO ring entries
+    // yet for a host (byHost empty) while the live gate is returning 0.85 —
+    // an operator watching the snapshot right after a reload would see 0% and
+    // conclude the gate is clear while P4/P5 are actually being shed. Surface
+    // the synthetic pressure for the known Binance hosts too.
+    for (const knownHost of ['fapi.binance.com', 'testnet.binancefuture.com']) {
+        if (!(knownHost in quotaPressure)) quotaPressure[knownHost] = getQuotaPressure(knownHost);
+    }
     let schedulerStats = null;
     let activeCriticalSections = 0;
     try {
@@ -320,8 +367,13 @@ function _resetForTest() {
     _ring = [];
     _now = null;
     _pollersProvider = null;
+    _lastRateLogTs = {};
+    // Default tests to STEADY-STATE (boot-blind window long past). Suites that
+    // exercise the boot-blind window set _setBootTsForTest explicitly.
+    _bootTs = 0;
 }
 function _setNowForTest(ts) { _now = ts; }
+function _setBootTsForTest(ts) { _bootTs = ts; }
 
 module.exports = {
     recordCall,
@@ -334,4 +386,5 @@ module.exports = {
     getSnapshot,
     _resetForTest,
     _setNowForTest,
+    _setBootTsForTest,
 };

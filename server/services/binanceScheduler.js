@@ -30,6 +30,21 @@ const LANE_RULES = [
     { pattern: /^signer:GET \/fapi\/v\d+\/openAlgoOrders\b/, lane: 'P2' },
     { pattern: /^signer:GET \/fapi\/v\d+\/positionRisk\b/, lane: 'P2' },
     { pattern: /^signer:GET \/fapi\/v\d+\/balance\b/, lane: 'P2' },
+    // [BOOT-STAGGER B 2026-06-05] exchangeInfo filters (stepSize/tickSize/
+    // minNotional) are REQUIRED for order rounding — P2 so it survives the
+    // boot-blind conservative pressure (0.85) and only sheds at ≥0.95.
+    // Without this rule it falls to DEFAULT_LANE=P5 and the whole boot-blind
+    // window would reject it (no exchangeInfo → no order rounding).
+    { pattern: /^exchangeInfo:/, lane: 'P2' },
+    // [BOOT-STAGGER B 2026-06-05] Catch-all: ANY signed op not matched above
+    // (ping verify, income, userTrades, …) is user/money-relevant — never let
+    // it fall to cosmetic P5 (boot-blind 0.85 would reject credential
+    // verification for the first 2 minutes after boot). Must stay AFTER the
+    // specific signer P0/P1/P2 rules (first match wins).
+    { pattern: /^signer:/, lane: 'P2' },
+    // keyhealth = signed credential verification (operator connecting keys /
+    // hourly health cron) — user-facing, must work even during boot-blind.
+    { pattern: /^keyhealth/, lane: 'P2' },
     { pattern: /^marketFeed:klines-init/, lane: 'P3' },
     { pattern: /^marketFeed:alt-klines/, lane: 'P4' },
     { pattern: /^marketFeed:funding/, lane: 'P4' },
