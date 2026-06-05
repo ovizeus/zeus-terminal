@@ -48,14 +48,24 @@ router.get('/', (req, res) => {
                     // Null on legacy rows (pre-Batch-G) — callers must handle.
                     exchange: d.exchange || null,
                     env: d.env || null,
+                    // [JOURNAL SPLIT 2026-06-05] AT vs MANUAL classification —
+                    // previously stored on (most) rows but NEVER returned, so the
+                    // UI could not separate the journals after a refresh.
+                    autoTrade: d.autoTrade === true,
+                    sourceMode: d.sourceMode || null,
                 };
             } catch (_) { return null; }
         }).filter(Boolean);
 
         // Server-side filters
-        const { mode, side, from, to } = req.query;
+        const { mode, side, from, to, source } = req.query;
         if (mode) trades = trades.filter(t => t.mode === mode);
         if (side) trades = trades.filter(t => t.side === side);
+        // [JOURNAL SPLIT 2026-06-05] ?source=at → only AT trades; ?source=manual
+        // → only manual/unclassified (mirrors the client bucket rule
+        // `autoTrade !== true` so the two journals partition cleanly).
+        if (source === 'at') trades = trades.filter(t => t.autoTrade === true);
+        else if (source === 'manual') trades = trades.filter(t => t.autoTrade !== true);
         if (from) {
             const fromTs = new Date(from).getTime();
             trades = trades.filter(t => t.openTs >= fromTs);
@@ -236,6 +246,15 @@ router.post('/report', (req, res) => {
             // reports (demo/live manual). Strict whitelist — no fake defaults.
             exchange: (t.exchange === 'binance' || t.exchange === 'bybit') ? t.exchange : null,
             env: (t.env === 'DEMO' || t.env === 'TESTNET' || t.env === 'REAL') ? t.env : null,
+            // [JOURNAL SPLIT 2026-06-05] THE FIX — this endpoint silently DROPPED
+            // the AT/manual classification: 1,982/2,600 at_closed rows (76%) had
+            // no autoTrade field, so client-AT closes (the demo engine runs
+            // client-side and reports here with autoTrade:true) landed in the
+            // MANUAL journal bucket (`autoTrade !== true`). Strict whitelist.
+            autoTrade: t.autoTrade === true,
+            sourceMode: (t.sourceMode === 'auto' || t.sourceMode === 'manual' || t.sourceMode === 'paper')
+                ? t.sourceMode
+                : (t.autoTrade === true ? 'auto' : 'manual'),
         };
 
         db.atInsertClosed(seq, JSON.stringify(data), userId);
