@@ -2050,8 +2050,16 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                 } else {
                     // All retries exhausted — queue for reconciliation
                     _pendingLiveCloses.set(pos.seq, { pos, exitType, exitPrice, pnl, ts: Date.now() });
-                    logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — queued for reconciliation`);
-                    telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on exchange — reconciliation will retry.*`);
+                    // [ORPHAN ROOT FIX 2026-06-05] The old log said "queued for
+                    // reconciliation" but queued NOTHING (recon's orphan sweep also
+                    // early-returned with no internal live positions — the exact
+                    // state an orphan creates). ETH orphan bled 6h with a fictive
+                    // +$17.32 in the journal (real -$42.72). Now: REALLY enqueue
+                    // into emergency_close_queue; emergencyCloseProcessor drains it
+                    // every 60s (the queue used to be processed at boot only).
+                    const _queued = module.exports._enqueueEmergencyClose(userId, pos, exitType);
+                    logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — ${_queued ? 'ENQUEUED for emergency-close processor (60s)' : 'ENQUEUE FAILED — manual intervention required'}`);
+                    telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on exchange — ${_queued ? 'emergency processor retries every 60s' : 'AUTO-RETRY UNAVAILABLE, close manually'}.*`);
                 }
             }
             if (closeResult && closeResult.ok) {
@@ -2166,11 +2174,33 @@ async function _cancelOrderSafe(symbol, orderId, creds, userId) {
 // ══════════════════════════════════════════════════════════════════
 // _closePosition — unified close handler (SL/TP/DSL/TTP/MANUAL/RECON/EMERGENCY/RESET)
 // ══════════════════════════════════════════════════════════════════
+// [ORPHAN ROOT FIX 2026-06-05] Persist a failed market close into
+// emergency_close_queue so emergencyCloseProcessor (60s) retries until the
+// exchange accepts. INSERT OR IGNORE — decision_key is UNIQUE, so re-entry
+// for the same position is idempotent. Returns true when the row is in.
+function _enqueueEmergencyClose(userId, pos, exitType) {
+    try {
+        const qty = (pos.live && pos.live.executedQty) || pos.qty;
+        db.prepare(
+            `INSERT OR IGNORE INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(userId, pos.symbol, pos.exchange || 'binance', String(qty), `closefail_${pos.seq}_${exitType}`.slice(0, 64), Date.now());
+        return true;
+    } catch (e) {
+        try { logger.error('AT_LIVE', `[${pos.seq}] emergency-close enqueue FAILED: ${e.message}`); } catch (_) {}
+        return false;
+    }
+}
+
 function _closePosition(idx, pos, exitType, price, pnl) {
     // [MULTI-USER] Hard guard — no fallback to user 1
     if (!pos.userId) { logger.error('AT_ENGINE', '_closePosition without pos.userId seq=' + pos.seq + ' — aborting'); return; }
     const userId = pos.userId;
     const us = _uState(userId);
+
+    // [PHANTOM ROOT FIX 2026-06-05] Mark this uid|symbol as recently closed so
+    // the userdata fast-path doesn't adopt our own mid-close fill snapshots as
+    // phantom "external" positions (see _closeRaceGuard).
+    try { _closeRaceGuard.record(userId, pos.symbol); } catch (_) {}
 
     pos.status = exitType;
     pos.closeTs = Date.now();
@@ -4203,6 +4233,11 @@ function _buildExternalEntry(data, seq, adoptedSL) {
         // exist for an adopted position (slOrderId/tpOrderId null) — the close path treats
         // null order ids as safe no-ops.
         live: { status: 'EXTERNAL', executedQty: _qty, slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false },
+        // [PHANTOM ROOT FIX 2026-06-05] Adopted positions had NO status field →
+        // the amt=0 close path (requires status==='OPEN') could never close
+        // them and existing-lookups never saw them → stuck phantoms (187/189
+        // sat OPEN 7+ hours). OPEN puts them in the normal lifecycle.
+        status: 'OPEN',
         ts: Date.now(),
         externalSync: true,
     };
@@ -4776,6 +4811,7 @@ function updateDslParams(userId, seq, dslParams) {
 // Periodic check: Binance real state vs server tracked state
 // ══════════════════════════════════════════════════════════════════
 const RECON_INTERVAL_MS = 60000; // 60s (reduced to 300s when userDataStream active)
+let _reconIdleCycles = 0; // [ORPHAN ROOT FIX] counts cycles with no internal live positions (idle sweep every 2nd)
 const RECON_INTERVAL_STREAM_MS = 300000; // 5 min safety net when WS provides real-time
 let _reconTimer = null;
 let _reconRunning = false;
@@ -4817,8 +4853,39 @@ async function _runReconciliation(isStartup) {
         for (const [k, v] of _orphanPending) {
             if (v.firstSeen < _pendingStale) _orphanPending.delete(k);
         }
-        const livePositions = _positions.filter(p => p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL'));
-        if (livePositions.length === 0) return; // [B6] finally will reset _reconRunning
+        // [ORPHAN ROOT FIX review C1] EXTERNAL included: an adopted position is
+        // the ONLY internal record of its exchange leg — excluding it (a) let the
+        // idle sweep flag its own backing as orphan every 120s (alert spam) and
+        // (b) denied it the phantom-check (exchange gone → close local record).
+        const livePositions = _positions.filter(p => p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL' || p.live.status === 'EXTERNAL'));
+        // [ORPHAN ROOT FIX 2026-06-05] The old `if (livePositions.length === 0)
+        // return;` meant the ORPHAN sweep (exchange has a position, server
+        // doesn't) NEVER ran in exactly the state an orphan creates — internal
+        // record closed, exchange leg alive (ETH orphan bled 6h today: detected
+        // at 17:29 while another position kept recon alive, then recon went
+        // dormant the moment the last internal position closed). With no
+        // internal live positions, still run an exchange-truth sweep every 2nd
+        // cycle (120s — under the 180s _orphanPending staleness eviction, so
+        // the 2-cycle orphan confirmation still completes) for every user with
+        // active exchange credentials. Cost: one positionRisk (w5) per
+        // user-exchange per 120s — negligible.
+        let _idleSweepUserExchanges = null;
+        if (livePositions.length === 0) {
+            _reconIdleCycles++;
+            if (_reconIdleCycles % 2 !== 0) return; // every 2nd idle cycle
+            try {
+                const accounts = db.prepare(
+                    `SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE is_active = 1`
+                ).all();
+                if (!accounts || accounts.length === 0) return;
+                _idleSweepUserExchanges = accounts.map(a => ({ userId: a.user_id, exchange: a.exchange || 'binance', positions: [] }));
+            } catch (e) {
+                logger.warn(label, `idle orphan sweep account query failed: ${e.message}`);
+                return;
+            }
+        } else {
+            _reconIdleCycles = 0;
+        }
 
         // [P2c.1b] Group live positions by (userId, exchange) so each exchange's
         // positions reconcile against THEIR OWN exchange (creds + held + trades via
@@ -4839,6 +4906,9 @@ async function _runReconciliation(isStartup) {
                 byUserExchange.push({ userId: uid, exchange, positions: exPositions });
             }
         }
+        // [ORPHAN ROOT FIX] Idle sweep — no internal live positions, but scan
+        // exchange truth anyway so orphans are detected and auto-closed.
+        if (_idleSweepUserExchanges) byUserExchange.push(..._idleSweepUserExchanges);
 
         for (const { userId, exchange, positions: userLivePositions } of byUserExchange) {
             const creds = getExchangeCredsFor(userId, exchange);
@@ -5349,6 +5419,33 @@ const _exitFillTracker = {
     _clear() { _exitFills.clear(); },
 };
 
+// [PHANTOM ROOT FIX 2026-06-05] Close-race guard. _closePosition runs
+// internally BEFORE the exchange's mid-close partial ACCOUNT_UPDATE snapshots
+// arrive; a snapshot with amt≠0 then finds no OPEN internal position and was
+// adopted as an "external" (manual-looking) phantom — 3 today, each at the
+// exact second of a DSL close, two stuck OPEN for hours. Userdata-stream
+// adoption is only a fast-path; the 60s recon (positionRisk = exchange truth,
+// race-free) adopts genuinely-external positions anyway — so suppressing the
+// fast-path for 30s around our own closes loses nothing.
+const _CLOSE_RACE_WINDOW_MS = 30_000;
+const _recentInternalCloses = new Map(); // 'userId|symbol' → ts
+const _closeRaceGuard = {
+    record(userId, symbol, now) {
+        _recentInternalCloses.set(userId + '|' + symbol, now != null ? now : Date.now());
+        // opportunistic prune
+        if (_recentInternalCloses.size > 64) {
+            const cutoff = (now != null ? now : Date.now()) - _CLOSE_RACE_WINDOW_MS;
+            for (const [k, ts] of _recentInternalCloses) { if (ts < cutoff) _recentInternalCloses.delete(k); }
+        }
+    },
+    isRecent(userId, symbol, now) {
+        const ts = _recentInternalCloses.get(userId + '|' + symbol);
+        if (ts == null) return false;
+        return ((now != null ? now : Date.now()) - ts) <= _CLOSE_RACE_WINDOW_MS;
+    },
+    _clear() { _recentInternalCloses.clear(); },
+};
+
 function onUserDataEvent(userId, event) {
     if (!event || !event.e) return;
     try {
@@ -5419,6 +5516,12 @@ function onUserDataEvent(userId, event) {
                     );
                     if (_recentReg) {
                         logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} — skipped (recent registration ${_recentReg.seq})`);
+                    } else if (_closeRaceGuard.isRecent(userId, p.symbol)) {
+                        // [PHANTOM ROOT FIX 2026-06-05] We just closed a position on
+                        // this symbol — these amt≠0 snapshots are the exchange's
+                        // mid-close partials, NOT a new external position. The 60s
+                        // recon (exchange-truth path) adopts anything genuinely new.
+                        logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} — skipped (close-race window, internal close <30s ago)`);
                     } else {
                         logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} ${side} amt=${p.positionAmt} — opened externally`);
                         // [SP2] POSITION_OPENED fires at open time → entryPrice ≈ current
@@ -5684,6 +5787,9 @@ module.exports = {
     _executeLiveEntryCore,
     _liveExecAllowed, // [SP2-a] pure live-exec gate predicate (unit-tested)
     _exitFillTracker, // [BUG B] SL/TP fill ↔ POSITION_CLOSED correlation (unit-tested)
+    _closeRaceGuard, // [PHANTOM ROOT FIX] suppress phantom adoption near our own closes (unit-tested)
+    _buildExternalEntry, // [PHANTOM ROOT FIX] exported to pin status:'OPEN' (unit-tested)
+    _enqueueEmergencyClose, // [ORPHAN ROOT FIX] failed closes REALLY enqueue now (unit-tested)
     // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
     // source='external' marker, NO SL placement responsibility, warning log.
     _syncExternalPosition,

@@ -1389,6 +1389,13 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   // Position reconciliation handled internally by serverAT._runReconciliation (60s + startup)
   // [C5] DB backup: already self-starting in database.js (30s delay + hourly, keep 7)
 
+  // [ORPHAN ROOT FIX 2026-06-05, review M2] Drain emergency_close_queue every
+  // 60s — failed closes (serverAT._enqueueEmergencyClose) and catastrophic
+  // entry failures (binanceOps/bybitOps) retry until the exchange accepts.
+  // UNCONDITIONAL (needs only DB+creds+signer): pre-fix the queue had
+  // manual-resolve semantics only — 06:31 orphans sat 3.5h, ETH bled 6h.
+  try { require('./server/services/emergencyCloseProcessor').start(); } catch (e) { console.error('[BOOT] emergencyCloseProcessor failed to start:', e.message); }
+
   // [P2] Start server-side market data feed if flag enabled
   if (MF.SERVER_MARKET_DATA) {
     const SD_SYMBOLS = (process.env.SD_SYMBOLS || process.env.SD_SYMBOL || 'BTCUSDT')

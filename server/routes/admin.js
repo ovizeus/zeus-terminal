@@ -50,4 +50,18 @@ router.get('/halt', _requireAuth, _requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/admin/binance-telemetry — live request-telemetry snapshot
+// (per-source counts, quota pressure, scheduler lane stats). [2026-06-05]
+// Built to attribute the recurring testnet weight saturations (6000+/min
+// bursts at 12:45/13:30/17:30) — the ring is in-memory, so when the next
+// BINANCE_RATE warn fires, hit this endpoint to see WHO spent the weight.
+router.get('/binance-telemetry', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        const snap = require('../services/binanceTelemetry').getSnapshot();
+        return res.json({ ok: true, snapshot: snap });
+    } catch (err) {
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 module.exports = router;
