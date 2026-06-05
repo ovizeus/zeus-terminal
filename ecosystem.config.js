@@ -11,7 +11,7 @@ module.exports = {
         exec_mode: 'fork',
         autorestart: true,
         watch: false,
-        max_memory_restart: '512M',
+        max_memory_restart: '1536M', // [2026-06-05] 512M caused pm2 auto-restarts every ~8-10h (proc grows ~30MB/h) → boot burst → 418 ban roulette; VPS has 7.6G
         exp_backoff_restart_delay: 100,
         env: {
             NODE_ENV: 'production',
