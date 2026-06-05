@@ -49,6 +49,12 @@ async function _placeConditionalAlgo({ symbol, side, type, triggerPrice, quantit
         side,
         type,
         triggerPrice: String(triggerPrice),
+        // [BUG A 2026-06-05] No workingType → CONTRACT_PRICE (last price)
+        // default. Thin testnet books print wild wicks — both 2026-06-04
+        // SP2-a positions were stopped out by their own SLs in <11s (BNB
+        // filled 611.07 while mark ~596). MARK_PRICE is the standard
+        // anti-wick trigger for protection orders, correct on REAL too.
+        workingType: 'MARK_PRICE',
         clientAlgoId: String(clientAlgoId).slice(0, 36),
         recvWindow: 5000,
     };

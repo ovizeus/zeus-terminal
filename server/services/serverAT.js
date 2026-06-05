@@ -1416,6 +1416,10 @@ async function _placeConditionalOrder(params, creds) {
         symbol: params.symbol,
         side: params.side,
         type: params.type,
+        // [BUG A 2026-06-05] Anti-wick: protection orders trigger on MARK
+        // price, not last price (see binanceOps._placeConditionalAlgo).
+        // This chokepoint covers recon SL re-placement + legacy core SL/TP.
+        workingType: 'MARK_PRICE',
     };
     if (params.stopPrice != null) mapped.triggerPrice = String(params.stopPrice);
     if (params.quantity != null) mapped.quantity = String(params.quantity);
@@ -2811,6 +2815,11 @@ function onPriceUpdate(symbol, price) {
         const pos = _positions[i];
         if (!pos || pos.symbol !== symbol) continue;
         if (pos.status && pos.status !== 'OPEN') continue; // already closing
+        // [BUG B 2026-06-05] Exchange reported amt=0 and we're deferring ~2.5s
+        // for the SL/TP fill event — don't let the server-side SL net close it
+        // meanwhile with an ESTIMATED PnL (it would consume the position and
+        // orphan the real exchange PnL held by _exitFillTracker).
+        if (pos._pendingExchangeClose) continue;
         pos._lastPrice = price; // track for client-initiated close PnL
         // MAE/MFE tracking — min/max price during position lifetime
         if (!pos._minPrice || price < pos._minPrice) pos._minPrice = price;
@@ -5306,6 +5315,40 @@ async function _checkOrderHealth(pos, creds, label) {
     }
 }
 
+// [BUG B 2026-06-05] Exit-fill correlation tracker. When OUR exchange-side
+// SL/TP algo fires, the child order's ORDER_TRADE_UPDATE carries
+// clientOrderId 'sl_<decisionKey>_<i>' / 'tp_...' with the REAL exit price
+// (avgPrice) and REAL realized PnL (rp). The ACCOUNT_UPDATE position-closed
+// event carries NEITHER (unrealizedPnL=0 at amt=0) and previously journaled
+// EXTERNAL_CLOSE PnL=$0.00 (observed: BNB really -$292). Event order varies
+// (observed: POSITION_CLOSED first, fill ~40ms later), so the handler matches
+// immediately AND via a short defer. Fail-closed: no matching protection fill
+// within the window → EXTERNAL_CLOSE fallback exactly as before.
+const _EXIT_FILL_MAX_AGE_MS = 5000;
+const _exitFills = new Map(); // 'userId|symbol' → { kind, avgPrice, realizedPnL, clientOrderId, ts }
+const _exitFillTracker = {
+    record(userId, symbol, fill, now) {
+        const cid = fill && fill.clientOrderId;
+        if (typeof cid !== 'string') return;
+        const kind = cid.startsWith('sl_') ? 'HIT_SL' : cid.startsWith('tp_') ? 'HIT_TP' : null;
+        if (!kind) return; // not one of our protection orders
+        _exitFills.set(userId + '|' + symbol, {
+            kind, avgPrice: +fill.avgPrice || 0, realizedPnL: +fill.realizedPnL || 0,
+            clientOrderId: cid, ts: now != null ? now : Date.now(),
+        });
+    },
+    match(userId, symbol, now) {
+        const key = userId + '|' + symbol;
+        const f = _exitFills.get(key);
+        if (!f) return null;
+        const t = now != null ? now : Date.now();
+        if (t - f.ts > _EXIT_FILL_MAX_AGE_MS) { _exitFills.delete(key); return null; }
+        _exitFills.delete(key); // consume — never double-journal
+        return f;
+    },
+    _clear() { _exitFills.clear(); },
+};
+
 function onUserDataEvent(userId, event) {
     if (!event || !event.e) return;
     try {
@@ -5326,10 +5369,46 @@ function onUserDataEvent(userId, event) {
                 if (Math.abs(p.positionAmt) < 1e-10) {
                     // Position CLOSED (amt → 0)
                     if (existing) {
-                        const pnl = p.unrealizedPnL || 0;
-                        const exitPrice = p.entryPrice || existing.entry || existing.price || 0;
-                        logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${existing.side} — closed externally, PnL=${pnl}`);
-                        _closePosition(existingIdx, existing, 'EXTERNAL_CLOSE', exitPrice, +pnl.toFixed(2));
+                        // [BUG B 2026-06-05] First try to attribute the close to
+                        // one of OUR protection orders (SL/TP algo child fill,
+                        // correlated via _exitFillTracker) → HIT_SL/HIT_TP with
+                        // REAL exit price + realized PnL. Event order varies, so
+                        // if no fill matched yet, defer ~2.5s and retry before
+                        // falling back to EXTERNAL_CLOSE (previous behaviour,
+                        // which journaled PnL=$0.00 / exit=entry on SL hits).
+                        const fallbackPnl = +(p.unrealizedPnL || 0).toFixed(2);
+                        const fallbackPrice = p.entryPrice || existing.entry || existing.price || 0;
+                        const immediate = _exitFillTracker.match(userId, p.symbol);
+                        if (immediate) {
+                            logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${existing.side} — ${immediate.kind} fill matched, exit=${immediate.avgPrice} PnL=${immediate.realizedPnL}`);
+                            _closePosition(existingIdx, existing, immediate.kind, immediate.avgPrice || fallbackPrice, +(+immediate.realizedPnL).toFixed(2));
+                        } else {
+                            const seq = existing.seq;
+                            // Suppress the server-side SL net for this position during
+                            // the defer — the exchange is already flat (review fix).
+                            existing._pendingExchangeClose = true;
+                            logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${existing.side} — no protection fill yet, deferring classification 2.5s`);
+                            setTimeout(() => {
+                                try {
+                                    // Re-find by seq — the array may have shifted; if the
+                                    // position is no longer OPEN someone else closed it.
+                                    const idx2 = _positions.findIndex(q => q.seq === seq && q.userId === userId && q.status === 'OPEN');
+                                    if (idx2 < 0) return;
+                                    const pos2 = _positions[idx2];
+                                    pos2._pendingExchangeClose = false; // lift suppression regardless of outcome
+                                    const late = _exitFillTracker.match(userId, p.symbol);
+                                    if (late) {
+                                        logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} — late ${late.kind} fill matched, exit=${late.avgPrice} PnL=${late.realizedPnL}`);
+                                        _closePosition(idx2, pos2, late.kind, late.avgPrice || fallbackPrice, +(+late.realizedPnL).toFixed(2));
+                                    } else {
+                                        logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${pos2.side} — closed externally, PnL=${fallbackPnl}`);
+                                        _closePosition(idx2, pos2, 'EXTERNAL_CLOSE', fallbackPrice, fallbackPnl);
+                                    }
+                                } catch (e) {
+                                    logger.error('USERDATA', `deferred close classification failed uid=${userId} ${p.symbol}: ${e.message}`);
+                                }
+                            }, 2500);
+                        }
                     }
                 } else if (!existing) {
                     // Position OPENED externally — but skip if Zeus JUST registered one
@@ -5436,6 +5515,10 @@ function onUserDataEvent(userId, event) {
             if (!parsed) return;
             if (parsed.executionType === 'TRADE' && parsed.orderStatus === 'FILLED') {
                 logger.info('USERDATA', `[ORDER_FILL] uid=${userId} ${parsed.side} ${parsed.symbol} qty=${parsed.filledQty} avgPx=${parsed.avgPrice} orderId=${parsed.orderId}`);
+                // [BUG B 2026-06-05] Our SL/TP algo child fills carry the
+                // clientAlgoId — record so POSITION_CLOSED (before OR after
+                // this event) classifies HIT_SL/HIT_TP with real numbers.
+                _exitFillTracker.record(userId, parsed.symbol, parsed);
             } else if (parsed.orderStatus === 'CANCELED' || parsed.orderStatus === 'EXPIRED') {
                 logger.info('USERDATA', `[ORDER_${parsed.orderStatus}] uid=${userId} ${parsed.symbol} orderId=${parsed.orderId}`);
             }
@@ -5600,6 +5683,7 @@ module.exports = {
     // AND Path B (registerManualPosition post-M1 unification) per ADR-001 Decision 3.1.
     _executeLiveEntryCore,
     _liveExecAllowed, // [SP2-a] pure live-exec gate predicate (unit-tested)
+    _exitFillTracker, // [BUG B] SL/TP fill ↔ POSITION_CLOSED correlation (unit-tested)
     // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
     // source='external' marker, NO SL placement responsibility, warning log.
     _syncExternalPosition,

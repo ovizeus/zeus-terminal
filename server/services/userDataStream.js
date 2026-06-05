@@ -68,6 +68,11 @@ function parseOrderUpdate(event) {
         executionType: o.x,
         orderStatus: o.X,
         orderId: o.i,
+        // [BUG B 2026-06-05] Triggered algo children carry the clientAlgoId
+        // as clientOrderId (sl_<decisionKey>_<i> / tp_...) — needed to
+        // recognize our own SL/TP fills and journal HIT_SL/HIT_TP with the
+        // REAL exit price + realized PnL instead of EXTERNAL_CLOSE $0.00.
+        clientOrderId: o.c,
         price: parseFloat(o.p) || 0,
         avgPrice: parseFloat(o.ap) || 0,
         origQty: parseFloat(o.q) || 0,
