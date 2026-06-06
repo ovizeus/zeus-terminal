@@ -3620,6 +3620,27 @@ async function _executeLiveEntryCore(entryInput, stc, creds) {
         throw err;
     }
 
+    // [REAL-GATE 2026-06-06] Fail-closed REAL block at the CORE level. The
+    // manual/unified route (order/place → registerManualPosition → here)
+    // bypasses both _liveExecAllowed (by design — manual path) and the
+    // _executeLiveEntry Layer-1/Layer-2 gates, so with REAL creds a manual
+    // live order would have reached the REAL exchange while
+    // _SRV_POS_REAL_ENABLED=false — contradicting the standing directive
+    // (REAL impossible until the formal flip). creds.mode is strictly
+    // 'testnet'|'live' (credentialStore); anything not explicitly testnet is
+    // treated as REAL and requires the flag strictly true.
+    // Demo entries are exchange-free inside core (no signed calls) — gate
+    // applies only to mode=live, where creds actually reach an exchange.
+    // Testnet is signalled by creds.mode==='testnet' (credentialStore strict)
+    // or the legacy creds.isTestnet===true shape; anything else = REAL.
+    const _coreIsTestnet = !!creds && (creds.mode === 'testnet' || creds.isTestnet === true);
+    if (entryInput.mode === 'live' && !_coreIsTestnet && MF._SRV_POS_REAL_ENABLED !== true) {
+        const err = new Error('SafetyAssertionError: REAL_EXECUTION_DISABLED — core refuses non-testnet creds while _SRV_POS_REAL_ENABLED is not true');
+        err.name = 'SafetyAssertionError';
+        err.code = 'REAL_EXECUTION_DISABLED';
+        throw err;
+    }
+
     // [M1.2 Cat B] Operate on shallow clone — prevents shared-reference last-write-wins
     // bug când caller passes same entry pe concurrent invocations (idempotency LOCK_BLOCKED
     // test scenario). entryInput preserved as read-only contract; result is fresh.
@@ -4963,6 +4984,24 @@ async function _runReconciliation(isStartup) {
             // [P2c.1b] Generic held-map from normalized getPositions (binance+bybit).
             // Var name kept `binanceHeld` to minimize churn in the body below.
             const binanceHeld = buildHeldMap(held);
+
+            // [D 2026-06-06] Periodic orphan-protection sweep on IDLE cycles
+            // (every 5th idle sweep ≈ 10 min): client-AT/manual closes can
+            // leave AT_/resl_ SL/TP algo orders resting on flat symbols
+            // (orderSweeper previously ran at BOOT only). Held symbols are
+            // skipped — never strip a live position's protection.
+            if (_idleSweepUserExchanges && _reconIdleCycles % 10 === 0) {
+                try {
+                    const _heldSyms = new Set([...binanceHeld.values()].map(b => b.symbol));
+                    const _swept = await require('./orderSweeper').sweep(userId, exchange, { skipSymbols: _heldSyms });
+                    if (_swept.cancelled.length > 0) {
+                        logger.warn(label, `idle order sweep uid=${userId}/${exchange}: cancelled ${_swept.cancelled.length} orphan protection order(s)`);
+                        audit.record('SAT_IDLE_ORDER_SWEEP', { userId, exchange, cancelled: _swept.cancelled.length }, 'SERVER_AT');
+                    }
+                } catch (sweepErr) {
+                    logger.warn(label, `idle order sweep failed uid=${userId}: ${sweepErr.message}`);
+                }
+            }
 
             // [Bug#3 STEP 3] Multi-seq collision reconciliation — if multiple OPEN
             // server seqs claim the same (symbol, side), Binance (ONE-WAY mode) holds

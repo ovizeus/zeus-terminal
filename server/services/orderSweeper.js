@@ -17,13 +17,16 @@
 
 // Zeus-attributable clientOrderId prefixes for OPEN orders (SL/TP/re-SL).
 // Tied to actual binanceOps.js wiring lines 148 (sl_), 219 (tp_), 564 (resl_).
-const ZEUS_PREFIX_REGEX = /^(sl_|tp_|resl_)/;
+// [D 2026-06-06] AT_ added: client-AT/manual Path-B protections (TP/SL) carry
+// AT_<ts> client ids — 3 orphaned ones found resting on flat symbols in the
+// 2026-06-05 audit and missed by this regex.
+const ZEUS_PREFIX_REGEX = /^(sl_|tp_|resl_|AT_)/;
 
 function isZeusOrder(order) {
     return ZEUS_PREFIX_REGEX.test(String(order && order.clientOrderId || ''));
 }
 
-async function sweep(userId, exchange) {
+async function sweep(userId, exchange, opts) {
     const result = {
         userId,
         exchange: exchange || null,
@@ -31,6 +34,12 @@ async function sweep(userId, exchange) {
         preserved: [],
         errors: [],
     };
+    // [D 2026-06-06] skipSymbols: NEVER cancel on symbols with a live exchange
+    // position — adopted positions track slOrderId:null, so the DB cross-check
+    // alone would strip a LIVE position's protection. Callers doing periodic
+    // sweeps (recon idle) pass the held-symbol set; boot callers omit it
+    // (recoveryBoot re-places SLs right after, unchanged behaviour).
+    const _skipSymbols = (opts && opts.skipSymbols instanceof Set) ? opts.skipSymbols : null;
 
     const exchangeOps = require('./exchangeOps');
     const { db } = require('./database');
@@ -84,6 +93,11 @@ async function sweep(userId, exchange) {
     for (const order of openOrders) {
         const isZeus = isZeusOrder(order);
         if (!isZeus) {
+            result.preserved.push(order);
+            continue;
+        }
+        // [D 2026-06-06] Held-symbol guard — see _skipSymbols note above.
+        if (_skipSymbols && _skipSymbols.has(order.symbol)) {
             result.preserved.push(order);
             continue;
         }
