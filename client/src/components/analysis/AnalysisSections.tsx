@@ -131,65 +131,9 @@ export function AnalysisSections() {
         </div>
       </div>
 
-      {/* ===== LIQUIDITY MAGNET SCANNER ===== */}
-      <div className="sec" id="magSec">
-        <div className="slbl" style={{ justifyContent: 'space-between' }}>
-          <span>LIQUIDITY MAGNET &mdash; RADAR</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span id="magUpdTime" style={{ fontSize: '7px', color: 'var(--dim)' }}>&mdash;</span>
-            <button
-              style={{
-                fontSize: '7px', padding: '2px 7px', border: '1px solid #f0c04033',
-                borderRadius: '2px', background: 'transparent', color: 'var(--gold)',
-                cursor: 'pointer', fontFamily: 'var(--ff)'
-              }}
-            >&#8634;</button>
-          </div>
-        </div>
-
-        {/* Magnet summary */}
-        <div className="mag-summary" id="magSummary">
-          <div className="mag-sum-item">
-            <div className="mag-sum-lbl">MAGNET UP</div>
-            <div className="mag-sum-val" id="magNearAbove" style={{ color: 'var(--red)' }}>&mdash;</div>
-          </div>
-          <div className="mag-sum-item">
-            <div className="mag-sum-lbl">BIAS</div>
-            <div className="mag-bias neut" id="magBias">NEUTRAL</div>
-          </div>
-          <div className="mag-sum-item">
-            <div className="mag-sum-lbl">MAGNET DOWN</div>
-            <div className="mag-sum-val" id="magNearBelow" style={{ color: 'var(--grn)' }}>&mdash;</div>
-          </div>
-        </div>
-
-        <div className="mag-wrap">
-          {/* Above price */}
-          <div className="mag-title">
-            <span><span className="z-dot z-dot--red"></span> RESISTANCE / UPPER MAGNETS</span>
-            <span id="magAboveCnt" style={{ color: 'var(--red)' }}>&mdash;</span>
-          </div>
-          <div className="mag-arrow" id="magAboveList">
-            <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>Loading...</div>
-          </div>
-
-          {/* Separator = current price */}
-          <div className="mag-separator" style={{ margin: '6px 0' }}>
-            <div className="mag-sep-line"></div>
-            <span>&#9679; <span id="magCurrentPrice">&mdash;</span> &#9679;</span>
-            <div className="mag-sep-line"></div>
-          </div>
-
-          {/* Below price */}
-          <div className="mag-title">
-            <span><span className="z-dot z-dot--grn"></span> SUPPORT / LOWER MAGNETS</span>
-            <span id="magBelowCnt" style={{ color: 'var(--grn)' }}>&mdash;</span>
-          </div>
-          <div className="mag-arrow" id="magBelowList">
-            <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>Loading...</div>
-          </div>
-        </div>
-      </div>
+      {/* [UI-COMPACT 2026-06-06] LIQUIDITY MAGNET — RADAR (magSec) moved 1:1
+          into ARIAPanel.tsx (ARIA dock page) — same pattern; bootstrapInit
+          mv() removed in pair. */}
 
       {/* [UI-COMPACT 2026-06-06] MULTI-SYMBOL SCANNER (mscanSec) + SIGNAL
           SCANNER (sigScanSec) moved 1:1 into AdaptivePanel.tsx (Adaptive dock
