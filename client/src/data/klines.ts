@@ -192,11 +192,14 @@ export function calcSymbolScore(_sym: any, _klines: any, rsi: any, macd: any, st
 const _klineCache: Record<string, any> = {}
 const _KLINE_CACHE_TTL = 50000
 
-export async function fetchSymbolKlines(sym: string, tf = '5m', limit = 100) {
+export async function fetchSymbolKlines(sym: string, tf = '5m', limit = 100, force = false) {
   try {
     const _cacheKey = sym + '_' + tf + '_' + limit
     const _cached = _klineCache[_cacheKey]
-    if (_cached && (Date.now() - _cached.ts) < _KLINE_CACHE_TTL) return _cached.data
+    // [ARIA PV 2026-06-06] force=true bypasses the read-cache (manual ⟳ in
+    // Pattern Vision must hit the server); the fresh result still refreshes
+    // the cache for everyone else. Default behaviour unchanged.
+    if (!force && _cached && (Date.now() - _cached.ts) < _KLINE_CACHE_TTL) return _cached.data
     const url = `/api/market/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(tf)}&limit=${encodeURIComponent(limit)}`
     const _ac = new AbortController()
     const _t = setTimeout(() => _ac.abort(), 8000)

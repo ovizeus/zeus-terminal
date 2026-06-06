@@ -41,7 +41,7 @@ function PatternVision() {
   const [st, setSt] = useState<PvState>({ svg: renderPatternSVG([], {}), name: null, dir: null, conf: null, levels: null, tfShown: '—', updatedAt: '—', error: '' })
   const _alive = useRef(true)
 
-  async function refresh(selTf: PvTf) {
+  async function refresh(selTf: PvTf, force = false) {
     const w = window as any
     try {
       const sym = (w.S && w.S.symbol) || 'BTCUSDT'
@@ -51,7 +51,7 @@ function PatternVision() {
         kl = (w.S && w.S.klines) || null
         tfShown = (w.S && w.S.chartTf) || '5m'
       } else {
-        kl = await fetchSymbolKlines(sym, selTf, 60)
+        kl = await fetchSymbolKlines(sym, selTf, 60, force)
         tfShown = selTf
       }
       if (!_alive.current) return
@@ -103,7 +103,7 @@ function PatternVision() {
             color: tf === t ? '#00d4ff' : '#6a8090', borderRadius: '3px', cursor: 'pointer',
           }}>{t === 'chart' ? 'CHART' : t.toUpperCase()}</button>
         ))}
-        <button onClick={() => void refresh(tf)} title="Refresh now" style={{
+        <button onClick={() => void refresh(tf, true)} title="Refresh now (bypasses cache)" style={{
           marginLeft: 'auto', fontSize: '9px', padding: '2px 7px', background: 'transparent',
           border: '1px solid #1a2a3a', color: '#6a8090', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)',
         }}>&#8634;</button>
