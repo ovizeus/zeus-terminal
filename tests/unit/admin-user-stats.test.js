@@ -23,7 +23,10 @@ function buildApp({ balanceThrows } = {}) {
     jest.doMock('../../server/services/exchangeOps', () => ({
         getBalance: async () => {
             if (balanceThrows) throw new Error('Binance IP rate-limit');
-            return { balance: 2743.63, availableBalance: 1737.11 };
+            // REAL canonical ops shape (binanceOps.js:634 / bybitOps.js:494):
+            // walletBalance as STRING — the first deploy read `bal.balance` and
+            // showed $0.00; this mock matched the wrong shape. Mirror reality.
+            return { asset: 'USDT', walletBalance: '2743.63', availableBalance: '1737.11', totalUnrealizedPnL: '0', rawExchange: 'binance' };
         },
     }));
     jest.doMock('../../server/services/credentialStore', () => ({

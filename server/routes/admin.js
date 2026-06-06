@@ -94,7 +94,9 @@ router.get('/user-stats/:id', _requireAuth, _requireAdmin, async (req, res) => {
             exchange.mode = creds.mode;
             try {
                 const bal = await require('../services/exchangeOps').getBalance(targetId);
-                exchange.balance = bal ? parseFloat(bal.balance || 0) : null;
+                // Canonical ops shape (binanceOps/bybitOps) is walletBalance;
+                // accept legacy `balance` defensively.
+                exchange.balance = bal ? parseFloat(bal.walletBalance != null ? bal.walletBalance : (bal.balance || 0)) : null;
                 exchange.availableBalance = bal ? parseFloat(bal.availableBalance || 0) : null;
             } catch (balErr) {
                 exchange.balance = null;
