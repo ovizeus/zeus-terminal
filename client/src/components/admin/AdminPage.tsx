@@ -15,9 +15,20 @@ export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () 
   const setSelectedUser = useAdminStore((s) => s.setSelectedUser)
   const loadUsers = useAdminStore((s) => s.loadUsers)
 
+  const setSection = useAdminStore((s) => s.setSection)
+
   useEffect(() => {
     if (!visible) return
+    // [ADMIN-BACK 2026-06-06] Fresh entry always lands on Dashboard — the
+    // zustand store outlives the modal, so without this a re-open resumed on
+    // whatever sub-page was last visited (phone UX complaint: had to refresh
+    // the whole app to get the panel's first page back).
+    setSection('dashboard')
     loadUsers()
+  }, [visible])
+
+  useEffect(() => {
+    if (!visible) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (selectedUserId) setSelectedUser(null)

@@ -15,6 +15,9 @@ const SECTION_TITLES: Record<string, { title: string; sub: string }> = {
 
 export function AdminHeader({ onClose }: { onClose: () => void }) {
   const section = useAdminStore((s) => s.currentSection)
+  const selectedUserId = useAdminStore((s) => s.selectedUserId)
+  const setSelectedUser = useAdminStore((s) => s.setSelectedUser)
+  const setSection = useAdminStore((s) => s.setSection)
   const lastRefresh = useAdminStore((s) => s.lastRefresh)
   const loadUsers = useAdminStore((s) => s.loadUsers)
   const loadAudit = useAdminStore((s) => s.loadAudit)
@@ -26,6 +29,16 @@ export function AdminHeader({ onClose }: { onClose: () => void }) {
     loadUsers()
     loadAudit(100)
     loadHealth()
+  }
+
+  // [ADMIN-BACK 2026-06-06] In-panel back navigation (phone): a user drawer
+  // closes first, any sub-section returns to Dashboard, and only from
+  // Dashboard does back leave the panel. "Back to App" always exits.
+  const inSubPage = selectedUserId !== null || section !== 'dashboard'
+  function goBack() {
+    if (selectedUserId !== null) { setSelectedUser(null); return }
+    if (section !== 'dashboard') { setSection('dashboard'); return }
+    onClose()
   }
 
   return (
@@ -40,8 +53,11 @@ export function AdminHeader({ onClose }: { onClose: () => void }) {
             UPDATED {fmtRelative(new Date(lastRefresh).toISOString())}
           </span>
         )}
+        {inSubPage && (
+          <button className="zac-btn zac-btn-ghost" onClick={goBack} title="Back to Dashboard">← Back</button>
+        )}
         <button className="zac-btn zac-btn-ghost" onClick={refreshAll}>↻ Refresh</button>
-        <button className="zac-btn zac-btn-ghost" onClick={onClose}>← Back to App</button>
+        <button className="zac-btn zac-btn-ghost" onClick={onClose}>⤴ Back to App</button>
       </div>
     </header>
   )
