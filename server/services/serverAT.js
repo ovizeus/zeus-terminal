@@ -4833,6 +4833,19 @@ function updateDslParams(userId, seq, dslParams) {
 // ══════════════════════════════════════════════════════════════════
 const RECON_INTERVAL_MS = 60000; // 60s (reduced to 300s when userDataStream active)
 let _reconIdleCycles = 0; // [ORPHAN ROOT FIX] counts cycles with no internal live positions (idle sweep every 2nd)
+// [F2 2026-06-06] Orphan-protection sweep cadence — TIME-based and independent
+// of the idle/busy recon state. The previous gate (`_idleSweepUserExchanges &&
+// _reconIdleCycles % 10 === 0`) required ZERO open positions, so with any
+// position open the sweep NEVER ran (proven 06-06: BNB open since 12:38 → the
+// 15:31 BTC orphan SL sat unmanaged for 2h blocking all BTC entries).
+// skipSymbols (held-position guard) makes the sweep safe in busy mode too.
+const ORPHAN_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+let _lastOrphanSweepTs = 0;
+function _shouldRunOrphanSweep(now) {
+    if (now - _lastOrphanSweepTs < ORPHAN_SWEEP_INTERVAL_MS) return false;
+    _lastOrphanSweepTs = now;
+    return true;
+}
 const RECON_INTERVAL_STREAM_MS = 300000; // 5 min safety net when WS provides real-time
 let _reconTimer = null;
 let _reconRunning = false;
@@ -4931,6 +4944,11 @@ async function _runReconciliation(isStartup) {
         // exchange truth anyway so orphans are detected and auto-closed.
         if (_idleSweepUserExchanges) byUserExchange.push(..._idleSweepUserExchanges);
 
+        // [F2 2026-06-06] Decide ONCE per recon pass whether the periodic
+        // orphan-protection sweep fires this cycle (the helper consumes the
+        // interval); applied to every user-exchange group below, idle OR busy.
+        const _doOrphanSweep = _shouldRunOrphanSweep(Date.now());
+
         for (const { userId, exchange, positions: userLivePositions } of byUserExchange) {
             const creds = getExchangeCredsFor(userId, exchange);
             if (!creds) continue;
@@ -4985,12 +5003,12 @@ async function _runReconciliation(isStartup) {
             // Var name kept `binanceHeld` to minimize churn in the body below.
             const binanceHeld = buildHeldMap(held);
 
-            // [D 2026-06-06] Periodic orphan-protection sweep on IDLE cycles
-            // (every 5th idle sweep ≈ 10 min): client-AT/manual closes can
-            // leave AT_/resl_ SL/TP algo orders resting on flat symbols
+            // [D 2026-06-06 / F2] Periodic orphan-protection sweep (~10 min,
+            // time-based — runs in idle AND busy recon): client-AT/manual closes
+            // can leave AT_/resl_ SL/TP algo orders resting on flat symbols
             // (orderSweeper previously ran at BOOT only). Held symbols are
             // skipped — never strip a live position's protection.
-            if (_idleSweepUserExchanges && _reconIdleCycles % 10 === 0) {
+            if (_doOrphanSweep) {
                 try {
                     const _heldSyms = new Set([...binanceHeld.values()].map(b => b.symbol));
                     const _swept = await require('./orderSweeper').sweep(userId, exchange, { skipSymbols: _heldSyms });
@@ -5370,11 +5388,20 @@ async function _checkOrderHealth(pos, creds, label) {
         return;
     }
     // [ALGO-FIX] Also fetch algo orders (SL/TP are conditional algo orders since Dec 2025)
+    // [F1 2026-06-06] A failed algo query is NOT non-critical: SL/TP ARE algo
+    // orders, so a verdict built without them is built on partial data. During
+    // the 14:46 IP ban this swallowed catch made a live SL look MISSING → a
+    // duplicate SL was placed → the old one leaked as an orphan that blocked
+    // all BTC entries for 2h ("Margin type cannot be changed..."). Fail-closed:
+    // algo query fails → skip ALL order-health verdicts this cycle.
     let openAlgoOrders = [];
     try {
         openAlgoOrders = await sendSignedRequest('GET', '/fapi/v1/openAlgoOrders', { symbol: pos.symbol }, creds);
         if (openAlgoOrders && openAlgoOrders.orders) openAlgoOrders = openAlgoOrders.orders;
-    } catch (_) { /* non-critical — regular orders still checked */ }
+    } catch (algoErr) {
+        logger.warn(label, `[${pos.seq}] openAlgoOrders query failed — skipping order-health verdicts (partial data): ${algoErr.message}`);
+        return;
+    }
 
     const orderIds = new Set([
         ...openOrders.map(o => o.orderId),
@@ -5384,6 +5411,12 @@ async function _checkOrderHealth(pos, creds, label) {
     // Check SL order
     if (pos.live.slOrderId && !orderIds.has(pos.live.slOrderId)) {
         logger.warn(label, `[${pos.seq}] SL order ${pos.live.slOrderId} MISSING from Binance — attempting re-placement`);
+        // [F3 2026-06-06] Remember the id we believe is gone — if the MISSING
+        // verdict was wrong (race), the old order would otherwise leak as an
+        // orphan after the overwrite below. Cancelled AFTER successful
+        // re-placement (never reduce protection first); on failure retained as
+        // staleSlOrderId so the watchdog cleans it post-repair.
+        const _oldSlOrderId = pos.live.slOrderId;
         const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
         // [DSL-FIX1] Use DSL-tightened SL if active (restore to the level the SL was already at), else original
         const dslSnap = serverDSL.getState(pos.seq);
@@ -5399,12 +5432,19 @@ async function _checkOrderHealth(pos, creds, label) {
             }, creds);
             pos.live.slOrderId = newSl.orderId;
             pos.live.status = 'LIVE';
+            delete pos.live.staleSlOrderId;
             replaced = true;
+            // [F3] New SL is live — now best-effort cancel the old id (idempotent:
+            // "Unknown order" → success when it was genuinely gone).
+            try { await _cancelOrderSafe(pos.symbol, _oldSlOrderId, creds, userId); } catch (_) { /* best-effort */ }
             logger.info(label, `[${pos.seq}] SL re-placed successfully → algoId=${newSl.orderId}`);
             telegram.sendToUser(userId, `✅ *SL Re-placed*\n${pos.side} ${pos.symbol}\nSL order was missing on Binance — automatically re-placed at $${currentSL.toFixed(2)}`);
         } catch (err) {
             pos.live.status = 'LIVE_NO_SL';
             pos.live.slOrderId = null;
+            // [F3] Don't lose the old id — if the MISSING verdict was a race the
+            // order still rests on the exchange; the watchdog cancels it after repair.
+            pos.live.staleSlOrderId = _oldSlOrderId;
             logger.error(label, `[${pos.seq}] SL re-placement FAILED: ${err.message}`);
             // [AUDIT] Per-user dedupe — alert once per position, not every recon cycle
             const _slFailKey = `${userId}:${pos.seq}`;
@@ -5749,6 +5789,14 @@ async function _watchdogLiveNoSL() {
                 pos.live.slOrderId = newSl.orderId;
                 pos.live.status = 'LIVE';
                 pos.live.slPlaced = true;
+                // [F3 2026-06-06] A failed recon re-placement retains the old SL id
+                // (staleSlOrderId) — if its MISSING verdict was a race, that order
+                // still rests on the exchange and would leak as an orphan. New SL is
+                // live, so cancel the stale one best-effort (idempotent when gone).
+                if (pos.live.staleSlOrderId) {
+                    try { await _cancelOrderSafe(pos.symbol, pos.live.staleSlOrderId, creds, userId); } catch (_) { /* best-effort */ }
+                    delete pos.live.staleSlOrderId;
+                }
                 _persistPosition(pos);
                 _watchdogAlerted.delete(`${userId}:${pos.seq}`);
                 logger.info('WATCHDOG', `[${pos.seq}] SL repaired → algoId=${newSl.orderId} @ $${currentSL}`);
@@ -5870,6 +5918,9 @@ module.exports = {
     }),
     // Watchdog (for manual trigger / testing)
     _watchdogLiveNoSL,
+    _checkOrderHealth, // [F1/F3 2026-06-06] test hook — order-health verdicts on partial data
+    _shouldRunOrphanSweep, // [F2 2026-06-06] time-based sweep cadence (test hook)
+
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
     // persistence + lazy restore + deadline cleanup.
