@@ -927,6 +927,59 @@ function _recordMissedTrade(userId, decision, reason) {
 // ══════════════════════════════════════════════════════════════════
 // Process a brain decision (called by serverBrain)
 // ══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// [G1/G2 2026-06-06] LIVE entry affordability gate + failure cooldown
+// ══════════════════════════════════════════════════════════════════
+// DEMO has a balance gate at DECISION time (below, ~demo balance gate) — LIVE
+// had none: the entry record was created, Telegram ENTRY fired, and only then
+// the margin pre-check failed → zombie cleanup journaled ENTRY_FAILED_* rows
+// (25× INSUFFICIENT_MARGIN + 7× LEVERAGE_FAILED on 06-06) and the brain
+// retried every cycle (API pressure → contributed to the 14:46 IP ban).
+//
+// G1: cheap sync gate at decision time on us.liveAvailableRef (cached from
+//     recon's balance refresh + the margin pre-check). Unknown ref (0/null)
+//     passes — the authoritative BLOCKING margin check in _executeLiveEntry
+//     still runs (defense in depth), and its result feeds the cache+cooldown
+//     so the SECOND attempt is gated. No record, no journal row, no Telegram.
+// G2: after a real failure, suppress repeat attempts:
+//     INSUFFICIENT_MARGIN → account-wide 5 min (margin frees on closes; recon
+//       refreshes the ref every 60s anyway), LEVERAGE_FAILED /
+//       MARGIN_TYPE_FAILED → per-symbol 10 min (persistent symbol condition,
+//       e.g. resting orders blocking margin-type change),
+//       MARGIN_CHECK_FAILED → account-wide 2 min (balance API flaky).
+function _liveEntryAffordable(availableRef, finalSize) {
+    if (availableRef == null || !(availableRef > 0)) return true; // no data → defer to async check
+    return availableRef >= finalSize;
+}
+const _ENTRY_COOLDOWN_MS = {
+    INSUFFICIENT_MARGIN: 5 * 60 * 1000,
+    MARGIN_CHECK_FAILED: 2 * 60 * 1000,
+    LEVERAGE_FAILED: 10 * 60 * 1000,
+    MARGIN_TYPE_FAILED: 10 * 60 * 1000,
+};
+const _ACCOUNT_WIDE_FAILS = new Set(['INSUFFICIENT_MARGIN', 'MARGIN_CHECK_FAILED']);
+const _entryFailCooldown = {
+    _map: new Map(), // key 'uid' (account-wide) or 'uid|symbol' → { until, kind }
+    record(userId, symbol, kind, now) {
+        const ms = _ENTRY_COOLDOWN_MS[kind];
+        if (!ms) return;
+        const t = now != null ? now : Date.now();
+        const key = _ACCOUNT_WIDE_FAILS.has(kind) ? String(userId) : userId + '|' + symbol;
+        this._map.set(key, { until: t + ms, kind });
+    },
+    check(userId, symbol, now) {
+        const t = now != null ? now : Date.now();
+        for (const key of [String(userId), userId + '|' + symbol]) {
+            const e = this._map.get(key);
+            if (!e) continue;
+            if (t <= e.until) return e.kind;
+            this._map.delete(key); // expired — clean as we go
+        }
+        return null;
+    },
+    _clear() { this._map.clear(); },
+};
+
 function processBrainDecision(decision, stc, userId, userIntent) {
     if (!decision || !decision.fusion || !stc) return null;
     // [MULTI-USER] Hard guard — reject decisions without userId
@@ -1184,6 +1237,23 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — insufficient demo balance ($${us.demoBalance.toFixed(2)} < $${finalSize})`);
         _recordMissedTrade(userId, decision, 'INSUFFICIENT_BALANCE');
         return null;
+    }
+
+    // ── [G1/G2 2026-06-06] LIVE affordability gate + failure cooldown (mirror
+    // of the demo gate above) — blocks BEFORE the entry record exists, so no
+    // ENTRY_FAILED_* journal rows, no false ENTRY Telegram, no API roundtrip.
+    if (us.engineMode === 'live') {
+        const _cdKind = _entryFailCooldown.check(userId, decision.symbol);
+        if (_cdKind) {
+            logger.warn('AT_ENGINE', `Entry blocked uid=${userId} ${decision.symbol} — ENTRY_FAILURE_COOLDOWN (${_cdKind})`);
+            _recordMissedTrade(userId, decision, 'ENTRY_FAILURE_COOLDOWN_' + _cdKind);
+            return null;
+        }
+        if (!_liveEntryAffordable(us.liveAvailableRef, finalSize)) {
+            logger.warn('AT_ENGINE', `Entry blocked uid=${userId} ${decision.symbol} — insufficient live balance (avail ~$${(+us.liveAvailableRef).toFixed(2)} < $${finalSize})`);
+            _recordMissedTrade(userId, decision, 'INSUFFICIENT_BALANCE');
+            return null;
+        }
     }
 
     // [SP2-1 gate 2] Shared pure order geometry — identical transform on client & server.
@@ -1579,9 +1649,11 @@ async function _executeLiveEntry(entry, stc) {
     try {
         const balResult = await exchangeOps.getBalance(userId);
         const available = balResult ? parseFloat(balResult.availableBalance || 0) : 0;
+        us.liveAvailableRef = available; // [G1] freshest data feeds the decision-time gate
         const requiredMargin = entry.size; // position size = required margin (before leverage)
         if (available < requiredMargin) {
             entry.live = { status: 'INSUFFICIENT_MARGIN', available, required: requiredMargin };
+            _entryFailCooldown.record(userId, entry.symbol, 'INSUFFICIENT_MARGIN'); // [G2]
             _pushLog(userId, 'LIVE_MARGIN_FAIL', { seq: entry.seq, available, required: requiredMargin });
             logger.warn('AT_LIVE', `[${entry.seq}] Insufficient margin: $${available.toFixed(2)} available, $${requiredMargin} required`);
             telegram.sendToUser(userId, `⚠️ *Insufficient Margin*\n${entry.side} ${entry.symbol}\nAvailable: $${available.toFixed(2)} | Required: $${requiredMargin}\nEntry skipped to prevent margin call.`);
@@ -1592,6 +1664,7 @@ async function _executeLiveEntry(entry, stc) {
     } catch (balErr) {
         // [B2] BLOCKING: if balance check fails, do NOT proceed — too risky without confirmation
         entry.live = { status: 'MARGIN_CHECK_FAILED', error: balErr.message };
+        _entryFailCooldown.record(userId, entry.symbol, 'MARGIN_CHECK_FAILED'); // [G2]
         _pushLog(userId, 'LIVE_MARGIN_CHECK_FAILED', { seq: entry.seq, error: balErr.message });
         logger.error('AT_LIVE', `[${entry.seq}] Margin pre-check failed — BLOCKING entry: ${balErr.message}`);
         telegram.sendToUser(userId, `⚠️ *Margin Check Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nCannot verify balance. Entry skipped for safety.\nError: ${balErr.message}`);
@@ -1635,11 +1708,13 @@ async function _executeLiveEntry(entry, stc) {
             // Distinguish margin vs leverage failure by code if available; default to LEVERAGE_FAILED
             if (readyErrCode && String(readyErrCode).includes('MARGIN')) {
                 entry.live = { status: 'MARGIN_TYPE_FAILED', error: readyErrMsg, intendedMarginType: 'CROSSED' };
+                _entryFailCooldown.record(userId, entry.symbol, 'MARGIN_TYPE_FAILED'); // [G2]
                 _pushLog(userId, 'LIVE_MARGIN_TYPE_FAILED', { seq: entry.seq, marginType: 'CROSSED', error: readyErrMsg });
                 logger.error('AT_LIVE', `[${entry.seq}] Margin type set failed — BLOCKING entry: ${readyErrMsg}`);
                 telegram.sendToUser(userId, `⚠️ *Margin Type Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: CROSSED\nEntry skipped — deterministic margin required for risk math.\nError: ${readyErrMsg}`);
             } else {
                 entry.live = { status: 'LEVERAGE_FAILED', error: readyErrMsg, intendedLev: entry.lev };
+                _entryFailCooldown.record(userId, entry.symbol, 'LEVERAGE_FAILED'); // [G2]
                 _pushLog(userId, 'LIVE_LEVERAGE_FAILED', { seq: entry.seq, leverage: entry.lev, error: readyErrMsg });
                 logger.error('AT_LIVE', `[${entry.seq}] Leverage/symbol-ready set failed — BLOCKING entry: ${readyErrMsg}`);
                 telegram.sendToUser(userId, `⚠️ *Leverage Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: ${entry.lev}x\nEntry skipped — wrong leverage = wrong risk.\nError: ${readyErrMsg}`);
@@ -5357,6 +5432,10 @@ async function _runReconciliation(isStartup) {
                     if (usdtBal) {
                         const realBalance = parseFloat(usdtBal.balance || 0);
                         if (realBalance > 0) us.liveBalanceRef = realBalance;
+                        // [G1 2026-06-06] availableBalance feeds the decision-time
+                        // affordability gate — refreshed every recon cycle (60s).
+                        const _avail = parseFloat(usdtBal.availableBalance || 0);
+                        if (Number.isFinite(_avail)) us.liveAvailableRef = _avail;
                     }
                 } catch (_) { /* balance refresh non-critical */ }
             }
@@ -5920,6 +5999,8 @@ module.exports = {
     _watchdogLiveNoSL,
     _checkOrderHealth, // [F1/F3 2026-06-06] test hook — order-health verdicts on partial data
     _shouldRunOrphanSweep, // [F2 2026-06-06] time-based sweep cadence (test hook)
+    // [G1/G2 2026-06-06] decision-time affordability gate + failure cooldown (test hooks)
+    _entryGateTestHooks: Object.freeze({ affordable: _liveEntryAffordable, cooldown: _entryFailCooldown }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown

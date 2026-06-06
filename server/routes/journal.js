@@ -59,6 +59,13 @@ router.get('/', (req, res) => {
 
         // Server-side filters
         const { mode, side, from, to, source } = req.query;
+        // [G3 2026-06-06] Failed entries (no exchange exposure, PnL=0) are kept
+        // in at_closed for forensics but hidden from the journal by default —
+        // 32 ENTRY_FAILED_* rows drowned the real trades on 06-06. Opt back in
+        // with ?includeFailed=1.
+        if (req.query.includeFailed !== '1') {
+            trades = trades.filter(t => !String(t.exitReason || '').startsWith('ENTRY_FAILED'));
+        }
         if (mode) trades = trades.filter(t => t.mode === mode);
         if (side) trades = trades.filter(t => t.side === side);
         // [JOURNAL SPLIT 2026-06-05] ?source=at → only AT trades; ?source=manual
