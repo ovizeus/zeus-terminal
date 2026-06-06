@@ -46,7 +46,9 @@ export function initZeusGroups(): void {
   // [UI-COMPACT 2026-06-06] dhfSec no longer mv()'d — it is React-owned inside
   // SignalRegistryPanel (data-panel-id="sigreg"); mv() here would yank it out
   // of the panel wrapper (the documented legacy-DOM-override trap).
-  mv('magSec', mi); mv('mscanSec', mi); mv('sigScanSec', mi)
+  // [UI-COMPACT 2026-06-06] mscanSec + sigScanSec no longer mv()'d —
+  // React-owned inside AdaptivePanel (same trap-avoidance as dhfSec above).
+  mv('magSec', mi)
   // [UI-COMPACT 2026-06-06] scenario-sec + macro-sec no longer mv()'d —
   // React-owned inside NovaPanel (same trap-avoidance as dhfSec above).
   mv('deepdive-sec', mi); mv('adaptive-sec', mi)

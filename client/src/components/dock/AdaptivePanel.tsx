@@ -6,6 +6,7 @@ export function AdaptivePanel() {
   const adaptiveOn = useBrainStore((s) => !!s.brain.adaptive?.enabled)
 
   return (
+    <>
     <div className="sec" id="adaptive-sec">
       <div className="slbl" style={{ justifyContent: 'space-between' }}>
         <span>ADAPTIVE CONTROL</span>
@@ -58,5 +59,70 @@ export function AdaptivePanel() {
         </div>
       </div>
     </div>
+
+    {/* ===== MULTI-SYMBOL SCANNER — LIVE =====
+        [UI-COMPACT 2026-06-06] Moved 1:1 from AnalysisSections.tsx (home
+        scroll zone) — operator wants the home shorter and Adaptive was nearly
+        empty. Filled by legacy JS via getElementById (#mscanBody etc.), SCAN
+        button calls window.runMultiSymbolScan — position-agnostic. Paired
+        change: bootstrapInit.ts no longer mv()'s #mscanSec. */}
+    <div className="sec" id="mscanSec">
+      <div className="slbl" style={{ justifyContent: 'space-between' }}>
+        <span>MULTI-SYMBOL SCANNER &mdash; LIVE</span>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <span id="mscanUpdTime" style={{ fontSize: '7px', color: 'var(--dim)' }}>&mdash;</span>
+          <span id="mscanOpps" style={{ fontSize: '7px', color: '#00ff88' }}>0 oportunitati</span>
+          <button
+            style={{
+              fontSize: '7px', padding: '2px 7px', border: '1px solid #00b8d433',
+              borderRadius: '2px', background: 'transparent', color: '#00b8d4',
+              cursor: 'pointer', fontFamily: 'var(--ff)'
+            }}
+            onClick={() => (window as any).runMultiSymbolScan?.()}
+          >&#8634; SCAN</button>
+        </div>
+      </div>
+      <div className="mscan-wrap">
+        <table className="mscan-table">
+          <thead>
+            <tr>
+              <th>SYM</th>
+              <th>PRICE</th>
+              <th>24H</th>
+              <th>RSI(5m)</th>
+              <th>MACD</th>
+              <th>S.TREND</th>
+              <th>ADX</th>
+              <th>SCORE</th>
+              <th>SIGNAL</th>
+              <th>ACTION</th>
+            </tr>
+          </thead>
+          <tbody id="mscanBody">
+            <tr>
+              <td colSpan={10} style={{ textAlign: 'center', padding: '16px', color: 'var(--dim)', fontSize: '8px' }}>
+                Press SCAN or wait for Auto Trade to start...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {/* ===== SIGNAL SCANNER =====
+        [UI-COMPACT 2026-06-06] Moved 1:1 from AnalysisSections.tsx — filled by
+        legacy JS via getElementById (#megaSigBox/#sigGrid), position-agnostic.
+        Paired change: bootstrapInit.ts no longer mv()'s #sigScanSec. */}
+    <div className="sec sig-scan" id="sigScanSec">
+      <div className="sig-hdr">
+        <span>SIGNAL SCANNER</span>
+        <span id="sigScanTime" style={{ fontSize: '7px', color: 'var(--dim)' }}></span>
+      </div>
+      <div id="megaSigBox"></div>
+      <div className="sig-grid" id="sigGrid">
+        <div className="sig-row" style={{ justifyContent: 'center', padding: '14px', color: 'var(--dim)', fontSize: '8px' }}>Calculating signals...</div>
+      </div>
+    </div>
+    </>
   )
 }
