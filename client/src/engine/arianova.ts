@@ -1248,6 +1248,15 @@ if (!w._ARIA_NOVA_LOADED) {
     _anSchedulePaint()
   }
 
+  // [ARIA PATTERN VISION 2026-06-06] Expose the detectors (READ-ONLY reuse)
+  // for the real-candle Pattern Vision display in ARIAPanel — the dock page
+  // runs the SAME detection on operator-selected timeframes for DISPLAY.
+  // Additive: zero change to the existing scan pipeline that feeds the brain.
+  w._ariaDetectors = Object.freeze({
+    candle: _detectCandle, chart: _detectChart,
+    advanced: _detectAdvanced, momentum: _detectMomentum,
+  })
+
   // ── INIT ──────────────────────────────────────────────────────────
   function initARIANOVA() {
     if (w._ARIA_NOVA_INITED) {
