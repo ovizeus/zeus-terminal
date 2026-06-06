@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
 
 export function Header() {
@@ -32,6 +33,26 @@ export function Header() {
     if (executionEnv === 'TESTNET') return { text: `TESTNET \u00B7 ${exch}`, cls: 'zhb-testnet' }
     return { text: `REAL \u00B7 ${exch}`, cls: 'zhb-real' }
   })()
+
+  // [ADMIN-BADGE 2026-06-06] Pending-approval counter on the admin shield icon.
+  // Polls the cheap /auth/admin/pending-count endpoint (admin only) every 60s
+  // + on window focus, so new registration requests are visible without
+  // opening the admin panel — like an unread-messages badge.
+  const [pendingCount, setPendingCount] = useState(0)
+  useEffect(() => {
+    if (role !== 'admin') return
+    let alive = true
+    const load = () => {
+      fetch('/auth/admin/pending-count', { credentials: 'same-origin' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (alive && d && d.ok) setPendingCount(d.count || 0) })
+        .catch(() => { /* badge is best-effort — never breaks the header */ })
+    }
+    load()
+    const id = setInterval(load, 60000)
+    window.addEventListener('focus', load)
+    return () => { alive = false; clearInterval(id); window.removeEventListener('focus', load) }
+  }, [role])
 
   function handleLogout() {
     if (!confirm('Are you sure you want to log out?')) return
@@ -148,12 +169,21 @@ export function Header() {
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg></button>
-            <button className="sbtn" id="adminBtn" title="Admin Panel"
-              style={{ display: role === 'admin' ? undefined : 'none' }} onClick={() => openModal('adminPage')}><svg width="16" height="16"
+            <button className="sbtn" id="adminBtn" title={pendingCount > 0 ? `Admin Panel — ${pendingCount} pending approval${pendingCount > 1 ? 's' : ''}` : 'Admin Panel'}
+              style={{ display: role === 'admin' ? undefined : 'none', position: 'relative' }} onClick={() => openModal('adminPage')}><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
               strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg></button>
+            </svg>{pendingCount > 0 && (
+              <span style={{
+                position: 'absolute', top: -4, right: -4,
+                minWidth: 14, height: 14, padding: '0 3px',
+                background: '#ff4d4d', color: '#fff', borderRadius: 8,
+                fontSize: 9, fontWeight: 700, lineHeight: '14px',
+                textAlign: 'center', pointerEvents: 'none',
+                boxShadow: '0 0 0 2px #0a0f16',
+              }}>{pendingCount > 9 ? '9+' : pendingCount}</span>
+            )}</button>
             <button className="sbtn" id="logoutBtn" title="Logout" onClick={handleLogout}><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
               strokeLinejoin="round">

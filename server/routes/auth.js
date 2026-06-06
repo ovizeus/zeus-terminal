@@ -554,6 +554,29 @@ router.get('/admin/users', (req, res) => {
     }
 });
 
+// ─── ADMIN: GET /auth/admin/pending-count — header badge counter ───
+// [2026-06-06] Cheap poll target for the admin shield icon in the main header:
+// shows how many registrations await approval without opening the panel.
+// Same guard as /admin/users.
+router.get('/admin/pending-count', (req, res) => {
+    const token = req.cookies && req.cookies.zeus_token;
+    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+        const caller = db.findUserByEmail(decoded.email);
+        if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
+            return res.status(403).json({ error: 'Admin only' });
+        }
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
+            return res.status(401).json({ error: 'Session expired' });
+        }
+        const count = db.listUsers().filter(u => !u.approved && (u.role || 'user') !== 'admin').length;
+        res.json({ ok: true, count });
+    } catch (err) {
+        res.status(401).json({ error: 'Token invalid' });
+    }
+});
+
 // ─── ADMIN: POST /auth/admin/approve — approve a user ───
 router.post('/admin/approve', (req, res) => {
     const token = req.cookies && req.cookies.zeus_token;
