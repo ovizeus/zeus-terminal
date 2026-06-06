@@ -1,6 +1,8 @@
 interface Props {
   label: string
-  phase: string
+  /** [2026-06-06] Optional — operator removed launch dates from the cards;
+   *  plain "COMING SOON" only. Kept for flexibility if ever needed again. */
+  phase?: string
 }
 
 export function ComingSoonCard({ label, phase }: Props) {
@@ -36,9 +38,11 @@ export function ComingSoonCard({ label, phase }: Props) {
             ◌ COMING SOON
           </span>
         </div>
-        <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#fbbf24cc', lineHeight: '1.6' }}>
-          {phase}
-        </div>
+        {phase ? (
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: '#fbbf24cc', lineHeight: '1.6' }}>
+            {phase}
+          </div>
+        ) : null}
       </div>
     </div>
   )

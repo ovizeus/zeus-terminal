@@ -6,12 +6,13 @@ import { ComingSoonCard } from './ComingSoonCard'
 import { ExchangeDetail } from './ExchangeDetail'
 import { toast } from '../../data/marketDataHelpers'
 
+// [2026-06-06] Operator: no launch dates on the cards — plain COMING SOON only.
 const COMING_SOON = [
-  { id: 'okx', label: 'OKX', phase: 'Phase 3 — Jun 2026' },
-  { id: 'hyperliquid', label: 'HYPERLIQUID', phase: 'Phase 6 — Aug 2026' },
-  { id: 'bitget', label: 'BITGET', phase: 'Phase 4 — Jun 2026' },
-  { id: 'mexc', label: 'MEXC', phase: 'Phase 5 — Jul 2026' },
-  { id: 'htx', label: 'HTX', phase: 'Phase 5 — Jul 2026' },
+  { id: 'okx', label: 'OKX' },
+  { id: 'hyperliquid', label: 'HYPERLIQUID' },
+  { id: 'bitget', label: 'BITGET' },
+  { id: 'mexc', label: 'MEXC' },
+  { id: 'htx', label: 'HTX' },
 ]
 
 export function MultiExchangePage() {
@@ -138,7 +139,7 @@ export function MultiExchangePage() {
           onSwitch={requestSwitch}
         />
         {COMING_SOON.map((cs) => (
-          <ComingSoonCard key={cs.id} label={cs.label} phase={cs.phase} />
+          <ComingSoonCard key={cs.id} label={cs.label} />
         ))}
       </div>
 
