@@ -161,3 +161,41 @@ describe('[LIQ-FIX] _normalizeBybit — allLiquidation shape {T,s,S,v,p}', () =>
         expect(_normalizeBybit({ T: 1, s: 'BTCUSDT', S: 'Hold', v: '1', p: '60000' })).toBeNull();
     });
 });
+
+// [LIQ-FIX 2026-06-06 #2] OKX liquidation-orders wraps the actual liquidation
+// fields in data[i].details[] (push example from the official docs) — the
+// handler fed data[i] directly into _normalizeOkx, which found no side/sz →
+// ev=0 forever despite frames flowing. The handler now flattens details with
+// the parent instId.
+describe('[LIQ-FIX] OKX details[] flattening', () => {
+    test('_normalizeOkx parses a flattened details item (docs push example)', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _normalizeOkx } = mod._internal_for_test;
+        const liq = _normalizeOkx({ instId: 'BTC-USDT-SWAP', side: 'buy', sz: '13', bkPx: '60000', ts: '1692266434010' });
+        expect(liq).toMatchObject({ exchange: 'okx', symbol: 'BTCUSDT', side: 'BUY', isLong: false, q: 13, p: 60000 });
+    });
+
+    test('_okxFlatten expands the wrapped docs shape into normalizable items', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _okxFlatten } = mod._internal_for_test;
+        const wrapped = [{
+            instId: 'BTC-USDT-SWAP', instType: 'SWAP', instFamily: 'BTC-USDT',
+            details: [
+                { side: 'buy', sz: '13', bkPx: '60000', ts: '1692266434010' },
+                { side: 'sell', sz: '2', bkPx: '59000', ts: '1692266434020' },
+            ],
+        }]
+        const flat = _okxFlatten(wrapped);
+        expect(flat.length).toBe(2);
+        expect(flat[0]).toMatchObject({ instId: 'BTC-USDT-SWAP', side: 'buy', sz: '13' });
+        expect(flat[1]).toMatchObject({ instId: 'BTC-USDT-SWAP', side: 'sell' });
+    });
+
+    test('_okxFlatten passes through legacy un-wrapped items (no details)', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _okxFlatten } = mod._internal_for_test;
+        const flat = _okxFlatten([{ instId: 'ETH-USDT-SWAP', side: 'buy', sz: '1', bkPx: '1500', ts: '1' }]);
+        expect(flat.length).toBe(1);
+        expect(flat[0].instId).toBe('ETH-USDT-SWAP');
+    });
+});

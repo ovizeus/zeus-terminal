@@ -145,6 +145,25 @@ function _normalizeOkx(d) {
     };
 }
 
+// [LIQ-FIX 2026-06-06 #2] OKX wraps the liquidation fields in
+// data[i].details[] (docs push example) — flatten with the parent instId so
+// _normalizeOkx sees side/sz/bkPx/ts. Items without details pass through
+// unchanged (defensive).
+function _okxFlatten(dataArr) {
+    const out = [];
+    for (const d of (dataArr || [])) {
+        if (!d) continue;
+        if (Array.isArray(d.details) && d.details.length) {
+            for (const det of d.details) {
+                if (det) out.push(Object.assign({ instId: d.instId }, det));
+            }
+        } else {
+            out.push(d);
+        }
+    }
+    return out;
+}
+
 // ── Broadcast ──
 function _broadcast(liq) {
     const fn = global.__zeusWsBroadcastAll;
@@ -277,7 +296,7 @@ function _connectOkx() {
         if (_txt === 'pong') return; // OKX ping reply — not JSON
         let m; try { m = JSON.parse(_txt); } catch (_) { return; }
         if (m && m.data && Array.isArray(m.data)) {
-            for (const d of m.data) {
+            for (const d of _okxFlatten(m.data)) {
                 const liq = _normalizeOkx(d);
                 if (liq) _emitLiq(liq);
             }
@@ -372,6 +391,7 @@ module.exports = {
         _normalizeBinance,
         _normalizeBybit,
         _normalizeOkx,
+        _okxFlatten,
         _buffer,
         _broadcast,
     },
