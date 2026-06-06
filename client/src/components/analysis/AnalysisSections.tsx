@@ -271,36 +271,10 @@ export function AnalysisSections() {
         </div>
       </div>
 
-      {/* ===== DAY / HOUR WIN RATE FILTER ===== */}
-      <div className="sec" id="dhfSec">
-        <div className="slbl" style={{ justifyContent: 'space-between' }}>
-          <span>DAY / HOUR WIN RATE FILTER</span>
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <span id="dhfCurrentSlot" style={{ fontSize: '8px', color: '#00ff88' }}>&mdash;</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '7px', cursor: 'pointer' }}>
-              <input type="checkbox" id="dhfEnabled" defaultChecked onChange={() => (window as any).renderDHF?.()} />
-              <span style={{ color: '#aa44ff' }}>Filter active</span>
-            </label>
-          </div>
-        </div>
-        <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
-          WEEKDAYS &mdash; avg WR across symbols
-        </div>
-        <div className="dhf-grid" id="dhfDayGrid">
-          {/* filled by JS */}
-        </div>
-        <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
-          HOURS ROMANIA (UTC+2/+3) &mdash; Avoid red hours
-        </div>
-        <div className="dhf-hours" id="dhfHourGrid">
-          {/* filled by JS */}
-        </div>
-        <div style={{ padding: '4px 10px 8px', fontSize: '7px', color: 'var(--dim)' }}>
-          <span style={{ color: '#00d97a' }}>&#9632;</span> WR&ge;60% &mdash; Trade &nbsp;
-          <span style={{ color: '#f0c040' }}>&#9632;</span> WR 45-60% &mdash; Caution &nbsp;
-          <span style={{ color: '#ff4466' }}>&#9632;</span> WR&lt;45% &mdash; Avoid
-        </div>
-      </div>
+      {/* [UI-COMPACT 2026-06-06] DAY / HOUR WIN RATE FILTER moved 1:1 into
+          SignalRegistryPanel.tsx (Signals dock page) — operator wants the home
+          scroll shorter. bootstrapInit.ts mv('dhfSec') removed in the same
+          change so the boot mover can't yank it back out of the panel. */}
 
       {/* ===== PERFORMANCE TRACKER — PER INDICATOR ===== */}
       <div className="sec" id="perfSec">

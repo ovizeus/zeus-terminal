@@ -6,6 +6,7 @@ export function SignalRegistryPanel() {
   const [isOpen, setIsOpen] = useState(true)
 
   return (
+    <>
     <div id="sr-strip" className={isOpen ? 'sr-strip-open' : ''}>
       {/* ── Bar (always visible) — 1:1 from index.html line 2541 ── */}
       <div id="sr-strip-bar" onClick={() => setIsOpen(o => !o)}>
@@ -57,5 +58,44 @@ export function SignalRegistryPanel() {
         </div>
       </div>
     </div>
+
+    {/* ===== DAY / HOUR WIN RATE FILTER =====
+        [UI-COMPACT 2026-06-06] Moved here 1:1 from AnalysisSections.tsx (home
+        scroll zone) — operator wants the home page shorter; this widget now
+        lives under Signals. IDs, checkbox handler and structure unchanged:
+        isCurrentTimeOK() (the client-AT time gate) and renderDHF() find these
+        by getElementById, and dock panel wrappers stay in the DOM at all
+        times (only CSS-hidden), so the AT gate behaves identically.
+        Paired change: bootstrapInit.ts no longer mv()'s #dhfSec. */}
+    <div className="sec" id="dhfSec">
+      <div className="slbl" style={{ justifyContent: 'space-between' }}>
+        <span>DAY / HOUR WIN RATE FILTER</span>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <span id="dhfCurrentSlot" style={{ fontSize: '8px', color: '#00ff88' }}>&mdash;</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '7px', cursor: 'pointer' }}>
+            <input type="checkbox" id="dhfEnabled" defaultChecked onChange={() => (window as any).renderDHF?.()} />
+            <span style={{ color: '#aa44ff' }}>Filter active</span>
+          </label>
+        </div>
+      </div>
+      <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
+        WEEKDAYS &mdash; avg WR across symbols
+      </div>
+      <div className="dhf-grid" id="dhfDayGrid">
+        {/* filled by JS */}
+      </div>
+      <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
+        HOURS ROMANIA (UTC+2/+3) &mdash; Avoid red hours
+      </div>
+      <div className="dhf-hours" id="dhfHourGrid">
+        {/* filled by JS */}
+      </div>
+      <div style={{ padding: '4px 10px 8px', fontSize: '7px', color: 'var(--dim)' }}>
+        <span style={{ color: '#00d97a' }}>&#9632;</span> WR&ge;60% &mdash; Trade &nbsp;
+        <span style={{ color: '#f0c040' }}>&#9632;</span> WR 45-60% &mdash; Caution &nbsp;
+        <span style={{ color: '#ff4466' }}>&#9632;</span> WR&lt;45% &mdash; Avoid
+      </div>
+    </div>
+    </>
   )
 }

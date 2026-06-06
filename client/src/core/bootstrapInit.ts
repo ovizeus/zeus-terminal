@@ -43,7 +43,10 @@ export function initZeusGroups(): void {
   mvSec('#rsiupd', mi); mvSec('.dttabs', mi); mvSec('.conf-widget', mi); mvSec('.fgc', mi)
   mvSec('#frv', mi); mvSec('#askc', mi); mvSec('.srgrid', mi); mvSec('.lmcs', mi)
   mvSec('#tv', mi); mvSec('.fdlist', mi)
-  mv('magSec', mi); mv('mscanSec', mi); mv('dhfSec', mi); mv('sigScanSec', mi)
+  // [UI-COMPACT 2026-06-06] dhfSec no longer mv()'d — it is React-owned inside
+  // SignalRegistryPanel (data-panel-id="sigreg"); mv() here would yank it out
+  // of the panel wrapper (the documented legacy-DOM-override trap).
+  mv('magSec', mi); mv('mscanSec', mi); mv('sigScanSec', mi)
   mv('deepdive-sec', mi); mv('scenario-sec', mi); mv('macro-sec', mi); mv('adaptive-sec', mi)
   if (DEV?.enabled) mv('dev-sec', mi)
   const _atPanel = document.getElementById('at-strip-panel')
