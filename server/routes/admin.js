@@ -64,4 +64,62 @@ router.get('/binance-telemetry', _requireAuth, _requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/admin/user-stats/:id — per-user live stats for the admin drawer
+// [P2 2026-06-06] On-demand only (fetched when the drawer opens, no polling →
+// at most one exchange balance call per open). Exchange balance is fail-soft:
+// a Binance hiccup returns balance:null + balanceError, never a 500 — the
+// drawer still renders mode/positions/demo balance.
+router.get('/user-stats/:id', _requireAuth, _requireAdmin, async (req, res) => {
+    const targetId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetId) || targetId <= 0) {
+        return res.status(400).json({ ok: false, error: 'numeric user id required' });
+    }
+    try {
+        const serverAT = require('../services/serverAT');
+        const credentialStore = require('../services/credentialStore');
+
+        const mode = serverAT.getMode(targetId);
+        const stats = serverAT.getStats(targetId);
+        const demo = serverAT.getDemoBalance(targetId);
+        const positions = (serverAT.getOpenPositions(targetId) || []).map(p => ({
+            seq: p.seq, symbol: p.symbol, side: p.side, mode: p.mode,
+            size: p.size, lev: p.lev, entryPrice: p.price, sl: p.sl, tp: p.tp,
+            openedAt: p.ts, liveStatus: p.live ? p.live.status : null,
+        }));
+
+        const creds = credentialStore.getExchangeCreds(targetId);
+        const exchange = { connected: !!creds };
+        if (creds) {
+            exchange.exchange = creds.exchange;
+            exchange.mode = creds.mode;
+            try {
+                const bal = await require('../services/exchangeOps').getBalance(targetId);
+                exchange.balance = bal ? parseFloat(bal.balance || 0) : null;
+                exchange.availableBalance = bal ? parseFloat(bal.availableBalance || 0) : null;
+            } catch (balErr) {
+                exchange.balance = null;
+                exchange.availableBalance = null;
+                exchange.balanceError = balErr.message;
+            }
+        }
+
+        return res.json({
+            ok: true,
+            stats: {
+                mode,
+                openCount: stats.openCount,
+                dailyPnLLive: stats.dailyPnLLive,
+                dailyPnLDemo: stats.dailyPnLDemo,
+                killActive: stats.killActive,
+                killPct: stats.killPct,
+                demo,
+                exchange,
+                positions,
+            },
+        });
+    } catch (err) {
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 module.exports = router;

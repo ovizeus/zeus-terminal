@@ -1003,15 +1003,27 @@ router.get('/admin/flags', (req, res) => {
         value: current[key],
         default: defaults[key],
         changed: current[key] !== defaults[key],
+        // [P1 2026-06-06] UI renders protected flags read-only.
+        protected: PROTECTED_FLAGS.has(key) || undefined,
     }));
     res.json({ ok: true, flags });
 });
+
+// [P1 2026-06-06] REAL-money master switches must NEVER be one-tap toggles in
+// the admin panel — they flip ONLY via the formal operator procedure (review +
+// phantom-check, at the console). Fail-closed blocklist; attempts are audited.
+const PROTECTED_FLAGS = new Set(['_SRV_POS_REAL_ENABLED', '_USERDATA_STREAM_REAL_ENABLED']);
 
 // ─── ADMIN: POST /auth/admin/flags — toggle a migration flag ───
 router.post('/admin/flags', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
     const { key, value } = req.body;
     if (typeof key !== 'string' || typeof value !== 'boolean') return res.status(400).json({ error: 'key:string and value:boolean required' });
+    // [P1 2026-06-06] Fail-closed: REAL master switches refuse the admin route.
+    if (PROTECTED_FLAGS.has(key)) {
+        try { db.auditLog(guard.caller.id, 'ADMIN_FLAG_TOGGLE_BLOCKED', { key, requested: value, reason: 'protected — operator procedure only' }, req.ip); } catch (_) {}
+        return res.status(403).json({ error: 'Flag protected — REAL execution flips only via the formal operator procedure, not the admin panel' });
+    }
     let MF = null;
     try { MF = require('../migrationFlags'); } catch (_) { return res.status(500).json({ error: 'migrationFlags unavailable' }); }
     try {

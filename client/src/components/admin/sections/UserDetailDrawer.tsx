@@ -90,10 +90,81 @@ function OverviewTab({ u }: { u: AdminUser }) {
         )}
       </Panel>
 
-      <Panel title="Account Stats">
-        <Placeholder title="Live stats binding" note="Open positions, balance, AT engine state per-user will be surfaced here once the admin aggregator endpoint is wired." />
-      </Panel>
+      <LiveStatsPanel userId={u.id} />
     </div>
+  )
+}
+
+// [P2 2026-06-06] Live stats binding — was a Placeholder since the panel
+// shipped. Fetches GET /api/admin/user-stats/:id once when the drawer opens
+// (no polling). Exchange balance is fail-soft server-side: a Binance hiccup
+// shows "unavailable" instead of breaking the drawer.
+interface LiveStats {
+  mode: string
+  openCount: number
+  dailyPnLLive: number
+  dailyPnLDemo: number
+  killActive: boolean
+  killPct: number
+  demo: { balance: number; startBalance: number; pnl: number }
+  exchange: { connected: boolean; exchange?: string; mode?: string; balance?: number | null; availableBalance?: number | null; balanceError?: string }
+  positions: Array<{ seq: number; symbol: string; side: string; mode: string; size: number; lev: number; entryPrice: number; sl: number; tp: number; openedAt: number; liveStatus: string | null }>
+}
+
+function LiveStatsPanel({ userId }: { userId: number }) {
+  const [stats, setStats] = useState<LiveStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const load = () => {
+    setLoading(true); setError('')
+    fetch(`/api/admin/user-stats/${userId}`, { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setStats(d.stats); else setError(d.error || 'Load error'); setLoading(false) })
+      .catch((e) => { setError(e.message || 'Network error'); setLoading(false) })
+  }
+  useEffect(() => { load() }, [userId])
+
+  return (
+    <Panel title="Account Stats — Live">
+      {loading && <LoadingSkeleton rows={3} />}
+      {error && <div style={{ fontSize: 11, color: 'var(--ac-danger)' }}>{error} <button className="zac-btn zac-btn-sm zac-btn-ghost" onClick={load}>↻ Retry</button></div>}
+      {!loading && !error && stats && (
+        <>
+          <Row k="Engine mode" v={<span className={stats.mode === 'live' ? 'zac-b zac-b-live' : 'zac-b zac-b-demo'}>{stats.mode.toUpperCase()}</span>} />
+          <Row k="Open positions" v={String(stats.openCount)} />
+          <Row k="Demo balance" v={`$${stats.demo.balance.toFixed(2)} (PnL ${stats.demo.pnl >= 0 ? '+' : ''}$${stats.demo.pnl.toFixed(2)})`} />
+          {stats.exchange.connected ? (
+            <>
+              <Row k="Exchange balance" v={stats.exchange.balance != null
+                ? `$${stats.exchange.balance.toFixed(2)} (avail $${(stats.exchange.availableBalance ?? 0).toFixed(2)})`
+                : <span style={{ color: 'var(--ac-gold)' }} title={stats.exchange.balanceError}>unavailable</span>} />
+              <Row k="Daily PnL (live)" v={`${stats.dailyPnLLive >= 0 ? '+' : ''}$${(stats.dailyPnLLive ?? 0).toFixed(2)}`} />
+            </>
+          ) : (
+            <Row k="Exchange" v="not connected" />
+          )}
+          <Row k="Kill switch" v={stats.killActive ? `ACTIVE (${stats.killPct}%)` : 'off'} />
+          {stats.positions.length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontSize: 9, color: 'var(--ac-fg-mute)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 }}>Open Positions</div>
+              {stats.positions.map((p) => (
+                <div key={p.seq} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '4px 0', borderBottom: '1px solid #0f1725' }}>
+                  <span>
+                    <b style={{ color: p.side === 'LONG' ? 'var(--ac-success)' : 'var(--ac-danger)' }}>{p.side}</b> {p.symbol}
+                    <span style={{ color: 'var(--ac-fg-mute)', marginLeft: 6 }}>{p.mode.toUpperCase()}{p.liveStatus ? ` · ${p.liveStatus}` : ''}</span>
+                  </span>
+                  <span style={{ color: 'var(--ac-fg-dim)' }}>${p.size} · {p.lev}x @ ${p.entryPrice}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ textAlign: 'right', marginTop: 4 }}>
+            <button className="zac-btn zac-btn-sm zac-btn-ghost" onClick={load}>↻ Refresh</button>
+          </div>
+        </>
+      )}
+    </Panel>
   )
 }
 

@@ -2,6 +2,26 @@ import { useEffect, useState } from 'react'
 import { Placeholder, fmtRelative, actionColor } from '../shared/components'
 import { useAdminStore } from '../../../stores/adminStore'
 
+// [P3 2026-06-06] Operator decision: scaffold sections STAY visible (so the
+// roadmap isn't forgotten) but must say loudly that they are not functional
+// and what remains to be built.
+function ScaffoldBanner({ todo }: { todo: string }) {
+  return (
+    <div style={{
+      padding: '10px 14px', marginBottom: 12,
+      background: 'rgba(240,192,64,.08)', border: '1px solid #f0c04066',
+      borderLeft: '4px solid var(--ac-gold)', borderRadius: 4,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--ac-gold)', textTransform: 'uppercase' }}>
+        🚧 Scaffold — not functional yet
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--ac-fg-dim)', marginTop: 4 }}>
+        <b>To build:</b> {todo}
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ROLES & PERMISSIONS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -50,12 +70,15 @@ const DEFAULT_MATRIX: Record<string, string[]> = {
 
 export function RolesSection() {
   const users = useAdminStore((s) => s.users)
+  // eslint-disable-next-line no-irregular-whitespace
+  // Banner first — everything below is a hardcoded mock (backend knows only admin/user).
   const adminCount = users.filter((u) => u.role === 'admin').length
   const userCount = users.filter((u) => u.role !== 'admin').length
   const memberCounts: Record<string, number> = { superadmin: 0, admin: adminCount, support: 0, analyst: 0 }
 
   return (
     <>
+      <ScaffoldBanner todo="roles table migration + per-permission enforcement in every admin route; until then the backend recognises only admin/user and this whole matrix is a hardcoded mock (planned Faza C)." />
       <div className="zac-panel">
         <div className="zac-panel-header">
           <div className="zac-panel-title">Roles</div>
@@ -275,6 +298,7 @@ const PLANS: PlanDef[] = [
 export function BillingSection() {
   return (
     <>
+      <ScaffoldBanner todo="plans table + plan field on users + billing provider integration (invoices, renewals, refunds); these plan cards are hardcoded text — no user has a plan (planned Faza C)." />
       <div className="zac-panel">
         <div className="zac-panel-header">
           <div className="zac-panel-title">Plans Overview</div>
@@ -343,6 +367,7 @@ export function SupportSection() {
       </div>
       <div className="zac-panel">
         <div className="zac-panel-header"><div className="zac-panel-title">Support Cases</div></div>
+        <ScaffoldBanner todo="case tracker (open/close/assign) + one-click resync/repair flows (planned Faza C). The quick tools and user directory above ARE functional." />
         <Placeholder title="Support cases, resync tools, repair actions" note="Case tracker + one-click resync/repair flows arrive in Faza C. The user list and audit search above cover routine triage today." />
       </div>
     </>
@@ -458,7 +483,7 @@ function formatUptime(sec: number) {
 // SETTINGS — feature flags scaffolded
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface FlagEntry { key: string; value: boolean; default: boolean; changed: boolean }
+interface FlagEntry { key: string; value: boolean; default: boolean; changed: boolean; protected?: boolean }
 
 const FLAG_DESC: Record<string, { title: string; note: string; danger?: boolean }> = {
   SERVER_MARKET_DATA: { title: 'Server subscribes to Binance WS', note: 'When ON, server maintains market feed. Clients still connect for UI updates.' },
@@ -521,12 +546,25 @@ export function SettingsSection() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 9, color: 'var(--ac-fg-mute)', marginBottom: 4 }}>default: <b>{String(f.default)}</b></div>
-                <button
-                  className={`zac-btn zac-btn-sm ${f.value ? 'zac-btn-primary' : 'zac-btn-ghost'}`}
-                  onClick={() => { if (desc.danger) setConfirm({ key: f.key, next: !f.value }); else apply(f.key, !f.value) }}
-                >
-                  {f.value ? 'ON' : 'OFF'}
-                </button>
+                {f.protected ? (
+                  /* [P1 2026-06-06] REAL master switches: read-only here — the server
+                     refuses them anyway (403). Flip only via operator procedure. */
+                  <span title="Protected — flips only via the formal operator procedure" style={{ fontSize: 10, color: 'var(--ac-gold)', border: '1px solid #f0c04044', borderRadius: 4, padding: '4px 8px', cursor: 'not-allowed' }}>
+                    🔒 {f.value ? 'ON' : 'OFF'}
+                  </span>
+                ) : (
+                  <button
+                    className={`zac-btn zac-btn-sm ${f.value ? 'zac-btn-primary' : 'zac-btn-ghost'}`}
+                    onClick={() => {
+                      /* [P1] Unknown flags (no curated description) are treated as
+                         dangerous too — confirm dialog for everything not whitelisted. */
+                      if (desc.danger || !FLAG_DESC[f.key]) setConfirm({ key: f.key, next: !f.value })
+                      else apply(f.key, !f.value)
+                    }}
+                  >
+                    {f.value ? 'ON' : 'OFF'}
+                  </button>
+                )}
               </div>
             </div>
           )
@@ -535,6 +573,7 @@ export function SettingsSection() {
 
       <div className="zac-panel">
         <div className="zac-panel-header"><div className="zac-panel-title">Safety Toggles</div></div>
+        <ScaffoldBanner todo="global trading lock + emergency broadcast + global force-logout as one-click switches (the halt API exists at POST /api/admin/halt — only the UI binding is missing)." />
         <Placeholder title="Emergency switches" note="Global trading lock, emergency admin broadcast, global force-logout. Destructive toggles — require superadmin role binding before enabling." />
       </div>
 
