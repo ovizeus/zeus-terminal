@@ -24,6 +24,8 @@ const RECONNECT_MIN_MS = 5000;
 const RECONNECT_MAX_MS = 60000;
 const PING_INTERVAL_MS = 180000;
 const BYB_PING_INTERVAL_MS = 20000;
+// [LIQ-FIX 2026-06-06] OKX idle-closes at ~30s (code 4004) — ping must beat it.
+const OKX_PING_INTERVAL_MS = 20000;
 const BUFFER_SIZE = 1000;
 
 // ── State ──
@@ -81,14 +83,29 @@ function _normalizeBinance(msg) {
 
 function _normalizeBybit(data) {
     if (!data) return null;
+    // [LIQ-FIX 2026-06-06] Bybit DEPRECATED `liquidation.*` (live probe:
+    // "error:handler not found") — replaced by `allLiquidation.*` with shape
+    // {T,s,S,v,p} and INVERTED side semantics per the docs: S='Buy' means a
+    // LONG position has been liquidated (old topic: Buy = short bought back).
+    // Canonical convention here: side 'SELL' = long liq (matches Binance
+    // forceOrder, where longs are force-SOLD). Legacy shape kept defensively.
+    if (typeof data.s === 'string' && typeof data.S === 'string') {
+        const symbol = data.s;
+        const rawS = data.S.toLowerCase();
+        if (rawS !== 'buy' && rawS !== 'sell') return null;
+        const p = parseFloat(data.p);
+        const q = parseFloat(data.v);
+        if (!isFinite(p) || !isFinite(q) || p <= 0 || q <= 0) return null;
+        const side = rawS === 'buy' ? 'SELL' : 'BUY'; // Buy=long liquidated → canonical SELL
+        const time = Number(data.T) || Date.now();
+        return { exchange: 'bybit', symbol, side, isLong: side === 'SELL', p, q, vol: p * q, time };
+    }
     const symbol = typeof data.symbol === 'string' ? data.symbol : null;
     const rawSide = typeof data.side === 'string' ? data.side.toLowerCase() : null;
     if (!symbol || (rawSide !== 'buy' && rawSide !== 'sell')) return null;
     const p = parseFloat(data.price);
     const q = parseFloat(data.size);
     if (!isFinite(p) || !isFinite(q) || p <= 0 || q <= 0) return null;
-    // Bybit side='Buy' means a BUY trade happened — i.e. a SHORT position was
-    // closed via buying back. For client convention side='SELL' = long liq.
     const side = rawSide === 'buy' ? 'SELL' : 'BUY';
     const time = Number(data.updatedTime) || Date.now();
     return {
@@ -192,8 +209,10 @@ function _connectByb() {
     s.ws.on('open', () => {
         s.connected = true;
         s.reconnectMs = RECONNECT_MIN_MS;
-        logger.info('LIQ-FEED', 'BYB connected — liquidation.BTCUSDT');
-        try { s.ws.send(JSON.stringify({ op: 'subscribe', args: ['liquidation.BTCUSDT'] })); } catch (_) {}
+        // [LIQ-FIX 2026-06-06] allLiquidation replaces the deprecated
+        // liquidation.* topic (Bybit rejects it: "handler not found").
+        logger.info('LIQ-FEED', 'BYB connected — allLiquidation.BTCUSDT');
+        try { s.ws.send(JSON.stringify({ op: 'subscribe', args: ['allLiquidation.BTCUSDT'] })); } catch (_) {}
         s.pingTimer = setInterval(() => {
             try { if (s.ws && s.ws.readyState === WebSocket.OPEN) s.ws.send(JSON.stringify({ op: 'ping' })); } catch (_) {}
         }, BYB_PING_INTERVAL_MS);
@@ -201,7 +220,7 @@ function _connectByb() {
     s.ws.on('message', (raw) => {
         s.framesReceived++;
         let j; try { j = JSON.parse(raw.toString()); } catch (_) { return; }
-        if (j && j.topic && j.topic.startsWith('liquidation') && j.data) {
+        if (j && j.topic && (j.topic.startsWith('allLiquidation') || j.topic.startsWith('liquidation')) && j.data) {
             const data = Array.isArray(j.data) ? j.data : [j.data];
             for (const d of data) {
                 const liq = _normalizeBybit(d);
@@ -243,10 +262,20 @@ function _connectOkx() {
                 args: [{ channel: 'liquidation-orders', instType: 'SWAP' }],
             }));
         } catch (_) {}
+        // [LIQ-FIX 2026-06-06] OKX closes idle connections after ~30s with
+        // code 4004 (proven: 814 reconnects today; the liquidation-orders
+        // channel is sparse so silence is normal). OKX expects a literal
+        // 'ping' text frame and answers 'pong'. Probe: with this ping the
+        // connection stayed OPEN past 70s.
+        s.pingTimer = setInterval(() => {
+            try { if (s.ws && s.ws.readyState === WebSocket.OPEN) s.ws.send('ping'); } catch (_) { /* ignored */ }
+        }, OKX_PING_INTERVAL_MS);
     });
     s.ws.on('message', (raw) => {
         s.framesReceived++;
-        let m; try { m = JSON.parse(raw.toString()); } catch (_) { return; }
+        const _txt = raw.toString();
+        if (_txt === 'pong') return; // OKX ping reply — not JSON
+        let m; try { m = JSON.parse(_txt); } catch (_) { return; }
         if (m && m.data && Array.isArray(m.data)) {
             for (const d of m.data) {
                 const liq = _normalizeOkx(d);

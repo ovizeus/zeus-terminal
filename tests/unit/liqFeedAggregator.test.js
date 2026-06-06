@@ -120,3 +120,44 @@ describe('liqFeedAggregator (Plan A — server-side proxy)', () => {
         expect(count).toBe(0);
     });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// [LIQ-FIX 2026-06-06] Bybit DEPRECATED the `liquidation.*` topic — live probe
+// returned `error:handler not found,topic:liquidation.BTCUSDT` and the server
+// sat at ev=0 with 600+ frames (pings only). Replacement: `allLiquidation.*`
+// with a NEW payload shape {T,s,S,v,p} and INVERTED side semantics (docs:
+// "when you receive a Buy update, a LONG position has been liquidated").
+// ═══════════════════════════════════════════════════════════════════════════
+describe('[LIQ-FIX] _normalizeBybit — allLiquidation shape {T,s,S,v,p}', () => {
+    test('S=Buy → LONG liquidated → canonical side SELL / isLong true (docs semantics)', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _normalizeBybit } = mod._internal_for_test;
+        const liq = _normalizeBybit({ T: 1780800000123, s: 'BTCUSDT', S: 'Buy', v: '0.5', p: '60000' });
+        expect(liq).toEqual({
+            exchange: 'bybit', symbol: 'BTCUSDT',
+            side: 'SELL', isLong: true,
+            p: 60000, q: 0.5, vol: 30000, time: 1780800000123,
+        });
+    });
+
+    test('S=Sell → SHORT liquidated → canonical side BUY / isLong false', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _normalizeBybit } = mod._internal_for_test;
+        const liq = _normalizeBybit({ T: 1780800000456, s: 'ETHUSDT', S: 'Sell', v: '2', p: '1500' });
+        expect(liq).toMatchObject({ exchange: 'bybit', symbol: 'ETHUSDT', side: 'BUY', isLong: false, vol: 3000 });
+    });
+
+    test('legacy object shape still parses (defensive back-compat)', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _normalizeBybit } = mod._internal_for_test;
+        const liq = _normalizeBybit({ symbol: 'BTCUSDT', side: 'Buy', size: '0.3', price: '61000', updatedTime: 1700000000123 });
+        expect(liq).toMatchObject({ exchange: 'bybit', symbol: 'BTCUSDT', q: 0.3 });
+    });
+
+    test('malformed new-shape input → null', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _normalizeBybit } = mod._internal_for_test;
+        expect(_normalizeBybit({ T: 1, s: 'BTCUSDT', S: 'Buy', v: '0', p: '60000' })).toBeNull();
+        expect(_normalizeBybit({ T: 1, s: 'BTCUSDT', S: 'Hold', v: '1', p: '60000' })).toBeNull();
+    });
+});

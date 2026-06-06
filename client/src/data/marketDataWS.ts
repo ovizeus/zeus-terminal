@@ -169,7 +169,10 @@ export function connectBYB(): void {
     onopen: () => {
       console.log(`[connectBYB] onopen`); w.S.bybOk = true; _resetBackoff('byb'); _exitDegradedMode('BYB'); updConn()
       w.S.liqMetrics.byb.connected = true; w.S.liqMetrics.byb.connectedAt = Date.now()
-      const wsi = w.WS.get('byb'); if (wsi) wsi.send(JSON.stringify({ op: 'subscribe', args: [`liquidation.${sym}`] }))
+      // [LIQ-FIX 2026-06-06] allLiquidation replaces the deprecated
+      // liquidation.* topic (Bybit rejects it: "handler not found" — this is
+      // why the Liquidation Overview/Monitor/Live Feed sat at 0).
+      const wsi = w.WS.get('byb'); if (wsi) wsi.send(JSON.stringify({ op: 'subscribe', args: [`allLiquidation.${sym}`] }))
       _stopBybPing()
       _bybPingTimer = setInterval(() => { try { const ws = w.WS.get('byb'); if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' })) } catch (_) { } }, 20000)
       _setWsDiag('byb', { state: 'OPEN', err: '' })
@@ -179,7 +182,17 @@ export function connectBYB(): void {
     onmessage: (e: any) => {
       if (w.__wsGen !== _bybGen) return
       let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
-      if (j.topic && j.topic.includes('liquidation') && j.data) {
+      if (j.topic && j.topic.startsWith('allLiquidation') && j.data) {
+        // [LIQ-FIX 2026-06-06] New shape: ARRAY of {T,s,S,v,p}; docs semantics
+        // INVERTED vs old topic: S='Buy' = LONG liquidated → canonical 'SELL'.
+        const items = Array.isArray(j.data) ? j.data : [j.data]
+        for (const d of items) {
+          if (!d || !d.s) continue
+          const o = { s: d.s, S: d.S === 'Buy' ? 'SELL' : 'BUY', q: +d.v, p: +d.p }
+          w.S.liqMetrics.byb.msgCount++; procLiq(o, 'byb')
+        }
+      } else if (j.topic && j.topic.includes('liquidation') && j.data && j.data.symbol) {
+        // Legacy shape (defensive — topic deprecated server-side by Bybit)
         const d = j.data; const o = { s: d.symbol, S: d.side === 'Buy' ? 'SELL' : 'BUY', q: +d.size, p: +d.price }
         w.S.liqMetrics.byb.msgCount++; procLiq(o, 'byb')
       }
