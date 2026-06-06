@@ -96,6 +96,130 @@ export function SignalRegistryPanel() {
         <span style={{ color: '#ff4466' }}>&#9632;</span> WR&lt;45% &mdash; Avoid
       </div>
     </div>
+
+    {/* ===== PERFORMANCE TRACKER — PER INDICATOR =====
+        [UI-COMPACT 2026-06-06] Moved 1:1 from AnalysisSections.tsx, same
+        operation as dhfSec above — filled by legacy JS via getElementById
+        (#perfTrackerBody/#perfUpdTime), position-agnostic. */}
+    <div className="sec" id="perfSec">
+      <div className="slbl" style={{ justifyContent: 'space-between' }}>
+        <span>PERFORMANCE TRACKER &mdash; PER INDICATOR</span>
+        <span id="perfUpdTime" style={{ fontSize: '9px', color: 'var(--dim)' }}>Live from trades</span>
+      </div>
+      <div style={{ padding: '4px 10px 4px', fontSize: '9px', color: 'var(--dim)', display: 'flex', justifyContent: 'space-between' }}>
+        <span>INDICATOR</span><span>WIN RATE | TRADES | WEIGHT AI</span>
+      </div>
+      <div id="perfTrackerBody">
+        <div style={{ padding: '16px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)' }}>
+          Collecting data from Auto Trade...
+        </div>
+      </div>
+      <div style={{ padding: '6px 10px', fontSize: '9px', color: 'var(--dim)', borderTop: '1px solid #0d1520', lineHeight: 1.8 }}>
+        Zeus Brain auto-weights the Confluence Score based on each indicator's real performance.<br />
+        Indicators with higher WR get more weight in entry decisions.
+      </div>
+    </div>
+
+    {/* ===== BACKTEST ENGINE =====
+        [UI-COMPACT 2026-06-06] Moved 1:1 from AnalysisSections.tsx — button
+        calls window.runBacktest, all elements found by id, position-agnostic. */}
+    <div className="sec" id="btSec">
+      <div className="slbl" style={{ justifyContent: 'space-between' }}>
+        <span>BACKTEST ENGINE &mdash; INDICATOR PRECISION</span>
+        <span id="btLastRun" style={{ fontSize: '9px', color: 'var(--dim)' }}>Not run yet</span>
+      </div>
+      <div className="bt-wrap">
+        {/* Controls */}
+        <div className="bt-controls">
+          <button className="bt-btn bt-btn-run" id="btRunBtn" onClick={() => (window as any).runBacktest?.()}>&#9654; RUN BACKTEST</button>
+          <select className="bt-sel" id="btLookback" defaultValue="500" onChange={() => {}}>
+            <option value="100">100 bars</option>
+            <option value="200">200 bars</option>
+            <option value="500">500 bars</option>
+            <option value="1000">1000 bars (max)</option>
+          </select>
+          <select className="bt-sel" id="btFwdBars" defaultValue="5" onChange={() => {}}>
+            <option value="3">+3 bars</option>
+            <option value="5">+5 bars</option>
+            <option value="10">+10 bars</option>
+            <option value="20">+20 bars</option>
+          </select>
+          <select className="bt-sel" id="btMinMove" defaultValue="0.5" onChange={() => {}}>
+            <option value="0.2">&ge;0.2% move</option>
+            <option value="0.5">&ge;0.5% move</option>
+            <option value="1.0">&ge;1.0% move</option>
+          </select>
+        </div>
+
+        {/* Progress */}
+        <div className="bt-progress" id="btProgress" style={{ display: 'none' }}>
+          <div>Calculating... <span id="btProgressPct">0</span>%</div>
+          <div className="bt-progress-bar">
+            <div className="bt-progress-fill" id="btProgressFill" style={{ width: '0%' }}></div>
+          </div>
+        </div>
+
+        {/* Results */}
+        <div id="btResults" style={{ display: 'none' }}>
+          {/* Summary row */}
+          <div className="bt-summary">
+            <div className="bt-sum-cell">
+              <div className="bt-sum-lbl">BEST INDICATOR</div>
+              <div className="bt-sum-val" id="btBestInd" style={{ color: 'var(--gold)', fontSize: '11px' }}>&mdash;</div>
+            </div>
+            <div className="bt-sum-cell">
+              <div className="bt-sum-lbl">AVG WIN RATE</div>
+              <div className="bt-sum-val" id="btAvgWR" style={{ color: 'var(--whi)' }}>&mdash;</div>
+            </div>
+            <div className="bt-sum-cell">
+              <div className="bt-sum-lbl">TOTAL SIGNALS</div>
+              <div className="bt-sum-val" id="btTotalSig" style={{ color: 'var(--blu)' }}>&mdash;</div>
+            </div>
+            <div className="bt-sum-cell">
+              <div className="bt-sum-lbl">CONFLUENCE WR</div>
+              <div className="bt-sum-val" id="btConfWR" style={{ color: 'var(--pur)' }}>&mdash;</div>
+            </div>
+          </div>
+
+          {/* Table header */}
+          <div className="bt-ind-row bt-hdr">
+            <span>INDICATOR</span>
+            <span>WIN RATE</span>
+            <span style={{ textAlign: 'center' }}>SIGNALS</span>
+            <span style={{ textAlign: 'right' }}>R:R</span>
+            <span style={{ textAlign: 'center' }}>GRADE</span>
+          </div>
+
+          {/* Results rows */}
+          <div className="bt-result-grid" id="btResultGrid"></div>
+
+          {/* Equity curve */}
+          <div className="bt-equity">
+            <div className="bt-equity-lbl">EQUITY CURVE &mdash; CONFLUENCE (simulated $1000)</div>
+            <div className="bt-equity-chart">
+              <svg className="bt-eq-svg" id="btEquitySvg" viewBox="0 0 400 50" preserveAspectRatio="none"></svg>
+            </div>
+          </div>
+
+          {/* Detail note */}
+          <div className="bt-detail" id="btDetailNote">
+            <svg className="z-i" viewBox="0 0 16 16">
+              <circle cx="8" cy="4" r="1" fill="currentColor" stroke="none" />
+              <path d="M7 7h2v6H7z" fill="currentColor" stroke="none" />
+            </svg> Backtest verifies whether, after every signal detected in history, the price confirmed the direction in
+            the following bars.
+            Win Rate &gt; 55% = useful signal. Win Rate &gt; 65% = excellent signal. Results are on the historical data
+            available.
+          </div>
+        </div>
+
+        {/* Empty state */}
+        <div id="btEmpty" style={{ padding: '16px', textAlign: 'center', fontSize: '9px', color: 'var(--dim)' }}>
+          Press <strong style={{ color: 'var(--gold)' }}>&#9654; RUN BACKTEST</strong> to analyze indicator precision on the
+          current historical data.
+        </div>
+      </div>
+    </div>
     </>
   )
 }

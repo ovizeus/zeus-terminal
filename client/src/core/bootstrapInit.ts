@@ -55,7 +55,8 @@ export function initZeusGroups(): void {
   if (_ptPanel) { mvSec('.trade-sep', _ptPanel); mv('panelDemo', _ptPanel) }
   const _dslPanel = document.getElementById('dsl-strip-panel')
   if (_dslPanel) mv('dslZone', _dslPanel)
-  mv('perfSec', mi); mv('btSec', mi)
+  // [UI-COMPACT 2026-06-06] perfSec + btSec no longer mv()'d — React-owned
+  // inside SignalRegistryPanel (same trap-avoidance as dhfSec above).
   setTimeout(function () { document.querySelectorAll('.zg-pending-move').forEach(function (el: any) { console.warn('[ZEUS] Recovery: element stuck:', el.id || el.className); _recoverElement(el) }); if (_failedElements.length > 0) { console.warn('[ZEUS] Recovery mode for:', _failedElements); _showRecoveryBanner() }; if (!sessionStorage.getItem('zeusDock')) { const _sp = document.getElementById('_dockSplash'); if (_sp) _sp.remove() } }, 500)
   setTimeout(function () { const _sp = document.getElementById('_dockSplash'); if (_sp) _sp.remove() }, 5000)
 }
