@@ -47,7 +47,9 @@ export function initZeusGroups(): void {
   // SignalRegistryPanel (data-panel-id="sigreg"); mv() here would yank it out
   // of the panel wrapper (the documented legacy-DOM-override trap).
   mv('magSec', mi); mv('mscanSec', mi); mv('sigScanSec', mi)
-  mv('deepdive-sec', mi); mv('scenario-sec', mi); mv('macro-sec', mi); mv('adaptive-sec', mi)
+  // [UI-COMPACT 2026-06-06] scenario-sec + macro-sec no longer mv()'d —
+  // React-owned inside NovaPanel (same trap-avoidance as dhfSec above).
+  mv('deepdive-sec', mi); mv('adaptive-sec', mi)
   if (DEV?.enabled) mv('dev-sec', mi)
   const _atPanel = document.getElementById('at-strip-panel')
   if (_atPanel) { mv('atPanel', _atPanel); mvSec('.at-sep', _atPanel) }
