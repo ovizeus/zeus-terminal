@@ -51,7 +51,9 @@ export function initZeusGroups(): void {
   mv('magSec', mi)
   // [UI-COMPACT 2026-06-06] scenario-sec + macro-sec no longer mv()'d —
   // React-owned inside NovaPanel (same trap-avoidance as dhfSec above).
-  mv('deepdive-sec', mi); mv('adaptive-sec', mi)
+  // [UI-COMPACT 2026-06-06] deepdive-sec no longer mv()'d — React-owned
+  // inside ActivityFeedPanel (same trap-avoidance as dhfSec above).
+  mv('adaptive-sec', mi)
   if (DEV?.enabled) mv('dev-sec', mi)
   const _atPanel = document.getElementById('at-strip-panel')
   if (_atPanel) { mv('atPanel', _atPanel); mvSec('.at-sep', _atPanel) }

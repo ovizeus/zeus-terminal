@@ -517,16 +517,9 @@ export function AnalysisSections() {
 
       {/* ===== TICKER WIDGET ===== */}
       {/* ===== DEVELOPER MODE — TEST HARNESS ===== */}
-      {/* ===== DEEP DIVE — MARKET CONTEXT ===== */}
-      <div className="sec" id="deepdive-sec">
-        <div className="slbl" style={{ justifyContent: 'space-between' }}>
-          <span>DEEP DIVE &mdash; MARKET CONTEXT</span>
-          <span id="deepdive-upd" style={{ fontSize: '9px', color: 'var(--dim)' }}></span>
-        </div>
-        <div className="deepdive-content" id="deepdive-content">
-          <div className="dd-loading">Waiting for market data...</div>
-        </div>
-      </div>
+      {/* [UI-COMPACT 2026-06-06] DEEP DIVE — MARKET CONTEXT (deepdive-sec)
+          moved 1:1 into ActivityFeedPanel.tsx (Activity dock page) — same
+          pattern; bootstrapInit mv() removed in pair. */}
 
       {/* [UI-COMPACT 2026-06-06] SCENARIO ENGINE (scenario-sec + QexitRiskStrip)
           + CYCLE INTELLIGENCE (macro-sec) moved 1:1 into NovaPanel.tsx (Nova

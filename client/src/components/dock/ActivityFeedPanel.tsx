@@ -6,6 +6,7 @@ export function ActivityFeedPanel() {
   const [isOpen, setIsOpen] = useState(true)
 
   return (
+    <>
     <div id="actfeed-strip" data-panel="actfeed" className={isOpen ? 'actfeed-open' : ''}>
       {/* ── Bar (always visible) — 1:1 from index.html line 803 ── */}
       <div className="actfeed-bar" onClick={() => setIsOpen(o => !o)}>
@@ -31,5 +32,21 @@ export function ActivityFeedPanel() {
         </div>
       </div>
     </div>
+
+    {/* ===== DEEP DIVE — MARKET CONTEXT =====
+        [UI-COMPACT 2026-06-06] Moved 1:1 from AnalysisSections.tsx (home
+        scroll zone) — fifth batch of the home shortening. Filled by legacy JS
+        via getElementById (#deepdive-content/#deepdive-upd), position-agnostic.
+        Paired change: bootstrapInit.ts no longer mv()'s #deepdive-sec. */}
+    <div className="sec" id="deepdive-sec">
+      <div className="slbl" style={{ justifyContent: 'space-between' }}>
+        <span>DEEP DIVE &mdash; MARKET CONTEXT</span>
+        <span id="deepdive-upd" style={{ fontSize: '9px', color: 'var(--dim)' }}></span>
+      </div>
+      <div className="deepdive-content" id="deepdive-content">
+        <div className="dd-loading">Waiting for market data...</div>
+      </div>
+    </div>
+    </>
   )
 }
