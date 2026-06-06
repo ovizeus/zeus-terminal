@@ -214,10 +214,11 @@ export function updConn(): void {
 }
 
 // ===== PROCESS LIQUIDATION =====
-// Module-private: the two WebSocket handlers above (lines ~61/62/93)
-// are the only callers. The `w.procLiq` bridge binding was removed in
-// ZT8 after audit confirmed zero external readers.
-function procLiq(o: any, src?: string): void {
+// [LIQ-FIX 2026-06-06] Exported (module import, NOT a window bridge): the
+// server-aggregated OKX events (liqFeedClient.ts) now feed the Liquidation
+// Overview / Monitor / Live Feed counters too — OKX has no direct client WS,
+// so this path is duplication-free.
+export function procLiq(o: any, src?: string): void {
   if (!o || !o.q || !o.p) return
   src = src || 'bnb'
   const qty = +o.q, price = +o.p
@@ -318,7 +319,7 @@ export function updLiqSourceMetrics(): void {
   const eyc = el('lm-byb-cnt'), eyu = el('lm-byb-usd'), eyp = el('lm-byb-pct')
   if (ebc) ebc.textContent = mb.count; if (ebu) ebu.textContent = '$' + fmt(mb.usd); if (ebp) ebp.textContent = (mb.count / total * 100).toFixed(0) + '%'
   if (eyc) eyc.textContent = my.count; if (eyu) eyu.textContent = '$' + fmt(my.usd); if (eyp) eyp.textContent = (my.count / total * 100).toFixed(0) + '%'
-  const elast = el('lm-last-src'); if (elast) { const lastEvt = w.S.events[0]; if (lastEvt) { elast.textContent = lastEvt.src === 'byb' ? 'BYB' : 'BNB'; elast.style.color = lastEvt.src === 'byb' ? 'var(--ylw)' : 'var(--grn)' } }
+  const elast = el('lm-last-src'); if (elast) { const lastEvt = w.S.events[0]; if (lastEvt) { elast.textContent = lastEvt.src === 'byb' ? 'BYB' : lastEvt.src === 'okx' ? 'OKX' : 'BNB'; elast.style.color = lastEvt.src === 'byb' ? 'var(--ylw)' : lastEvt.src === 'okx' ? 'var(--blu)' : 'var(--grn)' } }
   const edup = el('lm-dup-cnt'); if (edup) edup.textContent = w.S.events.filter((e: any) => e.dup).length
 }
 
@@ -371,7 +372,7 @@ export function renderFeed(): void {
   const base = (w.S.symbol || 'BTCUSDT').replace('USDT', '').replace('BUSD', '')
   let filtered = w.S.events.filter((e: any) => e.sym && e.sym.toUpperCase().startsWith(base.toUpperCase()))
   if (_liqSrcFilter !== 'all') filtered = filtered.filter((e: any) => e.src === _liqSrcFilter)
-  const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? _ZI.fire : e.usd >= 500000 ? _ZI.boom : _ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${fmt(e.usd)}</span><span style="color:var(--dim)">@${fP(e.price)}</span></div>` }).join('')
+  const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? _ZI.fire : e.usd >= 500000 ? _ZI.boom : _ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : e.src === 'okx' ? '<span class="liq-src-byb" style="color:var(--blu)">OKX</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${fmt(e.usd)}</span><span style="color:var(--dim)">@${fP(e.price)}</span></div>` }).join('')
   fd.innerHTML = html || `<div style="color:var(--dim);font-size:13px;padding:8px">Waiting for ${base} liquidations...</div>`
   const cnt = el('fcnt'); if (cnt) cnt.textContent = filtered.length + ' events' + (_liqSrcFilter !== 'all' ? ' (' + _liqSrcFilter.toUpperCase() + ')' : '')
 }

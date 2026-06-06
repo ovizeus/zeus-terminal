@@ -15,6 +15,7 @@
  */
 
 import { llvRequestRender } from '../data/marketDataOverlays'
+import { procLiq } from '../data/marketDataWS'
 
 const w = window as any
 
@@ -76,6 +77,22 @@ export function handleLiqFeedFrame(liq: LiqFeedEvent | null | undefined): void {
         // Quant Monitor `addLiq('okx', ...)` expects exchange='OKX' upper.
         const detail = { ...liq, exchange: 'OKX' }
         try { window.dispatchEvent(new CustomEvent('zeus:okxLiq', { detail })) } catch (_) { /* defensive */ }
+        // [LIQ-FIX 2026-06-06] Also feed the Liquidation Overview / Monitor /
+        // Live Feed counters (procLiq). OKX is the ONLY source ingested here:
+        // bybit arrives via the browser's direct WS and binance via the
+        // market.liq proxy — ingesting those too would double-count. OKX has
+        // no other client path, so this is duplication-free.
+        try {
+            // Flag-gated: when LIQ_FEED_VIA_SERVER is off this client is not
+            // authoritative — skip, or procLiq's internal zeus:liq dispatch
+            // would double-fire (caught by the vitest dispatch-count test).
+            if (w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true) {
+                if (w.S && w.S.liqMetrics && !w.S.liqMetrics.okx) {
+                    w.S.liqMetrics.okx = { count: 0, usd: 0, lastTs: 0, reconnects: 0, msgCount: 0, connected: true, connectedAt: Date.now() }
+                }
+                procLiq({ s: liq.symbol, S: liq.side, q: liq.q, p: liq.p }, 'okx')
+            }
+        } catch (_) { /* display-only — never break the QM dispatch */ }
         return
     }
     // binance / bybit route through zeus:liq with `exchange` field lowercase.
