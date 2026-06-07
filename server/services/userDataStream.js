@@ -16,17 +16,25 @@ const REFRESH_INTERVAL_MS = 25 * 60 * 1000;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
 
-let _ws = null;
-let _listenKey = null;
-let _refreshTimer = null;
-let _reconnectMs = RECONNECT_BASE_MS;
-let _health = {
-    connected: false,
-    lastEventTs: 0,
-    eventsTotal: 0,
-    reconnectCount: 0,
-    listenKeyCreatedAt: 0,
-};
+// [T1-1 2026-06-07] Per-user connection map. WAS a module-level singleton
+// (`_ws`/`_listenKey`/`_health`) with `if (_ws) return` in connect() — so only
+// the FIRST user ever got a stream and all others were silently dropped; health
+// reported one user globally. With 8 users (and REAL ahead) that meant 7/8 users
+// would miss real-time fills. Each user now owns an isolated connection record.
+const _conns = new Map(); // userId -> { ws, listenKey, refreshTimer, reconnectMs, creds, onEvent, disconnected, health }
+
+function _newHealth() {
+    return { connected: false, lastEventTs: 0, eventsTotal: 0, reconnectCount: 0, listenKeyCreatedAt: 0 };
+}
+
+function _conn(userId) {
+    let c = _conns.get(userId);
+    if (!c) {
+        c = { ws: null, listenKey: null, refreshTimer: null, reconnectMs: RECONNECT_BASE_MS, creds: null, onEvent: null, disconnected: false, health: _newHealth() };
+        _conns.set(userId, c);
+    }
+    return c;
+}
 
 async function createListenKey(creds) {
     const res = await sendSignedRequest('POST', '/fapi/v1/listenKey', {}, creds);
@@ -87,16 +95,44 @@ function shouldApplyUpdate(incomingTs, currentTs) {
     return incomingTs >= currentTs;
 }
 
-function getHealthStatus() {
+function _healthShape(h) {
     return {
-        connected: _health.connected,
-        lastEventTs: _health.lastEventTs,
-        eventsTotal: _health.eventsTotal,
-        reconnectCount: _health.reconnectCount,
-        listenKeyAgeMs: _health.listenKeyCreatedAt ? Date.now() - _health.listenKeyCreatedAt : 0,
+        connected: h.connected,
+        lastEventTs: h.lastEventTs,
+        eventsTotal: h.eventsTotal,
+        reconnectCount: h.reconnectCount,
+        listenKeyAgeMs: h.listenKeyCreatedAt ? Date.now() - h.listenKeyCreatedAt : 0,
     };
 }
 
+// [T1-1] Per-user when userId given; legacy aggregate when omitted (the
+// /api/userdatastream/health endpoint at server.js:157 calls it with no arg).
+function getHealthStatus(userId) {
+    if (userId != null) {
+        const c = _conns.get(userId);
+        return c ? _healthShape(c.health) : _healthShape(_newHealth());
+    }
+    if (_conns.size === 0) return _healthShape(_newHealth());
+    const agg = _newHealth();
+    let maxLkCreated = 0;
+    for (const c of _conns.values()) {
+        const h = c.health;
+        if (h.connected) agg.connected = true;
+        agg.eventsTotal += h.eventsTotal;
+        agg.reconnectCount += h.reconnectCount;
+        if (h.lastEventTs > agg.lastEventTs) agg.lastEventTs = h.lastEventTs;
+        if (h.listenKeyCreatedAt > maxLkCreated) maxLkCreated = h.listenKeyCreatedAt;
+    }
+    agg.listenKeyCreatedAt = maxLkCreated;
+    return Object.assign(_healthShape(agg), { userCount: _conns.size });
+}
+
+// [T1-1 REAL-flag fix] `mode` is the resolved EXECUTION env ('demo'|'testnet'|
+// 'real'), NOT the engineMode. The boot loop (server.js) now passes
+// `creds.mode` (testnet|real) instead of getMode() (which only ever returns
+// 'demo'|'live') — so the `real` branch is reachable and
+// _USERDATA_STREAM_REAL_ENABLED is no longer dead code. 'live' is kept as a
+// conservative alias for testnet (never routes to the REAL flag on ambiguity).
 function resolveStreamFlag(mode) {
     if (!MF.USERDATA_STREAM_ENABLED) return false;
     if (mode === 'demo') return true;
@@ -106,7 +142,8 @@ function resolveStreamFlag(mode) {
 }
 
 async function connect(userId, creds, onEvent) {
-    if (_ws) return;
+    const existing = _conns.get(userId);
+    if (existing && existing.ws) return; // already streaming for THIS user
     // [BUG multi-exchange] The user-data stream is Binance-specific (listenKey +
     // /fapi WS). A non-Binance active exchange (e.g. Bybit) has no listenKey — the
     // createListenKey below would POST /fapi/v1/listenKey to that exchange's host
@@ -117,58 +154,68 @@ async function connect(userId, creds, onEvent) {
         logger.info('USERDATA', `skip uid=${userId}: stream is Binance-only, active exchange=${creds.exchange}`);
         return;
     }
+
+    const c = _conn(userId);
+    c.creds = creds;
+    c.onEvent = onEvent;
+    c.disconnected = false;
+
     try {
-        _listenKey = await createListenKey(creds);
-        _health.listenKeyCreatedAt = Date.now();
+        c.listenKey = await createListenKey(creds);
+        c.health.listenKeyCreatedAt = Date.now();
         logger.info('USERDATA', `listenKey obtained uid=${userId}`);
     } catch (err) {
         logger.error('USERDATA', `createListenKey failed uid=${userId}: ${err.message}`);
         return;
     }
 
-    const wsUrl = _wsBase(creds) + _listenKey;
-    logger.info('USERDATA', `connecting WS uid=${userId} url=${wsUrl.replace(_listenKey, '***')}`);
-    _ws = new WebSocket(wsUrl);
+    const wsUrl = _wsBase(creds) + c.listenKey;
+    logger.info('USERDATA', `connecting WS uid=${userId} url=${wsUrl.replace(c.listenKey, '***')}`);
+    c.ws = new WebSocket(wsUrl);
 
-    _ws.on('open', () => {
-        _health.connected = true;
-        _reconnectMs = RECONNECT_BASE_MS;
+    c.ws.on('open', () => {
+        c.health.connected = true;
+        c.reconnectMs = RECONNECT_BASE_MS;
         logger.info('USERDATA', `WS connected uid=${userId}`);
     });
 
-    _ws.on('message', (raw) => {
+    c.ws.on('message', (raw) => {
         try {
             const data = JSON.parse(raw);
-            _health.lastEventTs = Date.now();
-            _health.eventsTotal++;
+            c.health.lastEventTs = Date.now();
+            c.health.eventsTotal++;
             if (typeof onEvent === 'function') onEvent(data);
         } catch (_) {}
     });
 
-    _ws.on('close', () => {
-        _health.connected = false;
-        _health.reconnectCount++;
-        logger.warn('USERDATA', `WS disconnected uid=${userId} — reconnect in ${_reconnectMs}ms`);
+    c.ws.on('close', () => {
+        c.health.connected = false;
+        // [T1-1] Manual disconnect must NOT trigger an auto-reconnect.
+        if (c.disconnected) return;
+        c.health.reconnectCount++;
+        logger.warn('USERDATA', `WS disconnected uid=${userId} — reconnect in ${c.reconnectMs}ms`);
+        const delay = c.reconnectMs;
         setTimeout(() => {
-            _ws = null;
-            connect(userId, creds, onEvent);
-        }, _reconnectMs);
-        _reconnectMs = Math.min(_reconnectMs * 2, RECONNECT_MAX_MS);
+            if (c.disconnected) return; // disconnected during the backoff window
+            c.ws = null;
+            connect(userId, c.creds, c.onEvent);
+        }, delay);
+        c.reconnectMs = Math.min(c.reconnectMs * 2, RECONNECT_MAX_MS);
     });
 
-    _ws.on('error', (err) => {
+    c.ws.on('error', (err) => {
         logger.error('USERDATA', `WS error uid=${userId}: ${err.message}`);
     });
 
-    if (_refreshTimer) clearInterval(_refreshTimer);
-    _refreshTimer = setInterval(async () => {
+    if (c.refreshTimer) clearInterval(c.refreshTimer);
+    c.refreshTimer = setInterval(async () => {
         try {
             await refreshListenKey(creds);
         } catch (err) {
             logger.warn('USERDATA', `listenKey refresh failed uid=${userId}: ${err.message} — recreating`);
             try {
-                _listenKey = await createListenKey(creds);
-                _health.listenKeyCreatedAt = Date.now();
+                c.listenKey = await createListenKey(creds);
+                c.health.listenKeyCreatedAt = Date.now();
             } catch (err2) {
                 logger.error('USERDATA', `listenKey recreate failed uid=${userId}: ${err2.message}`);
             }
@@ -176,16 +223,26 @@ async function connect(userId, creds, onEvent) {
     }, REFRESH_INTERVAL_MS);
 }
 
-function disconnect() {
-    if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; }
-    if (_ws) { try { _ws.close(); } catch (_) {} _ws = null; }
-    _health.connected = false;
-    _listenKey = null;
+// [T1-1] disconnect(userId) tears down ONE user; disconnect() (no arg) tears
+// down ALL (graceful shutdown / test reset).
+function disconnect(userId) {
+    if (userId != null) {
+        const c = _conns.get(userId);
+        if (!c) return;
+        c.disconnected = true;
+        if (c.refreshTimer) { clearInterval(c.refreshTimer); c.refreshTimer = null; }
+        if (c.ws) { try { c.ws.close(); } catch (_) {} c.ws = null; }
+        c.health.connected = false;
+        c.listenKey = null;
+        _conns.delete(userId);
+        return;
+    }
+    for (const uid of Array.from(_conns.keys())) disconnect(uid);
 }
 
 function _resetForTest() {
     disconnect();
-    _health = { connected: false, lastEventTs: 0, eventsTotal: 0, reconnectCount: 0, listenKeyCreatedAt: 0 };
+    _conns.clear();
 }
 
 module.exports = {

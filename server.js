@@ -1502,10 +1502,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
             try {
                 const creds = credStore.getExchangeCreds(u.id);
                 if (creds && creds.apiKey) {
-                    const mode = serverAT.getMode(u.id) || 'demo';
-                    if (uds.resolveStreamFlag(mode)) {
+                    // [T1-1 2026-06-07] Gate by the EXCHANGE env (creds.mode =
+                    // 'testnet'|'real'), NOT engineMode — getMode() returns only
+                    // 'demo'|'live', so REAL users were gated by the TESTNET flag
+                    // and _USERDATA_STREAM_REAL_ENABLED was dead code.
+                    const streamMode = creds.mode || serverAT.getMode(u.id) || 'demo';
+                    if (uds.resolveStreamFlag(streamMode)) {
                         uds.connect(u.id, creds, (event) => serverAT.onUserDataEvent(u.id, event));
-                        logger.info('SERVER', `[USERDATA] stream started uid=${u.id} mode=${mode}`);
+                        logger.info('SERVER', `[USERDATA] stream started uid=${u.id} mode=${streamMode}`);
                     }
                 }
             } catch (_) {}

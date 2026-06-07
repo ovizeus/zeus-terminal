@@ -177,3 +177,81 @@ describe('userDataStream', () => {
         expect(uds.resolveStreamFlag('real')).toBe(false);
     });
 });
+
+// ── [T1-1 2026-06-07] Per-user streams (was a singleton: only first user got a
+// stream) + REAL flag independence (was dead code). ──
+const _delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+describe('userDataStream — per-user isolation (T1-1)', () => {
+    test('two distinct users each get their OWN WS (no singleton dedupe across users)', async () => {
+        mockSendSigned.mockResolvedValue({ listenKey: 'lk' });
+        const uds = require('../../server/services/userDataStream');
+        await uds.connect(1, { exchange: 'binance', apiKey: 'k1', apiSecret: 's' }, () => {});
+        await uds.connect(2, { exchange: 'binance', apiKey: 'k2', apiSecret: 's' }, () => {});
+        // Singleton bug → only 1 instance. Per-user → 2.
+        expect(mockWsInstances.length).toBe(2);
+    });
+
+    test('same user connecting twice dedupes to one WS', async () => {
+        mockSendSigned.mockResolvedValue({ listenKey: 'lk' });
+        const uds = require('../../server/services/userDataStream');
+        await uds.connect(1, { exchange: 'binance', apiKey: 'k1', apiSecret: 's' }, () => {});
+        await uds.connect(1, { exchange: 'binance', apiKey: 'k1', apiSecret: 's' }, () => {});
+        expect(mockWsInstances.length).toBe(1);
+    });
+
+    test('getHealthStatus(userId) is per-user and independent', async () => {
+        mockSendSigned.mockResolvedValue({ listenKey: 'lk' });
+        const uds = require('../../server/services/userDataStream');
+        await uds.connect(1, { exchange: 'binance', apiKey: 'k1', apiSecret: 's' }, () => {});
+        await uds.connect(2, { exchange: 'binance', apiKey: 'k2', apiSecret: 's' }, () => {});
+        await _delay(15);
+        expect(uds.getHealthStatus(1).connected).toBe(true);
+        expect(uds.getHealthStatus(2).connected).toBe(true);
+        uds.disconnect(1);
+        expect(uds.getHealthStatus(1).connected).toBe(false);
+        // user 2 must remain connected — the singleton disconnect() killed everyone.
+        expect(uds.getHealthStatus(2).connected).toBe(true);
+        uds.disconnect(2);
+    });
+
+    test('getHealthStatus() with no arg returns a legacy aggregate (endpoint compat)', async () => {
+        mockSendSigned.mockResolvedValue({ listenKey: 'lk' });
+        const uds = require('../../server/services/userDataStream');
+        // empty → disconnected aggregate
+        expect(uds.getHealthStatus().connected).toBe(false);
+        expect(uds.getHealthStatus().eventsTotal).toBe(0);
+        await uds.connect(1, { exchange: 'binance', apiKey: 'k1', apiSecret: 's' }, () => {});
+        await _delay(15);
+        expect(uds.getHealthStatus().connected).toBe(true); // any connected
+        uds.disconnect(1);
+    });
+
+    test('disconnect() with no arg disconnects ALL users', async () => {
+        mockSendSigned.mockResolvedValue({ listenKey: 'lk' });
+        const uds = require('../../server/services/userDataStream');
+        await uds.connect(1, { exchange: 'binance', apiKey: 'k1', apiSecret: 's' }, () => {});
+        await uds.connect(2, { exchange: 'binance', apiKey: 'k2', apiSecret: 's' }, () => {});
+        await _delay(15);
+        uds.disconnect();
+        expect(uds.getHealthStatus(1).connected).toBe(false);
+        expect(uds.getHealthStatus(2).connected).toBe(false);
+    });
+});
+
+describe('userDataStream — REAL flag independent of TESTNET (T1-1 dead-code fix)', () => {
+    test('with REAL flag ON + TESTNET OFF: real→true, testnet→false, live→testnet(false)', () => {
+        jest.isolateModules(() => {
+            jest.doMock('../../server/migrationFlags', () => ({
+                USERDATA_STREAM_ENABLED: true,
+                _USERDATA_STREAM_TESTNET_ENABLED: false,
+                _USERDATA_STREAM_REAL_ENABLED: true,
+            }));
+            const uds = require('../../server/services/userDataStream');
+            expect(uds.resolveStreamFlag('real')).toBe(true);    // REAL flag now effective
+            expect(uds.resolveStreamFlag('testnet')).toBe(false); // independent
+            expect(uds.resolveStreamFlag('live')).toBe(false);    // 'live' = testnet alias (conservative)
+            jest.dontMock('../../server/migrationFlags');
+        });
+    });
+});
