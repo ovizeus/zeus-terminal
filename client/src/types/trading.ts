@@ -42,6 +42,11 @@ export interface ATState {
   killBalRef: number
   killModeAtTrigger: string | null
   killActiveAt: number
+  /** [KILL-REARM 2026-06-07] Server's dailyPnL snapshot at last kill reset.
+   *  The client kill check must subtract this baseline (server does NOT zero
+   *  dailyPnL on reset by design) — without it the client re-triggered the
+   *  kill at the SAME loss right after every deactivation. */
+  pnlAtReset: number
   interval: number | null
 
   // Stats

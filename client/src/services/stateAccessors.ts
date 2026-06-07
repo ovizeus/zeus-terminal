@@ -226,6 +226,20 @@ export function getATDailyPnL(): number {
   return (window as any).AT?.dailyPnL || (window as any).AT?.realizedDailyPnL || 0
 }
 
+/** [KILL-REARM 2026-06-07] dailyPnL snapshot at the last kill reset (server
+ *  authoritative, synced by useServerSync). The kill check must measure loss
+ *  SINCE this baseline — the server deliberately does NOT zero dailyPnL on
+ *  reset, so without the subtraction the client re-triggers the kill switch
+ *  at the same loss seconds after every deactivation. */
+export function getATPnlAtReset(): number {
+  try {
+    const v = (useATStore.getState() as any).pnlAtReset
+    if (Number.isFinite(+v)) return +v
+  } catch (_) {}
+  const lv = (window as any).AT?.pnlAtReset
+  return Number.isFinite(+lv) ? +lv : 0
+}
+
 /** TC max positions — [STORE CANDIDATE — POPULATION DEBT] settingsStore.maxPos
  *  TC config is written directly to `window.TC` by settings flow; settingsStore
  *  mirrors it only at hydrate time. Safer to keep legacy read until cutover. */

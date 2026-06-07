@@ -14,7 +14,6 @@ describe('[killswitch] re-arm invariant (existing pnlAtReset behavior)', () => {
     expect(serverAT._uStateForTest(UID).killActive).toBe(true);
 
     // operator deactivates → pnlAtReset re-baselines to current dailyPnL (-500)
-    serverAT._clearKillCooldownForTest(UID);
     serverAT.resetKill(UID);
     expect(serverAT._uStateForTest(UID).killActive).toBe(false);
     expect(serverAT._uStateForTest(UID).pnlAtReset).toBe(-500);
@@ -28,5 +27,27 @@ describe('[killswitch] re-arm invariant (existing pnlAtReset behavior)', () => {
     us.dailyPnL = -1000;
     serverAT._checkKillSwitchForTest(UID);
     expect(serverAT._uStateForTest(UID).killActive).toBe(true);
+  });
+
+  test('[KILL-REARM 2026-06-07] reset has NO cooldown — consecutive resets both succeed', () => {
+    // Operator rule: deactivation is always allowed; the pnlAtReset baseline
+    // (not a timer) is what prevents instant re-triggering. The old 5-min
+    // cooldown surfaced as "Kill switch reset cooldown — wait 162s" in the
+    // deactivate dialog and blocked the operator from his own kill switch.
+    const UID2 = 990002;
+    const us = serverAT._uStateForTest(UID2);
+    us.engineMode = 'demo'; us.demoStartBalance = 10000; us.killPct = 5;
+    us.killActive = true; us.pnlAtReset = 0; us.dailyPnL = -500;
+
+    const r1 = serverAT.resetKill(UID2);
+    expect(r1.ok).toBe(true);
+
+    // immediate second reset (double-tap) — must NOT be blocked by a timer
+    us.killActive = true;
+    const r2 = serverAT.resetKill(UID2);
+    expect(r2.ok).toBe(true);
+    expect(serverAT._uStateForTest(UID2).killActive).toBe(false);
+    // idempotent re-baseline: same dailyPnL → same pnlAtReset
+    expect(serverAT._uStateForTest(UID2).pnlAtReset).toBe(-500);
   });
 });

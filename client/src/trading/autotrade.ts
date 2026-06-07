@@ -63,7 +63,7 @@ export function _computeFillQtyFallback(
     return (adaptFinalSize * lev) / fillPrice
 }
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATPnlAtReset, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { confNDirectional, classifyEntryTier } from '../engine/fusionMath'
 import { TP } from '../core/state'
@@ -1716,7 +1716,12 @@ export function checkKillThreshold(): void {
   const killPct = parseFloat(el('atKillPct')?.value || '') || 5
   const bal = +(getATMode() === 'demo' ? TP.demoBalance : TP.liveBalance) || 0
   if (bal <= 0) return // [FIX BUG4] Skip kill check if balance unknown — prevents $10k fallback distortion
-  const _realPnL = +(getATDailyPnL()) || 0
+  // [KILL-REARM 2026-06-07] Measure loss SINCE the last kill reset, mirroring
+  // the server invariant (lossSinceReset = dailyPnL - pnlAtReset). The server
+  // keeps dailyPnL on reset (baseline lives in pnlAtReset) and re-syncs it to
+  // this store — without the subtraction the client re-triggered the kill at
+  // the SAME loss seconds after every deactivation (operator-reported 2×).
+  const _realPnL = (+(getATDailyPnL()) || 0) - (+(getATPnlAtReset()) || 0)
   // [PATCH3 R2] Include unrealized PnL from open positions in daily loss check
   // [KILL-LOOP FIX] Only AT positions count toward AT kill — manual/zombie positions
   // from stale localStorage must not trigger AT kill switch
@@ -1852,6 +1857,11 @@ export function resetKillSwitch(): void {
         AT.killTriggered = false
         AT._killTriggeredTs = 0
         AT.killResetTs = Date.now()
+        // [KILL-REARM 2026-06-07] Mirror the server's new baseline immediately
+        // (server response carries it) so the kill check can't re-fire in the
+        // gap before the next server sync.
+        AT.pnlAtReset = (j && j.pnlAtReset != null && Number.isFinite(+j.pnlAtReset)) ? +j.pnlAtReset : 0
+        try { useATStore.getState().patch({ pnlAtReset: AT.pnlAtReset } as any) } catch (_) { /* store optional */ }
         AT.realizedDailyPnL = 0
         AT.closedTradesToday = 0
         AT.dailyPnL = 0

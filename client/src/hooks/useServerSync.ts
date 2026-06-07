@@ -81,6 +81,11 @@ function applyATUpdate(data: ServerATState) {
     killBalRef: data.killBalRef ?? 0,
     killModeAtTrigger: data.killModeAtTrigger ?? null,
     killActiveAt: data.killActiveAt ?? 0,
+    // [KILL-REARM 2026-06-07] Baseline for the client kill check. Server
+    // resetKill keeps dailyPnL (the re-arm baseline lives in pnlAtReset) —
+    // the client must mirror it or it re-triggers at the same loss
+    // seconds after every deactivation (operator-reported, 2× same $).
+    pnlAtReset: data.pnlAtReset ?? 0,
     totalTrades: (stats.entries || 0),
     wins: stats.wins || 0,
     losses: stats.losses || 0,

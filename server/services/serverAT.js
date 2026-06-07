@@ -2813,16 +2813,13 @@ function activateKillSwitch(userId) {
     return { ok: true, killActive: true };
 }
 
-const _killResetCooldown = new Map(); // userId → last reset timestamp
-const KILL_RESET_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between resets
-
+// [KILL-REARM 2026-06-07] The 5-min reset cooldown REMOVED per operator rule:
+// deactivation is always allowed; protection against rapid re-loss comes from
+// the pnlAtReset baseline (re-fires only after ANOTHER full killPct loss),
+// not from blocking the deactivate button ("wait 162s" operator-reported as
+// wrong behavior). Reset is idempotent — repeated calls re-baseline to the
+// same dailyPnL, so there is nothing to rate-limit.
 function resetKill(userId) {
-    const lastReset = _killResetCooldown.get(userId) || 0;
-    if (Date.now() - lastReset < KILL_RESET_COOLDOWN_MS) {
-        const waitSec = Math.ceil((KILL_RESET_COOLDOWN_MS - (Date.now() - lastReset)) / 1000);
-        return { ok: false, error: `Kill switch reset cooldown — wait ${waitSec}s` };
-    }
-    _killResetCooldown.set(userId, Date.now());
     const us = _uState(userId);
     us.killActive = false;
     us.pnlAtReset = us.dailyPnL;
@@ -6081,7 +6078,7 @@ module.exports = {
     // [KS-UI 2026-06-01] Test-only hooks for the kill re-arm characterization test.
     _uStateForTest: _uState,
     _checkKillSwitchForTest: _checkKillSwitch,
-    _clearKillCooldownForTest: (uid) => { _killResetCooldown.delete(uid); },
+    _clearKillCooldownForTest: (_uid) => { /* [KILL-REARM 2026-06-07] cooldown removed — kept as no-op for test back-compat */ },
     // [SYNC-2 2026-06-01] Exchange-threading resolver (exported for testing)
     __sync2: { resolveEntryExchange: _resolveEntryExchange },
 };

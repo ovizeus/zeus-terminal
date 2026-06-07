@@ -39,6 +39,9 @@ export const AT = {
   // structural type — no more ad-hoc widening on a trading surface.
   enabledAt: 0,
   killResetTs: 0,
+  // [KILL-REARM 2026-06-07] dailyPnL snapshot at last kill reset (mirrors
+  // server pnlAtReset; legacy fallback for stateAccessors.getATPnlAtReset).
+  pnlAtReset: 0,
   _lastBlockReason: '' as string,
   _lastBlockTs: 0,
   _lastBlockLogKey: '' as string,
