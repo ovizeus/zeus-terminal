@@ -42,6 +42,16 @@ export interface ATState {
   killBalRef: number
   killModeAtTrigger: string | null
   killActiveAt: number
+  /** [T-MAXTRADES 2026-06-07] Server-side daily max-trades protection state. */
+  maxDayProtect?: {
+    configured: boolean
+    maxDay: number
+    dailyEntries: number
+    active: boolean
+    disabledToday: boolean
+    atCap: boolean
+    blocking: boolean
+  } | null
   /** [KILL-REARM 2026-06-07] Server's dailyPnL snapshot at last kill reset.
    *  The client kill check must subtract this baseline (server does NOT zero
    *  dailyPnL on reset by design) — without it the client re-triggered the

@@ -221,6 +221,16 @@ export interface ServerATState {
   dailyPnLDemo: number
   dailyPnLLive: number
   pnlAtReset: number
+  /** [T-MAXTRADES 2026-06-07] Server-side daily max-trades protection state. */
+  maxDayProtect?: {
+    configured: boolean
+    maxDay: number
+    dailyEntries: number
+    active: boolean
+    disabledToday: boolean
+    atCap: boolean
+    blocking: boolean
+  } | null
   ts: number
 }
 

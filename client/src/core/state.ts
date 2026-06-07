@@ -258,11 +258,21 @@ export function pushTCtoServer() {
   const TC = w.TC
   const DSL = getDSLObject()
   if (typeof TC === 'undefined') return
+  // [T-MAXTRADES 2026-06-07] maxDay (daily entry cap) — read the same DOM input
+  // the brain uses (atMaxDay) so the server cap matches what the operator sees;
+  // fall back to TC.maxDay. Server clamps 0..100; undefined → no cap change.
+  let _maxDay: number | undefined
+  try {
+    const _el = (typeof document !== 'undefined') ? (document.getElementById('atMaxDay') as HTMLInputElement | null) : null
+    const _v = _el ? parseInt(_el.value || '') : NaN
+    _maxDay = Number.isFinite(_v) && _v >= 0 ? _v : (typeof (TC as any).maxDay === 'number' ? (TC as any).maxDay : undefined)
+  } catch (_) { _maxDay = (typeof (TC as any).maxDay === 'number') ? (TC as any).maxDay : undefined }
   const payload: any = {
     confMin: TC.confMin,
     sigMin: TC.sigMin,
     adxMin: TC.minADX,
     maxPos: TC.maxPos,
+    maxDay: _maxDay,
     cooldownMs: TC.cooldownMs,
     lev: TC.lev,
     size: TC.size,

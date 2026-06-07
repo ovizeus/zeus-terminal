@@ -200,6 +200,7 @@ const DEFAULT_STC = {
     sigMin: 3,          // minimum signal count
     adxMin: 18,         // minimum ADX for trend confirmation
     maxPos: 3,          // max simultaneous positions
+    maxDay: 0,          // [T-MAXTRADES] max AT entries per UTC day (0 = no cap; set via client maxDay)
     cooldownMs: 300000, // 5min cooldown between entries per symbol
     lev: 5,
     size: 200,

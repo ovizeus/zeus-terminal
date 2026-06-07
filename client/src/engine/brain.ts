@@ -1141,8 +1141,12 @@ export function checkProtectMode(): void {
   // Loss streak — only if we actually have closed trades
   if (_closedToday > 0 && BM.lossStreak >= lossLim)
     reason = `PROTECT: ${lossLim} CONSECUTIVE LOSSES (${_closedToday} trades)`
-  // Max daily trades
-  if (BM.dailyTrades >= maxDay)
+  // Max daily trades — [T-MAXTRADES 2026-06-07] suppressed when the server owns
+  // AT: the server enforces its own daily cap and the operator-toggleable
+  // MaxTradesProtectBadge (server-driven) is the single source of truth. The
+  // client brain's dailyTrades-vs-maxDay reason would otherwise show a stale,
+  // un-disablable badge alongside it.
+  if (!serverOwnsAT() && BM.dailyTrades >= maxDay)
     reason = `PROTECT: MAX TRADES/DAY (${BM.dailyTrades}/${maxDay})`
   // [RISK RAILS] Daily DD condition REMOVED — server kill switch is sole authority
   // News HIGH — block not protect (keep compatible but only in auto)

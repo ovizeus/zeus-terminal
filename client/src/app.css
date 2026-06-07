@@ -7379,3 +7379,19 @@ select option {
   padding: 6px 14px; font-weight: 800; letter-spacing: 1px; cursor: pointer;
   animation: ksBlink 1s steps(1,end) infinite;
 }
+
+/* [T-MAXTRADES 2026-06-07] Daily max-trades protection badge + toggle. */
+.mtp-badge {
+  position: fixed; top: 44px; left: 50%; transform: translateX(-50%); z-index: 99999;
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+}
+.mtp-badge.mtp-on { background: #b9770e; color: #fff; border: 1px solid #ffce7b; }
+.mtp-badge.mtp-off { background: #2c3540; color: #cfe0ff; border: 1px solid #4a6079; }
+.mtp-label { white-space: nowrap; }
+.mtp-btn {
+  background: rgba(0,0,0,0.25); color: #fff; border: 1px solid rgba(255,255,255,0.45);
+  border-radius: 5px; padding: 2px 9px; font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.mtp-btn:disabled { opacity: 0.6; cursor: default; }
+.mtp-err { color: #ffb3b3; font-size: 11px; }

@@ -81,6 +81,7 @@ function applyATUpdate(data: ServerATState) {
     killBalRef: data.killBalRef ?? 0,
     killModeAtTrigger: data.killModeAtTrigger ?? null,
     killActiveAt: data.killActiveAt ?? 0,
+    maxDayProtect: data.maxDayProtect ?? null, // [T-MAXTRADES] server protection state
     // [KILL-REARM 2026-06-07] Baseline for the client kill check. Server
     // resetKill keeps dailyPnL (the re-arm baseline lives in pnlAtReset) —
     // the client must mirror it or it re-triggers at the same loss

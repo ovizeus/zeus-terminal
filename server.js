@@ -410,6 +410,7 @@ app.post('/api/tc/sync', (_req, res) => {
     sigMin: { min: 1, max: 10 },
     adxMin: { min: 0, max: 80 },
     maxPos: { min: 1, max: 20 },
+    maxDay: { min: 0, max: 100 }, // [T-MAXTRADES] 0 = no daily cap
     cooldownMs: { min: 0, max: 3600000 },
     lev: { min: 1, max: 125 },
     size: { min: 1, max: 100000 },
@@ -635,6 +636,15 @@ app.post('/api/at/kill/reset', (req, res) => {
   const balRef = parseFloat(req.body?.balanceRef);
   if (Number.isFinite(balRef) && balRef > 0) serverAT.setLiveBalanceRef(req.user.id, balRef);
   res.json(serverAT.resetKill(req.user.id));
+});
+// [T-MAXTRADES] Toggle the daily max-trades protection. enabled=false disables
+// it until the next UTC day (auto-re-arms at rollover); enabled=true re-arms now.
+app.post('/api/at/maxday-protect', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  const enabled = _req.body?.enabled;
+  if (typeof enabled !== 'boolean') return res.status(400).json({ ok: false, error: 'enabled must be boolean' });
+  const r = serverAT.setMaxDayProtect(_req.user.id, enabled);
+  res.json({ ...r, state: serverAT.getFullState(_req.user.id) });
 });
 // Kill switch threshold update (per-user)
 app.post('/api/at/kill/pct', (req, res) => {

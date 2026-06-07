@@ -181,6 +181,12 @@ function _defaultUserState() {
         lossStreak: 0,
         winStreak: 0,
         dailyTrades: 0,
+        // [T-MAXTRADES 2026-06-07] dailyEntries = AT entries OPENED today (cap
+        // counter; dailyTrades counts CLOSES). maxDayProtectOffDay = UTC day on
+        // which the operator disabled the cap; protection auto-re-arms when the
+        // day changes. Both reset/compared against the UTC day.
+        dailyEntries: 0,
+        maxDayProtectOffDay: 0,
         lastResetDay: -1,
         atActive: false, // [BUG-O5] LEGACY field — kept synced cu current engineMode via toggleActive (BUG-T7 2026-05-13)
         atActiveDemo: false, // [BUG-T7 2026-05-13] Per-mode AT toggle — DEMO independent
@@ -512,6 +518,8 @@ function _persistState(userId) {
             lossStreak: us.lossStreak || 0,
             winStreak: us.winStreak || 0,
             dailyTrades: us.dailyTrades || 0,
+            dailyEntries: us.dailyEntries || 0,                 // [T-MAXTRADES]
+            maxDayProtectOffDay: us.maxDayProtectOffDay || 0,   // [T-MAXTRADES]
             killActive: us.killActive,
             killPct: us.killPct,
             killActiveAt: us.killActiveAt || 0,
@@ -563,6 +571,8 @@ function _applyStateBlob(userId, saved) {
     us.lossStreak = saved.lossStreak || 0;
     us.winStreak = saved.winStreak || 0;
     us.dailyTrades = saved.dailyTrades || 0;
+    us.dailyEntries = saved.dailyEntries || 0;                 // [T-MAXTRADES]
+    us.maxDayProtectOffDay = saved.maxDayProtectOffDay || 0;   // [T-MAXTRADES]
     us.killActive = !!saved.killActive;
     us.killPct = (typeof saved.killPct === 'number' && saved.killPct > 0) ? saved.killPct : 5;
     us.killActiveAt = saved.killActiveAt || 0;
@@ -1201,6 +1211,15 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     const userPosCount = _positions.filter(p => p.userId === userId).length;
     if (userPosCount >= stc.maxPos) { _recordMissedTrade(userId, decision, 'MAX_POSITIONS'); return null; }
 
+    // ── [T-MAXTRADES] Max trades/day gate (per-user, operator-toggleable) ──
+    if (module.exports.shouldBlockMaxTradesDay({
+        maxDay: stc.maxDay, dailyEntries: us.dailyEntries,
+        maxDayProtectOffDay: us.maxDayProtectOffDay, currentUtcDay: _utcDay(),
+    })) {
+        _recordMissedTrade(userId, decision, 'MAX_TRADES_DAY');
+        return null;
+    }
+
     // [Task K 2026-05-28] Per-user trade rate limit — hard cap on entries/h
     // (default 10/h). Last-line defense against runaway brain bugs that
     // bypass confidence/dedup checks. Defensive: never blocks if module
@@ -1378,6 +1397,7 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     // ── Add to THE positions array ──
     _positions.push(entry);
     _trackLiveOpen(entry); // [P5b] hold feed for this exchange while position is open
+    us.dailyEntries = (us.dailyEntries || 0) + 1; // [T-MAXTRADES] count entry toward daily cap
     us.stats.entries++;
     if (entry.mode !== 'live') us.demoStats.entries++;
 
@@ -2755,6 +2775,7 @@ function _checkDailyReset(userId) {
         // UTC rollover. lossStreak/winStreak are NOT daily (they're streaks that
         // only break on the opposite outcome), so they survive the rollover.
         us.dailyTrades = 0;
+        us.dailyEntries = 0; // [T-MAXTRADES] daily entry cap counter resets too
         us.lastResetDay = utcDay;
         _persistState(userId);
         // [M2] Push state change to clients via WS so UI unlocks immediately after midnight
@@ -2808,6 +2829,47 @@ function _resyncLiveBalanceRef(userId) {
     }).catch(err => {
         logger.warn('AT_ENGINE', `liveBalanceRef resync failed uid=${userId}: ${err.message}`);
     });
+}
+
+// [T-MAXTRADES 2026-06-07] Server-side MAX TRADES/DAY protection.
+// The "PROTECT: MAX TRADES/DAY" badge was CLIENT display-only (brain.ts:1146)
+// — the client is locked under server ownership and the server had NO daily
+// entry cap (only maxPos concurrent), so users blew past it (14/10). These make
+// it a real server gate with an operator disable toggle that persists until the
+// next UTC day (auto-re-arms at rollover, mirroring dailyTrades).
+function _utcDay(now) { return Math.floor((now || Date.now()) / 86400000); }
+
+// Pure: block a NEW entry when at/over the daily cap AND protection not disabled
+// for the current UTC day.
+function shouldBlockMaxTradesDay(ctx) {
+    const maxDay = +(ctx && ctx.maxDay) || 0;
+    if (!(maxDay > 0)) return false;                          // no cap configured
+    const entries = +(ctx && ctx.dailyEntries) || 0;
+    if (entries < maxDay) return false;                       // under cap
+    if (ctx.maxDayProtectOffDay && ctx.maxDayProtectOffDay === ctx.currentUtcDay) return false; // disabled today
+    return true;                                              // at/over cap + armed → block
+}
+
+// Pure: display/state for getFullState + the UI badge/button.
+function computeMaxDayProtectState(ctx) {
+    const maxDay = +(ctx && ctx.maxDay) || 0;
+    const entries = +(ctx && ctx.dailyEntries) || 0;
+    const disabledToday = !!(ctx && ctx.maxDayProtectOffDay && ctx.maxDayProtectOffDay === ctx.currentUtcDay);
+    const configured = maxDay > 0;
+    const atCap = configured && entries >= maxDay;
+    return { configured, maxDay, dailyEntries: entries, active: configured && !disabledToday, disabledToday, atCap, blocking: atCap && !disabledToday };
+}
+
+// Operator toggle. enabled=false → disable for today (stamp offDay=today);
+// enabled=true → re-arm (clear offDay). Persists + notifies clients.
+function setMaxDayProtect(userId, enabled) {
+    const us = _uState(userId);
+    us.maxDayProtectOffDay = enabled ? 0 : _utcDay();
+    _persistState(userId);
+    audit.record('MAX_TRADES_PROTECT_TOGGLE', { userId, enabled: !!enabled, offDay: us.maxDayProtectOffDay }, 'user');
+    logger.info('AT_ENGINE', `MAX TRADES/DAY protection ${enabled ? 'RE-ARMED' : 'DISABLED until next UTC day'} uid=${userId}`);
+    try { _notifyChange(userId); } catch (_) {}
+    return { ok: true, active: !!enabled };
 }
 
 function _checkKillSwitch(userId) {
@@ -3556,6 +3618,12 @@ function getFullState(userId) {
         lossStreak: us.lossStreak || 0,
         winStreak: us.winStreak || 0,
         dailyTrades: us.dailyTrades || 0,
+        dailyEntries: us.dailyEntries || 0, // [T-MAXTRADES] entries opened today
+        // [T-MAXTRADES] Real protection state for the client badge + DISABLE button.
+        maxDayProtect: computeMaxDayProtectState({
+            maxDay: (() => { try { return +require('./serverBrain').getSTC(userId).maxDay || 0; } catch (_) { return 0; } })(),
+            dailyEntries: us.dailyEntries, maxDayProtectOffDay: us.maxDayProtectOffDay, currentUtcDay: _utcDay(),
+        }),
         srvPosFlags: {
             master: !!(MF && MF.SERVER_AUTHORITATIVE_POSITIONS),
             testnet: !!(MF && MF._SRV_POS_TESTNET_ENABLED),
@@ -6200,8 +6268,12 @@ module.exports = {
     // [KS-UI 2026-06-01] Test-only hooks for the kill re-arm characterization test.
     _uStateForTest: _uState,
     _checkKillSwitchForTest: _checkKillSwitch,
+    _checkDailyResetForTest: _checkDailyReset, // [T-MAXTRADES] test hook for rollover
     _shouldResyncLiveBalanceRef, // [T1-2] pure resync predicate
     _resyncLiveBalanceRef,       // [T1-2] liveBalanceRef self-heal
+    shouldBlockMaxTradesDay,     // [T-MAXTRADES] pure daily-cap gate
+    computeMaxDayProtectState,   // [T-MAXTRADES] pure display state
+    setMaxDayProtect,            // [T-MAXTRADES] operator toggle
     _clearKillCooldownForTest: (_uid) => { /* [KILL-REARM 2026-06-07] cooldown removed — kept as no-op for test back-compat */ },
     // [SYNC-2 2026-06-01] Exchange-threading resolver (exported for testing)
     __sync2: { resolveEntryExchange: _resolveEntryExchange },
