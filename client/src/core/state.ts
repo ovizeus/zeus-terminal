@@ -7,6 +7,7 @@
 import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
+import { shouldFlagAttributionDivergence } from '../services/shadowCompareRules'
 import { _applyATToggleUI, updateATMode, updateATStats , atLog , renderATPositions } from '../trading/autotrade'
 import { useATStore } from '../stores/atStore'
 import { _dslTrimAll } from '../trading/dsl'
@@ -1051,7 +1052,10 @@ export const ZState = (() => {
       if (!sp) return
       const legacyAT = !!p.autoTrade
       const shadowAT = !!sp.autoTrade
-      if (legacyAT !== shadowAT) {
+      // [SHADOW-FP 2026-06-07] exchange_raw rows carry no attribution
+      // (autoTrade hardcoded null above) — comparing it flagged every
+      // server-side AT position as a permanent v1 false positive.
+      if (shouldFlagAttributionDivergence(p, sp)) {
         divergences++
         // Vector detection based on _classifySource marker
         const source = p._classifySource || 'unknown'
