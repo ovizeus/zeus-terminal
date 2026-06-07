@@ -305,6 +305,21 @@ app.get('/api/diag/liq-feed', (_req, res) => {
   }
 });
 
+// [LIQ-WARMUP 2026-06-07] New-client warmup: recent liquidation events from
+// the aggregator ring buffer (built for this in Plan A b114 but never
+// consumed). liqFeedClient fetches this at startup and replays through the
+// same liq.feed pipeline so the Liquidation Overview/Monitor/Live Feed open
+// populated instead of $0-until-next-event. Session-authed like other /api.
+app.get('/api/liq/recent', (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 300, 1), 1000);
+    const events = require('./server/services/liqFeedAggregator').getRecent(limit);
+    res.json({ events, ts: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // [BIN-TELEM 2026-05-19] Binance rate-limit diagnostic. Read-only snapshot
 // of per-source call counts, per-host used-weight (X-MBX-USED-WEIGHT-1M),
 // top endpoints, active pollers. Local-IP allowlist via sessionAuth.

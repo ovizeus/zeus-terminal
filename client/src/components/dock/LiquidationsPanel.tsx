@@ -126,6 +126,12 @@ export function LiquidationsPanel() {
             <div className="liq-src-pct" id="lm-byb-pct">0%</div>
           </div>
           <div className="liq-src-col">
+            <div className="liq-src-lbl" style={{ color: 'var(--blu)' }}>OKX</div>
+            <div className="liq-src-val" id="lm-okx-cnt">0</div>
+            <div className="liq-src-sub" id="lm-okx-usd">$0</div>
+            <div className="liq-src-pct" id="lm-okx-pct">0%</div>
+          </div>
+          <div className="liq-src-col">
             <div className="liq-src-lbl" style={{ color: 'var(--dim)' }}>LAST</div>
             <div className="liq-src-val" id="lm-last-src">&mdash;</div>
             <div className="liq-src-sub">DUP?</div>

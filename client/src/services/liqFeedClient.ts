@@ -78,10 +78,7 @@ export function handleLiqFeedFrame(liq: LiqFeedEvent | null | undefined): void {
         const detail = { ...liq, exchange: 'OKX' }
         try { window.dispatchEvent(new CustomEvent('zeus:okxLiq', { detail })) } catch (_) { /* defensive */ }
         // [LIQ-FIX 2026-06-06] Also feed the Liquidation Overview / Monitor /
-        // Live Feed counters (procLiq). OKX is the ONLY source ingested here:
-        // bybit arrives via the browser's direct WS and binance via the
-        // market.liq proxy — ingesting those too would double-count. OKX has
-        // no other client path, so this is duplication-free.
+        // Live Feed counters (procLiq).
         try {
             // Flag-gated: when LIQ_FEED_VIA_SERVER is off this client is not
             // authoritative — skip, or procLiq's internal zeus:liq dispatch
@@ -90,13 +87,49 @@ export function handleLiqFeedFrame(liq: LiqFeedEvent | null | undefined): void {
                 if (w.S && w.S.liqMetrics && !w.S.liqMetrics.okx) {
                     w.S.liqMetrics.okx = { count: 0, usd: 0, lastTs: 0, reconnects: 0, msgCount: 0, connected: true, connectedAt: Date.now() }
                 }
-                procLiq({ s: liq.symbol, S: liq.side, q: liq.q, p: liq.p }, 'okx')
+                procLiq({ s: liq.symbol, S: liq.side, q: liq.q, p: liq.p }, 'okx', liq.time)
             }
         } catch (_) { /* display-only — never break the QM dispatch */ }
         return
     }
     // binance / bybit route through zeus:liq with `exchange` field lowercase.
     try { window.dispatchEvent(new CustomEvent('zeus:liq', { detail: liq })) } catch (_) { /* defensive */ }
+    // [LIQ-WARMUP 2026-06-07] When the server pipeline is authoritative, ALSO
+    // ingest bybit + binance into the Overview/Monitor/Feed counters. The
+    // direct-WS bybit path and the legacy market.liq binance path are now
+    // flag-gated OFF in marketDataWS (no double-count) — and on devices whose
+    // network blocks exchange hostnames (the operator's case; the original
+    // reason for the server proxy) this is the ONLY path that can ever move
+    // the BNB/BYB columns off $0.
+    try {
+        if (w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true) {
+            const src = liq.exchange === 'bybit' ? 'byb' : 'bnb'
+            procLiq({ s: liq.symbol, S: liq.side, q: liq.q, p: liq.p }, src, liq.time)
+        }
+    } catch (_) { /* display-only — never break the QM dispatch */ }
+}
+
+/**
+ * [LIQ-WARMUP 2026-06-07] Pull the server's ring buffer (last events per
+ * exchange, held by liqFeedAggregator precisely for new-client warmup since
+ * Plan A — never consumed until now) and replay it through the exact same
+ * frame handler. Without this every page load showed $0 across the
+ * Liquidation Overview/Monitor/Live Feed until the next ≥threshold event
+ * happened to arrive while the page was open.
+ */
+async function _warmupFromServer(): Promise<void> {
+    try {
+        if (!(w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true)) return
+        const resp = await fetch('/api/liq/recent?limit=300', { credentials: 'same-origin' })
+        if (!resp.ok) return
+        const body = await resp.json()
+        const events = Array.isArray(body && body.events) ? body.events : []
+        // Server returns time-ascending — replay preserves feed ordering.
+        for (const ev of events) handleLiqFeedFrame(ev)
+        if (typeof w.ZLOG !== 'undefined') {
+            try { w.ZLOG.push('LIQ-FEED', `[liqFeedClient] warmup replayed ${events.length} buffered event(s)`) } catch (_) {}
+        }
+    } catch (_) { /* warmup is best-effort — live frames still flow */ }
 }
 
 let _started = false
@@ -119,6 +152,9 @@ export function start(): void {
     if (typeof w.ZLOG !== 'undefined') {
         try { w.ZLOG.push('LIQ-FEED', '[liqFeedClient] subscribed to zeus:wsFrame for liq.feed broadcasts') } catch (_) {}
     }
+    // [LIQ-WARMUP 2026-06-07] Fire-and-forget — populates counters from the
+    // server buffer so panels open with data instead of $0.
+    void _warmupFromServer()
 }
 
 export function stop(): void {

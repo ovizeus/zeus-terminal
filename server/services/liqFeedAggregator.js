@@ -383,10 +383,23 @@ function getState() {
     };
 }
 
+// [LIQ-WARMUP 2026-06-07] New-client warmup — the ring buffer existed since
+// Plan A (b114) precisely for this, but no consumer was ever wired: every
+// page load started the Liquidation Overview/Monitor/Feed counters at $0
+// until the next ≥threshold event happened to arrive while the page was
+// open (operator-reported "toate $0"). Returns the merged buffers sorted by
+// time ASC (replay order); `limit` keeps the most recent events.
+function getRecent(limit = 300) {
+    const all = [..._buffer.bnb, ..._buffer.byb, ..._buffer.okx]
+        .sort((a, b) => (a.time || 0) - (b.time || 0));
+    return limit > 0 && all.length > limit ? all.slice(all.length - limit) : all;
+}
+
 module.exports = {
     start,
     stop,
     getState,
+    getRecent,
     _internal_for_test: {
         _normalizeBinance,
         _normalizeBybit,

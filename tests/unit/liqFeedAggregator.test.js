@@ -199,3 +199,30 @@ describe('[LIQ-FIX] OKX details[] flattening', () => {
         expect(flat[0].instId).toBe('ETH-USDT-SWAP');
     });
 });
+
+describe('[LIQ-WARMUP 2026-06-07] getRecent — new-client warmup buffer access', () => {
+    test('returns merged buffer sorted by time ascending, capped by limit', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        const { _buffer } = mod._internal_for_test;
+        _buffer.clear();
+        _buffer.add({ exchange: 'okx', symbol: 'BTCUSDT', side: 'SELL', isLong: true, p: 60000, q: 0.1, vol: 6000, time: 3000 });
+        _buffer.add({ exchange: 'bybit', symbol: 'ETHUSDT', side: 'BUY', isLong: false, p: 1600, q: 1, vol: 1600, time: 1000 });
+        _buffer.add({ exchange: 'binance', symbol: 'BTCUSDT', side: 'SELL', isLong: true, p: 60001, q: 0.2, vol: 12000, time: 2000 });
+
+        const all = mod.getRecent();
+        expect(all.map(e => e.time)).toEqual([1000, 2000, 3000]); // ascending — replay order
+        expect(all.map(e => e.exchange)).toEqual(['bybit', 'binance', 'okx']);
+
+        const capped = mod.getRecent(2);
+        expect(capped.length).toBe(2);
+        // cap keeps the MOST RECENT events (tail), still ascending
+        expect(capped.map(e => e.time)).toEqual([2000, 3000]);
+        _buffer.clear();
+    });
+
+    test('empty buffers → empty array (never throws)', () => {
+        const mod = require('../../server/services/liqFeedAggregator');
+        mod._internal_for_test._buffer.clear();
+        expect(mod.getRecent()).toEqual([]);
+    });
+});

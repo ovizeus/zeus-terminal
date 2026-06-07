@@ -67,6 +67,10 @@ function _connectBNBProxy(): void {
   }))
   _proxyUnsubs.push(on('market.liq', (msg: any) => {
     if (msg.exchange !== 'binance') return
+    // [LIQ-WARMUP 2026-06-07] When the server liq.feed pipeline is on,
+    // liqFeedClient ingests binance events into procLiq — counting this
+    // legacy market.liq path too would double-count.
+    if (w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true) return
     procLiq({ s: msg.symbol, S: msg.side, q: msg.qty, p: msg.price }, 'bnb')
   }))
   _proxyUnsubs.push(on('market.health', (msg: any) => {
@@ -186,15 +190,23 @@ export function connectBYB(): void {
         // [LIQ-FIX 2026-06-06] New shape: ARRAY of {T,s,S,v,p}; docs semantics
         // INVERTED vs old topic: S='Buy' = LONG liquidated → canonical 'SELL'.
         const items = Array.isArray(j.data) ? j.data : [j.data]
+        // [LIQ-WARMUP 2026-06-07] When the server liq.feed pipeline is on,
+        // liqFeedClient ingests bybit events into procLiq (works even on
+        // devices whose network blocks exchange hostnames — the original
+        // reason the operator's BYB column was stuck at 0). Counting this
+        // direct-WS path too would double-count on devices where it works.
+        const _bybViaServer = w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true
         for (const d of items) {
           if (!d || !d.s) continue
           const o = { s: d.s, S: d.S === 'Buy' ? 'SELL' : 'BUY', q: +d.v, p: +d.p }
-          w.S.liqMetrics.byb.msgCount++; procLiq(o, 'byb')
+          w.S.liqMetrics.byb.msgCount++
+          if (!_bybViaServer) procLiq(o, 'byb')
         }
       } else if (j.topic && j.topic.includes('liquidation') && j.data && j.data.symbol) {
         // Legacy shape (defensive — topic deprecated server-side by Bybit)
         const d = j.data; const o = { s: d.symbol, S: d.side === 'Buy' ? 'SELL' : 'BUY', q: +d.size, p: +d.price }
-        w.S.liqMetrics.byb.msgCount++; procLiq(o, 'byb')
+        w.S.liqMetrics.byb.msgCount++
+        if (!(w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true)) procLiq(o, 'byb')
       }
     }
   })
@@ -218,7 +230,10 @@ export function updConn(): void {
 // server-aggregated OKX events (liqFeedClient.ts) now feed the Liquidation
 // Overview / Monitor / Live Feed counters too — OKX has no direct client WS,
 // so this path is duplication-free.
-export function procLiq(o: any, src?: string): void {
+export function procLiq(o: any, src?: string, ts?: number): void {
+  // [LIQ-WARMUP 2026-06-07] Optional ts — warmup replay passes the event's
+  // ORIGINAL exchange timestamp so 1m/5m/15m windows and the feed list stay
+  // truthful instead of stamping buffered history as "now".
   if (!o || !o.q || !o.p) return
   src = src || 'bnb'
   const qty = +o.q, price = +o.p
@@ -256,10 +271,10 @@ export function procLiq(o: any, src?: string): void {
   if (usd < w.S.liqMinUsd) return
   const isLong = o.S === 'SELL'
   const m = w.S.liqMetrics[src] || w.S.liqMetrics.bnb
-  m.count++; m.usd += usd; m.lastTs = Date.now()
+  const now = (typeof ts === 'number' && Number.isFinite(ts) && ts > 0) ? ts : Date.now()
+  m.count++; m.usd += usd; m.lastTs = now
   w.S.totalUSD += usd; if (isLong) w.S.longUSD += usd; else w.S.shortUSD += usd
   w.S.cnt++; if (isLong) w.S.longCnt++; else w.S.shortCnt++
-  const now = Date.now()
   let dupFlag = false
   for (let i = 0; i < Math.min(3, w.S.events.length); i++) {
     const prev = w.S.events[i]
@@ -314,11 +329,18 @@ export function updLiqStats(): void {
 }
 
 export function updLiqSourceMetrics(): void {
-  const mb = w.S.liqMetrics.bnb, my = w.S.liqMetrics.byb; const total = mb.count + my.count || 1
+  // [LIQ-WARMUP 2026-06-07] OKX added — it has been feeding procLiq since
+  // the 06-06 liq.feed revival but SOURCE CONTRIBUTION only rendered BNB+BYB,
+  // so its events were counted in the totals yet invisible here.
+  const mb = w.S.liqMetrics.bnb, my = w.S.liqMetrics.byb
+  const mo = w.S.liqMetrics.okx || { count: 0, usd: 0 }
+  const total = mb.count + my.count + mo.count || 1
   const ebc = el('lm-bnb-cnt'), ebu = el('lm-bnb-usd'), ebp = el('lm-bnb-pct')
   const eyc = el('lm-byb-cnt'), eyu = el('lm-byb-usd'), eyp = el('lm-byb-pct')
+  const eoc = el('lm-okx-cnt'), eou = el('lm-okx-usd'), eop = el('lm-okx-pct')
   if (ebc) ebc.textContent = mb.count; if (ebu) ebu.textContent = '$' + fmt(mb.usd); if (ebp) ebp.textContent = (mb.count / total * 100).toFixed(0) + '%'
   if (eyc) eyc.textContent = my.count; if (eyu) eyu.textContent = '$' + fmt(my.usd); if (eyp) eyp.textContent = (my.count / total * 100).toFixed(0) + '%'
+  if (eoc) eoc.textContent = String(mo.count); if (eou) eou.textContent = '$' + fmt(mo.usd); if (eop) eop.textContent = (mo.count / total * 100).toFixed(0) + '%'
   const elast = el('lm-last-src'); if (elast) { const lastEvt = w.S.events[0]; if (lastEvt) { elast.textContent = lastEvt.src === 'byb' ? 'BYB' : lastEvt.src === 'okx' ? 'OKX' : 'BNB'; elast.style.color = lastEvt.src === 'byb' ? 'var(--ylw)' : lastEvt.src === 'okx' ? 'var(--blu)' : 'var(--grn)' } }
   const edup = el('lm-dup-cnt'); if (edup) edup.textContent = w.S.events.filter((e: any) => e.dup).length
 }
