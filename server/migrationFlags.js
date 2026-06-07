@@ -110,6 +110,12 @@ const DEFAULTS = {
     // enforced in serverAT.serverFullyOwnsEntries). OFF by default; this flag is
     // the rollback lever back to the hybrid handover.
     SERVER_AT_FULL_OWNERSHIP: false,
+    // [SERVER-ARES 2026-06-07] Server-side ARES engine (serverAres.js): decisions
+    // from aresRules, execution through serverAT (owner='ARES'), wallet in
+    // ares_state. Additionally gated per-user by serverFullyOwnsEntries —
+    // testnet cutover only. OFF = client ARES rules (locked under full
+    // ownership → ARES dormant). This flag is the ARES rollback lever.
+    SERVER_ARES: false,
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path (registerManualPosition
     // delegates la _executeLiveEntryCore + hard SafetyAssertionError pre-fill).
@@ -359,6 +365,8 @@ module.exports = {
     // [SP2-b 2026-06-07] FULL server ownership — server opens with client present;
     // client AT engine locked via serverActive. Rollback lever to SP2-a hybrid.
     get SERVER_AT_FULL_OWNERSHIP() { return flags.SERVER_AT_FULL_OWNERSHIP; },
+    // [SERVER-ARES 2026-06-07] Server-side ARES engine. Rollback lever.
+    get SERVER_ARES() { return flags.SERVER_ARES; },
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED — controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path.
     get LIVE_ENTRY_UNIFIED() { return flags.LIVE_ENTRY_UNIFIED; },

@@ -19,11 +19,14 @@ describe('SP2-b full ownership', () => {
     expect(o.entryOwner).toBe('SERVER');
     expect(o.exitOwner.disasterBackstop).toBe('SERVER');
   });
-  test('serverFullyOwnsEntries exported and fail-closed with default flags (SERVER_AT_FULL_OWNERSHIP absent/false)', () => {
+  test('serverFullyOwnsEntries exported, boolean, fail-closed for non-cutover users', () => {
     const { serverFullyOwnsEntries } = require('../../server/services/serverAT');
     expect(typeof serverFullyOwnsEntries).toBe('function');
-    // Test env loads defaults (flag false) → must be false for any user.
-    expect(serverFullyOwnsEntries(1)).toBe(false);
+    // NOTE: migrationFlags loads the LIVE data/migration_flags.json — uid=1's
+    // value depends on deployment state, so only assert it's boolean. A user
+    // NOT in sp2_cutover_users.json must be false regardless of flags
+    // (computeFullOwnership requires isCutover) — the stable invariant.
+    expect(typeof serverFullyOwnsEntries(1)).toBe('boolean');
     expect(serverFullyOwnsEntries(999999)).toBe(false);
   });
 });

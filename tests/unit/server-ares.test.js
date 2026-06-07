@@ -1,0 +1,187 @@
+'use strict';
+// [SERVER-ARES 2026-06-07] serverAres orchestration — state seed/migration,
+// gating, GO dispatch through serverAT, reservation release on refusal,
+// close-hook wallet accounting. All I/O mocked (lesson: mocks MUST mirror
+// the real module shape — db.getAresState/saveAresState are MODULE exports).
+
+const _dbStore = new Map();
+jest.mock('../../server/services/database', () => ({
+    getAresState: (uid) => (_dbStore.has(uid) ? JSON.parse(JSON.stringify(_dbStore.get(uid))) : null),
+    saveAresState: (uid, data) => { _dbStore.set(uid, JSON.parse(JSON.stringify(data))); },
+    auditLog: () => {},
+}));
+
+const _atMock = {
+    serverFullyOwnsEntries: jest.fn(() => true),
+    getOpenPositions: jest.fn(() => []),
+    processBrainDecision: jest.fn(() => ({ seq: 4242 })),
+    isKillActive: jest.fn(() => false),
+};
+jest.mock('../../server/services/serverAT', () => _atMock);
+
+const _flags = { SERVER_ARES: true };
+jest.mock('../../server/migrationFlags', () => ({
+    get SERVER_ARES() { return _flags.SERVER_ARES; },
+}));
+
+jest.mock('../../server/services/audit', () => ({ record: () => {} }));
+
+const serverAres = require('../../server/services/serverAres');
+
+// Market context where every rule gate passes (NY session enforced via mocked hour
+// is impossible — evaluateAres reads real clock hour; instead we pin Date).
+const GO_MCTX = {
+    price: 62000, priceTs: 1,
+    regime: { regime: 'TREND_UP', confidence: 75, trendBias: 'bullish' },
+    confluenceScore: 80,
+    atrPct: 1.2,
+    killActive: false,
+};
+
+// Pin UTC 14:00 (NEW YORK window) — evaluateAres derives session from Date.now().
+const NY_TS = Date.UTC(2026, 5, 7, 14, 0, 0);
+let _nowSpy;
+beforeAll(() => { _nowSpy = jest.spyOn(Date, 'now').mockReturnValue(NY_TS); });
+afterAll(() => { _nowSpy.mockRestore(); });
+
+beforeEach(() => {
+    _dbStore.clear();
+    _flags.SERVER_ARES = true;
+    _atMock.serverFullyOwnsEntries.mockReturnValue(true);
+    _atMock.getOpenPositions.mockReturnValue([]);
+    _atMock.processBrainDecision.mockClear();
+    _atMock.processBrainDecision.mockReturnValue({ seq: 4242 });
+});
+
+describe('state seed/migration', () => {
+    test('legacy flat client snapshot migrates into wallet shape (operator $655 preserved)', () => {
+        _dbStore.set(1, { balance: 655, locked: 0, available: 655, realizedPnL: 0, fundedTotal: 46905, stageName: 'SEED' });
+        const pub = serverAres.getPublicState(1);
+        expect(pub.wallet.balance).toBe(655);
+        expect(pub.wallet.fundedTotal).toBe(46905);
+        expect(pub.serverSide).toBe(true);
+    });
+    test('missing row → defaults (zero wallet, no crash)', () => {
+        const pub = serverAres.getPublicState(99);
+        expect(pub.wallet.balance).toBe(0);
+    });
+});
+
+describe('tick gating (fail-closed)', () => {
+    test('flag OFF → no evaluation, no dispatch', () => {
+        _flags.SERVER_ARES = false;
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 0 });
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+    });
+    test('server does NOT fully own entries → no dispatch', () => {
+        _atMock.serverFullyOwnsEntries.mockReturnValue(false);
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 0 });
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+    });
+    test('bad price → null', () => {
+        expect(serverAres.tick(1, { ...GO_MCTX, price: 0 })).toBeNull();
+    });
+});
+
+describe('GO path — dispatch through serverAT', () => {
+    test('reserves stake, dispatches owner=ARES decision, records lastTradeTs', () => {
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        const entry = serverAres.tick(1, GO_MCTX);
+        expect(entry).toEqual({ seq: 4242 });
+        expect(_atMock.processBrainDecision).toHaveBeenCalledTimes(1);
+        const [dec, stc, uid, intent] = _atMock.processBrainDecision.mock.calls[0];
+        expect(dec.owner).toBe('ARES');
+        expect(dec.symbol).toBe('BTCUSDT');
+        expect(dec.fusion.dir).toBe('LONG');           // TREND_UP forces LONG
+        expect(uid).toBe(1);
+        expect(stc.lev).toBeGreaterThanOrEqual(5);
+        expect(stc.lev).toBeLessThanOrEqual(20);
+        expect(intent).toBeCloseTo(655 * 0.12, 1);      // $655 tier (300..1000) = 12% stake
+        const st = _dbStore.get(1);
+        expect(st.wallet.locked).toBeCloseTo(intent, 2); // reservation held
+        expect(st.engine.lastTradeTs).toBe(NY_TS);
+        // 2nd tick within cooldown → blocked (no second dispatch)
+        const second = serverAres.tick(1, GO_MCTX);
+        expect(second).toBeNull();
+        expect(_atMock.processBrainDecision).toHaveBeenCalledTimes(1);
+    });
+    test('entry refused by serverAT → reservation released', () => {
+        _atMock.processBrainDecision.mockReturnValue(null);
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 0 });
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_dbStore.get(1).wallet.locked).toBe(0);
+    });
+    test('open ARES position blocks a second entry (MAX_OPEN=1)', () => {
+        _atMock.getOpenPositions.mockReturnValue([{ owner: 'ARES', symbol: 'BTCUSDT' }]);
+        _dbStore.set(1, { balance: 655, locked: 78.6, realizedPnL: 0, fundedTotal: 0 });
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+    });
+    test('AT-owned open positions do NOT block ARES (separate slot)', () => {
+        _atMock.getOpenPositions.mockReturnValue([{ owner: 'AT', symbol: 'ETHUSDT' }, { owner: 'AT', symbol: 'BTCUSDT' }]);
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 0 });
+        const entry = serverAres.tick(1, GO_MCTX);
+        expect(entry).toEqual({ seq: 4242 });
+        // maxPos passed to serverAT covers existing AT positions + the ARES slot
+        const stc = _atMock.processBrainDecision.mock.calls[0][1];
+        expect(stc.maxPos).toBe(3);
+    });
+});
+
+describe('onPositionClosed — wallet accounting', () => {
+    test('win: releases stake, applies net PnL (gross − taker fees ×2), streak updates', () => {
+        _dbStore.set(1, {
+            wallet: { balance: 576.4, locked: 78.6, realizedPnL: 0, fundedTotal: 46905 },
+            engine: { tradeHistory: [], consecutiveLoss: 0, consecutiveWin: 0, lastLossTs: 0, lastTradeTs: 0, winRate10: 0, totalTrades: 0, totalWins: 0, totalLosses: 0 },
+            mission: { startBalance: 655, startTs: NY_TS },
+            lastDecision: { executedSeq: 4242, stake: 78.6 },
+        });
+        serverAres.onPositionClosed({ owner: 'ARES', userId: 1, seq: 4242, closePnl: 20, size: 78.6, lev: 10, margin: 78.6 });
+        const st = _dbStore.get(1);
+        const fees = 78.6 * 10 * 0.00055 * 2;
+        expect(st.wallet.locked).toBe(0);
+        expect(st.wallet.balance).toBeCloseTo(576.4 + 20 - fees, 6);
+        expect(st.engine.consecutiveWin).toBe(1);
+        expect(st.engine.totalTrades).toBe(1);
+        expect(st.engine.winRate10).toBe(100);
+    });
+    test('loss: streak + lastLossTs set', () => {
+        _dbStore.set(1, {
+            wallet: { balance: 600, locked: 50, realizedPnL: 0, fundedTotal: 0 },
+            engine: { tradeHistory: [], consecutiveLoss: 0, consecutiveWin: 2, lastLossTs: 0, lastTradeTs: 0, winRate10: 100, totalTrades: 2, totalWins: 2, totalLosses: 0 },
+            mission: { startBalance: 655, startTs: NY_TS },
+            lastDecision: { executedSeq: 7, stake: 50 },
+        });
+        serverAres.onPositionClosed({ owner: 'ARES', userId: 1, seq: 7, closePnl: -15, size: 50, lev: 8, margin: 50 });
+        const st = _dbStore.get(1);
+        expect(st.engine.consecutiveLoss).toBe(1);
+        expect(st.engine.consecutiveWin).toBe(0);
+        expect(st.engine.lastLossTs).toBe(NY_TS);
+    });
+    test('non-ARES position ignored', () => {
+        _dbStore.set(1, { wallet: { balance: 100, locked: 0, realizedPnL: 0, fundedTotal: 0 }, engine: { tradeHistory: [], consecutiveLoss: 0, consecutiveWin: 0, lastLossTs: 0, lastTradeTs: 0, winRate10: 0, totalTrades: 0, totalWins: 0, totalLosses: 0 }, mission: {}, lastDecision: null });
+        serverAres.onPositionClosed({ owner: 'AT', userId: 1, seq: 1, closePnl: 99, size: 10, lev: 5 });
+        expect(_dbStore.get(1).wallet.balance).toBe(100);
+    });
+});
+
+describe('fund / withdraw', () => {
+    test('fund adds balance + fundedTotal; withdraw blocked while locked/open', () => {
+        expect(serverAres.fund(1, 100).ok).toBe(true);
+        expect(serverAres.fund(1, -5).ok).toBe(false);
+        let st = _dbStore.get(1);
+        expect(st.wallet.balance).toBe(100);
+        expect(st.wallet.fundedTotal).toBe(100);
+        st.wallet.locked = 10; _dbStore.set(1, st);
+        expect(serverAres.withdraw(1, 50).ok).toBe(false);
+        st.wallet.locked = 0; _dbStore.set(1, st);
+        _atMock.getOpenPositions.mockReturnValue([{ owner: 'ARES' }]);
+        expect(serverAres.withdraw(1, 50).ok).toBe(false);
+        _atMock.getOpenPositions.mockReturnValue([]);
+        expect(serverAres.withdraw(1, 50).ok).toBe(true);
+        expect(serverAres.withdraw(1, 5000).ok).toBe(false);
+        expect(_dbStore.get(1).wallet.balance).toBe(50);
+    });
+});

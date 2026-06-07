@@ -918,6 +918,13 @@ function _stripDangerousKeys(obj) {
 router.post('/user/ares', (req, res) => {
   try {
     const db = require('../services/database');
+    // [SERVER-ARES 2026-06-07] Server-authoritative guard: when the server
+    // engine owns ARES, a legacy client pushing its localStorage snapshot
+    // would CLOBBER the server wallet (this route merges raw over existing).
+    // 409 so old clients stop retrying silently corrupted state.
+    if (require('../migrationFlags').SERVER_ARES === true) {
+      return res.status(409).json({ ok: false, error: 'ARES_OWNED_BY_SERVER', detail: 'ARES state is server-authoritative — client snapshots are ignored. Use /api/ares/fund | /api/ares/withdraw.' });
+    }
     const raw = req.body.ares;
     if (!raw || typeof raw !== 'object') return res.status(400).json({ ok: false, error: 'Missing ares object' });
     // [SEC-7] Strip dangerous keys before merge so prototype-pollution
@@ -932,6 +939,32 @@ router.post('/user/ares', (req, res) => {
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Failed to save ARES state' });
   }
+});
+
+// ─── [SERVER-ARES 2026-06-07] Wallet ops — server-authoritative ARES ───
+router.post('/ares/fund', express.json(), (req, res) => {
+  try {
+    if (require('../migrationFlags').SERVER_ARES !== true) return res.status(409).json({ ok: false, error: 'SERVER_ARES_OFF' });
+    const r = require('../services/serverAres').fund(req.user.id, req.body.amount);
+    if (r.ok) { try { require('../services/database').auditLog(req.user.id, 'ARES_FUND', JSON.stringify({ amount: +req.body.amount }), req.ip); } catch (_) {} }
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+router.post('/ares/withdraw', express.json(), (req, res) => {
+  try {
+    if (require('../migrationFlags').SERVER_ARES !== true) return res.status(409).json({ ok: false, error: 'SERVER_ARES_OFF' });
+    const r = require('../services/serverAres').withdraw(req.user.id, req.body.amount);
+    if (r.ok) { try { require('../services/database').auditLog(req.user.id, 'ARES_WITHDRAW', JSON.stringify({ amount: +req.body.amount }), req.ip); } catch (_) {} }
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── [SERVER-ARES 2026-06-07] Public state (panel refresh without full sync) ───
+router.get('/ares/state', (req, res) => {
+  try {
+    res.json({ ok: true, ares: require('../services/serverAres').getPublicState(req.user.id) });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ─── POST /api/user/telegram/test ─── Send a test message ───

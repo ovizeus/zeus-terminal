@@ -914,6 +914,24 @@ function _runCycle() {
                     }
                 }
 
+                // [SERVER-ARES 2026-06-07] ARES engine tick — BTC-only, runs on
+                // the same cycle inputs (snap/ind/confluence/regime). Decision +
+                // wallet in serverAres; execution through serverAT with
+                // owner='ARES'. Cheap double gate here; serverAres re-gates on
+                // serverFullyOwnsEntries (testnet cutover only). Never throws
+                // into the AT cycle.
+                if (MF.SERVER_ARES === true && symbol === 'BTCUSDT') {
+                    try {
+                        require('./serverAres').tick(userId, {
+                            price: snap.price, priceTs: snap.priceTs,
+                            regime,
+                            confluenceScore: confluence.score,
+                            atrPct: (ind && Number.isFinite(+ind.atr) && +ind.atr > 0 && snap.price > 0) ? (+ind.atr / snap.price) * 100 : 0,
+                            killActive: serverAT.isKillActive ? serverAT.isKillActive(userId) : false,
+                        });
+                    } catch (e) { logger.warn('ARES', `tick failed uid=${userId}: ${e.message}`); }
+                }
+
                 // [V3] Multi-entry / pyramiding check for existing winning positions
                 if (!pendingResult) {
                     const existingPos = _hoistedOpenPos.find(p => p.symbol === symbol);

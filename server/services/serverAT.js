@@ -475,6 +475,12 @@ function _persistClose(pos) {
     }
     // [MIGRATION-F5 commit 3] Post-commit broadcast. No-op when flag OFF.
     _broadcastPositions(pos.userId);
+    // [SERVER-ARES 2026-06-07] ARES-owned closes route their PnL to the ARES
+    // virtual wallet. After the archive commit so wallet never double-applies
+    // on a failed persist. Lazy require — serverAres requires serverAT.
+    if (pos.owner === 'ARES') {
+        try { require('./serverAres').onPositionClosed(pos); } catch (e) { logger.warn('AT_DB', `ARES close hook failed seq=${pos.seq}: ${e.message}`); }
+    }
     return true;
 }
 
@@ -1353,6 +1359,9 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         controlMode: 'auto', // [TL-03] Initialize controlMode so user-override check works
         autoTrade: true,     // [AT-PANEL] Mark as AT position for client panel filtering
         sourceMode: 'auto',  // [AT-PANEL] Source mode for display labeling
+        // [SERVER-ARES 2026-06-07] Engine attribution — 'ARES' positions route
+        // their close PnL to the ARES virtual wallet via the _persistClose hook.
+        owner: decision.owner === 'ARES' ? 'ARES' : 'AT',
         _livePending: false, // [TL-04] True while _executeLiveEntry is in-flight
     };
 
@@ -3464,6 +3473,12 @@ function getFullState(userId) {
             cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
             fullServerOwnership: _sp2FullOwn, // [SP2-b] UI shows SERVER DRIVING with client present
         }),
+        // [SERVER-ARES 2026-06-07] Server-side ARES public state for the client
+        // panel (wallet/trajectory/decision). Only attached when the engine is
+        // on — keeps legacy payloads byte-identical with the flag off.
+        ...(MF.SERVER_ARES === true ? (() => {
+            try { return { ares: require('./serverAres').getPublicState(userId) }; } catch (_) { return {}; }
+        })() : {}),
         // [Phase 2 S6-B4] Demo-only authority signals — see derivation above.
         serverATDemoEnabled,
         serverBrainDemoEnabled,
@@ -5992,6 +6007,7 @@ module.exports = {
     getFullState,
     _computeUserOwnership, // [SP2-9] pure ownership resolver for sync payload
     serverFullyOwnsEntries, // [SP2-b] full-ownership glue — used by trading.js order/place reject
+    isKillActive: (userId) => { try { return _uState(userId).killActive === true; } catch (_) { return false; } }, // [SERVER-ARES] light kill probe for ares rules
     // Mode control
     setMode,
     getMode,

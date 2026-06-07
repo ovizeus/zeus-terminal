@@ -28,6 +28,9 @@ interface AresStoreState {
   positions: any[]
   loaded: boolean
   saving: boolean
+  /** [SERVER-ARES 2026-06-07] True when the server engine owns ARES — wallet
+   *  ops go through /api/ares/*, legacy snapshot pushes are suppressed. */
+  serverSide: boolean
 
   /** [R28.2] UI slice — mirrors aresUI.ts DOM render output. */
   ui: AresStoreUI
@@ -56,6 +59,28 @@ let _debouncedAresLoad: (() => void) | null = null
 
 export const useAresStore = create<AresStoreState>()((set, getState) => {
   const loadImpl = async (): Promise<void> => {
+    // [SERVER-ARES 2026-06-07] Server-authoritative path first: when the
+    // server engine owns ARES (MF.SERVER_ARES), /api/ares/state is the truth
+    // (wallet in ares_state DB, positions execute through serverAT). The
+    // legacy /api/user/ares snapshot below stays as fallback for client-ARES
+    // installs — POSTing to it returns 409 when the server owns (see
+    // saveToServer guard).
+    try {
+      const st = await api.raw<{ ok: boolean; ares?: any }>('GET', '/api/ares/state')
+      if (st && st.ok && st.ares && st.ares.enabled === true && st.ares.wallet) {
+        const a = st.ares
+        set({
+          balance: +a.wallet.balance || 0,
+          locked: +a.wallet.locked || 0,
+          available: +a.wallet.available || 0,
+          realizedPnL: +a.wallet.realizedPnL || 0,
+          fundedTotal: +a.wallet.fundedTotal || 0,
+          serverSide: true,
+          loaded: true,
+        })
+        return
+      }
+    } catch (_) { /* endpoint absent on old servers — fall through to legacy */ }
     try {
       const data = await api.raw<{ ok: boolean; ares?: Record<string, unknown> }>('GET', '/api/user/ares')
       const server = (data.ok && data.ares) ? data.ares : {}
@@ -76,6 +101,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   ...DEFAULT_ARES,
   loaded: false,
   saving: false,
+  serverSide: false,
   ui: DEFAULT_ARES_UI,
 
   loadFromServer: async () => { _debouncedAresLoad!() },
@@ -83,6 +109,9 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   saveToServer: async () => {
     const s = getState()
     if (s.saving) return
+    // [SERVER-ARES 2026-06-07] Server owns the wallet — pushing the client
+    // snapshot would 409 (and pre-guard servers would CLOBBER server state).
+    if (s.serverSide) return
     set({ saving: true })
     try {
       const payload = {
@@ -111,6 +140,15 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   fundWallet: (amount) => {
     const w = window as any
     if (!Number.isFinite(amount) || amount <= 0) return
+    // [SERVER-ARES 2026-06-07] Server-authoritative wallet → API op + re-pull.
+    if (getState().serverSide) {
+      fetch('/api/ares/fund', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      }).then(() => getState().loadFromServer()).catch(() => {})
+      return
+    }
     try {
       if (w.ARES?.wallet?.fund) {
         w.ARES.wallet.fund(amount)
@@ -122,6 +160,14 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   withdrawWallet: (amount) => {
     const w = window as any
     if (!Number.isFinite(amount) || amount <= 0) return
+    if (getState().serverSide) {
+      fetch('/api/ares/withdraw', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      }).then(() => getState().loadFromServer()).catch(() => {})
+      return
+    }
     try {
       if (w.ARES?.wallet?.withdraw) {
         w.ARES.wallet.withdraw(amount)
