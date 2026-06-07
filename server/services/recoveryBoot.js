@@ -176,7 +176,14 @@ async function _reconcileUser(uid, exchange) {
             // Both sides — mark matched so 3b skips it
             exchangeBySymbol.delete(symbol);
 
-            const slOrderId = dbPos.parsedData.slOrderId;
+            // [2026-06-07 B8] serverAT live positions persist the SL id at
+            // data.live.slOrderId — checking only the top-level field made
+            // EVERY boot see "no SL recorded" and place a duplicate at
+            // entry*0.95 (reduceOnly, so no exposure — but it rests as an
+            // invisible algo orphan after close → the -4047 entry-block
+            // pattern that froze BNB for 9h). Check both shapes.
+            const slOrderId = dbPos.parsedData.slOrderId
+                || (dbPos.parsedData.live && dbPos.parsedData.live.slOrderId);
             if (!slOrderId && dbPos.status === 'OPEN') {
                 // No SL recorded — attempt to place one
                 // Fix #12: Round stopPrice to 2dp to satisfy exchange tick size filter

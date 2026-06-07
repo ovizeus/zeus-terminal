@@ -179,6 +179,25 @@ describe('recoveryBoot', () => {
         );
     });
 
+    it('[B8] live position with SL under live.slOrderId → NO duplicate placement', async () => {
+        // [2026-06-07] serverAT live positions persist the SL id at
+        // data.live.slOrderId — recoveryBoot only checked the top-level
+        // field, so EVERY boot saw "no SL recorded" and placed a duplicate
+        // at entry*0.95 (live: resl_iZcRFIcGG @ $1554.52 next to the real
+        // watchdog SL @ $1589.63 on ETHUSDT, 12:22:36). The duplicate is
+        // reduceOnly (no exposure risk) but rests as an invisible orphan
+        // after close — the exact -4047 entry-block pattern.
+        addExchangeAccount(1, 'binance');
+        addPosition(1, {
+            symbol: 'ETHUSDT', side: 'LONG', qty: '3.496',
+            live: { status: 'LIVE', slOrderId: '1000000098520618' },
+        });
+        mockGetPositions.mockResolvedValue([{ symbol: 'ETHUSDT', side: 'LONG', qty: '3.496', entryPrice: '1636.34' }]);
+
+        await recoveryBoot.run();
+        expect(mockPlaceStopLoss).not.toHaveBeenCalled();
+    });
+
     it('position only in DB (not on exchange) → marks ORPHANED', async () => {
         addExchangeAccount(1, 'binance');
         const seq = addPosition(1, { symbol: 'BTCUSDT', side: 'LONG', qty: '0.001', slOrderId: 'sl1' });
