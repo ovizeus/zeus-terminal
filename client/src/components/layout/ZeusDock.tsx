@@ -168,17 +168,6 @@ const DOCK_ITEMS: DockItem[] = [
         <line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </>
     ) },
-  // [UI-COMPACT 2026-06-07] Dedicated Liquidations page (Monitor + Overview +
-  // Live Feed). MIRROR entry also added in ui/dock.ts DOCK_ITEMS — both lists
-  // must stay in sync (documented 2026-05-21 gotcha).
-  { id: 'liquidations', label: 'Liquidations', group: 'intel',
-    icon: (
-      <>
-        <path d="M12 2.5s6.5 7.5 6.5 12.5a6.5 6.5 0 0 1-13 0C5.5 10 12 2.5 12 2.5z" fill="currentColor" opacity=".1" />
-        <path d="M12 2.5s6.5 7.5 6.5 12.5a6.5 6.5 0 0 1-13 0C5.5 10 12 2.5 12 2.5z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-        <path d="M9 15a3 3 0 0 0 3 3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      </>
-    ) },
   { id: 'activity', label: 'Activity', group: 'review',
     icon: (
       <>

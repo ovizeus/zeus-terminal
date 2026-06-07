@@ -38,7 +38,6 @@ import { QuantMonitorPanel } from '../dock/QuantMonitorPanel'
 import { MTFPanel } from '../dock/MTFPanel'
 import { TeacherDockPanel } from '../dock/TeacherDockPanel'
 import { SignalRegistryPanel } from '../dock/SignalRegistryPanel'
-import { LiquidationsPanel } from '../dock/LiquidationsPanel'
 import { ActivityFeedPanel } from '../dock/ActivityFeedPanel'
 import { AUBPanel } from '../dock/AUBPanel'
 // ── Modals & Overlays (1:1 from old Zeus .mover modals) ──
@@ -97,7 +96,6 @@ const DOCK_TITLES: Record<string, string> = {
   'mtf': 'MTF',
   'teacher': 'Teacher',
   'sigreg': 'Signals',
-  'liquidations': 'Liquidations',
   'activity': 'Activity',
   'aub': 'Alien',
 }
@@ -546,9 +544,6 @@ export function PanelShell() {
           </div>
           <div data-panel-id="sigreg" className={dockActive === 'sigreg' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <SignalRegistryPanel />
-          </div>
-          <div data-panel-id="liquidations" className={dockActive === 'liquidations' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
-            <LiquidationsPanel />
           </div>
           <div data-panel-id="activity" className={dockActive === 'activity' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <ActivityFeedPanel />
