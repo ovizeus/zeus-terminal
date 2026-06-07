@@ -17,6 +17,28 @@ const DEFAULT_ARES = {
   positions: [] as any[],
 }
 
+/** [SERVER-ARES P3 2026-06-07] Live server reasoning snapshot from
+ *  GET /api/ares/state (serverAres.getPublicState). */
+export interface AresServerSnapshot {
+  lastDecision: {
+    ts?: number
+    shouldTrade?: boolean
+    side?: string | null
+    confidence?: number
+    stateId?: string
+    reasons?: string[]
+  } | null
+  engine: {
+    winRate10?: number
+    consecutiveLoss?: number
+    consecutiveWin?: number
+    totalTrades?: number
+    totalWins?: number
+    totalLosses?: number
+  }
+  trajectory: { delta?: number; daysPassed?: number }
+}
+
 interface AresStoreState {
   balance: number
   locked: number
@@ -31,6 +53,12 @@ interface AresStoreState {
   /** [SERVER-ARES 2026-06-07] True when the server engine owns ARES — wallet
    *  ops go through /api/ares/*, legacy snapshot pushes are suppressed. */
   serverSide: boolean
+  /** [SERVER-ARES P3 2026-06-07] Live server reasoning snapshot — the server
+   *  engine's lastDecision + engine stats + trajectory, refreshed by
+   *  loadFromServer. Drives the ARES panel's thought stream / decision line /
+   *  state badge / confidence / stats when serverSide (the client engine is
+   *  locked, so its own state is frozen). null until first server load. */
+  srv: AresServerSnapshot | null
 
   /** [R28.2] UI slice — mirrors aresUI.ts DOM render output. */
   ui: AresStoreUI
@@ -77,7 +105,19 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
           fundedTotal: +a.wallet.fundedTotal || 0,
           serverSide: true,
           loaded: true,
+          // [SERVER-ARES P3] Capture the live reasoning snapshot so the panel
+          // shows the SERVER engine's thinking instead of the frozen client.
+          srv: {
+            lastDecision: a.lastDecision || null,
+            engine: a.engine || {},
+            trajectory: a.trajectory || {},
+          },
         })
+        // [SERVER-ARES P3] Pump the UI now — the client ARES tick that normally
+        // drives _aresRender only fires every 5min, far too slow for a live
+        // thought stream. loadFromServer runs ~8s, so render here for ~8s-fresh
+        // server reasoning in the panel.
+        try { _aresRender() } catch (_) {}
         return
       }
     } catch (_) { /* endpoint absent on old servers — fall through to legacy */ }
@@ -102,6 +142,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   loaded: false,
   saving: false,
   serverSide: false,
+  srv: null,
   ui: DEFAULT_ARES_UI,
 
   loadFromServer: async () => { _debouncedAresLoad!() },

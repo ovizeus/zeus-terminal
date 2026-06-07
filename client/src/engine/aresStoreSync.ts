@@ -64,6 +64,20 @@ const EMOTION_MAP: Record<string, string> = {
   REVENGE_GUARD: 'Revenge Guard',
 }
 
+// [SERVER-ARES P3 2026-06-07] State visuals — mirrors engine/ares.ts STATES
+// (color/glow/label) so the server's stateId can drive the badge without the
+// dead client engine. Labels match the client 1:1.
+const STATE_VISUALS: Record<string, { label: string; color: string; glow: string }> = {
+  DETERMINED: { label: 'DETERMINED', color: '#00d9ff', glow: '#00d9ff' },
+  RESILIENT: { label: 'RESILIENT', color: '#00ff88', glow: '#00ff88' },
+  FOCUSED: { label: 'FOCUSED', color: '#f0c040', glow: '#f0c040' },
+  STRATEGIC: { label: 'STRATEGIC', color: '#aa44ff', glow: '#aa44ff' },
+  MOMENTUM: { label: 'MOMENTUM', color: '#00ff44', glow: '#00ff44' },
+  FRUSTRATED: { label: 'FRUSTRATED', color: '#ff8800', glow: '#ff8800' },
+  DEFENSIVE: { label: 'DEFENSIVE', color: '#ff3355', glow: '#ff3355' },
+  REVENGE_GUARD: { label: 'REVENGE GUARD', color: '#ff0044', glow: '#ff0044' },
+}
+
 function _rangeProgress(x: number, a: number, b: number): number {
   if (!Number.isFinite(x) || x <= a) return 0
   if (x >= b) return 1
@@ -127,6 +141,86 @@ function _decision(): AresDecisionLine {
   } catch (_) {
     return { visible: false, shouldTrade: false, side: null, reasons: [], color: '' }
   }
+}
+
+// ── [SERVER-ARES P3 2026-06-07] Server-reasoning derivations ──────────────
+// PURE. Drive the panel from the server engine's lastDecision/engine/trajectory
+// (aresStore.srv) when serverSide — the client engine is locked & frozen.
+
+/** State badge from the server's stateId. */
+export function serverCore(stateId: string | undefined, consecutiveLoss: number): AresCoreState {
+  const id = String(stateId || 'DETERMINED')
+  const v = STATE_VISUALS[id] || STATE_VISUALS.DETERMINED
+  return { id, label: v.label, emoji: '', color: v.color, glow: v.glow, consecutiveLoss: Number(consecutiveLoss || 0) }
+}
+
+/** Decision line from the server's lastDecision. */
+export function serverDecisionLine(lastDec: any): AresDecisionLine {
+  if (!lastDec) return { visible: false, shouldTrade: false, side: null, reasons: [], color: '' }
+  const reasons = Array.isArray(lastDec.reasons) ? lastDec.reasons.map(String) : []
+  if (lastDec.shouldTrade) {
+    return { visible: true, shouldTrade: true, side: String(lastDec.side || ''), reasons: reasons.slice(0, 3), color: '#00ff88' }
+  }
+  return { visible: true, shouldTrade: false, side: null, reasons: reasons.slice(0, 2), color: '#ff8800' }
+}
+
+/** Live thought stream from the server snapshot — newest first. */
+export function serverThoughts(srv: any): string[] {
+  if (!srv) return ['SERVER ARES — awaiting first decision...']
+  const dec = srv.lastDecision
+  const eng = srv.engine || {}
+  const traj = srv.trajectory || {}
+  const lines: string[] = []
+  if (dec) {
+    const conf = Number(dec.confidence || 0)
+    const state = String(dec.stateId || '—')
+    if (dec.shouldTrade) {
+      lines.push('[DECISION] GO ' + String(dec.side || '') + ' — confidence ' + conf + '%')
+    } else {
+      lines.push('[DECISION] HOLD — ' + (Array.isArray(dec.reasons) && dec.reasons.length ? String(dec.reasons[0]) : 'conditions not met'))
+    }
+    if (Array.isArray(dec.reasons)) {
+      for (const r of dec.reasons.slice(0, dec.shouldTrade ? 4 : 2)) lines.push('  → ' + String(r))
+    }
+    lines.push('STATE: ' + state + ' — confidence ' + conf + '%')
+  }
+  const wr = Number(eng.winRate10 || 0)
+  const cl = Number(eng.consecutiveLoss || 0)
+  const cw = Number(eng.consecutiveWin || 0)
+  lines.push('FORM: WR10 ' + wr + '% · ' + (cw > 0 ? cw + 'W streak' : cl > 0 ? cl + 'L streak' : 'flat') + ' · ' + Number(eng.totalTrades || 0) + ' trades')
+  const d = Number(traj.delta || 0)
+  lines.push('TRAJECTORY: ' + (d >= 0 ? '+' : '') + d + '% vs curve · day ' + Math.floor(Number(traj.daysPassed || 0)) + '/365')
+  lines.push('SERVER-SIDE ENGINE — runs with terminal closed')
+  return lines
+}
+
+/** Stats row from the server snapshot. */
+export function serverStats(srv: any): AresStatsUI {
+  const eng = srv?.engine || {}
+  const traj = srv?.trajectory || {}
+  const d = Number(traj.delta || 0)
+  return {
+    day: Math.floor(Number(traj.daysPassed || 0)) + ' / 365',
+    delta: (d >= 0 ? '+' : '') + d + '%',
+    prediction: '—',
+    winRate: Number(eng.winRate10 || 0) + '%',
+  }
+}
+
+/** Cognitive lines from the server snapshot (no client ARES_MIND). */
+export function serverCognitive(srv: any): AresCognitiveUI {
+  const dec = srv?.lastDecision
+  const conf = Number(dec?.confidence || 0)
+  const priceN = (typeof w.S !== 'undefined' && Number(w.S?.price) > 0) ? Number(w.S.price) : null
+  const price = priceN != null ? priceN.toFixed(2) : '—'
+  const regime = (typeof w.BM !== 'undefined' ? w.BM.regime : null) || '—'
+  const cogLines = [
+    'SERVER ENGINE: ' + (dec ? (dec.shouldTrade ? 'GO ' + String(dec.side || '') : 'HOLD') : 'idle'),
+    'CONFIDENCE: ' + conf + '% — ' + (conf >= 68 ? 'ABOVE entry bar' : 'below 68% bar'),
+    'STATE: ' + String(dec?.stateId || '—'),
+    'CURRENT PRICE: ' + price + ' — REGIME: ' + regime,
+  ]
+  return { clarity: conf, predictionAccuracy: 0, pulseSpeed: 1, cogLines }
 }
 
 function _stage(balance: number): AresStageUI {
@@ -411,6 +505,55 @@ function _missionArc(st: any, balance: number): AresMissionArcUI {
 /** Publish the full UI slice to the store. Called at the start of _aresRender(). */
 export function syncAresUIToStore(): void {
   try {
+    // [SERVER-ARES P3 2026-06-07] Server-authoritative reasoning. The client
+    // engine is locked under full ownership, so w.ARES.getState() is frozen.
+    // Drive core/decision/thoughts/confidence/stats/wallet from the live
+    // server snapshot (aresStore.srv, refreshed by loadFromServer ~8s).
+    const _s = useAresStore.getState()
+    if (_s.serverSide === true) {
+      const srv = _s.srv
+      const balance = Number(_s.balance || 0)
+      const locked = Number(_s.locked || 0)
+      const available = Number(_s.available != null ? _s.available : (balance - locked))
+      const core = serverCore(srv?.lastDecision?.stateId, srv?.engine?.consecutiveLoss || 0)
+      const conf = Number(srv?.lastDecision?.confidence || 0)
+      const openCnt = _positions().length
+      const partialSrv: Partial<AresStoreUI> = {
+        core,
+        confidence: conf,
+        immPct: balance > 0 ? Math.min(100, +(balance / 10000).toFixed(2)) : 0,
+        emotion: EMOTION_MAP[core.id] || '',
+        wound: _wound({ current: { id: core.id }, consecutiveLoss: core.consecutiveLoss }, balance),
+        decision: serverDecisionLine(srv?.lastDecision),
+        stage: _stage(balance),
+        objectives: _objectives(balance),
+        objectivesTitle: _objectivesTitle(balance),
+        wallet: {
+          balance, locked, available,
+          realizedPnL: Number(_s.realizedPnL || 0),
+          fundedTotal: Number(_s.fundedTotal || 0),
+          withdrawEnabled: !(locked > 0 || openCnt > 0),
+          withdrawTip: (locked > 0 || openCnt > 0) ? 'Close all positions before withdrawing' : '',
+          failBannerVisible: available <= 0 && balance > 0,
+          failMessage: '',
+        },
+        cognitive: serverCognitive(srv),
+        stats: serverStats(srv),
+        positions: _positions(),
+        closeAllVisible: (openCnt >= 2),
+        thoughts: serverThoughts(srv),
+        lesson: srv?.lastDecision && !srv.lastDecision.shouldTrade && Array.isArray(srv.lastDecision.reasons) && srv.lastDecision.reasons.length
+          ? 'Server discipline: ' + String(srv.lastDecision.reasons[0])
+          : 'Server engine active — disciplined entries only',
+        lobeColors: _lobeColors({ current: { id: core.id }, consecutiveLoss: core.consecutiveLoss, winRate10: srv?.engine?.winRate10 || 0 }),
+        lobDots: _lobDots({ current: { id: core.id }, consecutiveLoss: core.consecutiveLoss }),
+        consciousnessActiveIdx: _consciousnessActiveIdx(balance),
+        missionArc: _missionArc({ trajectoryDelta: srv?.trajectory?.delta || 0 }, balance),
+      }
+      useAresStore.getState().patchUi(partialSrv)
+      return
+    }
+
     const aresState = w.ARES?.getState?.()
     if (!aresState) return
 
