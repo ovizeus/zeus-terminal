@@ -94,7 +94,11 @@ const defaultMarket: MarketState = {
   },
   heatmapPockets: [],
   klines: [] as MarketState['klines'],
-  liqMinUsd: 500,
+  // [LIQ-WARMUP 2026-06-07] 500 → 100: at \$500 the Overview/Feed sat at \$0
+  // for hours in quiet markets (and after every server reload, which resets
+  // the warmup buffer) — the operator read that as "broken". \$100 still
+  // filters dust; big prints keep their fire/boom icons.
+  liqMinUsd: 100,
   liqSym: 'BTC',
   wsK: null,
   scenario: { primary: null, alternate: null, failure: null, updated: 0 },

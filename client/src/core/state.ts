@@ -1749,7 +1749,7 @@ export const S: any = {
   indicators: { ema: true, wma: true, st: true, vp: true },
   overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false, ovi: false },
   llvSettings: { bucketPct: 0.3, maxBarWidthPct: 30, opacity: 0.7, minUsd: 0, longCol: '#00d4aa', shortCol: '#ff4466', showLabels: true, labelMode: 'compact' },
-  klines: [], liqMinUsd: 500, liqSym: 'BTC', wsK: null,
+  klines: [], liqMinUsd: 100 /* [LIQ-WARMUP 2026-06-07] 500→100, see marketStore */, liqSym: 'BTC', wsK: null,
   symbol: 'BTCUSDT', tz: 'Europe/Bucharest',
   magnetBias: 'neut',
   cloudEmail: '',
