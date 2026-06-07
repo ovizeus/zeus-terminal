@@ -119,6 +119,15 @@ export function handleLiqFeedFrame(liq: LiqFeedEvent | null | undefined): void {
  */
 async function _warmupFromServer(): Promise<void> {
     try {
+        // [LIQ-WARMUP timing fix 2026-06-07] start() runs at app mount, but
+        // window.__MF is populated asynchronously AFTER mount — the one-shot
+        // flag gate below returned early on EVERY page load, silently turning
+        // warmup into a no-op (counters only ever filled from live events;
+        // proven via Playwright network capture: zero /api/liq/recent calls).
+        // Poll briefly for the flags object before deciding.
+        for (let i = 0; i < 15 && !(w.__MF && typeof w.__MF === 'object'); i++) {
+            await new Promise(r => setTimeout(r, 2000))
+        }
         if (!(w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true)) return
         const resp = await fetch('/api/liq/recent?limit=300', { credentials: 'same-origin' })
         if (!resp.ok) return
