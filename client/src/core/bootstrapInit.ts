@@ -41,8 +41,10 @@ export function initZeusGroups(): void {
   mv('mtf-strip', mi); mv('adaptive-strip', mi); mv('actfeed-strip', mi)
   mv('zeusBrain', mi); mv('brainExt', mi)
   mvSec('#rsiupd', mi); mvSec('.dttabs', mi); mvSec('.conf-widget', mi); mvSec('.fgc', mi)
-  mvSec('#frv', mi); mvSec('#askc', mi); mvSec('.srgrid', mi); mvSec('.lmcs', mi)
-  mvSec('#tv', mi); mvSec('.fdlist', mi)
+  // [UI-COMPACT 2026-06-07] .lmcs / #tv / .fdlist (Liquidations Monitor +
+  // Overview + Live Feed) no longer mvSec()'d — React-owned inside
+  // LiquidationsPanel (same trap-avoidance as dhfSec above).
+  mvSec('#frv', mi); mvSec('#askc', mi); mvSec('.srgrid', mi)
   // [UI-COMPACT 2026-06-06] dhfSec no longer mv()'d — it is React-owned inside
   // SignalRegistryPanel (data-panel-id="sigreg"); mv() here would yank it out
   // of the panel wrapper (the documented legacy-DOM-override trap).

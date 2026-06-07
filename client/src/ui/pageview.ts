@@ -55,6 +55,9 @@ export const PAGE_VIEW_MODULES: Record<string, any> = {
   'sigreg': {
     title: 'Signals'
   },
+  'liquidations': {
+    title: 'Liquidations'
+  },
   'activity': {
     title: 'Activity'
   },
