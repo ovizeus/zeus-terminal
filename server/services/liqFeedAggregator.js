@@ -230,8 +230,14 @@ function _connectByb() {
         s.reconnectMs = RECONNECT_MIN_MS;
         // [LIQ-FIX 2026-06-06] allLiquidation replaces the deprecated
         // liquidation.* topic (Bybit rejects it: "handler not found").
-        logger.info('LIQ-FEED', 'BYB connected — allLiquidation.BTCUSDT');
-        try { s.ws.send(JSON.stringify({ op: 'subscribe', args: ['allLiquidation.BTCUSDT'] })); } catch (_) {}
+        // [LIQ-WARMUP 2026-06-07] Widened from BTCUSDT-only to the main
+        // basket — OKX delivers ALL symbols while Bybit requires per-symbol
+        // subscription, so the BYB SOURCE column sat at 0 for hours between
+        // sparse BTC liquidations (operator-reported). Parser is already
+        // symbol-agnostic; one topic per symbol is the documented form.
+        const _bybSyms = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT'];
+        logger.info('LIQ-FEED', 'BYB connected — allLiquidation × ' + _bybSyms.length + ' symbols');
+        try { s.ws.send(JSON.stringify({ op: 'subscribe', args: _bybSyms.map(x => 'allLiquidation.' + x) })); } catch (_) {}
         s.pingTimer = setInterval(() => {
             try { if (s.ws && s.ws.readyState === WebSocket.OPEN) s.ws.send(JSON.stringify({ op: 'ping' })); } catch (_) {}
         }, BYB_PING_INTERVAL_MS);
