@@ -151,6 +151,7 @@ export function LiquidationsPanel() {
         <button className="liq-fbtn act" id="lf-all" onClick={() => (window as any).setLiqSrcFilter?.('all')}>ALL</button>
         <button className="liq-fbtn" id="lf-bnb" onClick={() => (window as any).setLiqSrcFilter?.('bnb')}>BNB</button>
         <button className="liq-fbtn" id="lf-byb" onClick={() => (window as any).setLiqSrcFilter?.('byb')}>BYB</button>
+        <button className="liq-fbtn" id="lf-okx" onClick={() => (window as any).setLiqSrcFilter?.('okx')}>OKX</button>
       </div>
       <div className="feed">
         <div className="fdlist" id="fdlist"></div>

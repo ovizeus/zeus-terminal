@@ -388,14 +388,18 @@ export function updMarketPressure(): void {
 // ===== FEED =====
 let _liqSrcFilter = 'all'
 export function setLiqSrcFilter(v: any): void { _liqSrcFilter = v; renderFeed(); updLiqFilterBtns() }
-export function updLiqFilterBtns(): void { ['all', 'bnb', 'byb'].forEach((k: string) => { const b = el('lf-' + k); if (b) b.className = 'liq-fbtn' + (_liqSrcFilter === k ? ' act' : '') }) }
+export function updLiqFilterBtns(): void { ['all', 'bnb', 'byb', 'okx'].forEach((k: string) => { const b = el('lf-' + k); if (b) b.className = 'liq-fbtn' + (_liqSrcFilter === k ? ' act' : '') }) }
 export function renderFeed(): void {
   const fd = el('fdlist'); if (!fd) return
-  const base = (w.S.symbol || 'BTCUSDT').replace('USDT', '').replace('BUSD', '')
-  let filtered = w.S.events.filter((e: any) => e.sym && e.sym.toUpperCase().startsWith(base.toUpperCase()))
+  // [LIQ-WARMUP 2026-06-07] Symbol filter REMOVED — it kept the LIVE FEED at
+  // "0 events" forever: it only showed the CHART symbol (BTC), but the BNB
+  // BTC feed is network-dead and Bybit BTC liqs are sparse, while the OKX
+  // server feed delivers ALL symbols. The Overview totals already count all
+  // symbols; each row prints its own symbol, so the list stays readable.
+  let filtered = w.S.events
   if (_liqSrcFilter !== 'all') filtered = filtered.filter((e: any) => e.src === _liqSrcFilter)
   const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? _ZI.fire : e.usd >= 500000 ? _ZI.boom : _ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : e.src === 'okx' ? '<span class="liq-src-byb" style="color:var(--blu)">OKX</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${fmt(e.usd)}</span><span style="color:var(--dim)">@${fP(e.price)}</span></div>` }).join('')
-  fd.innerHTML = html || `<div style="color:var(--dim);font-size:13px;padding:8px">Waiting for ${base} liquidations...</div>`
+  fd.innerHTML = html || `<div style="color:var(--dim);font-size:13px;padding:8px">Waiting for liquidations...</div>`
   const cnt = el('fcnt'); if (cnt) cnt.textContent = filtered.length + ' events' + (_liqSrcFilter !== 'all' ? ' (' + _liqSrcFilter.toUpperCase() + ')' : '')
 }
 
