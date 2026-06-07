@@ -4185,7 +4185,27 @@ function _registerManualPositionLegacy(userId, data) {
     if (mode === 'live') {
         const existing = _positions.find(p => p.userId === userId && p.symbol === data.symbol && p.side === side && p.mode === 'live');
         if (existing) {
-            logger.info('AT_ENGINE', `[${existing.seq}] LIVE manual position already tracked — skipping`);
+            // [AT-ATTR 2026-06-07] The USERDATA stream's external-position
+            // adoption can WIN the race with this registration (live proof:
+            // seq 1776859653267, adopted source='external' at 13:04:22.088,
+            // this branch hit at .095). The position then stayed unattributed
+            // forever — client-AT entries filed under MANUAL in every panel
+            // ("months-old" operator complaint). Merge the registration's
+            // attribution onto the adopted row instead of dropping it.
+            if (existing.source === 'external' || existing.autoTrade == null) {
+                const _src = data.source || 'manual';
+                existing.autoTrade = _src === 'auto';
+                existing.sourceMode = _src === 'auto' ? 'auto' : 'manual';
+                existing.controlMode = _src === 'auto' ? 'auto' : 'user';
+                existing.source = _src;
+                if (Number.isFinite(+data.leverage) && +data.leverage > 0) existing.lev = +data.leverage;
+                try { _persistPosition(existing); } catch (_) { /* best-effort */ }
+                try { _broadcastPositions(userId); } catch (_) { /* best-effort */ }
+                logger.info('AT_ENGINE', `[${existing.seq}] LIVE position already tracked (adoption race) — attribution merged: source=${_src} autoTrade=${existing.autoTrade}`);
+                audit.record('AT_ATTRIBUTION_MERGED', { userId, seq: existing.seq, symbol: data.symbol, source: _src }, 'SERVER_AT');
+            } else {
+                logger.info('AT_ENGINE', `[${existing.seq}] LIVE manual position already tracked — skipping`);
+            }
             return { ok: true, seq: existing.seq, alreadyTracked: true };
         }
     }
@@ -5710,8 +5730,18 @@ function onUserDataEvent(userId, event) {
                             // Fire-and-forget (don't block recon); DSL takes over this native SL on activation.
                             (async () => {
                                 const _mark = Number(p.markPrice) || Number(p.entryPrice) || 0;
-                                const _stop = _computeProtectiveStop(side, _mark, 0.02);
+                                let _stop = _computeProtectiveStop(side, _mark, 0.02);
                                 if (!_stop) return;
+                                // [2026-06-07] Round to tick size — the raw float
+                                // (63007.950000000004 live, seq 1776859653267) made
+                                // Binance reject ALL 3 attempts with "Precision is
+                                // over the maximum", leaving the adopted position
+                                // with the server-net backstop ONLY.
+                                try {
+                                    const _rp = roundOrderParams(p.symbol, Math.abs(p.positionAmt), _stop);
+                                    if (_rp && _rp.stopPrice != null && Number.isFinite(+_rp.stopPrice)) _stop = +_rp.stopPrice;
+                                    else if (_rp && _rp.price != null && Number.isFinite(+_rp.price)) _stop = +_rp.price;
+                                } catch (_) { /* fall back to raw — retry loop still applies */ }
                                 // [SP2-7b] The EXCHANGE-side stop is the PRIMARY protection for an
                                 // adopted position (survives server-process death); the server-net
                                 // SL is the backstop. Make placement robust: retry up to 3 attempts,

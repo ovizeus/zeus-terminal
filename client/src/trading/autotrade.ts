@@ -80,7 +80,7 @@ import { _ZI } from '../constants/icons'
 import { STALL_GRACE_MS } from '../constants/trading'
 import { TabLeader } from '../services/tabLeader'
 import { api } from '../services/api'
-import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage } from '../trading/liveApi'
+import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage, _atClientOrderId } from '../trading/liveApi'
 import { getTimeUTC, getCurrentADX, isCurrentTimeOK, renderDHF } from '../ui/render'
 import { runPostMortem } from '../engine/postMortem'
 import { computeOrderGeometry } from './orderGeometry'
@@ -1205,6 +1205,10 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           leverage: lev,
           referencePrice: entry,
           source: 'auto',
+          // [AT-ATTR 2026-06-07] AT_ prefix — without it Binance generated a
+          // random clientOrderId (live: Py8hushTtyG3WlI2viLLyA, 13:04:22) and
+          // the entry was unattributable on the exchange side.
+          newClientOrderId: _atClientOrderId(),
         })
         // Build position from exchange response
         const fillPrice = parseFloat(result.avgPrice) || entry

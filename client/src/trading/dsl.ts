@@ -1094,11 +1094,19 @@ export function _renderDslCard(pos: any): string {
   const _isAT = !!pos.autoTrade
 
   var _dslEnv = w._executionEnv
+  // [AT-ATTR 2026-06-07] Server-synced rows carry mode:'live', NOT the legacy
+  // isLive flag — every live position fell into the `pos.isLive ?` else-branch
+  // and rendered "PAPER DEMO" (operator: "de ce paper demo daca trebuia sa fie
+  // testnet"). Env label now derives from the POSITION (demo stays DEMO even
+  // when the global execution env is TESTNET).
+  const _isLiveP = pos.isLive === true || pos.mode === 'live'
   var _paperLiveLabel = _dslEnv === 'TESTNET' ? 'PAPER TESTNET' : (_dslEnv === 'REAL' ? 'PAPER LIVE' : 'PAPER LOCKED')
-  var _atEnvLabel = _dslEnv === 'TESTNET' ? 'TESTNET' : (_dslEnv === 'REAL' ? 'REAL' : (pos.isLive ? 'LOCKED' : 'DEMO'))
+  var _atEnvLabel = _isLiveP
+    ? (_dslEnv === 'TESTNET' ? 'TESTNET' : (_dslEnv === 'REAL' ? 'REAL' : 'LOCKED'))
+    : 'DEMO'
   const _srcLabel = _isAT
     ? ('AT ' + _atEnvLabel)
-    : (pos.isLive ? _paperLiveLabel : 'PAPER DEMO')
+    : (_isLiveP ? _paperLiveLabel : 'PAPER DEMO')
   const _srcMap: any = {
     'AT DEMO': { color: '#aa44ff', bg: '#aa44ff18', border: '#aa44ff44', icon: '' },
     'AT TESTNET': { color: '#f0c040', bg: '#f0c04018', border: '#f0c04044', icon: '' },

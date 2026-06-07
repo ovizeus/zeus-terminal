@@ -458,7 +458,11 @@ function _aresClientOrderId(): string {
 // [FIX #11] 6-digit random suffix so simultaneous AT + ARES/manual calls within the same ms
 // cannot collide on Binance dedup (previous 2-digit random = 1-in-100 collision within one ms).
 var _atOrderSeq = 0
-function _atClientOrderId(): string {
+// [AT-ATTR 2026-06-07] Exported — the client-AT live ENTRY (autotrade.ts)
+// previously sent NO newClientOrderId, so Binance generated a random id and
+// nothing downstream (sweeper ZEUS_PREFIX_REGEX, recon forensics) could
+// attribute the order to AT.
+export function _atClientOrderId(): string {
   _atOrderSeq = (_atOrderSeq + 1) % 10000
   return 'AT_' + Date.now() + '_' + _atOrderSeq + '_' + String(Math.floor(Math.random() * 999999)).padStart(6, '0')
 }
