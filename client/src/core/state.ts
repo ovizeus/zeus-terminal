@@ -943,6 +943,10 @@ export const ZState = (() => {
       openTs: sp.ts || sp.openTs || Date.now(),
       label: ((sp.mode === 'live') ? (w._executionEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : (w._executionEnv === 'REAL' ? '\uD83D\uDD34 LIVE' : '\u26D4 LOCKED')) : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
+      // [SERVER-ARES P2 2026-06-07] Engine attribution \u2014 'ARES' rows render in
+      // the ARES panel and are EXCLUDED from the AT panel (renderATPositions).
+      // Server value wins; preserve the client's last-known tag otherwise.
+      owner: (sp.owner != null) ? sp.owner : ((existingPos && existingPos.owner) || undefined),
       // [Phase 9A1] Ownership resolution, strict order:
       //   1. Explicit server value wins.
       //   2. Else client's existingPos value (preserves whatever opened the pos).

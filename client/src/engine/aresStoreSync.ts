@@ -230,7 +230,59 @@ function _stats(st: any): AresStatsUI {
   }
 }
 
+/**
+ * [SERVER-ARES P2 2026-06-07] Map a server-synced TP position row
+ * (owner==='ARES', shape from state.ts _mapServerPos) to the ARES panel card.
+ * PURE — uPnL recomputed from markPrice because server rows carry closePnl
+ * only at close (the AT panel does the same per-render computation).
+ */
+export function mapServerRowToAresCard(p: any, markPrice: number): AresPositionCard {
+  const entry = Number(p.entry) || 0
+  const lev = (typeof p.lev === 'number' && p.lev > 0) ? p.lev : 1
+  const notional = (Number(p.margin || p.size) || 0) * lev
+  const dir = p.side === 'LONG' ? 1 : -1
+  const mark = (Number.isFinite(markPrice) && markPrice > 0) ? markPrice : entry
+  // `+ 0` normalizes the -0 that SHORT (dir=-1) produces when mark===entry.
+  const uPnL = (entry > 0 && notional > 0) ? (((mark - entry) * dir / entry) * notional) + 0 : 0
+  return {
+    id: String(p._serverSeq || p.id),
+    side: String(p.side || ''),
+    symbol: String(p.sym || 'BTCUSDT'),
+    entry,
+    size: notional,
+    pnl: uPnL,
+    pnlPct: notional > 0 ? (uPnL / notional) * 100 : 0,
+    live: (p.mode === 'live'),
+    durationMs: p.openTs ? Math.max(0, Date.now() - p.openTs) : 0,
+    tag: undefined,
+    closable: true,
+    leverage: lev,
+    markPrice: mark,
+    liqPrice: Number(p.liqPrice) || 0,
+    slPrice: Number(p.sl) || 0,
+    tpPrice: Number(p.tp) || 0,
+    reason: 'SERVER ARES',
+    beMoved: false,
+  }
+}
+
+/** [SERVER-ARES P2] Server-synced ARES rows from the TP arrays. */
+function _serverAresPositions(): AresPositionCard[] {
+  try {
+    const TP = w.TP
+    if (!TP) return []
+    const mark = (typeof w.S !== 'undefined' && Number(w.S?.price) > 0) ? Number(w.S.price) : 0
+    const all: any[] = ([] as any[]).concat(TP.demoPositions || [], TP.livePositions || [])
+    return all
+      .filter((p: any) => p && p.owner === 'ARES' && !p.closed && p.status !== 'closing')
+      .map((p: any) => mapServerRowToAresCard(p, mark))
+  } catch (_) { return [] }
+}
+
 function _positions(): AresPositionCard[] {
+  // [SERVER-ARES P2 2026-06-07] Server engine owns ARES → cards come from the
+  // server-synced TP rows (owner==='ARES'), not the dormant local engine.
+  try { if (useAresStore.getState().serverSide === true) return _serverAresPositions() } catch (_) { }
   try {
     const posApi = w.ARES?.positions
     if (!posApi?.getOpen) return []

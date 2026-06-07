@@ -178,6 +178,13 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
 
   closeArePosition: (posId, live, entry) => {
     const w = window as any
+    // [SERVER-ARES P2 2026-06-07] Server-owned cards carry the serverAT seq as
+    // id — close through the canonical server close path (same as Manual/AT
+    // panels), NOT the dormant local engine.
+    if (getState().serverSide) {
+      api.raw('POST', '/api/at/close', { seq: Number(posId) }).catch(() => {})
+      return
+    }
     try {
       if (live) {
         const engine = w.ARES?.positions?.getOpen?.()?.find((p: any) => String(p.id) === posId)
@@ -195,6 +202,13 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
 
   closeAllArePositions: () => {
     const w = window as any
+    // [SERVER-ARES P2 2026-06-07] Close every server-owned ARES card via the
+    // canonical server path.
+    if (getState().serverSide) {
+      const cards = getState().ui.positions || []
+      cards.forEach((p) => { api.raw('POST', '/api/at/close', { seq: Number(p.id) }).catch(() => {}) })
+      return
+    }
     try {
       if (w.ARES?.positions?.closeAll) {
         w.ARES.positions.closeAll()

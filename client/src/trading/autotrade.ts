@@ -1909,8 +1909,11 @@ export function renderATPositions(): void {
   // Pair this with ManualTradePanel _isManualOwned (autoTrade !== true) to
   // guarantee every position shows in exactly one panel.
   const _globalMode = (useATStore.getState().mode || 'demo')
-  const _atStep1Demo = (TP.demoPositions || []).filter((p: any) => p.autoTrade === true && !p.closed)
-  const _atStep1Live = (TP.livePositions || []).filter((p: any) => p.autoTrade === true && !p.closed && p.status !== 'closing')
+  // [SERVER-ARES P2 2026-06-07] owner==='ARES' rows are autoTrade:true (they
+  // execute through serverAT) but belong to the ARES panel — exclude here so
+  // every position still shows in exactly one panel (AT / Manual / ARES).
+  const _atStep1Demo = (TP.demoPositions || []).filter((p: any) => p.autoTrade === true && !p.closed && p.owner !== 'ARES')
+  const _atStep1Live = (TP.livePositions || []).filter((p: any) => p.autoTrade === true && !p.closed && p.status !== 'closing' && p.owner !== 'ARES')
   const autoPosns = [..._atStep1Demo, ..._atStep1Live]
     .filter((p: any) => (p.mode || p._serverMode || 'demo') === _globalMode)
     .sort((a: any, b: any) => (a.seq || 0) - (b.seq || 0))
