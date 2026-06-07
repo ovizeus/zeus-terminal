@@ -2773,6 +2773,43 @@ function _updateStreakCounters(us, pnl) {
     else if (p < 0) { us.lossStreak = (us.lossStreak || 0) + 1; us.winStreak = 0; }
 }
 
+// [T1-2 2026-06-07] Kill-switch liveBalanceRef resync.
+// _checkKillSwitch is inert on live when liveBalanceRef<=0, and the ref was
+// only ever auto-init on a mode switch (serverAT.js:765). A live user whose
+// ref was never set (new REAL account, direct-live boot) had the daily-loss
+// kill switch SILENTLY DISABLED. These heal it: a throttled resync kicked
+// from _checkKillSwitch's inert branch.
+const LIVE_BALREF_RESYNC_THROTTLE_MS = 30000;
+
+function _shouldResyncLiveBalanceRef(us, now) {
+    if (!us || us.engineMode !== 'live') return false;       // demo uses demoStartBalance
+    if ((us.liveBalanceRef || 0) > 0) return false;          // already have a reference
+    if ((now - (us._liveBalRefResyncTs || 0)) < LIVE_BALREF_RESYNC_THROTTLE_MS) return false; // throttle
+    return true;
+}
+
+function _resyncLiveBalanceRef(userId) {
+    const us = _uState(userId);
+    if (!_shouldResyncLiveBalanceRef(us, Date.now())) return;
+    us._liveBalRefResyncTs = Date.now(); // stamp BEFORE the async fetch (throttle)
+    let creds = null;
+    try { creds = getExchangeCreds(userId); } catch (_) {}
+    if (!creds) {
+        logger.warn('AT_ENGINE', `liveBalanceRef resync skipped uid=${userId} — no creds (kill switch stays inert until balance known)`);
+        return;
+    }
+    exchangeOps.getBalance(userId).then(bal => {
+        const total = parseFloat(bal.walletBalance || 0);
+        if (total > 0 && (us.liveBalanceRef || 0) <= 0) {
+            us.liveBalanceRef = total;
+            _persistState(userId);
+            logger.info('AT_ENGINE', `Kill switch liveBalanceRef RESYNCED uid=${userId}: $${total.toFixed(2)} (was <=0 — daily-loss protection was inert)`);
+        }
+    }).catch(err => {
+        logger.warn('AT_ENGINE', `liveBalanceRef resync failed uid=${userId}: ${err.message}`);
+    });
+}
+
 function _checkKillSwitch(userId) {
     const us = _uState(userId);
     if (us.killActive) return;
@@ -2780,7 +2817,13 @@ function _checkKillSwitch(userId) {
     let balRef;
     if (us.engineMode === 'live') {
         if (us.liveBalanceRef > 0) { balRef = us.liveBalanceRef; }
-        else { return; } // no live balance ref — skip to avoid false trigger
+        else {
+            // [T1-2] No live balance ref → daily-loss kill would be silently
+            // inert. Kick a throttled resync so it self-heals, and skip THIS
+            // evaluation (can't compute a daily-loss % without a reference).
+            try { module.exports._resyncLiveBalanceRef(userId); } catch (_) {}
+            return;
+        }
     } else {
         balRef = us.demoStartBalance > 0 ? us.demoStartBalance : 10000; // [S3] use start-of-day balance, not floating balance
     }
@@ -6157,6 +6200,8 @@ module.exports = {
     // [KS-UI 2026-06-01] Test-only hooks for the kill re-arm characterization test.
     _uStateForTest: _uState,
     _checkKillSwitchForTest: _checkKillSwitch,
+    _shouldResyncLiveBalanceRef, // [T1-2] pure resync predicate
+    _resyncLiveBalanceRef,       // [T1-2] liveBalanceRef self-heal
     _clearKillCooldownForTest: (_uid) => { /* [KILL-REARM 2026-06-07] cooldown removed — kept as no-op for test back-compat */ },
     // [SYNC-2 2026-06-01] Exchange-threading resolver (exported for testing)
     __sync2: { resolveEntryExchange: _resolveEntryExchange },
