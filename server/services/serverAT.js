@@ -2256,7 +2256,11 @@ async function _cancelOrderSafe(symbol, orderId, creds, userId) {
 function _enqueueEmergencyClose(userId, pos, exitType) {
     try {
         const qty = (pos.live && pos.live.executedQty) || pos.qty;
-        db.prepare(
+        // [2026-06-07 B1] db = database MODULE; raw sqlite handle is db.db.
+        // Bare db.prepare threw "not a function" — fired live 09:23:40 seq
+        // 1776859653259 (4/4 close retries failed AND enqueue failed; recon
+        // saved it). Regression net: tests/unit/serverat-db-handle.test.js
+        db.db.prepare(
             `INSERT OR IGNORE INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, ?, ?, ?, ?)`
         ).run(userId, pos.symbol, pos.exchange || 'binance', String(qty), `closefail_${pos.seq}_${exitType}`.slice(0, 64), Date.now());
         return true;
@@ -4983,7 +4987,9 @@ async function _runReconciliation(isStartup) {
             _reconIdleCycles++;
             if (_reconIdleCycles % 2 !== 0) return; // every 2nd idle cycle
             try {
-                const accounts = db.prepare(
+                // [2026-06-07 B2] db.db — see B1 note at _enqueueEmergencyClose.
+                // Bare db.prepare crashed EVERY idle sweep cycle all night.
+                const accounts = db.db.prepare(
                     `SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE is_active = 1`
                 ).all();
                 if (!accounts || accounts.length === 0) return;
@@ -6000,7 +6006,7 @@ module.exports = {
     _checkOrderHealth, // [F1/F3 2026-06-06] test hook — order-health verdicts on partial data
     _shouldRunOrphanSweep, // [F2 2026-06-06] time-based sweep cadence (test hook)
     // [G1/G2 2026-06-06] decision-time affordability gate + failure cooldown (test hooks)
-    _entryGateTestHooks: Object.freeze({ affordable: _liveEntryAffordable, cooldown: _entryFailCooldown }),
+    _entryGateTestHooks: Object.freeze({ affordable: _liveEntryAffordable, cooldown: _entryFailCooldown, enqueueEmergencyClose: _enqueueEmergencyClose }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown

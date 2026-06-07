@@ -682,7 +682,11 @@ async function cancelOrder(uid, params, creds) {
         const algoResp = await sendSignedRequest('DELETE', '/fapi/v1/algoOrder', {
             symbol, algoId: orderId, recvWindow: 5000,
         }, creds);
-        if (algoResp && !algoResp.code) {
+        // [2026-06-07 B4] Real testnet success shape is {code:"200",msg:"success"}
+        // — code "200" is truthy, so the old `!algoResp.code` check misread a
+        // SUCCESSFUL cancel as failure and fell through to DELETE /fapi/v1/order
+        // → -2013 → reported ok:false for a cancel that actually worked.
+        if (algoResp && (!algoResp.code || String(algoResp.code) === '200')) {
             return { ok: true, orderId, status: 'CANCELLED', ts: Date.now(), rawExchange: 'binance' };
         }
     } catch (_) {}
@@ -749,19 +753,28 @@ async function getOpenOrders(uid, params, creds) {
     }
 
     // 2. Algo orders (SL/TP since Dec 2025)
+    // [2026-06-07 B3] The listing path is /fapi/v1/openAlgoOrders —
+    // /fapi/v1/algoOrders rejects GET with -5000 ("Method GET is invalid"),
+    // audited live as ORDER_SWEEPER_ALGO_UNAVAILABLE every sweep since F2
+    // shipped. Field names per the REAL captured response: clientAlgoId /
+    // orderType / triggerPrice / quantity / algoStatus. The old mapping left
+    // clientOrderId:'' so orderSweeper's ZEUS_PREFIX_REGEX never matched and
+    // stale resl_ orphans were invisible AND preserved — one blocked every
+    // BNB entry with -4047 for 9+ hours (and would have opened an unmanaged
+    // $5.2K LONG at trigger). Tests: tests/unit/algo-open-orders.test.js
     try {
-        const respAlgo = await sendSignedRequest('GET', '/fapi/v1/algoOrders', query, creds);
+        const respAlgo = await sendSignedRequest('GET', '/fapi/v1/openAlgoOrders', query, creds);
         if (Array.isArray(respAlgo)) {
             for (const o of respAlgo) {
                 out.push({
                     orderId: String(o.algoId || o.orderId),
-                    clientOrderId: o.clientOrderId || o.algoClientOrderId || '',
+                    clientOrderId: o.clientAlgoId || o.clientOrderId || o.algoClientOrderId || '',
                     symbol: o.symbol,
                     side: o.side,
-                    type: o.algoType || o.type,
-                    price: Number(o.stopPrice || o.price),
-                    origQty: Number(o.origQty || 0),
-                    status: o.status,
+                    type: o.orderType || o.algoType || o.type,
+                    price: Number(o.triggerPrice || o.stopPrice || o.price),
+                    origQty: Number(o.quantity || o.origQty || 0),
+                    status: o.algoStatus || o.status,
                     source: 'algo',
                 });
             }

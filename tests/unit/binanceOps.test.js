@@ -255,10 +255,17 @@ describe('binanceOps.closePosition', () => {
     });
 
     it('cancel SL fail → continues with close anyway (warn only)', async () => {
-        mockSendSignedRequest
-            .mockRejectedValueOnce(new Error('SL cancel fail'))
-            .mockResolvedValueOnce({ status: 'CANCELED', orderId: 'tp1' })
-            .mockResolvedValueOnce({ status: 'FILLED', orderId: 'close2', executedQty: '0.001', avgPrice: '51000' });
+        // [2026-06-07] Path-aware mocks — cancelOrder tries DELETE /fapi/v1/algoOrder
+        // first (ORPHAN-FIX algo-first), so positional mockResolvedValueOnce
+        // sequences no longer match the call order. Make EVERY cancel fail and
+        // only the reduce-only close POST succeed.
+        mockSendSignedRequest.mockImplementation(async (method, path) => {
+            if (method === 'DELETE') throw new Error('SL cancel fail');
+            if (method === 'POST' && path === '/fapi/v1/order') {
+                return { status: 'FILLED', orderId: 'close2', executedQty: '0.001', avgPrice: '51000' };
+            }
+            throw new Error(`unexpected ${method} ${path}`);
+        });
 
         const r = await binanceOps.closePosition(1, _validCloseParams(), _validCreds);
         expect(r.ok).toBe(true);  // close still succeeds
@@ -403,8 +410,33 @@ describe('binanceOps.ping', () => {
 describe('binanceOps.cancelOrder', () => {
     beforeEach(() => mockSendSignedRequest.mockReset());
 
-    it('cancels by orderId → canonical shape', async () => {
-        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'x', status: 'CANCELED' });
+    it('cancels by orderId — algo-first success with REAL testnet shape [B4]', async () => {
+        // Real captured cancel response 2026-06-07: {"algoId":...,"code":"200",
+        // "msg":"success"} — code "200" is truthy; the old `!algoResp.code`
+        // check misread success as failure and fell through to /fapi/v1/order
+        // → -2013 → ok:false for a cancel that worked.
+        mockSendSignedRequest.mockImplementation(async (method, path) => {
+            if (method === 'DELETE' && path === '/fapi/v1/algoOrder') {
+                return { algoId: 1000000097916831, clientAlgoId: 'resl_x', code: '200', msg: 'success' };
+            }
+            throw Object.assign(new Error('Order does not exist.'), { code: -2013 });
+        });
+        const r = await binanceOps.cancelOrder(1, { symbol: 'BTCUSDT', orderId: 'x' }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.status).toBe('CANCELLED');
+        expect(r.rawExchange).toBe('binance');
+    });
+
+    it('cancels by orderId — algo path absent → falls back to regular cancel', async () => {
+        mockSendSignedRequest.mockImplementation(async (method, path) => {
+            if (path === '/fapi/v1/algoOrder') {
+                throw Object.assign(new Error('Method DELETE is invalid'), { code: -5000 });
+            }
+            if (method === 'DELETE' && path === '/fapi/v1/order') {
+                return { orderId: 'x', status: 'CANCELED' };
+            }
+            throw new Error(`unexpected ${method} ${path}`);
+        });
         const r = await binanceOps.cancelOrder(1, { symbol: 'BTCUSDT', orderId: 'x' }, _validCreds);
         expect(r.ok).toBe(true);
         expect(r.status).toBe('CANCELED');
