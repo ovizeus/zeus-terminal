@@ -255,6 +255,30 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       return res.status(500).json({ ok: false, error: e.message });
     }
   }
+  // [SP2-b 2026-06-07] Defense-in-depth: when the server FULLY owns entries
+  // for this user (SERVER_AT_FULL_OWNERSHIP + cutover, testnet-only), reject
+  // client-originated AUTO opens. A fresh client whose serverActive lockout
+  // hasn't synced yet would otherwise double-open (observed live 2026-06-07 —
+  // two AT_ entries from a cold session, blocked only by insufficient margin).
+  // reduceOnly (closes) and manual orders always pass — pure decision tested
+  // in ownership.test.js::shouldRejectClientAutoOrder.
+  try {
+    const { shouldRejectClientAutoOrder } = require('../services/ownership');
+    if (shouldRejectClientAutoOrder({
+      serverOwnsEntries: _getServerAT().serverFullyOwnsEntries(req.user.id),
+      source: req.body.source,
+      reduceOnly: req.body.reduceOnly === true || req.body.reduceOnly === 'true',
+    })) {
+      try {
+        require('../services/database').auditLog(req.user.id, 'ORDER_REJECT_ENTRY_OWNED_BY_SERVER',
+          JSON.stringify({ symbol: req.body.symbol, side: req.body.side, source: req.body.source }), req.ip);
+      } catch (_) {}
+      return res.status(409).json({ ok: false, error: 'ENTRY_OWNED_BY_SERVER', detail: 'Server AT owns entries for this account — client auto-entries are locked out (SP2-b full ownership).' });
+    }
+  } catch (e) {
+    // Guard must never break manual trading — log and continue on internal error.
+    console.error('[API] order/place SP2-b ownership guard error:', e.message);
+  }
   // [Fix #1 2026-05-20 — BUG-T2c Path B regression seal] Server-resolved
   // engineMode check. Client may send mode=undefined or no mode field at all
   // (historical client behavior); validateOrderBody middleware's mode==='live'

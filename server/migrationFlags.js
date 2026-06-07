@@ -102,6 +102,14 @@ const DEFAULTS = {
     // SP2: master toggle to allow serverAT to EXECUTE testnet entries (not just
     // shadow). Gated additionally per-user by data/sp2_cutover_users.json. OFF by default.
     SERVER_AT_TESTNET_EXEC: false,
+    // [SP2-b 2026-06-07] FULL server ownership of entries for cutover users:
+    // server opens even when the client is PRESENT (SP2-a hybrid deferred to a
+    // present client → two engines commanded one account). Also flips the
+    // `serverActive` sync field so the client locks its own AT engine, and arms
+    // the /api/order/place auto-open reject. Testnet-only (creds.mode==='testnet'
+    // enforced in serverAT.serverFullyOwnsEntries). OFF by default; this flag is
+    // the rollback lever back to the hybrid handover.
+    SERVER_AT_FULL_OWNERSHIP: false,
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path (registerManualPosition
     // delegates la _executeLiveEntryCore + hard SafetyAssertionError pre-fill).
@@ -348,6 +356,9 @@ module.exports = {
     get SERVER_AT_TESTNET() { return flags.SERVER_AT_TESTNET; },
     // SP2 testnet-exec master toggle (per-user gated by sp2_cutover_users.json).
     get SERVER_AT_TESTNET_EXEC() { return flags.SERVER_AT_TESTNET_EXEC; },
+    // [SP2-b 2026-06-07] FULL server ownership — server opens with client present;
+    // client AT engine locked via serverActive. Rollback lever to SP2-a hybrid.
+    get SERVER_AT_FULL_OWNERSHIP() { return flags.SERVER_AT_FULL_OWNERSHIP; },
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED — controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path.
     get LIVE_ENTRY_UNIFIED() { return flags.LIVE_ENTRY_UNIFIED; },

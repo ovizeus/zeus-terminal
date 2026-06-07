@@ -1025,17 +1025,21 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         const _heartbeat = require('./heartbeatTracker');
         const { resolveOwnership } = require('./ownership');
         const _creds2 = getExchangeCreds(userId);
+        // [SP2-b 2026-06-07] Full ownership: server opens even with the client
+        // present (operator directive — single engine, client never commands).
+        const _fullOwn = serverFullyOwnsEntries(userId);
         const _own = resolveOwnership({
             clientPresent: _heartbeat.isClientPresent(userId, Date.now()),
             atActive: _isATActiveForMode(us, us.engineMode),
             credsValid: !!_creds2,
             cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
             underTakeControl: false,
+            fullServerOwnership: _fullOwn,
         });
         const _prevOwner = _lastEntryOwner.get(userId) || 'CLIENT';
         if (_own.entryOwner !== _prevOwner) {
             _lastEntryOwner.set(userId, _own.entryOwner);
-            try { require('./database').logHandover(userId, _prevOwner, _own.entryOwner, _own.entryOwner === 'SERVER' ? 'client_absent' : 'client_present'); } catch (_) {}
+            try { require('./database').logHandover(userId, _prevOwner, _own.entryOwner, _own.entryOwner === 'SERVER' ? (_fullOwn ? 'full_ownership' : 'client_absent') : 'client_present'); } catch (_) {}
         }
         if (_own.entryOwner !== 'SERVER') {
             _recordMissedTrade(userId, decision, 'ENTRY_OWNED_BY_CLIENT');
@@ -3386,6 +3390,27 @@ function _computeUserOwnership(ctx) {
     return require('./ownership').resolveOwnership(Object.assign({ underTakeControl: false }, ctx));
 }
 
+// [SP2-b 2026-06-07] TRUE when the server FULLY owns entries for this user —
+// opens even with the client present, the client AT engine is told to lock
+// (serverActive), and /api/order/place rejects client auto-opens. Pure matrix
+// in ownership.computeFullOwnership (tested); this is the I/O glue. Testnet
+// ONLY — creds.mode must be exactly 'testnet'; REAL stays blocked.
+function serverFullyOwnsEntries(userId) {
+    try {
+        const us = _uState(userId);
+        const creds = getExchangeCreds(userId);
+        return require('./ownership').computeFullOwnership({
+            flagFull: MF.SERVER_AT_FULL_OWNERSHIP === true,
+            flagExec: MF.SERVER_AT_TESTNET_EXEC === true,
+            isCutover: require('./sp2Cutover').isCutoverUser(userId),
+            engineMode: us.engineMode,
+            credsMode: creds ? creds.mode : null,
+        });
+    } catch (_) {
+        return false; // fail-closed: uncertain → hybrid behavior (no client lockout)
+    }
+}
+
 /** Full state snapshot for API/WebSocket consumers (per-user) */
 function getFullState(userId) {
     // [M2] Lazy UTC day rollover — ensures kill switch reset propagates to clients
@@ -3403,7 +3428,13 @@ function getFullState(userId) {
     const resolvedEnv = execEnv.env;
     // [LOCKOUT-FIX] Report whether server actually drives AT decisions (brain+AT flags).
     // Client uses this to decide if it should lock out its own AT engine.
-    const serverDrivesAT = !!(MF && MF.SERVER_AT && MF.SERVER_BRAIN);
+    // [SP2-b 2026-06-07] ALSO true under full SP2 ownership: the SP2-a cutover
+    // ran on the NEW flags (SERVER_AT_TESTNET_EXEC + cutover list) but this
+    // line still read only the legacy pair — the client was told
+    // serverActive:false and kept its own engine UNLOCKED, so TWO engines
+    // commanded one account (root cause of the duplicate-entry/adoption races).
+    const _sp2FullOwn = serverFullyOwnsEntries(userId);
+    const serverDrivesAT = !!(MF && MF.SERVER_AT && MF.SERVER_BRAIN) || _sp2FullOwn;
     // [Phase 2 S6-B4] Demo-authority flags — true ONLY if the corresponding
     // demo carve-out flag is on AND this user is in demo mode. Live/testnet/
     // real users always receive false even when the demo flags are true.
@@ -3431,6 +3462,7 @@ function getFullState(userId) {
             atActive: _isATActiveForMode(us, us.engineMode),
             credsValid: !!creds,
             cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
+            fullServerOwnership: _sp2FullOwn, // [SP2-b] UI shows SERVER DRIVING with client present
         }),
         // [Phase 2 S6-B4] Demo-only authority signals — see derivation above.
         serverATDemoEnabled,
@@ -5959,6 +5991,7 @@ module.exports = {
     getDemoBalance,
     getFullState,
     _computeUserOwnership, // [SP2-9] pure ownership resolver for sync payload
+    serverFullyOwnsEntries, // [SP2-b] full-ownership glue — used by trading.js order/place reject
     // Mode control
     setMode,
     getMode,
