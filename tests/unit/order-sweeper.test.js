@@ -15,11 +15,21 @@ const exchangeOpsMock = {
 };
 jest.mock(path.resolve(__dirname, '../../server/services/exchangeOps'), () => exchangeOpsMock);
 
+// [2026-06-07 B5] Mock mirrors the REAL database module shape: `db` is the
+// raw better-sqlite3 handle (NO getZeusOrderIds/auditLog on it); the helpers
+// are top-level module exports. The old mock put them on `db`, matching the
+// sweeper's bug instead of reality — so the dead DB cross-check passed tests
+// while live boot sweeps cancelled LIVE SL orders (2026-06-07 12:10:02,
+// repaired by watchdog 36s later). Mocks must mirror real shapes.
 const dbMock = {
     getZeusOrderIds: jest.fn(() => new Set()),
     auditLog: jest.fn(),
 };
-jest.mock(path.resolve(__dirname, '../../server/services/database'), () => ({ db: dbMock }));
+jest.mock(path.resolve(__dirname, '../../server/services/database'), () => ({
+    db: {}, // raw sqlite handle — none of the helpers live here
+    getZeusOrderIds: (...a) => dbMock.getZeusOrderIds(...a),
+    auditLog: (...a) => dbMock.auditLog(...a),
+}));
 
 const telegramMock = { sendToUser: jest.fn(() => Promise.resolve()) };
 jest.mock(path.resolve(__dirname, '../../server/services/telegram'), () => telegramMock);
@@ -36,7 +46,11 @@ describe('orderSweeper.sweep', () => {
         dbMock.auditLog.mockReset();
         telegramMock.sendToUser.mockReset().mockResolvedValue({ ok: true });
         jest.doMock(path.resolve(__dirname, '../../server/services/exchangeOps'), () => exchangeOpsMock);
-        jest.doMock(path.resolve(__dirname, '../../server/services/database'), () => ({ db: dbMock }));
+        jest.doMock(path.resolve(__dirname, '../../server/services/database'), () => ({
+            db: {}, // raw sqlite handle — helpers are module-level (see B5 note above)
+            getZeusOrderIds: (...a) => dbMock.getZeusOrderIds(...a),
+            auditLog: (...a) => dbMock.auditLog(...a),
+        }));
         jest.doMock(path.resolve(__dirname, '../../server/services/telegram'), () => telegramMock);
         sweeper = require('../../server/services/orderSweeper');
     });
@@ -97,6 +111,21 @@ describe('orderSweeper.sweep', () => {
         expect(result.preserved.length).toBe(2);
         expect(exchangeOpsMock.cancelOrder).toHaveBeenCalledTimes(2);
         expect(telegramMock.sendToUser).toHaveBeenCalledWith(42, expect.stringMatching(/2.*orphan/i));
+    });
+
+    test('[B5] boot sweep (no skipSymbols): LIVE SL recorded in DB is PRESERVED', async () => {
+        // The 2026-06-07 12:10:02 incident: recoveryBoot sweeps WITHOUT
+        // skipSymbols; the DB cross-check was dead (getZeusOrderIds read off
+        // the raw handle) → empty set → both LIVE SL algo orders cancelled →
+        // 36s of unprotected live positions until the watchdog repaired them.
+        dbMock.getZeusOrderIds.mockReturnValue(new Set(['1000000098439950']));
+        exchangeOpsMock.getOpenOrders.mockResolvedValue([
+            { orderId: '1000000098439950', clientOrderId: 'sl_SAT_1776859653263_11add604_0', symbol: 'ETHUSDT' },
+        ]);
+        const result = await sweeper.sweep(1);
+        expect(exchangeOpsMock.cancelOrder).not.toHaveBeenCalled();
+        expect(result.cancelled).toEqual([]);
+        expect(result.preserved.length).toBe(1);
     });
 
     test('cancel failure logged but does not throw or stop sweep', async () => {

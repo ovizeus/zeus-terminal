@@ -25,6 +25,29 @@ describe('B1/B2 — serverAT uses the raw sqlite handle (db.db), never db.prepar
         const bare = src.match(/(?<!\.)\bdb\.prepare\(/g) || [];
         expect(bare).toHaveLength(0);
     });
+
+    test('[B6] every templated client order id stays under the 36-char algo limit', () => {
+        // SAT_RESLOT_<13-digit seq>_<13-digit ms> was 38 chars → every
+        // startup-recon SL re-placement failed live ("Client order id length
+        // should be less than 36 chars", 2026-06-07 12:10:09) → LIVE_NO_SL.
+        const src = fs.readFileSync(
+            path.join(__dirname, '../../server/services/serverAT.js'), 'utf8');
+        const SEQ = '1776859653263'; // realistic 13-digit liveSeq
+        const templates = src.match(/`[A-Z_]+\$\{[^`]*\}`/g) || [];
+        const tooLong = [];
+        for (const t of templates) {
+            // substitute every ${...} with a realistic worst-case value
+            const rendered = t.slice(1, -1).replace(/\$\{[^}]*\}/g, (m) =>
+                /Date\.now\(\)\.toString\(36\)/.test(m) ? Date.now().toString(36)
+                : /Date\.now\(\)/.test(m) ? String(Date.now())
+                : /addOnCount|attempt|tpAttempt/.test(m) ? '3' // small counters
+                : SEQ);
+            if (/^(SAT_|PB_|resl_|sl_|tp_|close_)/.test(rendered) && rendered.length > 36) {
+                tooLong.push(`${t} → ${rendered} (${rendered.length})`);
+            }
+        }
+        expect(tooLong).toEqual([]);
+    });
 });
 
 describe('B1 — _enqueueEmergencyClose persists the retry row', () => {

@@ -4588,7 +4588,9 @@ async function addOnPosition(userId, seq, options = {}) {
             const rounded = roundOrderParams(pos.symbol, addonQty, null);
             const addonQtyStr = String(rounded.quantity || addonQty);
             const liveSeq = pos.live.liveSeq || 0;
-            const addonClientId = `SAT_ADDON_${liveSeq}_${pos.addOnCount + 1}_${Date.now()}`;
+            // [2026-06-07 B7] 36-char clientOrderId limit: raw ms made this 39
+            // chars → every add-on entry would be rejected. base36 ms = 34.
+            const addonClientId = `SAT_ADDON_${liveSeq}_${pos.addOnCount + 1}_${Date.now().toString(36)}`;
 
             let addonOrder;
             try {
@@ -5513,7 +5515,12 @@ async function _checkOrderHealth(pos, creds, label) {
                 symbol: pos.symbol, side: closeSide, type: 'STOP_MARKET',
                 quantity: String(rounded.quantity || pos.live.executedQty),
                 stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : currentSL),
-                reduceOnly: true, newClientOrderId: `SAT_RESLOT_${pos.live.liveSeq}_${Date.now()}`,
+                // [2026-06-07 B6] Algo clientAlgoId limit is 36 chars.
+                // `SAT_RESLOT_<13-digit seq>_<13-digit ms>` = 38 → EVERY
+                // startup-recon SL re-placement failed ("Client order id
+                // length should be less than 36 chars", live 12:10:09).
+                // base36 ms (8 chars) keeps it ≤ 30.
+                reduceOnly: true, newClientOrderId: `SAT_RSL_${pos.live.liveSeq}_${Date.now().toString(36)}`,
             }, creds);
             pos.live.slOrderId = newSl.orderId;
             pos.live.status = 'LIVE';

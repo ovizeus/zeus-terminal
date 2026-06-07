@@ -42,7 +42,13 @@ async function sweep(userId, exchange, opts) {
     const _skipSymbols = (opts && opts.skipSymbols instanceof Set) ? opts.skipSymbols : null;
 
     const exchangeOps = require('./exchangeOps');
-    const { db } = require('./database');
+    // [2026-06-07 B5] getZeusOrderIds/auditLog are MODULE-level exports of
+    // database.js — `db` is the raw better-sqlite3 handle and has neither.
+    // The old `db.getZeusOrderIds` was always undefined → dbOrderIds always
+    // empty → the boot sweep (no skipSymbols) cancelled LIVE SL orders the
+    // moment B3 made algo orders visible (2026-06-07 12:10:02, watchdog
+    // repaired 36s later). db.auditLog was equally dead → zero audit trail.
+    const database = require('./database');
 
     // [P2c.4] Sweep the exchange being reconciled. recoveryBoot now iterates each
     // connected exchange (P2c.3) and passes it here so orphan SL/TP are cancelled on
@@ -80,8 +86,8 @@ async function sweep(userId, exchange, opts) {
     // Build Set of orderIds the DB knows about (slOrderId/tpOrderId in at_positions data JSON)
     let dbOrderIds;
     try {
-        dbOrderIds = (typeof db.getZeusOrderIds === 'function')
-            ? db.getZeusOrderIds(userId)
+        dbOrderIds = (typeof database.getZeusOrderIds === 'function')
+            ? database.getZeusOrderIds(userId)
             : new Set();
     } catch (e) {
         // Failure to read DB → assume NOTHING is known. Safer to PRESERVE all
@@ -120,7 +126,7 @@ async function sweep(userId, exchange, opts) {
             });
             result.cancelled.push(order);
             try {
-                db.auditLog(userId, 'ORDER_SWEEPER_CANCELLED', {
+                database.auditLog(userId, 'ORDER_SWEEPER_CANCELLED', {
                     orderId: order.orderId,
                     symbol: order.symbol,
                     clientOrderId: order.clientOrderId,
@@ -129,7 +135,7 @@ async function sweep(userId, exchange, opts) {
         } catch (err) {
             result.errors.push({ orderId: order.orderId, error: err.message });
             try {
-                db.auditLog(userId, 'ORDER_SWEEPER_CANCEL_FAILED', {
+                database.auditLog(userId, 'ORDER_SWEEPER_CANCEL_FAILED', {
                     orderId: order.orderId,
                     symbol: order.symbol,
                     clientOrderId: order.clientOrderId,
