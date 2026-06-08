@@ -1848,6 +1848,7 @@ async function _executeLiveEntry(entry, stc) {
             leverage: entry.lev,
             decisionKey: clientOrderId,  // SAT_<seq>_<8hex> — compatible with exchangeOps regex
             source: 'serverAT',
+            mode: entry.mode,            // [PHANTOM-SHORT FIX a] ENGINE mode ('live') for the dual-write row — NOT creds.mode ('testnet')
         });
     } catch (placeErr) {
         // Unexpected throw (not ok:false) — treat as ENTRY_FAILED

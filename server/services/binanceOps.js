@@ -142,6 +142,21 @@ async function _emergencyClose(uid, params, creds, seq) {
     return { ok: false, attempts: EMERGENCY_RETRIES };
 }
 
+// [PHANTOM-SHORT FIX 2026-06-08 — part a] Pure builder for the transitional
+// dual-write PENDING row. mode = the ENGINE mode passed by the caller
+// (params.mode, e.g. 'live') — NOT creds.mode ('testnet'/'real'), which would
+// mistag a live-engine position and exclude it from recon / confuse the
+// directional guard. creds.mode remains a backward-compat fallback.
+function _buildPendingPositionData(params, creds) {
+    return {
+        symbol: params.symbol, side: params.side, qty: params.qty,
+        entryType: params.entryType, sl: params.sl && params.sl.price,
+        tp: params.tp && params.tp.price, leverage: params.leverage,
+        decisionKey: params.decisionKey, source: params.source,
+        mode: params.mode || (creds && creds.mode),
+    };
+}
+
 async function placeEntry(uid, params, creds) {
     const lockKey = `${uid}|${params.symbol}`;
     const lockAcquired = await orderLock.acquire(lockKey, LOCK_TIMEOUT_MS);
@@ -153,12 +168,7 @@ async function placeEntry(uid, params, creds) {
     }
 
     // Create PENDING row
-    const positionData = {
-        symbol: params.symbol, side: params.side, qty: params.qty,
-        entryType: params.entryType, sl: params.sl && params.sl.price,
-        tp: params.tp && params.tp.price, leverage: params.leverage,
-        decisionKey: params.decisionKey, source: params.source, mode: creds.mode,
-    };
+    const positionData = _buildPendingPositionData(params, creds);
     const insertResult = db.prepare(
         `INSERT INTO at_positions (data, status, user_id, exchange, created_at, updated_at) VALUES (?, 'PENDING', ?, 'binance', datetime('now'), datetime('now'))`
     ).run(JSON.stringify(positionData), uid);
@@ -877,6 +887,7 @@ async function getOrder(uid, params, creds) {
 
 module.exports = {
     placeEntry,
+    _buildPendingPositionData, // [PHANTOM-SHORT FIX a] pure PENDING-row builder (mode-tag = engine mode)
     closePosition,
     ensureSymbolReady,
     getPositions,
