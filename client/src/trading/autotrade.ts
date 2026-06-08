@@ -785,6 +785,13 @@ export function runAutoTradeCheck(): void {
     }
 
     // ── KILL SWITCH — realized + unrealized loss ──
+    // [KILL-SERVER-OWNED 2026-06-08] SECOND client trigger path (besides
+    // checkKillThreshold). When the server owns AT (SP2-b cutover) the kill is
+    // server-authoritative — skip this inline recompute entirely. This path also
+    // used getATDailyPnL() WITHOUT the pnlAtReset baseline, so it ignored resets
+    // and re-fired the overlay right after every reset (operator: "resetez si
+    // reapare iar", RESET hammered 12×). Gating both paths makes reset stick.
+    const _killServerOwned = serverOwnsAT()
     const killPct = parseFloat(el('atKillPct')?.value || '') || 5
     // [FIX BUG2] No phantom $10k fallback — skip kill check if balance unknown (consistent with checkKillThreshold)
     const bal = +(getATMode() === 'demo' ? TP.demoBalance : TP.liveBalance) || 0
@@ -807,7 +814,7 @@ export function runAutoTradeCheck(): void {
     const _closedToday = +(getATClosedToday()) || 0
     // Guard: need at least one closed trade OR significant unrealized loss
     if (_closedToday === 0 && _unrealPnL2 >= 0) { /* skip */ }
-    else if (bal > 0 && Number.isFinite(_totalDayPnL2) && _totalDayPnL2 < 0 && Math.abs(_totalDayPnL2) / bal * 100 >= killPct) {
+    else if (!_killServerOwned && bal > 0 && Number.isFinite(_totalDayPnL2) && _totalDayPnL2 < 0 && Math.abs(_totalDayPnL2) / bal * 100 >= killPct) {
       triggerKillSwitch('daily_loss', _totalDayPnL2, _closedToday, killPct, bal)
       return
     }
