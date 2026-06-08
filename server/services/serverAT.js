@@ -996,6 +996,22 @@ const _entryFailCooldown = {
     _clear() { this._map.clear(); },
 };
 
+// [PHANTOM-SHORT FIX 2026-06-08] Pure directional-conflict predicate, shared by
+// the brain-entry guard (processBrainDecision) AND the userDataStream fast-path
+// external-adoption gate. Returns the first position belonging to `userId` whose
+// side is OPPOSITE `side` within the SAME mode (demo & live are independent
+// sandboxes per Wave 8). Mode defaults to 'demo' on BOTH sides for legacy rows.
+// ANY symbol counts (no mixed LONG+SHORT book within a mode — operator-mandated
+// 2026-05-19). Keeping this pure makes both guards unit-testable in isolation.
+function _findSameModeOpposite(positions, { userId, side, mode } = {}) {
+    if (!Array.isArray(positions)) return null;
+    const oppositeSide = side === 'LONG' ? 'SHORT' : 'LONG';
+    const m = mode || 'demo';
+    return positions.find(p =>
+        p && p.userId === userId && p.side === oppositeSide && (p.mode || 'demo') === m
+    ) || null;
+}
+
 function processBrainDecision(decision, stc, userId, userIntent) {
     if (!decision || !decision.fusion || !stc) return null;
     // [MULTI-USER] Hard guard — reject decisions without userId
@@ -1156,10 +1172,7 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     // sandboxes). Voice thought emitted in both block + cross-mode-info cases.
     const oppositeSide = side === 'LONG' ? 'SHORT' : 'LONG';
     const decMode = us.engineMode || 'demo';
-    const sameModeOpposite = _positions.find(p =>
-        p.userId === userId && p.side === oppositeSide &&
-        (p.mode || 'demo') === decMode
-    );
+    const sameModeOpposite = _findSameModeOpposite(_positions, { userId, side, mode: decMode });
     if (sameModeOpposite) {
         const sameSymbol = sameModeOpposite.symbol === decision.symbol;
         const reasonTag = sameSymbol ? 'OPPOSITE_SIDE_SAME_MODE' : 'MIXED_DIRECTION_SAME_MODE';
@@ -5896,6 +5909,20 @@ function onUserDataEvent(userId, event) {
                         // mid-close partials, NOT a new external position. The 60s
                         // recon (exchange-truth path) adopts anything genuinely new.
                         logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} — skipped (close-race window, internal close <30s ago)`);
+                    } else if (_findSameModeOpposite(_positions, { userId, side, mode: _uState(userId).engineMode })) {
+                        // [PHANTOM-SHORT FIX 2026-06-08] The detected "external" side is
+                        // OPPOSITE to a position serverAT already holds in this mode. On a
+                        // ONE-WAY account (the only kind serverAT trades) the exchange CANNOT
+                        // hold both sides of the book — so this ACCOUNT_UPDATE is a misread of
+                        // a BUY/SELL *reduce*-fill (amt still ≠0 after a partial net), NOT a
+                        // genuine new position. Adopting it here injected a phantom opposite
+                        // row that lived ~80min in the book (operator-observed "short + long").
+                        // Do NOT fast-adopt: defer to the 60s exchange-truth recon, which only
+                        // adopts positions GENUINELY present on the exchange (a real opposite on
+                        // a hedge account is picked up there within a minute, with its own SL).
+                        const _opp = _findSameModeOpposite(_positions, { userId, side, mode: _uState(userId).engineMode });
+                        logger.warn('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} ${side} amt=${p.positionAmt} — DEFERRED (would create same-mode opposite book vs ${_opp.side} ${_opp.symbol}/seq=${_opp.seq}; one-way misread → exchange-truth recon will adopt only if genuinely held)`);
+                        try { audit.record('SAT_EXTERNAL_ADOPT_DEFERRED', { userId, symbol: p.symbol, side, amt: p.positionAmt, conflictSide: _opp.side, conflictSymbol: _opp.symbol, conflictSeq: _opp.seq }, 'SERVER_AT'); } catch (_) {}
                     } else {
                         logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} ${side} amt=${p.positionAmt} — opened externally`);
                         // [SP2] POSITION_OPENED fires at open time → entryPrice ≈ current
@@ -6299,6 +6326,7 @@ module.exports = {
     _checkDailyResetForTest: _checkDailyReset, // [T-MAXTRADES] test hook for rollover
     _shouldResyncLiveBalanceRef, // [T1-2] pure resync predicate
     _resyncLiveBalanceRef,       // [T1-2] liveBalanceRef self-heal
+    _findSameModeOpposite,       // [PHANTOM-SHORT FIX] pure directional-conflict predicate (shared guard)
     shouldBlockMaxTradesDay,     // [T-MAXTRADES] pure daily-cap gate
     computeMaxDayProtectState,   // [T-MAXTRADES] pure display state
     setMaxDayProtect,            // [T-MAXTRADES] operator toggle
