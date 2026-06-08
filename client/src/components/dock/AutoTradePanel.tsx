@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useATStore, useSettingsStore, useUiStore } from '../../stores'
 import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
@@ -85,26 +85,49 @@ export function AutoTradePanel() {
   // the fields stay at their defaults after F5.
   const storeSettings = useSettingsStore((s) => s.settings)
   const storeLoaded = useSettingsStore((s) => s.loaded)
+  // [SETTINGS-PERSIST FIX 2026-06-08] Hydrate each panel input from the settings
+  // store ONLY when the SERVER value genuinely CHANGED since the last hydration —
+  // NOT on every storeSettings reference change. Pre-fix this ran on every store
+  // update (routine WS/settings sync produces a fresh object even when values are
+  // unchanged) and unconditionally clobbered the operator's in-progress edits:
+  // change leverage → a sync re-ran this effect → setAtLev reverted to the saved
+  // value → "I change it and it reverts, doesn't persist". The lastHyd ref makes
+  // a no-op sync leave edits intact, while a real server change still reflects.
+  const _lastHyd = useRef<Record<string, unknown>>({})
   useEffect(() => {
     if (!storeLoaded) return
-    const s = storeSettings
-    if (s.confMin != null)      setConfMin(String(s.confMin))
-    if (s.sigMin != null)       setSigMin(String(s.sigMin))
-    if (s.size != null)         setAtSize(String(s.size))
-    if (s.riskPct != null)      setAtRiskPct(String(s.riskPct))
-    if (s.maxDay != null)       setAtMaxDay(String(s.maxDay))
-    if (s.maxPos != null)       setAtMaxPos(String(s.maxPos))
-    if (s.sl != null)           setAtSL(String(s.sl))
-    if (s.rr != null)           setAtRR(String(s.rr))
-    if (s.killPct != null)      setAtKillPct(String(s.killPct))
-    if (s.lossStreak != null)   setAtLossStreak(String(s.lossStreak))
-    if (s.maxAddon != null)     setAtMaxAddon(String(s.maxAddon))
-    if (s.lev != null)          setAtLev(String(s.lev))
-    if (s.adaptEnabled != null) setAdaptEnabled(!!s.adaptEnabled)
-    if (s.adaptLive != null)    setAdaptLive(!!s.adaptLive)
-    if (s.smartExitEnabled != null) setSmartExit(!!s.smartExitEnabled)
-    if (s.mscanEnabled != null) setMscanEnabled(!!s.mscanEnabled)
-    if (Array.isArray(s.mscanSyms) && s.mscanSyms.length > 0) setMscanSyms(s.mscanSyms)
+    const s = storeSettings as Record<string, unknown>
+    const p = _lastHyd.current
+    const H = (val: unknown, key: string, setter: (v: string) => void) => {
+      if (val == null || val === p[key]) return
+      p[key] = val
+      setter(String(val))
+    }
+    const HB = (val: unknown, key: string, setter: (v: boolean) => void) => {
+      if (val == null || val === p[key]) return
+      p[key] = val
+      setter(!!val)
+    }
+    H(s.confMin, 'confMin', setConfMin)
+    H(s.sigMin, 'sigMin', setSigMin)
+    H(s.size, 'size', setAtSize)
+    H(s.riskPct, 'riskPct', setAtRiskPct)
+    H(s.maxDay, 'maxDay', setAtMaxDay)
+    H(s.maxPos, 'maxPos', setAtMaxPos)
+    H(s.sl, 'sl', setAtSL)
+    H(s.rr, 'rr', setAtRR)
+    H(s.killPct, 'killPct', setAtKillPct)
+    H(s.lossStreak, 'lossStreak', setAtLossStreak)
+    H(s.maxAddon, 'maxAddon', setAtMaxAddon)
+    H(s.lev, 'lev', setAtLev)
+    HB(s.adaptEnabled, 'adaptEnabled', setAdaptEnabled)
+    HB(s.adaptLive, 'adaptLive', setAdaptLive)
+    HB(s.smartExitEnabled, 'smartExitEnabled', setSmartExit)
+    HB(s.mscanEnabled, 'mscanEnabled', setMscanEnabled)
+    if (Array.isArray(s.mscanSyms) && s.mscanSyms.length > 0) {
+      const j = JSON.stringify(s.mscanSyms)
+      if (j !== p.mscanSyms) { p.mscanSyms = j; setMscanSyms(s.mscanSyms as string[]) }
+    }
   }, [storeLoaded, storeSettings])
 
   // [Phase 8D1] No direct LS write here. mscan selection is committed via
@@ -133,6 +156,29 @@ export function AutoTradePanel() {
       sigMin: _n(sigMin),
     })
   }, [atLev, atSize, atSL, atRR, atMaxPos, sigMin])
+
+  // [SETTINGS-PERSIST FIX 2026-06-08] Commit a leverage change so it actually
+  // STICKS. The bare setAtLev only updated React state → atStore.config (TC
+  // Proxy) via the patch effect; but settingsStore was untouched, so the next
+  // loadFromServer/_projectAll re-projected the SAVED lev onto atStore.config
+  // and the button "reverted". And the brain's stc only updated on the 60s TC
+  // push — too late, already reverted. Now a click: (1) updates atStore.config
+  // (brain source), (2) patches settingsStore (display source — stops the
+  // _projectAll revert), (3) pushes to the brain stc NOW via the direct
+  // /api/tc/sync path (reliable — no optimistic-concurrency), (4) schedules the
+  // userSettings save so it persists across reload. Same shape used for the
+  // other AT controls' Save, but leverage commits live (it's a toggle, like
+  // kill-%). Operator: "at nu ma lasa sa schimb leverage, il schimb si revine".
+  function commitLev(v: string) {
+    setAtLev(v)
+    const n = Number(v)
+    if (!Number.isFinite(n) || n <= 0) return
+    const w = window as unknown as { pushTCtoServer?: () => void; _usScheduleSave?: () => void }
+    try { useATStore.getState().patchConfig({ lev: n }) } catch (_) { /* defensive */ }
+    try { useSettingsStore.getState().patch({ lev: n }) } catch (_) { /* defensive */ }
+    try { if (typeof w.pushTCtoServer === 'function') w.pushTCtoServer() } catch (_) { /* defensive */ }
+    try { if (typeof w._usScheduleSave === 'function') w._usScheduleSave() } catch (_) { /* defensive */ }
+  }
 
   // Close the sym picker on outside click (React owns state now — legacy
   // document-level listener in klines.ts only mutates DOM style and would
@@ -351,7 +397,7 @@ export function AutoTradePanel() {
                 <button
                   key={v}
                   type="button"
-                  onClick={() => setAtLev(v)}
+                  onClick={() => commitLev(v)}
                   style={{
                     padding: '3px 7px',
                     background: atLev === v ? '#f0c04022' : '#0a0a14',
