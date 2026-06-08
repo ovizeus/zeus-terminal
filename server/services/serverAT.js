@@ -471,6 +471,16 @@ function _persistPosition(pos) {
     _broadcastPositions(pos.userId);
 }
 
+// [P1 dual-write dedup 2026-06-08] Returns the linked binanceOps ("Option B")
+// at_positions row seq that should be cleaned when this position closes — iff it
+// exists and is DISTINCT from the canonical seq. null otherwise. Pure → tested.
+function _linkedOpsSeqToCleanup(pos) {
+    const opsSeq = pos && pos.live && pos.live.opsSeq;
+    if (typeof opsSeq !== 'number' || !Number.isFinite(opsSeq) || opsSeq <= 0) return null;
+    if (opsSeq === pos.seq) return null;
+    return opsSeq;
+}
+
 function _persistClose(pos) {
     try {
         db.atArchiveClosed(pos);
@@ -478,6 +488,28 @@ function _persistClose(pos) {
         logger.error('AT_DB', 'Archive closed failed: ' + e.message);
         _alertPersistFailure(pos.userId, 'Archive closed [' + pos.seq + ']', e.message);
         return false;
+    }
+    // [P1 dual-write dedup 2026-06-08] Remove the linked binanceOps transitional
+    // row (pos.live.opsSeq). On a NORMAL close binanceOps.closePosition already
+    // DELETEd it (this is then a 0-row no-op); but close paths that skip
+    // binanceOps (EXTERNAL_CLOSE / RECON_PHANTOM / RECON_EXCHANGE_CLOSED) left it
+    // orphaned. SQL guard `price IS NULL` ensures we ONLY ever delete a dual-write
+    // STUB (a real serverAT position always carries price) — defense-in-depth so a
+    // seq mishap can never drop a live position. user_id-scoped. Best-effort:
+    // never let dedup failure break the close flow.
+    try {
+        const _opsSeq = _linkedOpsSeqToCleanup(pos);
+        if (_opsSeq != null && pos.userId) {
+            const _r = db.db.prepare(
+                "DELETE FROM at_positions WHERE seq = ? AND user_id = ? AND json_extract(data, '$.price') IS NULL"
+            ).run(_opsSeq, pos.userId);
+            if (_r && _r.changes > 0) {
+                logger.info('AT_DB', `[${pos.seq}] dual-write dedup: removed linked binanceOps stub row opsSeq=${_opsSeq} (exit=${pos.closeReason || pos.status})`);
+                try { audit.record('SAT_DUALWRITE_STUB_CLEANED', { userId: pos.userId, seq: pos.seq, opsSeq: _opsSeq, exit: pos.closeReason || pos.status }, 'SERVER_AT'); } catch (_) {}
+            }
+        }
+    } catch (_e) {
+        logger.warn('AT_DB', `[${pos.seq}] dual-write dedup cleanup failed (non-fatal): ${_e.message}`);
     }
     // [MIGRATION-F5 commit 3] Post-commit broadcast. No-op when flag OFF.
     _broadcastPositions(pos.userId);
@@ -6340,6 +6372,7 @@ module.exports = {
     _resyncLiveBalanceRef,       // [T1-2] liveBalanceRef self-heal
     _findSameModeOpposite,       // [PHANTOM-SHORT FIX] pure directional-conflict predicate (shared guard)
     _isReconcilablePosition,     // [PHANTOM-SHORT FIX b] pure recon-eligibility predicate (mode-tag robust)
+    _linkedOpsSeqToCleanup,      // [P1 dual-write dedup] pure linked-ops-row decision
     shouldBlockMaxTradesDay,     // [T-MAXTRADES] pure daily-cap gate
     computeMaxDayProtectState,   // [T-MAXTRADES] pure display state
     setMaxDayProtect,            // [T-MAXTRADES] operator toggle
