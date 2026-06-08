@@ -4617,6 +4617,11 @@ function _syncExternalPosition(data) {
     _positions.push(entry);
     _trackLiveOpen(entry); // [P5b]
     try { _persistState(userId); } catch (_) {}
+    // [ADOPT-PERSIST FIX 2026-06-08] Persist the adopted orphan to at_positions
+    // so it survives a restart (mirrors registerManualPosition / brain entry).
+    // Without this the adopted row was in-memory only → lost on reload → the
+    // position re-orphaned (recon re-adopted ~2min later, churning every restart).
+    try { _persistPosition(entry); } catch (e) { logger.warn('AT_RECON', `External adopt persist failed seq=${seq}: ${e.message}`); }
     logger.warn('AT_RECON', `External position synced uid=${userId} sym=${data.symbol} side=${data.side} qty=${data.qty} — no exchange SL placed here (pre-existing pe exchange, source=external); protective server SL @ ${_adoptedSL}`);
     return {
         ok: true,
