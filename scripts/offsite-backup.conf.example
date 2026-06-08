@@ -1,0 +1,16 @@
+# [T1-4 2026-06-08] Offsite backup config. Copy to offsite-backup.conf and fill in.
+# The .conf (no .example) is gitignored — it points at your remote.
+#
+# 1) Set up ONE rclone remote for your cloud, e.g. Backblaze B2 (cheapest):
+#      rclone config
+#        n) new remote  → name: zeusb2  → storage: b2
+#        account: <B2 keyID>   key: <B2 applicationKey>
+#    or AWS S3 / Hetzner Storage Box (sftp) / any rclone backend.
+#
+# 2) Create a bucket/folder, then set REMOTE_PATH to "<remote>:<bucket>/<path>".
+#
+# 3) chmod 600 offsite-backup.conf  (it only references the remote, not secrets,
+#    but keep it tight). rclone's own creds live in ~/.config/rclone/rclone.conf.
+
+REMOTE_PATH=""        # e.g. "zeusb2:zeus-backups/db"  — EMPTY = backup skipped
+KEEP_N=14             # offsite copies to retain (daily → ~2 weeks)
