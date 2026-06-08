@@ -59,8 +59,14 @@ describe('D — orderSweeper: AT_ prefix + skipSymbols (held-position guard)', (
             getOpenOrders: async () => openOrders,
             cancelOrder: async (uid, p) => { cancelled.push(p.orderId); return { ok: true }; },
         }));
+        // [2026-06-08] Mock the MODULE-LEVEL exports orderSweeper actually calls
+        // (database.getZeusOrderIds / database.auditLog). The old mock provided
+        // `db.getZeusOrderIds`, but the 2026-06-07 B5 fix moved the call to the
+        // module-level export — so the stale mock left database.getZeusOrderIds
+        // undefined → dbOrderIds empty → DB-tracked order '111' was wrongly swept.
         jest.doMock('../../server/services/database', () => ({
-            db: { getZeusOrderIds: () => new Set(['111']) },
+            getZeusOrderIds: () => new Set(['111']),
+            auditLog: () => {},
         }));
         return require('../../server/services/orderSweeper');
     }
