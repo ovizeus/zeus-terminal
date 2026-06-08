@@ -14,9 +14,16 @@ const serverATMock = {
     setGlobalHalt: jest.fn(),
 };
 const exchangeOpsMock = { getPositions: jest.fn(() => Promise.resolve([])) };
+// [P2c.2 2026-06-08] driftChecker enumerates active users via the RAW handle
+// query (database.db.prepare 'SELECT DISTINCT user_id FROM exchange_accounts
+// WHERE is_active=1') and audits via the MODULE-level database.auditLog. The old
+// mock provided db.listActiveExchangeUsers (nonexistent in prod) + db.auditLog
+// (raw handle has none) → driftChecker was inert + lost its audit. Mock the real
+// interface so the test exercises production behaviour.
+let _activeUsers = [];
+const auditLogMock = jest.fn();
 const dbMock = {
-    listActiveExchangeUsers: jest.fn(() => []),
-    auditLog: jest.fn(),
+    prepare: jest.fn(() => ({ all: () => _activeUsers })),
 };
 const telegramMock = { sendToUser: jest.fn(() => Promise.resolve()) };
 // [P2c.2] driftChecker now resolves the active exchange to also check it for
@@ -34,13 +41,14 @@ describe('driftChecker', () => {
         serverATMock.getOpenPositions.mockReset().mockReturnValue([]);
         serverATMock.setGlobalHalt.mockReset();
         exchangeOpsMock.getPositions.mockReset().mockResolvedValue([]);
-        dbMock.listActiveExchangeUsers.mockReset().mockReturnValue([]);
-        dbMock.auditLog.mockReset();
+        _activeUsers = [];
+        dbMock.prepare.mockClear();
+        auditLogMock.mockReset();
         telegramMock.sendToUser.mockReset().mockResolvedValue({ ok: true });
         credentialStoreMock.getExchangeCreds.mockReset().mockReturnValue({ exchange: 'binance', mode: 'testnet' });
         jest.doMock(path.resolve(__dirname, '../../server/services/serverAT'), () => serverATMock);
         jest.doMock(path.resolve(__dirname, '../../server/services/exchangeOps'), () => exchangeOpsMock);
-        jest.doMock(path.resolve(__dirname, '../../server/services/database'), () => ({ db: dbMock }));
+        jest.doMock(path.resolve(__dirname, '../../server/services/database'), () => ({ db: dbMock, auditLog: auditLogMock }));
         jest.doMock(path.resolve(__dirname, '../../server/services/telegram'), () => telegramMock);
         jest.doMock(path.resolve(__dirname, '../../server/services/credentialStore'), () => credentialStoreMock);
         dc = require('../../server/services/driftChecker');
@@ -103,7 +111,7 @@ describe('driftChecker', () => {
         await dc.checkUser(42);  // 2nd consecutive
         expect(serverATMock.setGlobalHalt).toHaveBeenCalledWith(true, 42, expect.stringMatching(/DRIFT_DETECTED/));
         expect(telegramMock.sendToUser).toHaveBeenCalledWith(42, expect.stringMatching(/DRIFT/i));
-        expect(dbMock.auditLog).toHaveBeenCalledWith(42, 'DRIFT_DETECTED_HALT', expect.any(Object), null);
+        expect(auditLogMock).toHaveBeenCalledWith(42, 'DRIFT_DETECTED_HALT', expect.any(Object), null);
     });
 
     test('clean check resets consecutive counter', async () => {
@@ -143,23 +151,24 @@ describe('driftChecker', () => {
         expect(serverATMock.setGlobalHalt).toHaveBeenCalledTimes(1);
     });
 
-    test('checkAllUsers iterates listActiveExchangeUsers', async () => {
-        dbMock.listActiveExchangeUsers.mockReturnValue([{ user_id: 42 }, { user_id: 99 }]);
+    test('checkAllUsers iterates active exchange users (exchange_accounts WHERE is_active=1)', async () => {
+        _activeUsers = [{ user_id: 42 }, { user_id: 99 }];
         await dc.checkAllUsers();
+        expect(dbMock.prepare).toHaveBeenCalledWith(expect.stringMatching(/exchange_accounts.*is_active\s*=\s*1/is));
         expect(serverATMock.getOpenPositions).toHaveBeenCalledWith(42);
         expect(serverATMock.getOpenPositions).toHaveBeenCalledWith(99);
     });
 
     test('start() schedules periodic check, stop() clears it', () => {
         jest.useFakeTimers();
-        dbMock.listActiveExchangeUsers.mockReturnValue([]);
+        _activeUsers = [];
         dc.start({ intervalMs: 10000 });
         jest.advanceTimersByTime(10001);
-        expect(dbMock.listActiveExchangeUsers).toHaveBeenCalled();
-        const callsBefore = dbMock.listActiveExchangeUsers.mock.calls.length;
+        expect(dbMock.prepare).toHaveBeenCalled();
+        const callsBefore = dbMock.prepare.mock.calls.length;
         dc.stop();
         jest.advanceTimersByTime(20000);
-        expect(dbMock.listActiveExchangeUsers.mock.calls.length).toBe(callsBefore);
+        expect(dbMock.prepare.mock.calls.length).toBe(callsBefore);
         jest.useRealTimers();
     });
 

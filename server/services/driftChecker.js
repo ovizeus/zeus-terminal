@@ -154,8 +154,12 @@ function _fireHaltAlert(userId, payload) {
     } catch (_) { /* best-effort */ }
 
     try {
-        const { db } = require('./database');
-        db.auditLog(userId, 'DRIFT_DETECTED_HALT', {
+        // [P2c.2 2026-06-08] auditLog is a MODULE-level export of database.js —
+        // the old `const { db } = require('./database'); db.auditLog(...)` called
+        // it on the RAW better-sqlite3 handle (which has no auditLog) → the halt
+        // audit was silently lost to the catch.
+        const database = require('./database');
+        database.auditLog(userId, 'DRIFT_DETECTED_HALT', {
             exchangeOnly: payload.exchangeOnly,
             dbOnly: payload.dbOnly,
             sizeMismatch: payload.sizeMismatch,
@@ -166,10 +170,21 @@ function _fireHaltAlert(userId, payload) {
 
 async function checkAllUsers() {
     try {
+        // [P2c.2 2026-06-08] Enumerate active-exchange users directly from the
+        // exchange_accounts table (canonical pattern — see pnlReconCron.js,
+        // serverAT recon). The old `db.listActiveExchangeUsers` existed NOWHERE
+        // (neither on the raw handle nor as a module export) → users always [] →
+        // checkAllUsers was INERT and the whole drift checker never ran.
         const { db } = require('./database');
-        const users = (typeof db.listActiveExchangeUsers === 'function')
-            ? (db.listActiveExchangeUsers() || [])
-            : [];
+        let users = [];
+        try {
+            users = db.prepare(
+                'SELECT DISTINCT user_id FROM exchange_accounts WHERE is_active = 1'
+            ).all() || [];
+        } catch (qe) {
+            console.error('[DRIFT-CHECKER] active-user query failed:', qe.message);
+            return;
+        }
         for (const u of users) {
             const uid = u && (u.user_id != null ? u.user_id : u.id);
             if (!uid) continue;
