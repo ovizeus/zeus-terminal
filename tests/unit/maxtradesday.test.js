@@ -69,6 +69,28 @@ describe('[T-MAXTRADES] setMaxDayProtect toggle (persists until UTC day)', () =>
         expect(serverAT._uStateForTest(UID).maxDayProtectOffDay).toBe(0);
         expect(r2.active).toBe(true);
     });
+
+    // [MTP-RESET 2026-06-08] Operator: disabling must reset the counter "de la 0"
+    // so the badge disappears cleanly and state is fresh (it stays off until the
+    // next UTC day anyway via offDay).
+    test('disable resets dailyEntries to 0 (de la 0)', () => {
+        const UID = 990022;
+        const us = serverAT._uStateForTest(UID);
+        us.dailyEntries = 14;
+        us.maxDayProtectOffDay = 0;
+
+        serverAT.setMaxDayProtect(UID, false); // disable
+        expect(serverAT._uStateForTest(UID).dailyEntries).toBe(0);
+    });
+
+    test('re-enable does NOT zero the counter (only disable resets)', () => {
+        const UID = 990023;
+        const us = serverAT._uStateForTest(UID);
+        us.dailyEntries = 7;
+
+        serverAT.setMaxDayProtect(UID, true); // re-enable / arm
+        expect(serverAT._uStateForTest(UID).dailyEntries).toBe(7);
+    });
 });
 
 describe('[T-MAXTRADES] daily reset clears dailyEntries', () => {

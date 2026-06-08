@@ -2922,6 +2922,12 @@ function computeMaxDayProtectState(ctx) {
 function setMaxDayProtect(userId, enabled) {
     const us = _uState(userId);
     us.maxDayProtectOffDay = enabled ? 0 : _utcDay();
+    // [MTP-RESET 2026-06-08] Operator: disabling resets the daily entry counter
+    // "de la 0" so the on-screen badge clears completely (it shows only while
+    // blocking). Protection stays off until the next UTC day via offDay; it never
+    // closes/touches OPEN positions (those keep running under DSL) — this only
+    // affects the NEW-entry cap counter.
+    if (!enabled) us.dailyEntries = 0;
     _persistState(userId);
     audit.record('MAX_TRADES_PROTECT_TOGGLE', { userId, enabled: !!enabled, offDay: us.maxDayProtectOffDay }, 'user');
     logger.info('AT_ENGINE', `MAX TRADES/DAY protection ${enabled ? 'RE-ARMED' : 'DISABLED until next UTC day'} uid=${userId}`);

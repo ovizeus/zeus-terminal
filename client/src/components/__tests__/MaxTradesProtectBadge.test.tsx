@@ -40,11 +40,13 @@ describe('MaxTradesProtectBadge (T-MAXTRADES)', () => {
     expect(post).toHaveBeenCalledWith('/api/at/maxday-protect', { enabled: false })
   })
 
-  it('shows OFF-until-tomorrow + Re-enable when disabledToday', () => {
+  // [MTP-DISMISS 2026-06-08] Operator: once disabled the badge must DISAPPEAR
+  // completely — no lingering "OFF / Re-enable" chip on screen.
+  it('renders NOTHING when disabledToday (badge gone after Disable)', () => {
     useATStore.setState({ maxDayProtect: mp({ dailyEntries: 14, atCap: true, active: false, disabledToday: true, blocking: false }) })
-    render(<MaxTradesProtectBadge />)
-    expect(screen.getByText(/OFF until tomorrow/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByText(/Re-enable/i))
-    expect(post).toHaveBeenCalledWith('/api/at/maxday-protect', { enabled: true })
+    const { container } = render(<MaxTradesProtectBadge />)
+    expect(container.firstChild).toBeNull()
+    expect(screen.queryByText(/OFF until tomorrow/i)).toBeNull()
+    expect(screen.queryByText(/Re-enable/i)).toBeNull()
   })
 })
