@@ -1055,6 +1055,17 @@ function _isReconcilablePosition(p) {
     return !!(p && p.mode !== 'demo' && p.live && _RECONCILABLE_LEG_STATUSES.has(p.live.status));
 }
 
+// [ORPHAN-ADOPT FIX 2026-06-08] Resolution policy for a CONFIRMED recon orphan
+// (a position the exchange holds but the server doesn't track). isZeusCreated =
+// the position still has open SAT_ orders (a live Zeus position that lost its
+// in-memory tracking) → CLOSE it. Otherwise → ADOPT it (track + protective SL)
+// rather than the old alert-only DEAD-END that left it a perpetual orphan,
+// re-flagged every cycle until orphan-protection suspended AT in a loop. Default
+// ADOPT on missing ctx (fail toward tracked+protected, never a perpetual orphan).
+function _classifyOrphanResolution(ctx) {
+    return (ctx && ctx.isZeusCreated === true) ? 'CLOSE' : 'ADOPT';
+}
+
 function processBrainDecision(decision, stc, userId, userIntent) {
     if (!decision || !decision.fusion || !stc) return null;
     // [MULTI-USER] Hard guard — reject decisions without userId
@@ -5582,7 +5593,8 @@ async function _runReconciliation(isStartup) {
                             logger.warn(label, `Open orders check failed for ${symbol}: ${oErr.message}`);
                         }
 
-                        if (isZeusCreated) {
+                        const _orphanAction = _classifyOrphanResolution({ isZeusCreated });
+                        if (_orphanAction === 'CLOSE') {
                             // Auto-close: MARKET close with reduceOnly
                             try {
                                 const closeSide = bpos.side === 'LONG' ? 'SELL' : 'BUY';
@@ -5629,11 +5641,35 @@ async function _runReconciliation(isStartup) {
                                 );
                             }
                         } else {
-                            // Not Zeus-created — alert only
-                            if (_reconAlertedShouldFire('orphans', _orphanKey)) {
-                                telegram.sendToUser(userId,
-                                    `⚠️ *RECON: External Orphan*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nThis position was NOT created by Zeus (no SAT_ orders).\nManual review required.`
-                                );
+                            // [ORPHAN-ADOPT FIX 2026-06-08] No open SAT_ orders → was
+                            // alert-only, leaving an untracked orphan re-flagged every
+                            // cycle until orphan-protection (srvPos.js) suspended AT in a
+                            // loop (operator: "reset kill reapare"; 3 zombie-left orphans).
+                            // ADOPT it: track + attach a protective server SL so it stops
+                            // being an orphan. Safer than auto-close (preserves the
+                            // position); covers BOTH a Zeus orphan whose SL/TP orders are
+                            // gone AND a genuine external position (now protected, not
+                            // perpetually flagged). Still alert for operator visibility.
+                            try {
+                                const _adopt = _syncExternalPosition({
+                                    userId, symbol, side: bpos.side,
+                                    entryPrice: bpos.entryPrice, qty: Math.abs(bpos.amt),
+                                    markPrice: bpos.markPrice, exchange,
+                                });
+                                if (_adopt && _adopt.ok) {
+                                    logger.warn(label, `ORPHAN adopted uid=${userId}: ${bpos.side} ${symbol} amt=${bpos.amt} — now server-tracked + protected (was perpetual orphan)`);
+                                    try { _broadcastPositions(userId); } catch (_) {}
+                                    audit.record('SAT_RECON_ORPHAN_ADOPTED', { symbol, side: bpos.side, amt: bpos.amt, userId, seq: _adopt.seq }, 'SERVER_AT');
+                                    if (_reconAlertedShouldFire('orphans', _orphanKey)) {
+                                        telegram.sendToUser(userId,
+                                            `🔧 *RECON: Orphan Adopted*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nWas untracked (no SAT_ orders) — now server-tracked with a protective SL.`
+                                        );
+                                    }
+                                } else {
+                                    logger.warn(label, `ORPHAN adopt FAILED uid=${userId}: ${bpos.side} ${symbol} — ${_adopt && _adopt.error}`);
+                                }
+                            } catch (adoptErr) {
+                                logger.error(label, `ORPHAN adopt ERROR uid=${userId}: ${bpos.side} ${symbol} — ${adoptErr.message}`);
                             }
                         }
                         _orphanPending.delete(_orphanKey);
@@ -6378,6 +6414,7 @@ module.exports = {
     _resyncLiveBalanceRef,       // [T1-2] liveBalanceRef self-heal
     _findSameModeOpposite,       // [PHANTOM-SHORT FIX] pure directional-conflict predicate (shared guard)
     _isReconcilablePosition,     // [PHANTOM-SHORT FIX b] pure recon-eligibility predicate (mode-tag robust)
+    _classifyOrphanResolution,   // [ORPHAN-ADOPT FIX] pure recon orphan resolution policy (CLOSE|ADOPT)
     _linkedOpsSeqToCleanup,      // [P1 dual-write dedup] pure linked-ops-row decision
     shouldBlockMaxTradesDay,     // [T-MAXTRADES] pure daily-cap gate
     computeMaxDayProtectState,   // [T-MAXTRADES] pure display state
