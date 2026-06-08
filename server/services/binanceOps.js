@@ -142,6 +142,16 @@ async function _emergencyClose(uid, params, creds, seq) {
     return { ok: false, attempts: EMERGENCY_RETRIES };
 }
 
+// [ORPHAN-ROOT FIX 2026-06-08] True iff err is a SQLite UNIQUE-constraint
+// violation (any sqlite driver shape). Used to treat the dual-write OPEN-row
+// collision as non-fatal (the order already filled) instead of abandoning →
+// orphan. Pure → unit-tested.
+function _isUniqueConstraintError(err) {
+    if (!err) return false;
+    const m = String(err.message || '') + ' ' + String(err.code || '');
+    return /UNIQUE constraint failed/i.test(m) || /SQLITE_CONSTRAINT_UNIQUE/i.test(m);
+}
+
 // [PHANTOM-SHORT FIX 2026-06-08 — part a] Pure builder for the transitional
 // dual-write PENDING row. mode = the ENGINE mode passed by the caller
 // (params.mode, e.g. 'live') — NOT creds.mode ('testnet'/'real'), which would
@@ -331,7 +341,27 @@ async function placeEntry(uid, params, creds) {
             avgFillPrice: fillResp.avgPrice,
         };
         db.prepare(`UPDATE at_positions SET data = ? WHERE seq = ?`).run(JSON.stringify(updatedData), seq);
-        positionStateMachine.transition(seq, 'OPENING', 'OPEN', { slOrderId, tpOrderId });
+        try {
+            positionStateMachine.transition(seq, 'OPENING', 'OPEN', { slOrderId, tpOrderId });
+        } catch (openErr) {
+            // [ORPHAN-ROOT FIX 2026-06-08] Two OPEN rows can't coexist for one
+            // (user,symbol,side,mode) — idx_at_pos_user_sym_side_mode_open. serverAT
+            // persists its CANONICAL OPEN row at entry time (M5), so transitioning
+            // THIS dual-write row to OPEN collides. The MARKET entry has ALREADY
+            // FILLED by now → this is NOT a failure. Returning an error here made
+            // serverAT abandon a filled position ("Zombie cleanup") → live orphan →
+            // recon re-adopts it as a lev=1 source=external row → shows in the
+            // MANUAL journal at x1, opens/closes "by itself" (the months-old bug).
+            // Leave this row in OPENING (the UNIQUE index only constrains
+            // status='OPEN', so it no longer collides; it's a stub the P1 dedup
+            // removes on close) and fall through to the success return — the
+            // position is real and tracked by serverAT's canonical row.
+            if (_isUniqueConstraintError(openErr)) {
+                try { require('./logger').warn('BINANCE_OPS', `[${seq}] dual-write OPEN collision for ${params.symbol}/${params.side} — serverAT canonical row owns it; order FILLED, not abandoning`); } catch (_) {}
+            } else {
+                throw openErr;
+            }
+        }
 
         return {
             ok: true,
@@ -888,6 +918,7 @@ async function getOrder(uid, params, creds) {
 module.exports = {
     placeEntry,
     _buildPendingPositionData, // [PHANTOM-SHORT FIX a] pure PENDING-row builder (mode-tag = engine mode)
+    _isUniqueConstraintError,  // [ORPHAN-ROOT FIX] pure UNIQUE-constraint detector (dual-write OPEN collision)
     closePosition,
     ensureSymbolReady,
     getPositions,
