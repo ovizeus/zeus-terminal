@@ -113,3 +113,38 @@ describe('computeFullOwnership — flag/cutover/env matrix', () => {
     expect(computeFullOwnership(c({ credsMode: null }))).toBe(false);
   });
 });
+
+// ─── [T1-3 2026-06-08] REAL ownership extension — full server ownership must
+// also engage on REAL (single engine, no hybrid two-engine race that SP2-b
+// eliminated on testnet), gated by the master _SRV_POS_REAL_ENABLED flag so it
+// stays INERT until REAL is deliberately enabled. Testnet behavior unchanged.
+describe('computeFullOwnership — REAL extension (T1-3)', () => {
+  const { computeFullOwnership } = require('../../server/services/ownership');
+  const realOk = { flagFull: true, flagRealEnabled: true, isCutover: true, engineMode: 'live', credsMode: 'real' };
+  const c = (o) => Object.assign({}, realOk, o);
+  test('REAL creds + flagRealEnabled + prereqs → true (single-engine on REAL)', () => {
+    expect(computeFullOwnership(c({}))).toBe(true);
+  });
+  test('REAL creds but flagRealEnabled OFF → false (inert until REAL enabled)', () => {
+    expect(computeFullOwnership(c({ flagRealEnabled: false }))).toBe(false);
+  });
+  test('REAL + flagRealEnabled but not cutover → false (prereqs still apply)', () => {
+    expect(computeFullOwnership(c({ isCutover: false }))).toBe(false);
+  });
+  test('REAL + flagRealEnabled but flagFull OFF → false (rollback lever covers REAL too)', () => {
+    expect(computeFullOwnership(c({ flagFull: false }))).toBe(false);
+  });
+  test('REAL + flagRealEnabled but demo engine → false', () => {
+    expect(computeFullOwnership(c({ engineMode: 'demo' }))).toBe(false);
+  });
+  test('flagRealEnabled does NOT unlock testnet (testnet still needs flagExec)', () => {
+    expect(computeFullOwnership({ flagFull: true, flagExec: false, flagRealEnabled: true, isCutover: true, engineMode: 'live', credsMode: 'testnet' })).toBe(false);
+  });
+  test('testnet unaffected: flagExec path still works regardless of flagRealEnabled', () => {
+    expect(computeFullOwnership({ flagFull: true, flagExec: true, flagRealEnabled: false, isCutover: true, engineMode: 'live', credsMode: 'testnet' })).toBe(true);
+  });
+  test("ambiguous credsMode 'live'/null → false (must be exactly testnet or real)", () => {
+    expect(computeFullOwnership(c({ credsMode: 'live' }))).toBe(false);
+    expect(computeFullOwnership(c({ credsMode: null }))).toBe(false);
+  });
+});

@@ -1048,7 +1048,7 @@ function processBrainDecision(decision, stc, userId, userIntent) {
             clientPresent: _heartbeat.isClientPresent(userId, Date.now()),
             atActive: _isATActiveForMode(us, us.engineMode),
             credsValid: !!_creds2,
-            cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
+            cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && (MF.SERVER_AT_TESTNET_EXEC === true || MF._SRV_POS_REAL_ENABLED === true), // [T1-3] env-aware (testnet OR real-enabled)
             underTakeControl: false,
             fullServerOwnership: _fullOwn,
         });
@@ -3516,6 +3516,11 @@ function serverFullyOwnsEntries(userId) {
         return require('./ownership').computeFullOwnership({
             flagFull: MF.SERVER_AT_FULL_OWNERSHIP === true,
             flagExec: MF.SERVER_AT_TESTNET_EXEC === true,
+            // [T1-3 2026-06-08] REAL ownership gated on the master REAL flag —
+            // when REAL is deliberately enabled, the server fully owns entries on
+            // REAL too (single engine, no hybrid two-engine race). Inert today
+            // (_SRV_POS_REAL_ENABLED=false, no real creds).
+            flagRealEnabled: MF._SRV_POS_REAL_ENABLED === true,
             isCutover: require('./sp2Cutover').isCutoverUser(userId),
             engineMode: us.engineMode,
             credsMode: creds ? creds.mode : null,
@@ -3575,7 +3580,7 @@ function getFullState(userId) {
             clientPresent: require('./heartbeatTracker').isClientPresent(userId, Date.now()),
             atActive: _isATActiveForMode(us, us.engineMode),
             credsValid: !!creds,
-            cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && MF.SERVER_AT_TESTNET_EXEC === true,
+            cutoverActive: require('./sp2Cutover').isCutoverUser(userId) && (MF.SERVER_AT_TESTNET_EXEC === true || MF._SRV_POS_REAL_ENABLED === true), // [T1-3] env-aware (testnet OR real-enabled)
             fullServerOwnership: _sp2FullOwn, // [SP2-b] UI shows SERVER DRIVING with client present
         }),
         // [SERVER-ARES 2026-06-07] Server-side ARES public state for the client

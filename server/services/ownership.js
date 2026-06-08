@@ -19,20 +19,27 @@ function resolveOwnership(ctx) {
   return { entryOwner, exitOwner };
 }
 
-// [SP2-b 2026-06-07] Pure core for serverAT.serverFullyOwnsEntries glue.
-// True ONLY when every condition holds — any missing piece → false:
-//  - flagFull:  MF.SERVER_AT_FULL_OWNERSHIP (the rollback lever)
-//  - flagExec:  MF.SERVER_AT_TESTNET_EXEC (SP2-a exec carve-out)
+// [SP2-b 2026-06-07 · T1-3 2026-06-08] Pure core for serverAT.serverFullyOwnsEntries.
+// Full server ownership of entries (client locked, single engine — eliminates the
+// two-engine race) requires ALL of:
+//  - flagFull:  MF.SERVER_AT_FULL_OWNERSHIP (the rollback lever, covers testnet+real)
 //  - isCutover: user is in data/sp2_cutover_users.json
 //  - engineMode 'live' (demo is already server-owned via SERVER_AT_DEMO)
-//  - credsMode 'testnet' EXACTLY — REAL stays blocked until explicit GO
+//  - a per-env enable gate matching the creds:
+//      testnet → flagExec  (MF.SERVER_AT_TESTNET_EXEC)
+//      real    → flagRealEnabled (MF._SRV_POS_REAL_ENABLED — the master REAL gate)
+// [T1-3] REAL was previously hardcoded OFF (credsMode==='testnet' only), so on REAL
+// ownership fell back to the SP2-a hybrid (client-present → CLIENT owns) = a
+// two-engine race on real money. Now REAL gets the SAME single-engine ownership,
+// but ONLY once _SRV_POS_REAL_ENABLED is deliberately turned on — so it stays
+// fully INERT today (flag false, no real creds) with zero behavior change.
+// Execution permission stays a SEPARATE concern (the 3 fail-closed REAL gates).
 function computeFullOwnership(ctx) {
-  const { flagFull, flagExec, isCutover, engineMode, credsMode } = ctx || {};
-  return flagFull === true
-    && flagExec === true
-    && isCutover === true
-    && engineMode === 'live'
-    && credsMode === 'testnet';
+  const { flagFull, flagExec, flagRealEnabled, isCutover, engineMode, credsMode } = ctx || {};
+  if (flagFull !== true || isCutover !== true || engineMode !== 'live') return false;
+  if (credsMode === 'testnet') return flagExec === true;
+  if (credsMode === 'real') return flagRealEnabled === true;
+  return false; // unknown/ambiguous creds → never own
 }
 
 // [SP2-b 2026-06-07] Defense-in-depth for POST /api/order/place: reject
