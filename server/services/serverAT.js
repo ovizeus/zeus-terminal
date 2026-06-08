@@ -1012,6 +1012,17 @@ function _findSameModeOpposite(positions, { userId, side, mode } = {}) {
     ) || null;
 }
 
+// [PHANTOM-SHORT FIX 2026-06-08 — part b] A position must be reconciled against
+// the exchange iff it is a REAL (non-demo) position WITH a live exchange leg.
+// Pre-fix the recon filter required mode==='live', which EXCLUDED real rows
+// mistagged mode='testnet' (binanceOps dual-write "Option B" stamps creds.mode)
+// — those drifted forever (never deduped, never phantom-closed). Demo (paper)
+// must NEVER hit the exchange-truth path. Pure → unit-tested.
+const _RECONCILABLE_LEG_STATUSES = new Set(['LIVE', 'LIVE_NO_SL', 'EXTERNAL']);
+function _isReconcilablePosition(p) {
+    return !!(p && p.mode !== 'demo' && p.live && _RECONCILABLE_LEG_STATUSES.has(p.live.status));
+}
+
 function processBrainDecision(decision, stc, userId, userIntent) {
     if (!decision || !decision.fusion || !stc) return null;
     // [MULTI-USER] Hard guard — reject decisions without userId
@@ -5165,7 +5176,7 @@ async function _runReconciliation(isStartup) {
         // the ONLY internal record of its exchange leg — excluding it (a) let the
         // idle sweep flag its own backing as orphan every 120s (alert spam) and
         // (b) denied it the phantom-check (exchange gone → close local record).
-        const livePositions = _positions.filter(p => p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL' || p.live.status === 'EXTERNAL'));
+        const livePositions = _positions.filter(_isReconcilablePosition);
         // [ORPHAN ROOT FIX 2026-06-05] The old `if (livePositions.length === 0)
         // return;` meant the ORPHAN sweep (exchange has a position, server
         // doesn't) NEVER ran in exactly the state an orphan creates — internal
@@ -6327,6 +6338,7 @@ module.exports = {
     _shouldResyncLiveBalanceRef, // [T1-2] pure resync predicate
     _resyncLiveBalanceRef,       // [T1-2] liveBalanceRef self-heal
     _findSameModeOpposite,       // [PHANTOM-SHORT FIX] pure directional-conflict predicate (shared guard)
+    _isReconcilablePosition,     // [PHANTOM-SHORT FIX b] pure recon-eligibility predicate (mode-tag robust)
     shouldBlockMaxTradesDay,     // [T-MAXTRADES] pure daily-cap gate
     computeMaxDayProtectState,   // [T-MAXTRADES] pure display state
     setMaxDayProtect,            // [T-MAXTRADES] operator toggle
