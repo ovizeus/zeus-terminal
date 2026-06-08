@@ -65,6 +65,7 @@ export function _computeFillQtyFallback(
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATPnlAtReset, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 import { AT } from '../engine/events'
+import { serverOwnsAT } from '../engine/lockoutGate'
 import { confNDirectional, classifyEntryTier } from '../engine/fusionMath'
 import { TP } from '../core/state'
 import { BM } from '../core/config'
@@ -1712,6 +1713,17 @@ export function scheduleAutoClose(pos: any): void {
 
 // Kill switch
 export function checkKillThreshold(): void {
+  // [KILL-SERVER-OWNED 2026-06-08] When the server owns AT (SP2-b cutover), the
+  // kill switch is server-authoritative: killActive comes from getFullState and
+  // KillSwitchOverlay mirrors it via the store. The client must NOT recompute or
+  // re-trigger — doing so re-fired the overlay seconds after every reset (the
+  // reset cutoff AT.killResetTs is in-memory only, lost on refresh, so the client
+  // recounted pre-reset open positions' UNREALIZED loss and tripped the kill
+  // again — operator hammered RESET 8× in 30min). The server's realized
+  // lossSinceReset (= dailyPnL - pnlAtReset) is the single source of truth and
+  // stays at 0 after reset until a NEW realized loss. Client-AT users (server NOT
+  // authoritative) keep the original behavior — serverOwnsAT() fails open.
+  if (serverOwnsAT()) return
   if (getATKillTriggered()) return
   // [KILL-LOOP FIX R4] Defer kill check until server confirms AT state.
   // Prevents firing on boot while TP.demoPositions still has zombie AT positions
