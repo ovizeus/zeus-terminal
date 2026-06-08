@@ -5742,15 +5742,35 @@ async function _checkOrderHealth(pos, creds, label) {
 // within the window → EXTERNAL_CLOSE fallback exactly as before.
 const _EXIT_FILL_MAX_AGE_MS = 5000;
 const _exitFills = new Map(); // 'userId|symbol' → { kind, avgPrice, realizedPnL, clientOrderId, ts }
+
+// [T-EXTCLOSE 2026-06-08] Classify a fill that may close a position.
+//  - sl_<…> → HIT_SL, tp_<…> → HIT_TP (our protection orders, unchanged)
+//  - any OTHER reduceOnly fill → EXTERNAL (manual/testnet/liquidation close — it
+//    carries the REAL avgPrice + realizedPnL; previously discarded → the close
+//    was journaled EXTERNAL_CLOSE PnL=$0.00 with exit=entry).
+//  - non-reduceOnly (entry) fill → null (never an exit).
+function classifyExitFill(clientOrderId, reduceOnly) {
+    const cid = typeof clientOrderId === 'string' ? clientOrderId : '';
+    if (cid.startsWith('sl_')) return 'HIT_SL';
+    if (cid.startsWith('tp_')) return 'HIT_TP';
+    if (reduceOnly === true) return 'EXTERNAL';
+    return null;
+}
+
+// [T-EXTCLOSE] Map an exit-fill kind to the journal close type.
+function exitKindToCloseType(kind) {
+    return kind === 'EXTERNAL' ? 'EXTERNAL_CLOSE' : kind;
+}
+
 const _exitFillTracker = {
     record(userId, symbol, fill, now) {
-        const cid = fill && fill.clientOrderId;
-        if (typeof cid !== 'string') return;
-        const kind = cid.startsWith('sl_') ? 'HIT_SL' : cid.startsWith('tp_') ? 'HIT_TP' : null;
-        if (!kind) return; // not one of our protection orders
+        if (!fill) return;
+        const kind = classifyExitFill(fill.clientOrderId, fill.reduceOnly);
+        if (!kind) return; // entry / non-reduceOnly fill — never an exit
         _exitFills.set(userId + '|' + symbol, {
             kind, avgPrice: +fill.avgPrice || 0, realizedPnL: +fill.realizedPnL || 0,
-            clientOrderId: cid, ts: now != null ? now : Date.now(),
+            clientOrderId: (typeof fill.clientOrderId === 'string' ? fill.clientOrderId : null),
+            ts: now != null ? now : Date.now(),
         });
     },
     match(userId, symbol, now) {
@@ -5824,7 +5844,9 @@ function onUserDataEvent(userId, event) {
                         const immediate = _exitFillTracker.match(userId, p.symbol);
                         if (immediate) {
                             logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${existing.side} — ${immediate.kind} fill matched, exit=${immediate.avgPrice} PnL=${immediate.realizedPnL}`);
-                            _closePosition(existingIdx, existing, immediate.kind, immediate.avgPrice || fallbackPrice, +(+immediate.realizedPnL).toFixed(2));
+                            // [T-EXTCLOSE] EXTERNAL kind → EXTERNAL_CLOSE journal type but with the
+                            // REAL exit price + realizedPnL from the closing fill (not entry/$0.00).
+                            _closePosition(existingIdx, existing, exitKindToCloseType(immediate.kind), immediate.avgPrice || fallbackPrice, +(+immediate.realizedPnL).toFixed(2));
                         } else {
                             const seq = existing.seq;
                             // Suppress the server-side SL net for this position during
@@ -5842,7 +5864,8 @@ function onUserDataEvent(userId, event) {
                                     const late = _exitFillTracker.match(userId, p.symbol);
                                     if (late) {
                                         logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} — late ${late.kind} fill matched, exit=${late.avgPrice} PnL=${late.realizedPnL}`);
-                                        _closePosition(idx2, pos2, late.kind, late.avgPrice || fallbackPrice, +(+late.realizedPnL).toFixed(2));
+                                        // [T-EXTCLOSE] EXTERNAL kind → EXTERNAL_CLOSE with real exit + PnL.
+                                        _closePosition(idx2, pos2, exitKindToCloseType(late.kind), late.avgPrice || fallbackPrice, +(+late.realizedPnL).toFixed(2));
                                     } else {
                                         logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${pos2.side} — closed externally, PnL=${fallbackPnl}`);
                                         _closePosition(idx2, pos2, 'EXTERNAL_CLOSE', fallbackPrice, fallbackPnl);
@@ -6274,6 +6297,9 @@ module.exports = {
     shouldBlockMaxTradesDay,     // [T-MAXTRADES] pure daily-cap gate
     computeMaxDayProtectState,   // [T-MAXTRADES] pure display state
     setMaxDayProtect,            // [T-MAXTRADES] operator toggle
+    classifyExitFill,            // [T-EXTCLOSE] pure exit-fill classifier
+    exitKindToCloseType,         // [T-EXTCLOSE] kind → journal close type
+    _exitFillTrackerForTest: _exitFillTracker, // [T-EXTCLOSE] tracker behavior tests
     _clearKillCooldownForTest: (_uid) => { /* [KILL-REARM 2026-06-07] cooldown removed — kept as no-op for test back-compat */ },
     // [SYNC-2 2026-06-01] Exchange-threading resolver (exported for testing)
     __sync2: { resolveEntryExchange: _resolveEntryExchange },

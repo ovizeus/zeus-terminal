@@ -86,6 +86,10 @@ function parseOrderUpdate(event) {
         origQty: parseFloat(o.q) || 0,
         filledQty: parseFloat(o.z) || 0,
         realizedPnL: parseFloat(o.rp) || 0,
+        // [T-EXTCLOSE 2026-06-08] reduceOnly (o.R) — distinguishes a closing fill
+        // (manual/testnet/liquidation close, all reduceOnly) from an entry fill,
+        // so EXTERNAL_CLOSE can capture the real realizedPnL instead of $0.00.
+        reduceOnly: !!o.R,
         tradeTime: o.T,
         eventTime: event.E,
     };
