@@ -418,6 +418,174 @@ git push origin main
 
 ---
 
+### Task 4b: consent UI — `MlConsentSection` in Settings → Trading tab
+
+UI strings in ENGLISH (project rule). Consent for real-money ML deserves an explicit confirm step, mirroring the kill-switch confirm pattern. The global fetch patch (`client/src/bridge/legacyLoader.ts:85`) auto-adds the `X-Zeus-Request` CSRF header, but we set it explicitly anyway (UsersSection.tsx:73 pattern).
+
+**Files:**
+- Create: `client/src/components/settings/MlConsentSection.tsx`
+- Modify: `client/src/components/settings/SettingsModal.tsx` (render inside the `trading` tab section, ~line 71)
+- Test: `client/src/components/__tests__/MlConsentSection.test.tsx`
+
+- [ ] **Step 4b.1: Write the failing test**
+
+```tsx
+// client/src/components/__tests__/MlConsentSection.test.tsx
+// [REAL-GATE P0-3 2026-06-09] Consent UI: status from GET, change via POST
+// only after explicit confirm. Real-money ML must never be one accidental
+// click away.
+import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MlConsentSection } from '../settings/MlConsentSection'
+
+const fetchMock = vi.fn()
+beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+})
+
+function okJson(body: unknown) {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(body) } as Response)
+}
+
+describe('MlConsentSection', () => {
+    test('shows NOT OPTED IN when server says false', async () => {
+        fetchMock.mockReturnValueOnce(okJson({ ok: true, optedIn: false }))
+        render(<MlConsentSection />)
+        await waitFor(() => expect(screen.getByText(/NOT OPTED IN/i)).toBeTruthy())
+    })
+
+    test('opt-in requires confirm — first click does NOT POST', async () => {
+        fetchMock.mockReturnValueOnce(okJson({ ok: true, optedIn: false }))
+        render(<MlConsentSection />)
+        await waitFor(() => screen.getByText(/NOT OPTED IN/i))
+        await userEvent.click(screen.getByRole('button', { name: /opt in/i }))
+        // only the initial GET so far — no POST yet
+        expect(fetchMock.mock.calls.filter(c => c[1]?.method === 'POST')).toHaveLength(0)
+        expect(screen.getByText(/are you sure/i)).toBeTruthy()
+    })
+
+    test('confirm sends POST {optedIn:true} and flips the badge', async () => {
+        fetchMock
+            .mockReturnValueOnce(okJson({ ok: true, optedIn: false }))   // initial GET
+            .mockReturnValueOnce(okJson({ ok: true, optedIn: true }))    // POST
+        render(<MlConsentSection />)
+        await waitFor(() => screen.getByText(/NOT OPTED IN/i))
+        await userEvent.click(screen.getByRole('button', { name: /opt in/i }))
+        await userEvent.click(screen.getByRole('button', { name: /confirm/i }))
+        await waitFor(() => expect(screen.getByText(/OPTED IN/i)).toBeTruthy())
+        const post = fetchMock.mock.calls.find(c => c[1]?.method === 'POST')
+        expect(post?.[0]).toBe('/api/ring5/live-optin')
+        expect(JSON.parse(post?.[1]?.body as string)).toEqual({ optedIn: true })
+    })
+
+    test('revoke does NOT require confirm (withdrawing consent must be easy)', async () => {
+        fetchMock
+            .mockReturnValueOnce(okJson({ ok: true, optedIn: true }))    // initial GET
+            .mockReturnValueOnce(okJson({ ok: true, optedIn: false }))   // POST
+        render(<MlConsentSection />)
+        await waitFor(() => screen.getByText(/^OPTED IN/i))
+        await userEvent.click(screen.getByRole('button', { name: /revoke/i }))
+        await waitFor(() => expect(screen.getByText(/NOT OPTED IN/i)).toBeTruthy())
+    })
+})
+```
+
+- [ ] **Step 4b.2: Run — must FAIL (module missing)**
+
+Run: `cd client && npx vitest run src/components/__tests__/MlConsentSection.test.tsx > /tmp/mlconsent-red.log 2>&1; grep -E "failed|Cannot find" /tmp/mlconsent-red.log | head -3`
+
+- [ ] **Step 4b.3: Create `client/src/components/settings/MlConsentSection.tsx`**
+
+```tsx
+/**
+ * [REAL-GATE P0-3 2026-06-09] ML Live Influence consent.
+ * Real-money ML influence requires explicit, audited, per-user opt-in —
+ * enforced server-side at influence-eligibility level (live_optin_missing).
+ * This section is the only UI that flips it. Opt-in needs a confirm step;
+ * revoking is one click (withdrawing consent must always be easy).
+ */
+import { useEffect, useState } from 'react'
+
+export function MlConsentSection() {
+    const [optedIn, setOptedIn] = useState<boolean | null>(null)
+    const [busy, setBusy] = useState(false)
+    const [confirming, setConfirming] = useState(false)
+
+    useEffect(() => {
+        let alive = true
+        fetch('/api/ring5/live-optin', { credentials: 'include' })
+            .then(r => r.json())
+            .then(d => { if (alive && d && d.ok) setOptedIn(!!d.optedIn) })
+            .catch(() => { /* stays null = UNKNOWN */ })
+        return () => { alive = false }
+    }, [])
+
+    const apply = async (next: boolean) => {
+        setBusy(true)
+        try {
+            const r = await fetch('/api/ring5/live-optin', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
+                body: JSON.stringify({ optedIn: next }),
+            })
+            const d = await r.json()
+            if (d && d.ok) setOptedIn(!!d.optedIn)
+        } catch { /* keep previous state */ }
+        finally { setBusy(false); setConfirming(false) }
+    }
+
+    const badge = optedIn === null ? 'UNKNOWN' : optedIn ? 'OPTED IN' : 'NOT OPTED IN'
+
+    return (
+        <div className="zr-settings-block">
+            <h4>ML Influence on REAL (consent)</h4>
+            <p className="zr-settings-hint">
+                When REAL trading goes live, the ML layer may adjust decision
+                confidence only if you have explicitly opted in here. Stored
+                server-side, audited, revocable at any time.
+            </p>
+            <p>Status: <strong>{badge}</strong></p>
+            {optedIn === false && !confirming && (
+                <button disabled={busy} onClick={() => setConfirming(true)}>Opt in</button>
+            )}
+            {confirming && (
+                <div>
+                    <p>Are you sure? This allows ML to influence REAL-money trade confidence once REAL trading is enabled.</p>
+                    <button disabled={busy} onClick={() => apply(true)}>Confirm opt-in</button>
+                    <button disabled={busy} onClick={() => setConfirming(false)}>Cancel</button>
+                </div>
+            )}
+            {optedIn === true && (
+                <button disabled={busy} onClick={() => apply(false)}>Revoke consent</button>
+            )}
+        </div>
+    )
+}
+```
+
+- [ ] **Step 4b.4: Wire into `SettingsModal.tsx`** — import `{ MlConsentSection }` next to the `OmegaMemorySection` import (line 5) and render `<MlConsentSection />` at the END of the `trading` tab section (inside the `{tab === 'trading' && (...)}` block, before its closing `</div>`).
+
+- [ ] **Step 4b.5: Run — must PASS 4/4, then build**
+
+Run: `cd client && npx vitest run src/components/__tests__/MlConsentSection.test.tsx > /tmp/mlconsent-green.log 2>&1; grep -E "passed|failed" /tmp/mlconsent-green.log | head -2`
+Run: `cd client && npm run build > /tmp/mlconsent-build.log 2>&1; tail -3 /tmp/mlconsent-build.log`
+Expected: 4 passed; build clean (bundle picked up at next hard-refresh, no pm2 reload needed for client).
+
+- [ ] **Step 4b.6: Commit**
+
+```bash
+git add client/src/components/settings/MlConsentSection.tsx client/src/components/settings/SettingsModal.tsx client/src/components/__tests__/MlConsentSection.test.tsx
+git commit -m "feat(real-gate): ML REAL consent UI in Settings→Trading — confirm to opt in, one click to revoke
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
+git push origin main
+```
+
+---
+
 ### Task 5: `realGateCoherence` guard (P0-4 remainder)
 
 Context: execution refusal (3 layers in serverAT) and ownership (T1-3) are DONE. The remaining hole is **incoherent flag combinations** on the REAL day — e.g. exec enabled while the REAL userDataStream is off → positions open but fills are invisible. Nothing watches for that. This guard is pure + loud, never blocking (it ALERTS; the existing fail-closed layers do the blocking).
