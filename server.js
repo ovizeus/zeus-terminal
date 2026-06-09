@@ -1661,6 +1661,10 @@ try { require('./server/cron/mlScanCron').schedule(); } catch (_) {}
 // [P1 2026-06-09] Disk space monitor — Telegram alert at ≥90% used (hysteresis)
 try { require('./server/cron/diskMonitor').schedule(); } catch (_) {}
 
+// [P1 2026-06-09] PnL reconciliation — daily 04:05 UTC, read-only vs exchange,
+// audit_log rows on book↔exchange mismatch (was orphaned since 2026-05-23)
+try { require('./server/services/pnlReconCron').schedule(); } catch (_) {}
+
 // [Wave 2] R1 Constitution — seed canonical principles (idempotent)
 try {
     const charter = require('./server/services/ml/R1_constitution/constitutionalCharterLayer');

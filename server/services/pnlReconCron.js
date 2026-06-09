@@ -3,7 +3,10 @@
 const { db } = require('./database');
 const exchangeOps = require('./exchangeOps');
 
-const RECON_HOUR_UTC = 2;
+// [P1 2026-06-09] 02:00 → 04:05 UTC: 02:00 sat at the edge of the Binance
+// anti-ban window (22:00-02:00) and collided with omegaMemoryCleanup.
+const RECON_HOUR_UTC = 4;
+const RECON_MIN_UTC = 5;
 
 async function reconcileUser(uid) {
     // Get recent closed positions from at_closed (last 24h)
@@ -82,7 +85,7 @@ let _cronTimer = null;
 
 function schedule() {
     if (_cronTimer) return;
-    const msToNextRun = _msUntilNextHour(RECON_HOUR_UTC);
+    const msToNextRun = _msUntilNextHour(RECON_HOUR_UTC, RECON_MIN_UTC);
     _cronTimer = setTimeout(() => {
         runDaily().catch(() => {});
         // Re-schedule for next day
@@ -95,12 +98,11 @@ function stop() {
     if (_cronTimer) { clearTimeout(_cronTimer); _cronTimer = null; }
 }
 
-function _msUntilNextHour(hourUtc) {
-    const now = new Date();
+function _msUntilNextHour(hourUtc, minUtc = 0, now = new Date()) {
     const next = new Date(now);
-    next.setUTCHours(hourUtc, 0, 0, 0);
+    next.setUTCHours(hourUtc, minUtc, 0, 0);
     if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
     return next.getTime() - now.getTime();
 }
 
-module.exports = { runDaily, reconcileUser, schedule, stop, _msUntilNextHour };
+module.exports = { runDaily, reconcileUser, schedule, stop, _msUntilNextHour, RECON_HOUR_UTC, RECON_MIN_UTC };
