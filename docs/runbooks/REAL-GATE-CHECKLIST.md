@@ -4,13 +4,19 @@
 > action with its own verification. Abort at any red.
 
 ## Phase 0 — prerequisites (any day before)
+- [ ] b127 deployed: before the pm2 reload run `git diff data/migration_flags.json` (must be clean —
+      a runtime `set()` from the pre-b127 process rewrites the whole file and can silently revert
+      `ML_LIVE_OPTIN_REQUIRED` to false); after reload confirm the boot-log flags dump shows
+      `ML_LIVE_OPTIN_REQUIRED: true`
 - [ ] Offsite backup green for ≥7 consecutive days (`data/logs/offsite-backup.log`, daily OK lines)
 - [ ] `pnlReconCron` produced ≥7 daily `PNL_RECON_DAILY_COMPLETE` audit rows, 0 unexplained mismatches
 - [ ] Kill switch verified on testnet within the last 7 days (daily-loss trip + resync auto-heal)
 - [ ] Operator has REAL Binance API keys (trade-only, NO withdrawal permission, IP-restricted to the VPS)
 
 ## Phase 1 — consent & coherence (still zero REAL exposure)
-- [ ] Opt in via Settings → Trading → "ML Influence on REAL (consent)" (or `POST /api/ring5/live-optin {"optedIn":true}`) → verify status shows OPTED IN
+- [ ] Opt in via Settings → Trading → "ML Influence on REAL (consent)" → verify status shows OPTED IN
+      (API alternative needs the session cookie AND the CSRF header or it 403s:
+      `curl -b "zeus_token=<jwt>" -H "X-Zeus-Request: 1" -H "Content-Type: application/json" -d '{"optedIn":true}' http://localhost:3000/api/ring5/live-optin`)
 - [ ] Confirm `ML_LIVE_OPTIN_REQUIRED=true` in boot log flags dump
 - [ ] Confirm boot log has NO `REAL GATE INCOHERENT` line
 
