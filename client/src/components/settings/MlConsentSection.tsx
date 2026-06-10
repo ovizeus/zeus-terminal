@@ -14,6 +14,7 @@
  * Fail-closed: UNKNOWN (GET failed) renders the badge only, no buttons.
  */
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { toast } from '../../data/marketDataHelpers'
 
 const CONFIRM_COPY = {
@@ -78,10 +79,14 @@ export function MlConsentSection() {
                     REVOKE ML
                 </button>
             )}
-            {confirming !== null && (
+            {confirming !== null && createPortal(
                 <div
                     className="zr-modal-overlay"
                     data-testid="ml-consent-overlay"
+                    /* portal + z-index: the chip lives inside .zpv (z-index 900,
+                       its own stacking context) — rendered inline, the fixed
+                       overlay was trapped under the Omega orb artwork. */
+                    style={{ zIndex: 9999 }}
                     onClick={e => { if (e.target === e.currentTarget) setConfirming(null) }}
                 >
                     <div className="zr-modal" role="dialog" aria-modal="true" aria-label={CONFIRM_COPY[confirming].title}>
@@ -103,7 +108,8 @@ export function MlConsentSection() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </>
     )
