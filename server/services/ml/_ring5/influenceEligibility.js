@@ -64,9 +64,11 @@ function checkEligibility(params) {
 
     // [REAL-GATE P0-3 2026-06-09] Real money requires the user's explicit,
     // audited consent — checked HERE so no downstream math can bypass it.
-    // ML_LIVE_OPTIN_REQUIRED defaults TRUE (fail-closed); setting it false is
-    // a deliberate operator escape hatch (see REAL-GATE-CHECKLIST runbook).
-    if (envUpper === 'REAL' && MF.ML_LIVE_OPTIN_REQUIRED === true) {
+    // ML_LIVE_OPTIN_REQUIRED defaults TRUE (fail-closed); ONLY an explicit
+    // boolean false disables the gate — a missing/undefined flag means the
+    // gate stays ON. Setting it false is a deliberate operator escape hatch
+    // (see REAL-GATE-CHECKLIST runbook).
+    if (envUpper === 'REAL' && MF.ML_LIVE_OPTIN_REQUIRED !== false) {
         const mlLiveOptin = require('../mlLiveOptin');
         if (!mlLiveOptin.isOptedIn(userId)) {
             return {

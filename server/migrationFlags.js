@@ -157,9 +157,10 @@ const DEFAULTS = {
     // per-user check below. NEVER flip without operator GO + canary plan.
     ML_LIVE_INFLUENCE_ENABLED: false,
     // ML_LIVE_OPTIN_REQUIRED — per-user explicit opt-in for REAL ML influence.
-    // When true (default), user MUST acknowledge ML influence before R4 may
-    // use bandit on REAL trades, even if ML_LIVE_INFLUENCE_ENABLED is true.
-    ML_LIVE_OPTIN_REQUIRED: false,
+    // When true (default, fail-closed), user MUST acknowledge ML influence
+    // before R4 may use bandit on REAL trades, even if
+    // ML_LIVE_INFLUENCE_ENABLED is true. [REAL-GATE P0-3 2026-06-09]
+    ML_LIVE_OPTIN_REQUIRED: true,
     // WS_PROXY_ENABLED — route client Binance WS through server proxy.
     // Phase B.6: client checks this flag to decide direct vs proxy path.
     WS_PROXY_ENABLED: false,
@@ -340,6 +341,9 @@ function getAll() {
 }
 
 module.exports = {
+    // [REAL-GATE P0-3 2026-06-09] Raw defaults exposed for test inspection
+    // (pins fail-closed defaults; NOT the resolved runtime values).
+    _DEFAULTS: DEFAULTS,
     // Direct flag access (read-only semantics — use set() to change)
     get SERVER_MARKET_DATA() { return flags.SERVER_MARKET_DATA; },
     get SERVER_BRAIN() { return flags.SERVER_BRAIN; },
