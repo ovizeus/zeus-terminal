@@ -290,7 +290,7 @@ function _handleSubscribeAck(msg) {
     } else {
         // Mark all topics in this batch as failed (Bybit doesn't always specify which)
         for (const topic of pending.topics) {
-            const current = _failedTopics.get(topic) || { retries: 0, nextRetryAt: 0 };
+            const current = _failedTopics.get(topic) || { retries: 0, nextRetryAt: 0, failedAt: Date.now() };
             current.retries += 1;
             // Backoff: 1s, 5s, 30s, 5min, then 5min cooldown after 5 failures
             const backoffs = [1000, 5000, 30000, 300000];
@@ -301,6 +301,39 @@ function _handleSubscribeAck(msg) {
         try { require('./logger').warn('BYBIT_FEED', `subscribe ack FAILED: ${pending.topics.length} topics, ret_msg=${msg.ret_msg || '(empty)'}`); } catch (_) {}
     }
 }
+
+// ═══ GC sweep — bound the two otherwise-unbounded maps ═══
+// _failedTopics: permanently-failing topics are never deleted (delete only happens
+// on a later SUCCESS ack), so they accumulate forever. Evict at retries >= 10 or
+// after 1h since first failure.
+// _pendingByReqId: deleted on ACK, but orphaned forever if the socket dies before
+// the ACK arrives. Evict entries older than 120s.
+const GC_FAILED_MAX_RETRIES = 10;
+const GC_FAILED_MAX_AGE_MS = 60 * 60 * 1000;
+const GC_PENDING_MAX_AGE_MS = 120_000;
+const GC_SWEEP_INTERVAL_MS = 60_000;
+
+function _gcSweep(now = Date.now()) {
+    for (const [topic, entry] of _failedTopics) {
+        // Legacy entries (pre-GC) have no failedAt — stamp them so they age out
+        if (entry.failedAt == null) entry.failedAt = now;
+        if (entry.retries >= GC_FAILED_MAX_RETRIES || (now - entry.failedAt) > GC_FAILED_MAX_AGE_MS) {
+            _failedTopics.delete(topic);
+        }
+    }
+    for (const [reqId, entry] of _pendingByReqId) {
+        if (entry.sentAt < now - GC_PENDING_MAX_AGE_MS) {
+            _pendingByReqId.delete(reqId);
+        }
+    }
+}
+
+function _getGcStatsForTest() {
+    return { failedTopics: _failedTopics.size, pendingByReqId: _pendingByReqId.size };
+}
+
+const _gcTimer = setInterval(() => _gcSweep(), GC_SWEEP_INTERVAL_MS);
+if (_gcTimer.unref) _gcTimer.unref();
 
 function _dispatchMessage(msg) {
     if (!msg) return;
@@ -422,4 +455,6 @@ module.exports = {
     _normalizeBookTicker,
     _normalizeMarkPrice,
     _getSubscriptionState,
+    _gcSweep,
+    _getGcStatsForTest,
 };

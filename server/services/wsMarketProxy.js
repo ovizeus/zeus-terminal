@@ -292,6 +292,30 @@ function getHealthSnapshot() {
     return { streams, overall: hasNonLive ? 'DEGRADED' : 'HEALTHY', crossExchange: getAllCrossExchangeDivergences() };
 }
 
+// ═══ Health-state GC — TTL sweep for the otherwise-unbounded _healthState map ═══
+// Entries are created on first event per symbol and never evicted, so the map
+// grows with every unique symbol any client ever touched. Evict entries whose
+// symbol has NO active subscription AND whose last event is older than 1h.
+const HEALTH_GC_MAX_AGE_MS = 60 * 60 * 1000;
+const HEALTH_GC_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+function _healthStateSweep(now = Date.now()) {
+    for (const [sym, h] of _healthState) {
+        const hasActiveSub = _subs.has(sym) && _subs.get(sym).size > 0;
+        if (hasActiveSub) continue;
+        if ((h.lastEventTs || 0) < now - HEALTH_GC_MAX_AGE_MS) {
+            _healthState.delete(sym);
+        }
+    }
+}
+
+function _getHealthStateStatsForTest() {
+    return { healthState: _healthState.size };
+}
+
+const _healthGcTimer = setInterval(() => _healthStateSweep(), HEALTH_GC_SWEEP_INTERVAL_MS);
+if (_healthGcTimer.unref) _healthGcTimer.unref();
+
 // ═══ Circuit breaker per stream ═══
 
 const CB_TRIP_THRESHOLD = 5;
@@ -1007,6 +1031,8 @@ module.exports = {
     getHealthSnapshot,
     _recordEvent,
     _recordEventAt,
+    _healthStateSweep,
+    _getHealthStateStatsForTest,
     _recordReconnectFailure,
     _clearReconnectFailures,
     _isCircuitOpen,
