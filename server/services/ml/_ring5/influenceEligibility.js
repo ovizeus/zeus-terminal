@@ -62,6 +62,24 @@ function checkEligibility(params) {
         };
     }
 
+    // [REAL-GATE P0-3 2026-06-09] Real money requires the user's explicit,
+    // audited consent — checked HERE so no downstream math can bypass it.
+    // ML_LIVE_OPTIN_REQUIRED defaults TRUE (fail-closed); setting it false is
+    // a deliberate operator escape hatch (see REAL-GATE-CHECKLIST runbook).
+    if (envUpper === 'REAL' && MF.ML_LIVE_OPTIN_REQUIRED === true) {
+        const mlLiveOptin = require('../mlLiveOptin');
+        if (!mlLiveOptin.isOptedIn(userId)) {
+            return {
+                eligible: false,
+                reason: 'live_optin_missing',
+                observationCount: 0,
+                preRegStatus: null,
+                versionId: null,
+                env: envUpper,
+            };
+        }
+    }
+
     const cellKey = `${userId}:${env}:${symbol}:${regime}`;
     const l4 = bp.getPosterior({ level: 4, cellKey });
     const observationCount = l4 ? l4.observationCount : 0;
