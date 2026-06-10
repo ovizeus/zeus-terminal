@@ -30,8 +30,12 @@
         background: #0a0a0f;
       }
       .zt-splash img {
-        width: min(60vw, 280px); height: auto;
+        width: min(68vw, 320px); height: auto;
         animation: zt-splash-pulse 1.6s ease-in-out infinite;
+        /* radial fade: melts the icon's square canvas into the page black —
+           no visible "picture frame" edge around the emblem */
+        -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 56%, transparent 74%);
+        mask-image: radial-gradient(circle at 50% 50%, #000 56%, transparent 74%);
       }
       @keyframes zt-splash-pulse {
         0%, 100% { opacity: 1; transform: scale(1); }

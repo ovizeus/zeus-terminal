@@ -800,9 +800,12 @@ select.zac-select optgroup {
 /* [SPLASH 2026-06-10] Big centered ZT logo — mirrors the static .zt-splash in
    index.html so the boot → auth-loading transition is seamless. */
 .zr-loading__logo {
-  width: min(60vw, 280px);
+  width: min(68vw, 320px);
   height: auto;
   animation: zr-pulse 1.6s ease-in-out infinite;
+  /* radial fade — same as the static splash in index.html */
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 56%, transparent 74%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 56%, transparent 74%);
 }
 @keyframes zr-pulse {
   0%, 100% { opacity: 0.4; }
