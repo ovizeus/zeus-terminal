@@ -20,9 +20,27 @@
       try{var t=localStorage.getItem('zeus_theme');if(t&&t!=='native')document.documentElement.setAttribute('data-theme',t)}catch(e){}
     </script>
     <link rel="stylesheet" href="/themes.css" />
+    <style>
+      /* [SPLASH 2026-06-10] Static boot splash — big centered ZT logo instead
+         of a black page. Lives INSIDE #root so React's first render replaces
+         it seamlessly (App.tsx shows the same logo while auth loads). */
+      .zt-splash {
+        position: fixed; inset: 0; display: flex;
+        align-items: center; justify-content: center;
+        background: #0a0a0f;
+      }
+      .zt-splash img {
+        width: min(60vw, 280px); height: auto;
+        animation: zt-splash-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes zt-splash-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.72; transform: scale(0.96); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="zt-splash"><img src="/assets/icon-512.png" alt="Zeus Terminal" /></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

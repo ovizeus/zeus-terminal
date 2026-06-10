@@ -797,6 +797,13 @@ select.zac-select optgroup {
   letter-spacing: 2px;
   animation: zr-pulse 1.5s ease-in-out infinite;
 }
+/* [SPLASH 2026-06-10] Big centered ZT logo — mirrors the static .zt-splash in
+   index.html so the boot → auth-loading transition is seamless. */
+.zr-loading__logo {
+  width: min(60vw, 280px);
+  height: auto;
+  animation: zr-pulse 1.6s ease-in-out infinite;
+}
 @keyframes zr-pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1; }

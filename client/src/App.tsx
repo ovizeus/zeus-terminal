@@ -92,9 +92,11 @@ export function App() {
   useATBridge()
 
   if (loading) {
+    // [SPLASH 2026-06-10] Same big centered logo as the static boot splash in
+    // index.html — the operator sees one continuous logo from first paint to app.
     return (
       <div className="zr-loading">
-        <span className="zr-loading__text">Zeus Terminal</span>
+        <img className="zr-loading__logo" src="/assets/icon-512.png" alt="Zeus Terminal" />
       </div>
     )
   }
