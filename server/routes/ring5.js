@@ -290,6 +290,7 @@ const mlLiveOptin = require('../services/ml/mlLiveOptin');
 
 router.get('/live-optin', (req, res) => {
     if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'auth required' });
+    // no try/catch needed: isOptedIn never throws — fail-closed inside the store
     res.json({ ok: true, optedIn: mlLiveOptin.isOptedIn(req.user.id) });
 });
 

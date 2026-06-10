@@ -88,6 +88,17 @@ describe('Ring5 live-optin self-service routes', () => {
             expect(mlLiveOptin.setOptin).toHaveBeenCalledWith(7, true, 'api', expect.anything());
         });
 
+        test('explicit optedIn:false revokes via setOptin(uid, false, "api", ip)', async () => {
+            mlLiveOptin.setOptin.mockReturnValue({ optedIn: false });
+            const app = buildApp({ id: 7, role: 'user' });
+            const res = await request(app)
+                .post('/api/ring5/live-optin')
+                .send({ optedIn: false });
+            expect(res.status).toBe(200);
+            expect(res.body.ok).toBe(true);
+            expect(mlLiveOptin.setOptin).toHaveBeenCalledWith(7, false, 'api', expect.anything());
+        });
+
         test('missing optedIn is treated as revoke (strict boolean)', async () => {
             mlLiveOptin.setOptin.mockReturnValue({ optedIn: false });
             const app = buildApp({ id: 7, role: 'user' });
