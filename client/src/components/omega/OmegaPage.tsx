@@ -6,6 +6,7 @@ import { ReportCard } from './ReportCard'
 import { R5AStats } from './R5AStats'
 import { DoctorPanel } from './DoctorPanel'
 import { Ring5Panel } from './Ring5Panel'
+import { MlConsentSection } from '../settings/MlConsentSection'
 import { useATStore, useUiStore } from '../../stores'
 import { useAuthStore } from '../../stores/authStore'
 import type { Utterance, Mood, HealthState } from './omegaApi'
@@ -188,22 +189,10 @@ export function OmegaPage() {
                     <span className="omega-title-tag">read-only · wave 1 foundation</span>
                 </h1>
                 <div className="omega-page-meta">
-                    {health && (
-                        <>
-                            <span className="omega-meta-item">
-                                <span className="omega-meta-label">R0</span>
-                                <span className={`omega-meta-val omega-state-${health.R0.state.toLowerCase()}`}>{health.R0.state}</span>
-                            </span>
-                            <span className="omega-meta-item">
-                                <span className="omega-meta-label">V·24h</span>
-                                <span className="omega-meta-val">{health.utterances_24h}</span>
-                            </span>
-                            <span className="omega-meta-item">
-                                <span className="omega-meta-label">D·24h</span>
-                                <span className="omega-meta-val">{health.decisions_24h}</span>
-                            </span>
-                        </>
-                    )}
+                    {/* [REAL-GATE 2026-06-10] ML REAL consent lives here (operator
+                        request) — Omega is where ML lives; old Settings modal host
+                        was dead code. */}
+                    <MlConsentSection compact />
                     <button
                         type="button"
                         className="omega-nav-button"
@@ -251,6 +240,22 @@ export function OmegaPage() {
                         </span>
                     )}
                 </div>
+                {health && (
+                    <div className="omega-page-meta omega-page-meta-chips">
+                        <span className="omega-meta-item">
+                            <span className="omega-meta-label">R0</span>
+                            <span className={`omega-meta-val omega-state-${health.R0.state.toLowerCase()}`}>{health.R0.state}</span>
+                        </span>
+                        <span className="omega-meta-item">
+                            <span className="omega-meta-label">V·24h</span>
+                            <span className="omega-meta-val">{health.utterances_24h}</span>
+                        </span>
+                        <span className="omega-meta-item">
+                            <span className="omega-meta-label">D·24h</span>
+                            <span className="omega-meta-val">{health.decisions_24h}</span>
+                        </span>
+                    </div>
+                )}
             </div>
 
             <R5AStats />

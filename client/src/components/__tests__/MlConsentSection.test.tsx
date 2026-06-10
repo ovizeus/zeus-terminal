@@ -66,4 +66,24 @@ describe('MlConsentSection', () => {
         await waitFor(() => expect(screen.getByText(/UNKNOWN/i)).toBeTruthy())
         expect(screen.queryByRole('button')).toBeNull()
     })
+
+    // [2026-06-10] Compact mode — Omega header rendering. Same state machine:
+    // confirm-before-POST and fail-closed UNKNOWN must hold there too.
+    test('compact: NOT OPTED IN badge, OPT IN first click does NOT POST — shows confirm', async () => {
+        fetchMock.mockReturnValueOnce(okJson({ ok: true, optedIn: false }))
+        render(<MlConsentSection compact />)
+        await waitFor(() => expect(screen.getByText(/NOT OPTED IN/i)).toBeTruthy())
+        fireEvent.click(screen.getByRole('button', { name: /opt in/i }))
+        expect(fetchMock.mock.calls.filter(c => c[1]?.method === 'POST')).toHaveLength(0)
+        expect(screen.getByText(/are you sure/i)).toBeTruthy()
+        expect(screen.getByRole('button', { name: /confirm/i })).toBeTruthy()
+        expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy()
+    })
+
+    test('compact: GET failure → UNKNOWN and no buttons (fail-closed)', async () => {
+        fetchMock.mockReturnValueOnce(Promise.reject(new Error('network')))
+        render(<MlConsentSection compact />)
+        await waitFor(() => expect(screen.getByText(/UNKNOWN/i)).toBeTruthy())
+        expect(screen.queryByRole('button')).toBeNull()
+    })
 })
