@@ -7,17 +7,17 @@
 const MF = require('../../server/migrationFlags');
 
 describe('migrationFlags fail-closed defaults', () => {
-    test('exports _DEFAULTS for inspection', () => {
-        expect(MF._DEFAULTS).toBeDefined();
+    test('exports DEFAULTS for inspection', () => {
+        expect(MF.DEFAULTS).toBeDefined();
     });
 
     test('ML_LIVE_OPTIN_REQUIRED defaults TRUE (fail-closed)', () => {
-        expect(MF._DEFAULTS.ML_LIVE_OPTIN_REQUIRED).toBe(true);
+        expect(MF.DEFAULTS.ML_LIVE_OPTIN_REQUIRED).toBe(true);
     });
 
     test('REAL execution flags default FALSE (fail-closed)', () => {
-        expect(MF._DEFAULTS._SRV_POS_REAL_ENABLED).toBe(false);
-        expect(MF._DEFAULTS._USERDATA_STREAM_REAL_ENABLED).toBe(false);
-        expect(MF._DEFAULTS.ML_LIVE_INFLUENCE_ENABLED).toBe(false);
+        expect(MF.DEFAULTS._SRV_POS_REAL_ENABLED).toBe(false);
+        expect(MF.DEFAULTS._USERDATA_STREAM_REAL_ENABLED).toBe(false);
+        expect(MF.DEFAULTS.ML_LIVE_INFLUENCE_ENABLED).toBe(false);
     });
 });

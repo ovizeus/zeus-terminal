@@ -187,6 +187,9 @@ const DEFAULTS = {
     _SRV_POS_TESTNET_ENABLED: false,
     _SRV_POS_REAL_ENABLED: false,
 };
+// [REVIEW of 109b8962] DEFAULTS is the immutable fail-closed baseline pinned
+// by tests; freeze so no code path can mutate it (module never writes to it).
+Object.freeze(DEFAULTS);
 
 // ── Load persisted flags (survives restarts) ──
 const flags = Object.assign({}, DEFAULTS);
@@ -341,9 +344,6 @@ function getAll() {
 }
 
 module.exports = {
-    // [REAL-GATE P0-3 2026-06-09] Raw defaults exposed for test inspection
-    // (pins fail-closed defaults; NOT the resolved runtime values).
-    _DEFAULTS: DEFAULTS,
     // Direct flag access (read-only semantics — use set() to change)
     get SERVER_MARKET_DATA() { return flags.SERVER_MARKET_DATA; },
     get SERVER_BRAIN() { return flags.SERVER_BRAIN; },
