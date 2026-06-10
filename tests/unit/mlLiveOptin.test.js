@@ -51,3 +51,31 @@ describe('mlLiveOptin store', () => {
         expect(optin.isOptedIn(undefined)).toBe(false);
     });
 });
+
+describe('mlLiveOptin review hardening (459c9c2a)', () => {
+    test('setOptin throws on missing userId', () => {
+        expect(() => optin.setOptin(null, true, 't')).toThrow();
+    });
+
+    test('non-boolean truthy optedIn records a REVOKE (strict-boolean grant)', () => {
+        optin.setOptin(44, 'true', 't');
+        expect(optin.isOptedIn(44)).toBe(false);
+    });
+
+    test('isOptedIn fail-closed on DB error', () => {
+        // Object param makes better-sqlite3 throw a bind error, exercising the catch.
+        expect(optin.isOptedIn({ bogus: true })).toBe(false);
+    });
+
+    test('grant is atomic with audit (both row and audit entry written in one call)', () => {
+        const { db } = require('../../server/services/database');
+        optin.setOptin(45, true, 'atomic-test', '10.0.0.1');
+        expect(optin.isOptedIn(45)).toBe(true);
+        const row = db.prepare(
+            "SELECT details, ip FROM audit_log WHERE action='ML_LIVE_OPTIN_SET' AND user_id=45 ORDER BY id DESC LIMIT 1"
+        ).get();
+        expect(row).toBeTruthy();
+        expect(JSON.parse(row.details).optedIn).toBe(true);
+        expect(row.ip).toBe('10.0.0.1');
+    });
+});
