@@ -5,7 +5,9 @@ module.exports = {
     apps: [{
         name: 'zeus',
         script: 'server.js',
-        interpreter: '/root/.nvm/versions/node/v20.20.2/bin/node',
+        // [SEC-23 2026-06-10] system node at /usr/local/bin (copy of nvm
+        // v20.20.2 in /opt/node) — the zeus user cannot reach /root/.nvm.
+        interpreter: '/usr/local/bin/node',
         cwd: path.resolve(__dirname),
         instances: 1,
         exec_mode: 'fork',
