@@ -1387,7 +1387,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   logger.info('SERVER', 'Zeus Terminal started on port ' + PORT);
   logger.info('MIGRATION', 'Feature flags: ' + JSON.stringify(MF.getAll()));
   // [REAL-GATE P0-4 2026-06-09] Scream (log+Telegram) if REAL flags are incoherent.
-  try { require('./server/services/realGateCoherence').assertAndAlert(MF.getAll(), 'boot'); } catch (_) {}
+  try { require('./server/services/realGateCoherence').assertAndAlert(MF.getAll(), 'boot'); } catch (e) { console.error('[REAL_GATE] coherence guard failed to load: ' + e.message); }
   // [OPS-5] Persist boot event for restart-count monitoring. Daily cron
   // în database.js counts SERVER_BOOT events în last 24h and alerts on
   // anomaly. Best-effort — try/catch so DB write failure never blocks

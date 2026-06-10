@@ -41,6 +41,7 @@ function assertAndAlert(flagsGetAll, label) {
         }
         return r;
     } catch (e) {
+        console.error('[REAL_GATE] coherence check crashed: ' + e.message);
         return { coherent: false, problems: ['coherence check crashed: ' + e.message] };
     }
 }

@@ -15,6 +15,7 @@ const path = require('path');
 const FLAGS_FILE = path.join(__dirname, '..', 'data', 'migration_flags.json');
 
 // ── Defaults: current safe behavior (client does everything) ──
+// Adding a REAL-path flag? Add a coherence rule in services/realGateCoherence.js.
 const DEFAULTS = {
     SERVER_MARKET_DATA: false,  // Phase 3: server subscribes to Binance WS
     SERVER_BRAIN: false,  // Phase 4: server runs brain/confluence/regime
@@ -339,7 +340,7 @@ function set(key, value) {
     // require avoids a boot-order cycle; assertAndAlert never throws).
     try {
         require('./services/realGateCoherence').assertAndAlert(getAll(), `set(${key})`);
-    } catch (_) {}
+    } catch (e) { console.error('[REAL_GATE] coherence guard failed to load: ' + e.message); }
     return Object.assign({}, flags);
 }
 
