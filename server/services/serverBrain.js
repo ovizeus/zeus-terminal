@@ -1676,10 +1676,9 @@ function _runTestnetShadowCycle() {
 // its [SHORT-FIX] direction-agnostic scoring. S3.1c aligns the shadow
 // formula to the client's in client/src/engine/confluence.ts so the
 // ≥95% agreement gate is computed on the same indicator set + same
-// score shape. Residual gap: client uses LongShort ratio (getLS()),
-// server has no LS feed yet → lsDir defaults to 'neut' here, mirroring
-// client's neutral-LS behavior; a follow-up batch should add
-// /futures/data/topLongShortPositionRatio polling to serverState.
+// score shape. [LEVER-A 2026-06-10] Residual LS gap closed: lsDir now
+// consumes serverSentiment's cached globalLongShortAccountRatio (see below)
+// instead of hardcoded 'neut'.
 // ══════════════════════════════════════════════════════════════════
 function _calcConfluenceParity(snap, ind) {
     // rsi direction — identical to client (50 split, binary)
@@ -1691,9 +1690,17 @@ function _calcConfluenceParity(snap, ind) {
     // match client's fallback semantics.
     const stDir = ind.stDir === 'bull' ? 'bull' : 'bear';
 
-    // LongShort ratio — server has no LS feed; default to 'neut' (same as
-    // client when getLS() returns null).
-    const lsDir = 'neut';
+    // [LEVER-A 2026-06-10] LongShort ratio — consume serverSentiment's cached
+    // global L/S account ratio (R = longs/shorts). Mirrors client
+    // confluence.ts:34 exactly: split l>s ⇔ R>1; R==1 → 'bear' (client's
+    // binary else); missing/unfinite → 'neut'. Parity rows only — the LIVE
+    // _calcConfluence (RSI/ST/MACD/FR/OI) is deliberately untouched.
+    let lsDir = 'neut';
+    try {
+        const sent = require('./serverSentiment').getSentiment(snap.symbol);
+        const r = sent && sent.ls;
+        if (r != null && Number.isFinite(+r)) lsDir = (+r > 1) ? 'bull' : 'bear';
+    } catch (_) { /* sentiment unavailable → neut (same as client without LS) */ }
 
     // Funding rate — identical to client
     const fr = snap.fr;
@@ -2509,6 +2516,9 @@ module.exports = {
     // [SP2-a soak] Tier classifier + gating helpers. Pure/thin readers exported
     // for unit tests; runtime path (_computeFusion) references the local symbols.
     _classifyTier,
+    // [LEVER-A 2026-06-10] test-only — pure shadow-parity formula, no runtime
+    // path calls this export (_runShadowCycle uses the local symbol).
+    _calcConfluenceParity,
     _belowSmallBar,
     _resolveSoakFloor,
     _soakConfFloorFor,

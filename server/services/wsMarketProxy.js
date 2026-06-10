@@ -514,7 +514,11 @@ function stopWatchlistREST() {
 // ═══ Quant data poller — funding + OI via REST into cache ═══
 
 const QUANT_POLL_MS = 60_000;
-const QUANT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'];
+// [P2-OI 2026-06-10] Env-overridable (comma-separated) — default preserves
+// the original 4. Quant poller weight = 2 calls/symbol/60s; mind rate budget
+// before extending the list.
+const QUANT_SYMBOLS = (process.env.QUANT_SYMBOLS || 'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT')
+    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
 let _quantPollTimer = null;
 
 async function _pollQuantData() {
@@ -1078,4 +1082,5 @@ module.exports = {
     _handleBinanceMessage,
     _sendCachedValues,
     _resetForTest,
+    QUANT_SYMBOLS, // [P2-OI 2026-06-10] exported for tests (env-override coverage)
 };
