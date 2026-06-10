@@ -6275,8 +6275,10 @@ select option {
 .omega-page-meta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-width: 0; }
 /* [2026-06-10] Second header row: R0 / V·24h / D·24h health chips moved under
    the action row (ML·REAL consent + REPORT now own the first row). flex-basis
-   100% forces the wrap inside .omega-page-header's flex. */
-.omega-page-meta-chips { flex-basis: 100%; justify-content: flex-end; margin-top: 4px; }
+   100% forces the wrap inside .omega-page-header's flex.
+   [2026-06-10 v3 operator feedback] Left-aligned so the chips sit directly
+   under the ML·REAL consent chip (first item of the action row). */
+.omega-page-meta-chips { flex-basis: 100%; justify-content: flex-start; margin-top: 4px; }
 .omega-meta-item { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
 .omega-meta-label { font-size: 9px; color: #6a4f8a; letter-spacing: 0.15em; text-transform: uppercase; white-space: nowrap; }
 .omega-meta-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #00d4ff; font-weight: 600; white-space: nowrap; }
@@ -6297,6 +6299,9 @@ select option {
   .omega-page-title { justify-content: flex-start; font-size: 16px; }
   .omega-title-glyph { font-size: 20px; }
   .omega-page-meta { justify-content: space-between; width: 100%; gap: 4px; }
+  /* [2026-06-10 v3] Chips row stays LEFT on phone too — the space-between
+     above (action row) would otherwise win the cascade over the base rule. */
+  .omega-page-meta-chips { justify-content: flex-start; }
   .omega-meta-item { flex-direction: row; gap: 4px; align-items: center; }
   .omega-voice-toggle { margin-left: auto; }
 }

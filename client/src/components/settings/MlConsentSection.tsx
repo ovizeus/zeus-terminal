@@ -5,16 +5,26 @@
  * This chip is the only UI that flips it.
  * [2026-06-10 v2] Single rendering: Omega page header chip (the Settings
  * modal that hosted the full section was dead code and has been deleted).
- * BOTH opt-in AND revoke require an explicit confirm step, each with a
+ * [2026-06-10 v3 operator feedback] Confirm step is a dedicated modal
+ * (zr-modal house classes, same as the old SettingsModal) instead of inline
+ * text squeezed into the header row; buttons are OPT IN ML / REVOKE ML.
+ * BOTH opt-in AND revoke require the explicit confirm, each with a
  * one-sentence explanation of what ON / OFF means for real-money trades.
+ * Overlay click and CANCEL both close without POSTing.
  * Fail-closed: UNKNOWN (GET failed) renders the badge only, no buttons.
  */
 import { useEffect, useState } from 'react'
 import { toast } from '../../data/marketDataHelpers'
 
-const CONFIRM_TEXT = {
-    optin: 'Turn ON: once REAL trading is enabled, ML may adjust the confidence of your real-money trades. Every change is audited. You can turn it off anytime.',
-    revoke: 'Turn OFF: ML immediately stops influencing your REAL-money trades. You can opt in again anytime.',
+const CONFIRM_COPY = {
+    optin: {
+        title: 'Enable ML on REAL',
+        body: 'Once REAL trading is enabled, ML may adjust the confidence of your real-money trades. Every change is audited. You can turn it off anytime.',
+    },
+    revoke: {
+        title: 'Disable ML on REAL',
+        body: 'ML immediately stops influencing your REAL-money trades. You can opt in again anytime.',
+    },
 } as const
 
 export function MlConsentSection() {
@@ -58,26 +68,42 @@ export function MlConsentSection() {
                 <span className="omega-meta-label">ML·REAL</span>
                 <span className="omega-meta-val">{badge}</span>
             </span>
-            {optedIn === false && confirming === null && (
+            {optedIn === false && (
                 <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming('optin')}>
-                    OPT IN
+                    OPT IN ML
                 </button>
             )}
-            {optedIn === true && confirming === null && (
+            {optedIn === true && (
                 <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming('revoke')}>
-                    REVOKE
+                    REVOKE ML
                 </button>
             )}
             {confirming !== null && (
-                <>
-                    <span className="omega-meta-val">{CONFIRM_TEXT[confirming]}</span>
-                    <button type="button" className="omega-nav-button" disabled={busy} onClick={() => apply(confirming === 'optin')}>
-                        CONFIRM
-                    </button>
-                    <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming(null)}>
-                        CANCEL
-                    </button>
-                </>
+                <div
+                    className="zr-modal-overlay"
+                    data-testid="ml-consent-overlay"
+                    onClick={e => { if (e.target === e.currentTarget) setConfirming(null) }}
+                >
+                    <div className="zr-modal" role="dialog" aria-modal="true" aria-label={CONFIRM_COPY[confirming].title}>
+                        <div className="zr-modal__header">
+                            <span>{CONFIRM_COPY[confirming].title}</span>
+                            <button type="button" className="zr-modal__close" aria-label="Close" onClick={() => setConfirming(null)}>✕</button>
+                        </div>
+                        <div className="zr-modal__body">
+                            <p style={{ margin: '0 0 16px', fontSize: 12, lineHeight: 1.6, color: 'var(--txt)' }}>
+                                {CONFIRM_COPY[confirming].body}
+                            </p>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                                <button type="button" className="sbtn2 pri" disabled={busy} onClick={() => apply(confirming === 'optin')}>
+                                    CONFIRM
+                                </button>
+                                <button type="button" className="sbtn2 sec" disabled={busy} onClick={() => setConfirming(null)}>
+                                    CANCEL
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
         </>
     )
