@@ -192,7 +192,7 @@ export function OmegaPage() {
                     {/* [REAL-GATE 2026-06-10] ML REAL consent lives here (operator
                         request) — Omega is where ML lives; old Settings modal host
                         was dead code. */}
-                    <MlConsentSection compact />
+                    <MlConsentSection />
                     <button
                         type="button"
                         className="omega-nav-button"

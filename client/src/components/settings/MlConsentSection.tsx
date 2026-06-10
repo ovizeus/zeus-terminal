@@ -2,18 +2,25 @@
  * [REAL-GATE P0-3 2026-06-09] ML Live Influence consent.
  * Real-money ML influence requires explicit, audited, per-user opt-in —
  * enforced server-side at influence-eligibility level (live_optin_missing).
- * This section is the only UI that flips it. Opt-in needs a confirm step;
- * revoking is one click (withdrawing consent must always be easy).
- * [2026-06-10] Lives in the Omega page header (compact mode) — the Settings
- * modal that originally hosted it is dead code (never opened).
+ * This chip is the only UI that flips it.
+ * [2026-06-10 v2] Single rendering: Omega page header chip (the Settings
+ * modal that hosted the full section was dead code and has been deleted).
+ * BOTH opt-in AND revoke require an explicit confirm step, each with a
+ * one-sentence explanation of what ON / OFF means for real-money trades.
+ * Fail-closed: UNKNOWN (GET failed) renders the badge only, no buttons.
  */
 import { useEffect, useState } from 'react'
 import { toast } from '../../data/marketDataHelpers'
 
-export function MlConsentSection({ compact = false }: { compact?: boolean } = {}) {
+const CONFIRM_TEXT = {
+    optin: 'Turn ON: once REAL trading is enabled, ML may adjust the confidence of your real-money trades. Every change is audited. You can turn it off anytime.',
+    revoke: 'Turn OFF: ML immediately stops influencing your REAL-money trades. You can opt in again anytime.',
+} as const
+
+export function MlConsentSection() {
     const [optedIn, setOptedIn] = useState<boolean | null>(null)
     const [busy, setBusy] = useState(false)
-    const [confirming, setConfirming] = useState(false)
+    const [confirming, setConfirming] = useState<null | 'optin' | 'revoke'>(null)
 
     useEffect(() => {
         let alive = true
@@ -37,78 +44,41 @@ export function MlConsentSection({ compact = false }: { compact?: boolean } = {}
             if (d && d.ok) setOptedIn(!!d.optedIn)
             else toast('Failed to update ML consent')
         } catch { toast('Failed to update ML consent') /* keep previous state */ }
-        finally { setBusy(false); setConfirming(false) }
+        finally { setBusy(false); setConfirming(null) }
     }
 
     const badge = optedIn === null ? 'UNKNOWN' : optedIn ? 'OPTED IN' : 'NOT OPTED IN'
 
-    if (compact) {
-        // Omega header rendering — same state machine + fetch logic, header-chip
-        // markup. Fail-closed: UNKNOWN renders the badge only, no buttons.
-        return (
-            <>
-                <span
-                    className="omega-meta-item"
-                    title="ML influence on REAL-money trades requires your explicit, audited consent. Revocable at any time."
-                >
-                    <span className="omega-meta-label">ML·REAL</span>
-                    <span className="omega-meta-val">{badge}</span>
-                </span>
-                {optedIn === false && !confirming && (
-                    <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming(true)}>
-                        OPT IN
-                    </button>
-                )}
-                {confirming && (
-                    <>
-                        <span className="omega-meta-val">Are you sure?</span>
-                        <button type="button" className="omega-nav-button" disabled={busy} onClick={() => apply(true)}>
-                            CONFIRM
-                        </button>
-                        <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming(false)}>
-                            CANCEL
-                        </button>
-                    </>
-                )}
-                {optedIn === true && (
-                    <button type="button" className="omega-nav-button" disabled={busy} onClick={() => apply(false)}>
-                        REVOKE
-                    </button>
-                )}
-            </>
-        )
-    }
-
     return (
-        <div className="zr-settings-subsection">
-            <h4>ML Influence on REAL (consent)</h4>
-            <p className="zr-settings-desc">
-                When REAL trading goes live, the ML layer may adjust decision
-                confidence only if you have explicitly opted in here. Stored
-                server-side, audited, revocable at any time.
-            </p>
-            <p className="zr-settings-meta">Status: <strong>{badge}</strong></p>
-            {optedIn === false && !confirming && (
-                <button className="zr-btn" disabled={busy} onClick={() => setConfirming(true)}>
-                    Opt in
+        <>
+            <span
+                className="omega-meta-item"
+                title="ML influence on REAL-money trades requires your explicit, audited consent. Revocable at any time."
+            >
+                <span className="omega-meta-label">ML·REAL</span>
+                <span className="omega-meta-val">{badge}</span>
+            </span>
+            {optedIn === false && confirming === null && (
+                <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming('optin')}>
+                    OPT IN
                 </button>
             )}
-            {confirming && (
-                <div className="zr-confirm-block">
-                    <p>Are you sure? This allows ML to influence REAL-money trade confidence once REAL trading is enabled.</p>
-                    <button className="zr-btn zr-btn-danger" disabled={busy} onClick={() => apply(true)}>
-                        Confirm opt-in
-                    </button>
-                    <button className="zr-btn" disabled={busy} onClick={() => setConfirming(false)}>
-                        Cancel
-                    </button>
-                </div>
-            )}
-            {optedIn === true && (
-                <button className="zr-btn" disabled={busy} onClick={() => apply(false)}>
-                    Revoke consent
+            {optedIn === true && confirming === null && (
+                <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming('revoke')}>
+                    REVOKE
                 </button>
             )}
-        </div>
+            {confirming !== null && (
+                <>
+                    <span className="omega-meta-val">{CONFIRM_TEXT[confirming]}</span>
+                    <button type="button" className="omega-nav-button" disabled={busy} onClick={() => apply(confirming === 'optin')}>
+                        CONFIRM
+                    </button>
+                    <button type="button" className="omega-nav-button" disabled={busy} onClick={() => setConfirming(null)}>
+                        CANCEL
+                    </button>
+                </>
+            )}
+        </>
     )
 }

@@ -14,7 +14,7 @@
 - [ ] Operator has REAL Binance API keys (trade-only, NO withdrawal permission, IP-restricted to the VPS)
 
 ## Phase 1 — consent & coherence (still zero REAL exposure)
-- [ ] Opt in via Settings → Trading → "ML Influence on REAL (consent)" → verify status shows OPTED IN
+- [ ] Opt in via Omega tab → ML·REAL chip (CONFIRM in the Turn ON dialog) → verify status shows OPTED IN
       (API alternative needs the session cookie AND the CSRF header or it 403s:
       `curl -b "zeus_token=<jwt>" -H "X-Zeus-Request: 1" -H "Content-Type: application/json" -d '{"optedIn":true}' http://localhost:3000/api/ring5/live-optin`)
 - [ ] Confirm `ML_LIVE_OPTIN_REQUIRED=true` in boot log flags dump
