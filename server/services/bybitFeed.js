@@ -314,18 +314,23 @@ const GC_PENDING_MAX_AGE_MS = 120_000;
 const GC_SWEEP_INTERVAL_MS = 60_000;
 
 function _gcSweep(now = Date.now()) {
-    for (const [topic, entry] of _failedTopics) {
-        // Legacy entries (pre-GC) have no failedAt — stamp them so they age out
-        if (entry.failedAt == null) entry.failedAt = now;
-        if (entry.retries >= GC_FAILED_MAX_RETRIES || (now - entry.failedAt) > GC_FAILED_MAX_AGE_MS) {
-            _failedTopics.delete(topic);
+    // try/catch: a corrupted entry must degrade to "evicted", never to an
+    // uncaughtException inside a setInterval tick on the live trading process.
+    try {
+        for (const [topic, entry] of _failedTopics) {
+            if (!entry) { _failedTopics.delete(topic); continue; }
+            // Legacy entries (pre-GC) have no failedAt — stamp them so they age out
+            if (entry.failedAt == null) entry.failedAt = now;
+            if (entry.retries >= GC_FAILED_MAX_RETRIES || (now - entry.failedAt) > GC_FAILED_MAX_AGE_MS) {
+                _failedTopics.delete(topic);
+            }
         }
-    }
-    for (const [reqId, entry] of _pendingByReqId) {
-        if (entry.sentAt < now - GC_PENDING_MAX_AGE_MS) {
-            _pendingByReqId.delete(reqId);
+        for (const [reqId, entry] of _pendingByReqId) {
+            if (!entry || (entry.sentAt || 0) < now - GC_PENDING_MAX_AGE_MS) {
+                _pendingByReqId.delete(reqId);
+            }
         }
-    }
+    } catch (_) { /* never throw from a GC tick */ }
 }
 
 function _getGcStatsForTest() {

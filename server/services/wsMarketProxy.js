@@ -300,13 +300,16 @@ const HEALTH_GC_MAX_AGE_MS = 60 * 60 * 1000;
 const HEALTH_GC_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 function _healthStateSweep(now = Date.now()) {
-    for (const [sym, h] of _healthState) {
-        const hasActiveSub = _subs.has(sym) && _subs.get(sym).size > 0;
-        if (hasActiveSub) continue;
-        if ((h.lastEventTs || 0) < now - HEALTH_GC_MAX_AGE_MS) {
-            _healthState.delete(sym);
+    // try/catch: a corrupted entry must never crash a GC tick on the live process.
+    try {
+        for (const [sym, h] of _healthState) {
+            const hasActiveSub = _subs.has(sym) && _subs.get(sym).size > 0;
+            if (hasActiveSub) continue;
+            if (!h || (h.lastEventTs || 0) < now - HEALTH_GC_MAX_AGE_MS) {
+                _healthState.delete(sym);
+            }
         }
-    }
+    } catch (_) { /* never throw from a GC tick */ }
 }
 
 function _getHealthStateStatsForTest() {
