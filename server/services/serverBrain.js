@@ -1699,7 +1699,8 @@ function _calcConfluenceParity(snap, ind) {
     try {
         const sent = require('./serverSentiment').getSentiment(snap.symbol);
         const r = sent && sent.ls;
-        if (r != null && Number.isFinite(+r)) lsDir = (+r > 1) ? 'bull' : 'bear';
+        // R <= 0: client lsRatioToSplit returns null → 'neut'; mirror that too.
+        if (r != null && Number.isFinite(+r) && +r > 0) lsDir = (+r > 1) ? 'bull' : 'bear';
     } catch (_) { /* sentiment unavailable → neut (same as client without LS) */ }
 
     // Funding rate — identical to client

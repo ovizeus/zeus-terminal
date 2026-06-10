@@ -66,5 +66,10 @@ export async function fetchTopTraderPositionRatio(): Promise<void> {
     const sym = (c.symbol || 'BTCUSDT').toUpperCase()
     const tp = await (await fetch(`/api/market/topLongShort?symbol=${sym}&period=5m&limit=1`)).json()
     if (tp.length) { c._qmPosLongRatio = +tp[0].longAccount; c._qmPosShortRatio = +tp[0].shortAccount }
-  } catch (_) { c._qmPosLongRatio = c.ls || 0.5; c._qmPosShortRatio = 1 - (c.ls || 0.5) }
+  } catch (_) {
+    // c.ls is the {l, s} percentage split (sum≈100) — the old scalar fallback
+    // assigned the whole object, silently breaking `posLongRatio > 0` in frame.
+    c._qmPosLongRatio = c.ls?.l ? c.ls.l / 100 : 0.5
+    c._qmPosShortRatio = c.ls?.s ? c.ls.s / 100 : 0.5
+  }
 }

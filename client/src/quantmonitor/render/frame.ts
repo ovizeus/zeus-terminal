@@ -641,9 +641,10 @@ export function renderFrame(): string {
   L(``)
 
   // Futures stats
-  L(`  <span class="dg">OPEN INTEREST :</span> <span class="w">${openInterest.toFixed(2)} BTC</span> <span class="dg">(\u2248$${fmtUSD(oiValue)})</span>`)
-  L(`  <span class="dg">FUNDING RATE  :</span> <span class="${fundingRate >= 0 ? 'g' : 'r'}">${(fundingRate * 100).toFixed(4)}%</span> <span class="dg">BTC</span>`)
-  L(`  <span class="dg">LONG/SHORT    :</span> <span class="g">${(longRatio * 100).toFixed(1)}%L</span><span class="dg">/</span><span class="r">${(shortRatio * 100).toFixed(1)}%S</span> <span class="dg">BTC</span>`)
+  const _unit = oiUnitFor(w.S?.symbol)
+  L(`  <span class="dg">OPEN INTEREST :</span> <span class="w">${openInterest.toFixed(2)} ${_unit}</span> <span class="dg">(\u2248$${fmtUSD(oiValue)})</span>`)
+  L(`  <span class="dg">FUNDING RATE  :</span> <span class="${fundingRate >= 0 ? 'g' : 'r'}">${(fundingRate * 100).toFixed(4)}%</span> <span class="dg">${_unit}</span>`)
+  L(`  <span class="dg">LONG/SHORT    :</span> <span class="g">${(longRatio * 100).toFixed(1)}%L</span><span class="dg">/</span><span class="r">${(shortRatio * 100).toFixed(1)}%S</span> <span class="dg">${_unit}</span>`)
   L(``)
 
   // === OI Change 1h ===

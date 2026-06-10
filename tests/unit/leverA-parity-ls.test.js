@@ -164,6 +164,17 @@ describe('Lever A — parity confluence LS vote (client-mirror)', () => {
         expect(res.score).toBe(20);
     });
 
+    test('R <= 0 → neut (client lsRatioToSplit returns null for R<=0)', () => {
+        sentiment.getSentiment.mockReturnValue({ ls: 0 });
+        const res0 = sb._calcConfluenceParity(snap, ind);
+        sentiment.getSentiment.mockReturnValue({ ls: -1.2 });
+        const resNeg = sb._calcConfluenceParity(snap, ind);
+        for (const res of [res0, resNeg]) {
+            expect(res.bullDirs).toBe(1);
+            expect(res.bearDirs).toBe(1);
+        }
+    });
+
     test('non-finite R (NaN/Infinity) → neut', () => {
         sentiment.getSentiment.mockReturnValue({ ls: NaN });
         const resNaN = sb._calcConfluenceParity(snap, ind);
