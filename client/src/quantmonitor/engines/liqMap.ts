@@ -61,7 +61,10 @@ export function buildLiqEstimate(): void {
 export async function fetchTopTraderPositionRatio(): Promise<void> {
   const c = w.S; if (!c) return
   try {
-    const tp = await (await fetch('/api/market/topLongShort?symbol=BTCUSDT&period=5m&limit=1')).json()
+    // [P2-QM 2026-06-10] was hardcoded BTCUSDT — use the active symbol.
+    // Server route /api/market/topLongShort passes symbol through (no whitelist).
+    const sym = (c.symbol || 'BTCUSDT').toUpperCase()
+    const tp = await (await fetch(`/api/market/topLongShort?symbol=${sym}&period=5m&limit=1`)).json()
     if (tp.length) { c._qmPosLongRatio = +tp[0].longAccount; c._qmPosShortRatio = +tp[0].shortAccount }
   } catch (_) { c._qmPosLongRatio = c.ls || 0.5; c._qmPosShortRatio = 1 - (c.ls || 0.5) }
 }

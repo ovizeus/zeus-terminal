@@ -6,6 +6,12 @@ import { escHtml } from '../../utils/dom'
 const w = window as any
 const REQ = 75
 
+// [P2-QM 2026-06-10] OI unit label was hardcoded "BTC" regardless of the
+// active symbol. Derive the base asset from the symbol (ETHUSDT → ETH).
+export function oiUnitFor(symbol?: string): string {
+  return (symbol || 'BTCUSDT').toUpperCase().replace(/USDT$|USDC$|BUSD$/, '')
+}
+
 // --- helper: liqMap (order book depth heatmap) ---
 function liqMap(): string[] {
   const S = w.S
@@ -140,7 +146,7 @@ function liqChart(): string[] {
   const status = bucketCount === 0
     ? `<span class="y">accumulating real liqs — ${liqEventCount} events so far (24h rolling)</span>`
     : `real liq feed 24h | ${bucketCount} active levels | ${liqEventCount} events`
-  lines.push(`  <span class="dg">\u25CF ${status} | src: BNB+BYB+OKX | ${posRatio} | OI:${openInterest.toFixed(0)}BTC</span>`)
+  lines.push(`  <span class="dg">\u25CF ${status} | src: BNB+BYB+OKX | ${posRatio} | OI:${openInterest.toFixed(0)}${oiUnitFor(S?.symbol)}</span>`)
 
   return lines
 }

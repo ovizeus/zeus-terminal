@@ -62,7 +62,8 @@ function runAllEngines(): void {
   buildLiqEstimate()
 }
 
-function _syncQmVars(): void {
+// [P2-QM 2026-06-10] exported for unit tests (acc L/S mapping from S.ls)
+export function _syncQmVars(): void {
   const S = w.S; if (!S) return
   // Price fallback chain: WS markPrice → basisRate REST markPrice → last kline close
   if (!S.price || S.price <= 0) {
@@ -77,6 +78,11 @@ function _syncQmVars(): void {
   S._qmStableMarketCap = S.stableMarketCap || 0
   S._qmStableChange24h = S.stableChange24h || 0
   S._qmOpenInterest = S.oi || 0
+  // [P2-QM 2026-06-10] acc L/S fallback fields had zero writers (always 0%).
+  // S.ls = {l, s} percentage split (sum≈100) from fetchLS/lsRatioToSplit;
+  // frame.ts multiplies by 100 for display, so store as 0..1 fractions.
+  S._qmLongRatio = S.ls?.l ? S.ls.l / 100 : 0
+  S._qmShortRatio = S.ls?.s ? S.ls.s / 100 : 0
   S._qmWsOK = !!(S.bnbOk || S.bybOk)
   S._qmChgP = S.chg24hPct || 0
   S._qmH24 = S.high24h || 0
