@@ -3,6 +3,7 @@ import { useUiStore, useSettingsStore, useAuthStore } from '../../stores'
 import { authApi } from '../../services/api'
 import type { ThemeId } from '../../types'
 import { OmegaMemorySection } from './OmegaMemorySection'
+import { MlConsentSection } from './MlConsentSection'
 
 const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'native', label: 'Obsidian' },
@@ -135,6 +136,7 @@ export function SettingsModal() {
                   onChange={(e) => setTC({ confMin: Number(e.target.value) || 50 })}
                 />
               </label>
+              <MlConsentSection />
             </div>
           )}
 
