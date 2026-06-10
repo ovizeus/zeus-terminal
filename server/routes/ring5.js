@@ -283,4 +283,29 @@ router.get('/influence/status', _requireAdmin, (req, res) => {
     }
 });
 
+// [REAL-GATE P0-3 2026-06-09] Per-user REAL ML influence consent.
+// Self-service (req.user.id only — no cross-user access), audited in store.
+// NOT admin-gated: any authenticated user manages only their own consent.
+const mlLiveOptin = require('../services/ml/mlLiveOptin');
+
+router.get('/live-optin', (req, res) => {
+    if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'auth required' });
+    res.json({ ok: true, optedIn: mlLiveOptin.isOptedIn(req.user.id) });
+});
+
+router.post('/live-optin', (req, res) => {
+    if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'auth required' });
+    // Strict boolean: anything other than literal true is treated as revoke (fail-closed).
+    const optedIn = req.body && req.body.optedIn === true;
+    try {
+        const result = mlLiveOptin.setOptin(req.user.id, optedIn, 'api', req.ip || null);
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        // GRANT path is transactional with its audit row and throws if the audit
+        // cannot be written — do not report success without an audit trail.
+        console.error('[ring5/live-optin] setOptin failed:', err.message);
+        res.status(500).json({ ok: false, error: 'optin update failed' });
+    }
+});
+
 module.exports = router;
