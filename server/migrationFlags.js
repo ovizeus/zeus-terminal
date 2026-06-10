@@ -335,6 +335,11 @@ function set(key, value) {
             actor: 'migrationFlags.set', reason: 'flag_change',
         });
     } catch (_) { /* never block flag set on rollback snapshot */ }
+    // [REAL-GATE P0-4 2026-06-09] Any flip re-checks REAL-gate coherence (lazy
+    // require avoids a boot-order cycle; assertAndAlert never throws).
+    try {
+        require('./services/realGateCoherence').assertAndAlert(getAll(), `set(${key})`);
+    } catch (_) {}
     return Object.assign({}, flags);
 }
 
