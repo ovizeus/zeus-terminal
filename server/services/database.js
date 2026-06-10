@@ -10160,6 +10160,20 @@ migrate('406_handover_log', () => {
     `);
 });
 
+// [REAL-GATE P0-3 2026-06-09] Per-user explicit opt-in for REAL ML influence.
+// Absence of a row = NOT opted in (fail-closed). Written only via
+// mlLiveOptin.setOptin (audited). Read by influenceEligibility on env=REAL.
+migrate('407_ml_live_optin', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_live_optin (
+            user_id     INTEGER PRIMARY KEY,
+            opted_in    INTEGER NOT NULL DEFAULT 0,
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            source      TEXT
+        );
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
