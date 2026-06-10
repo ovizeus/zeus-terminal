@@ -59,4 +59,11 @@ describe('MlConsentSection', () => {
         fireEvent.click(screen.getByRole('button', { name: /revoke/i }))
         await waitFor(() => expect(screen.getByText(/NOT OPTED IN/i)).toBeTruthy())
     })
+
+    test('GET failure → UNKNOWN badge and no action buttons (fail-closed)', async () => {
+        fetchMock.mockReturnValueOnce(Promise.reject(new Error('network')))
+        render(<MlConsentSection />)
+        await waitFor(() => expect(screen.getByText(/UNKNOWN/i)).toBeTruthy())
+        expect(screen.queryByRole('button')).toBeNull()
+    })
 })

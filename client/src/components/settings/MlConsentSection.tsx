@@ -6,6 +6,7 @@
  * revoking is one click (withdrawing consent must always be easy).
  */
 import { useEffect, useState } from 'react'
+import { toast } from '../../data/marketDataHelpers'
 
 export function MlConsentSection() {
     const [optedIn, setOptedIn] = useState<boolean | null>(null)
@@ -32,7 +33,8 @@ export function MlConsentSection() {
             })
             const d = await r.json()
             if (d && d.ok) setOptedIn(!!d.optedIn)
-        } catch { /* keep previous state */ }
+            else toast('Failed to update ML consent')
+        } catch { toast('Failed to update ML consent') /* keep previous state */ }
         finally { setBusy(false); setConfirming(false) }
     }
 
