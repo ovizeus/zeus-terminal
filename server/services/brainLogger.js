@@ -267,6 +267,10 @@ function prune() {
     } catch (err) {
         try { logger.error('BRAIN_LOG', 'prune failed: ' + err.message); } catch (_) {}
     }
+    // [AUDIT-F1/F2 2026-06-11] Retention for the two previously-unbounded ML
+    // tables — separate try/catch so a failure in one never skips the others.
+    try { db.mlAuditPrune(); } catch (e) { try { logger.error('BRAIN_LOG', 'mlAuditPrune failed: ' + e.message); } catch (_) {} }
+    try { db.parityPrune(); } catch (e) { try { logger.error('BRAIN_LOG', 'parityPrune failed: ' + e.message); } catch (_) {} }
 }
 
 /**

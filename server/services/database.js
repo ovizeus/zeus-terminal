@@ -10302,6 +10302,10 @@ const _stmts = {
     bdPruneNoTrade: db.prepare("DELETE FROM brain_decisions WHERE final_tier = 'NO_TRADE' AND linked_seq IS NULL AND ts < ?"),
     bdPruneBlocked: db.prepare("DELETE FROM brain_decisions WHERE final_action LIKE 'blocked_%' AND ts < ?"),
     bdPruneTrade: db.prepare("DELETE FROM brain_decisions WHERE final_action = 'entry' AND ts < ? AND linked_seq IS NULL"),
+    // [AUDIT-F1/F2 2026-06-11] Retention for the two unbounded ML tables
+    // (created_at is INTEGER ms). Mirrors the bdPrune tiered-retention model.
+    mlAuditPruneOld: db.prepare('DELETE FROM ml_influence_audit WHERE created_at < ?'),
+    parityPruneOld: db.prepare('DELETE FROM brain_parity_log WHERE created_at < ?'),
     bdCount: db.prepare('SELECT COUNT(*) as cnt, final_action FROM brain_decisions GROUP BY final_action'),
     // Missed trades
     missedInsert: db.prepare('INSERT INTO missed_trades (user_id, symbol, side, reason, price, confidence, tier, regime, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
@@ -11592,6 +11596,10 @@ module.exports = {
         _stmts.bdPruneBlocked.run(d90);
         _stmts.bdPruneTrade.run(d365);
     },
+    // [AUDIT-F1 2026-06-11] ml_influence_audit retention — keep 30 days.
+    mlAuditPrune: (now = Date.now()) => _stmts.mlAuditPruneOld.run(now - 30 * 86400000).changes,
+    // [AUDIT-F2 2026-06-11] brain_parity_log retention — keep 60 days.
+    parityPrune: (now = Date.now()) => _stmts.parityPruneOld.run(now - 60 * 86400000).changes,
     bdCount: () => _stmts.bdCount.all(),
     // [SEC-1] Login attempts
     loginAttemptGet: (kind, key) => _stmts.loginAttemptGet.get(kind, key) || null,
