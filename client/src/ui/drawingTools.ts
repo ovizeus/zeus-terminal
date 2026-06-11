@@ -510,20 +510,33 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
         var x2 = _timeToX(l.p2.time), y2 = _priceToY(l.p2.price);
         if (x1 != null && y1 != null) { l.handles[0].style.left = (oxL + x1) + 'px'; l.handles[0].style.top = (oyT + y1) + 'px'; }
         if (x2 != null && y2 != null) { l.handles[1].style.left = (oxL + x2) + 'px'; l.handles[1].style.top = (oyT + y2) + 'px'; }
-        if (l.delBtn && x1 != null && y1 != null && x2 != null && y2 != null) {
+        if (l.delBtn) {
           // [Pack C M12 X-clamp + Pack F.1 offset fix] Clamp delete-X
           // position to chart bounds AND apply parent offset.
-          var midX = Math.max(15, Math.min(chartW - 15, (x1 + x2) / 2));
-          var topY = Math.max(15, Math.min(chartH - 15, Math.min(y1, y2) - 12));
-          l.delBtn.style.left = (oxL + midX) + 'px';
-          l.delBtn.style.top = (oyT + topY) + 'px';
-          // [Pack G] Settings ⚙ button to the RIGHT of the X (+24px).
-          // Clamped so it stays inside chart bounds when X is at the
-          // right edge.
-          if (l.cfgBtn) {
-            var cfgX = Math.max(15, Math.min(chartW - 15, midX + 24));
-            l.cfgBtn.style.left = (oxL + cfgX) + 'px';
-            l.cfgBtn.style.top = (oyT + topY) + 'px';
+          // [O12 2026-06-11] Also anchor to whichever endpoint is on-screen:
+          // when one scrolled out (_timeToX → null), the X used to freeze at a
+          // stale spot. Fall back to the visible endpoint; hide if both gone.
+          var hasA = (x1 != null && y1 != null);
+          var hasB = (x2 != null && y2 != null);
+          if (hasA || hasB) {
+            var rawX = hasA && hasB ? (x1 + x2) / 2 : (hasA ? x1 : x2);
+            var rawY = (hasA && hasB ? Math.min(y1, y2) : (hasA ? y1 : y2)) - 12;
+            var midX = Math.max(15, Math.min(chartW - 15, rawX));
+            var topY = Math.max(15, Math.min(chartH - 15, rawY));
+            l.delBtn.style.left = (oxL + midX) + 'px';
+            l.delBtn.style.top = (oyT + topY) + 'px';
+            l.delBtn.style.display = 'block';
+            // [Pack G] Settings ⚙ button to the RIGHT of the X (+24px),
+            // clamped so it stays inside chart bounds at the right edge.
+            if (l.cfgBtn) {
+              var cfgX = Math.max(15, Math.min(chartW - 15, midX + 24));
+              l.cfgBtn.style.left = (oxL + cfgX) + 'px';
+              l.cfgBtn.style.top = (oyT + topY) + 'px';
+              l.cfgBtn.style.display = 'block';
+            }
+          } else {
+            l.delBtn.style.display = 'none';
+            if (l.cfgBtn) l.cfgBtn.style.display = 'none';
           }
         }
       }

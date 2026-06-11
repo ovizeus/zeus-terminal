@@ -199,15 +199,23 @@
   // ── Update handle positions (runs every frame via RAF) ──
   function _updateHandles() {
     var mc = _mc(); if (!mc) return;
-    var chartW = mc.getBoundingClientRect().width;
+    var rect = mc.getBoundingClientRect();
+    var chartW = rect.width;
+    var chartH = rect.height;
+    // [O12 2026-06-11] Keep the ✕ delete button inside the chart so the handle
+    // container's overflow:hidden never clips it off-screen ("delete X iese din
+    // chart"). 12px margin = button radius (10) + a hair → whole circle visible.
+    function _clampX(v) { return Math.max(12, Math.min(chartW - 12, v)); }
+    function _clampY(v) { return Math.max(12, Math.min(chartH - 12, v)); }
     _lines.forEach(function(l) {
       if (!l.selected) return;
       if (l.type === 'hline') {
         var y = _priceToY(l.price);
         if (y != null) {
+          var hy = _clampY(y);
           l.handles[0].style.left = (chartW - 30) + 'px';
-          l.handles[0].style.top = y + 'px';
-          if (l.delBtn) { l.delBtn.style.left = (chartW - 55) + 'px'; l.delBtn.style.top = y + 'px'; }
+          l.handles[0].style.top = hy + 'px';
+          if (l.delBtn) { l.delBtn.style.left = (chartW - 55) + 'px'; l.delBtn.style.top = hy + 'px'; }
         }
       }
       if (l.type === 'tline') {
@@ -215,8 +223,23 @@
         var x2 = _timeToX(l.p2.time), y2 = _priceToY(l.p2.price);
         if (x1 != null && y1 != null) { l.handles[0].style.left = x1+'px'; l.handles[0].style.top = y1+'px'; }
         if (x2 != null && y2 != null) { l.handles[1].style.left = x2+'px'; l.handles[1].style.top = y2+'px'; }
-        if (l.delBtn && x1 != null && y1 != null && x2 != null && y2 != null) {
-          l.delBtn.style.left = ((x1+x2)/2) + 'px'; l.delBtn.style.top = Math.min(y1,y2) - 15 + 'px';
+        if (l.delBtn) {
+          // [O12 2026-06-11] Anchor the ✕ at the midpoint of whichever endpoints are
+          // on-screen; if one scrolled out (_timeToX → null) fall back to the visible
+          // one so the button never freezes at a stale spot. Always clamped in-bounds.
+          var hasA = (x1 != null && y1 != null);
+          var hasB = (x2 != null && y2 != null);
+          if (hasA || hasB) {
+            var mx, my;
+            if (hasA && hasB) { mx = (x1 + x2) / 2; my = Math.min(y1, y2) - 15; }
+            else if (hasA)    { mx = x1;            my = y1 - 15; }
+            else              { mx = x2;            my = y2 - 15; }
+            l.delBtn.style.left = _clampX(mx) + 'px';
+            l.delBtn.style.top = _clampY(my) + 'px';
+            l.delBtn.style.display = 'block';
+          } else {
+            l.delBtn.style.display = 'none';
+          }
         }
       }
     });
