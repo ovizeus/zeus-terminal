@@ -1795,11 +1795,21 @@ function _fuseDecision(inp) {
     const regimeN = Number.isFinite(inp.regimeN) ? inp.regimeN : 0.5;
     const liqDangerN = Number.isFinite(inp.liqDangerN) ? inp.liqDangerN : 0.2;
     const sigDirBonus = Number.isFinite(inp.sigDirBonus) ? inp.sigDirBonus : 0;
+    // [DIRSCORE-CALIBRATION 2026-06-12] Indicator direction consensus ∈ [-1,1]
+    // (RSI+SuperTrend+MACD+funding+OI alignment, from _calcConfluence). This is
+    // the trend/momentum direction the client brain uses. It was previously
+    // discarded (sigDirBonus hardcoded 0), so OFI was the SOLE directional
+    // driver — a strong bullish consensus got suffocated by a mild opposing OFI
+    // (the ~65% direction-parity gap vs the client). Now the consensus leads and
+    // OFI confirms/vetoes. The confluence *magnitude* (conf) is direction-
+    // agnostic strength and must NOT imply direction — it stays out of dirScore
+    // (still drives confidence via confN + the decision tiers below).
+    const dirConsensus = Number.isFinite(inp.dirConsensus) ? Math.max(-1, Math.min(1, inp.dirConsensus)) : 0;
 
     let dirScore = 0;
-    dirScore += ofi * 0.55;
-    dirScore += ((conf - 50) / 50) * 0.30;
-    dirScore += sigDirBonus;
+    dirScore += dirConsensus * 0.50;   // trend/momentum consensus — primary driver
+    dirScore += ofi * 0.30;            // order flow — confirm or veto (was 0.55 sole driver)
+    dirScore += sigDirBonus;           // optional external bonus (client multi-scan)
     dirScore = Math.max(-1, Math.min(1, dirScore));
     const dir = dirScore > 0.15 ? 'long' : dirScore < -0.15 ? 'short' : 'neutral';
 
@@ -1859,10 +1869,16 @@ function _computeFusionParity(snap, ind, confluence, regime, bars) {
         }
     } catch (_) { /* keep default 0.2, matches client */ }
 
-    // [SP1] Steps 7–9 delegated to the pure _fuseDecision. The server always
-    // feeds probN=0.5 (no Scenario) and sigDirBonus=0 (no multi-scan dir bonus),
-    // so this is behavior-identical to the previous inline math.
-    const fused = _fuseDecision({ conf, ofi, probN, regimeN, liqDangerN, sigDirBonus: 0 });
+    // [SP1] Steps 7–9 delegated to the pure _fuseDecision. probN=0.5 (no
+    // Scenario) and sigDirBonus=0 (no client multi-scan dir bonus).
+    // [DIRSCORE-CALIBRATION 2026-06-12] Feed the indicator direction consensus
+    // the server already computes (bullDirs/bearDirs from _calcConfluence) so
+    // the trend/momentum direction leads instead of being discarded. 5
+    // indicators total → (bull − bear) / 5 ∈ [-1,1].
+    const _bull = Number.isFinite(confluence && confluence.bullDirs) ? confluence.bullDirs : 0;
+    const _bear = Number.isFinite(confluence && confluence.bearDirs) ? confluence.bearDirs : 0;
+    const dirConsensus = (_bull - _bear) / 5;
+    const fused = _fuseDecision({ conf, ofi, probN, regimeN, liqDangerN, dirConsensus, sigDirBonus: 0 });
     const dirScore = fused.dirScore;
     const dir = fused.dir;
     const confidence = fused.confidence;
