@@ -1767,6 +1767,20 @@ function _updateServerSigDir(scoreList, now) {
     return _serverSigDirState;
 }
 
+// [SERVER-MULTISCAN 2026-06-12 FAZA 5] LIVE-path integration. _computeFusion has
+// no dirScore (direction = indicator consensus; confidence = weighted fusion ×
+// per-user modifiers), so the semantic mirror of the client's ±0.25 multi-scan
+// kick is a confidence MODIFIER in the established 0.85–1.15 modifier range:
+// scan aligned with the trade direction → ×1.10, scan against it → ×0.85,
+// absent/stale/neutral → ×1.0 (fail-safe: no scan state = ZERO live effect).
+function _mscanAlignModifier(tradeDir, state, now) {
+    if (tradeDir !== 'bull' && tradeDir !== 'bear') return 1.0;
+    if (!state || !state.dir || !Number.isFinite(+state.ts)) return 1.0;
+    if (now - (+state.ts) > _SIGDIR_STALE_MS) return 1.0;
+    if (state.dir !== 'bull' && state.dir !== 'bear') return 1.0;
+    return state.dir === tradeDir ? 1.10 : 0.85;
+}
+
 function _calcConfluenceParity(snap, ind) {
     // rsi direction — identical to client (50 split, binary)
     const rsiV = (snap.rsi && snap.rsi['5m']) || 50;
@@ -2241,7 +2255,7 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
     const _mods = {
         structure: 1.0, liquidity: 1.0, liqAnticipation: 1.0,
         journal: 1.0, knn: 1.0, session: 1.0, volatility: 1.0,
-        tilt: 1.0, trapRisk: 1.0, regimeDanger: 1.0,
+        tilt: 1.0, trapRisk: 1.0, regimeDanger: 1.0, mscan: 1.0,
     };
 
     const fusRawConfidence = confidence; // capture pre-modifier value
@@ -2281,6 +2295,15 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
             _mods.knn = serverKNN.getKNNModifier(knnDir, knnPred);
             confidence *= _mods.knn;
         }
+    }
+
+    // ── [SERVER-MULTISCAN FAZA 5] Multi-scan alignment modifier ──
+    // Server analog of the client LAST_SCAN ±0.25 kick: global dominant scan
+    // direction aligned with this trade → ×1.10, against it → ×0.85,
+    // absent/stale → ×1.0 (fail-safe, zero effect).
+    if (tradeDir !== 'neut') {
+        _mods.mscan = _mscanAlignModifier(tradeDir, _serverSigDirState, Date.now());
+        confidence *= _mods.mscan;
     }
 
     // ── [V3] Session modifier ──
@@ -2658,6 +2681,7 @@ module.exports = {
         computeServerSigDir: _computeServerSigDir,
         sigDirBonus: _sigDirBonus,
         updateServerSigDir: _updateServerSigDir,
+        mscanAlignModifier: _mscanAlignModifier,
         getServerSigDirState: () => _serverSigDirState,
         resetServerSigDirState: () => { _serverSigDirState = null; },
         setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },

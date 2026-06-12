@@ -126,3 +126,28 @@ describe('server _updateServerSigDir (LAST_SCAN-style: update only on >=65, else
     expect(getSigDirState()).toEqual({ dir: 'bear', ts: 3000 });
   });
 });
+
+// FAZA 5 — LIVE path integration. _computeFusion has NO dirScore (direction is
+// the indicator consensus, confidence is a weighted fusion × ~10 per-user
+// modifiers), so the idiomatic mirror of the client's ±0.25 multi-scan kick is a
+// confidence MODIFIER: aligned ×1.10, contra ×0.85, absent/stale/neutral ×1.0
+// (fail-safe: missing scan state must mean ZERO effect on live decisions).
+const mscanMod = brain.__sp1.mscanAlignModifier;
+
+describe('server _mscanAlignModifier (LIVE confidence modifier, fail-safe 1.0)', () => {
+  test('aligned: bull tradeDir + fresh bull sigDir → 1.10', () => {
+    expect(mscanMod('bull', { dir: 'bull', ts: 1000 }, 1000)).toBe(1.10);
+    expect(mscanMod('bear', { dir: 'bear', ts: 1000 }, 1000)).toBe(1.10);
+  });
+
+  test('contra: tradeDir against fresh sigDir → 0.85', () => {
+    expect(mscanMod('bull', { dir: 'bear', ts: 1000 }, 1000)).toBe(0.85);
+    expect(mscanMod('bear', { dir: 'bull', ts: 1000 }, 1000)).toBe(0.85);
+  });
+
+  test('fail-safe 1.0: null state, stale state, neut tradeDir', () => {
+    expect(mscanMod('bull', null, 5000)).toBe(1.0);
+    expect(mscanMod('bull', { dir: 'bull', ts: 1000 }, 1000 + 120001)).toBe(1.0);
+    expect(mscanMod('neut', { dir: 'bull', ts: 1000 }, 1000)).toBe(1.0);
+  });
+});
