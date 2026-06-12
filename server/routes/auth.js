@@ -759,8 +759,12 @@ router.get('/admin/health', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
     let dbStatus = 'ok';
     try { db.db.prepare('SELECT 1').get(); } catch (_) { dbStatus = 'down'; }
-    const wss = global.__zeusWSClients;
-    const wsStatus = typeof wss === 'number' ? 'ok' : (wss === undefined ? 'warn' : 'ok');
+    // [PANEL-LABELS 2026-06-12] Read the REAL WS server (global.__zeusWss, set at
+    // server.js:1694). The old probe read global.__zeusWSClients which is never
+    // assigned anywhere → always undefined → forced WARN (yellow) even though the
+    // WebSocket server is up and serving. Report 'ok' when the WSS exists.
+    const wss = global.__zeusWss;
+    const wsStatus = (wss && wss.clients) ? 'ok' : 'down';
     const health = {
         server: 'ok',
         websocket: wsStatus,
@@ -974,8 +978,12 @@ router.get('/admin/modules', (req, res) => {
     let MF = null;
     try { MF = require('../migrationFlags'); } catch (_) {}
     const modules = [
-        { key: 'at',        name: 'AutoTrade',   location: MF?.SERVER_AT ? 'server' : (MF?.CLIENT_AT ? 'client' : 'off'),
-          state: MF?.SERVER_AT || MF?.CLIENT_AT ? 'ok' : 'off' },
+        // [PANEL-LABELS 2026-06-12] AT execution migrated server-side under the
+        // SP2-b cutover flag SERVER_AT_FULL_OWNERSHIP (the legacy SERVER_AT flag
+        // was never flipped, so the panel wrongly showed "client"). Treat full
+        // server ownership as server-side.
+        { key: 'at',        name: 'AutoTrade',   location: (MF?.SERVER_AT || MF?.SERVER_AT_FULL_OWNERSHIP) ? 'server' : (MF?.CLIENT_AT ? 'client' : 'off'),
+          state: MF?.SERVER_AT || MF?.SERVER_AT_FULL_OWNERSHIP || MF?.CLIENT_AT ? 'ok' : 'off' },
         { key: 'brain',     name: 'Brain',       location: MF?.SERVER_BRAIN ? 'server' : (MF?.CLIENT_BRAIN ? 'client' : 'off'),
           state: MF?.SERVER_BRAIN || MF?.CLIENT_BRAIN ? 'ok' : 'off' },
         { key: 'marketData',name: 'Market Feed', location: MF?.SERVER_MARKET_DATA ? 'server' : 'client',
