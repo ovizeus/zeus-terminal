@@ -709,6 +709,9 @@ function _buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fu
             s.modTilt = fusion._intermediates.modifiers.tilt;
             s.modTrapRisk = fusion._intermediates.modifiers.trapRisk;
             s.modRegimeDanger = fusion._intermediates.modifiers.regimeDanger;
+            // [SERVER-MULTISCAN FAZA 5] expose the multi-scan alignment modifier to
+            // the ML data layer — the explicit map above silently dropped it.
+            s.modMscan = fusion._intermediates.modifiers.mscan;
         }
         // Fundamentals (Wave 9 / Canonical PDF #8) — additive sync read
         // from cache. fusion math untouched per ARCH-4. Available downstream
