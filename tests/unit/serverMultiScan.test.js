@@ -99,3 +99,30 @@ describe('server _sigDirBonus (±0.25, 120s staleness)', () => {
     expect(sigBonus(null, 5000)).toBe(0);
   });
 });
+
+// FAZA 3 — stateful update mirror of the client LAST_SCAN: only UPDATE when a
+// symbol reaches score>=65; otherwise KEEP the previous value (it ages out via
+// the 120s staleness window). arianova.ts:1439 only writes on best.score>=65.
+const updateSigDir = brain.__sp1.updateServerSigDir;
+const getSigDirState = brain.__sp1.getServerSigDirState;
+
+describe('server _updateServerSigDir (LAST_SCAN-style: update only on >=65, else keep)', () => {
+  beforeEach(() => { brain.__sp1.resetServerSigDirState(); });
+
+  test('updates state when a directional symbol reaches >=65', () => {
+    updateSigDir([{ dir: 'bull', score: 80 }], 1000);
+    expect(getSigDirState()).toEqual({ dir: 'bull', ts: 1000 });
+  });
+
+  test('KEEPS previous state when no symbol reaches >=65 (ages out via staleness, not cleared)', () => {
+    updateSigDir([{ dir: 'bull', score: 80 }], 1000);
+    updateSigDir([{ dir: 'bear', score: 60 }], 2000); // none >=65
+    expect(getSigDirState()).toEqual({ dir: 'bull', ts: 1000 }); // unchanged
+  });
+
+  test('flips when a NEW symbol crosses >=65', () => {
+    updateSigDir([{ dir: 'bull', score: 80 }], 1000);
+    updateSigDir([{ dir: 'bear', score: 90 }], 3000);
+    expect(getSigDirState()).toEqual({ dir: 'bear', ts: 3000 });
+  });
+});

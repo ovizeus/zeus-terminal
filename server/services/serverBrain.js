@@ -1600,12 +1600,25 @@ function _runShadowForUsers(includeUserFn) {
     if (!readySymbols || readySymbols.length === 0) return;
     if (_stcMap.size === 0) return;
 
+    // [SERVER-MULTISCAN 2026-06-12 FAZA 3] Accumulate per-symbol scan scores over
+    // this cycle's valid symbols; the global sigDir is refreshed AFTER the loop so
+    // the bonus used inside the loop reflects the PREVIOUS scan (mirrors the
+    // client's lagging LAST_SCAN). Shadow-only: feeds _computeFusionParity, which
+    // writes parity rows; the live _computeFusion is NOT touched in this phase.
+    const _scanScores = [];
+
     for (const symbol of readySymbols) {
         const snap = serverState.getSnapshotForSymbol(symbol);
         if (!snap || !snap.indicators) continue;
         if (snap.stale || (Date.now() - snap.priceTs) > STALE_DATA_MS) continue;
 
         const ind = snap.indicators;
+        _scanScores.push(_calcSymbolScanScore({
+            rsi: (snap.rsi && snap.rsi['5m']),
+            macdDir: ind.macdDir,
+            stDir: ind.stDir,
+            adx: ind.adx,
+        }));
         let confluence, regime, bars;
         try {
             // [Phase 2 S3.1c] Use client-mirror confluence for shadow rows
@@ -1646,6 +1659,11 @@ function _runShadowForUsers(includeUserFn) {
             } catch (_userErr) { /* per-user shadow failure is non-fatal */ }
         }
     }
+
+    // [SERVER-MULTISCAN 2026-06-12 FAZA 3] Refresh the global sigDir from this
+    // cycle's scan scores (only updates when a symbol crosses score>=65; else the
+    // previous value ages out via the 120s staleness window in _sigDirBonus).
+    try { _updateServerSigDir(_scanScores, Date.now()); } catch (_sigErr) { /* never break shadow */ }
 }
 
 // [SP1] Testnet parity shadow — runs ALONGSIDE the demo main cycle (which
@@ -1735,6 +1753,18 @@ function _sigDirBonus(state, now) {
     if (!state || !state.dir || !Number.isFinite(+state.ts)) return 0;
     if (now - (+state.ts) > _SIGDIR_STALE_MS) return 0;
     return state.dir === 'bull' ? 0.25 : state.dir === 'bear' ? -0.25 : 0;
+}
+
+// Module-level dominant scan direction (server analog of the client LAST_SCAN).
+// Updated at the END of each shadow cycle from that cycle's per-symbol scan
+// scores; read (with 120s staleness) by _computeFusionParity. Mirrors the
+// client's lagging semantics: the bonus used in a fusion reflects the PREVIOUS
+// scan, and only refreshes when a symbol crosses score>=65 (else it ages out).
+let _serverSigDirState = null;
+function _updateServerSigDir(scoreList, now) {
+    const sd = _computeServerSigDir(scoreList);
+    if (sd) _serverSigDirState = { dir: sd, ts: now };
+    return _serverSigDirState;
 }
 
 function _calcConfluenceParity(snap, ind) {
@@ -1916,10 +1946,13 @@ function _computeFusionParity(snap, ind, confluence, regime, bars) {
         }
     } catch (_) { /* keep default 0.2, matches client */ }
 
-    // [SP1] Steps 7–9 delegated to the pure _fuseDecision. The server always
-    // feeds probN=0.5 (no Scenario) and sigDirBonus=0 (no multi-scan dir bonus),
-    // so this is behavior-identical to the previous inline math.
-    const fused = _fuseDecision({ conf, ofi, probN, regimeN, liqDangerN, sigDirBonus: 0 });
+    // [SP1] Steps 7–9 delegated to the pure _fuseDecision. probN=0.5 (no Scenario).
+    // [SERVER-MULTISCAN 2026-06-12 FAZA 3] sigDirBonus now mirrors the client's
+    // LAST_SCAN momentum kick (±0.25, 120s staleness) instead of the hardcoded 0
+    // — this was the single remaining direction-input drift vs computeFusionDecision.
+    // Shadow-only: this function feeds db.logParityRow, never execution.
+    const sigDirBonus = _sigDirBonus(_serverSigDirState, Date.now());
+    const fused = _fuseDecision({ conf, ofi, probN, regimeN, liqDangerN, sigDirBonus });
     const dirScore = fused.dirScore;
     const dir = fused.dir;
     const confidence = fused.confidence;
@@ -2624,6 +2657,9 @@ module.exports = {
         calcSymbolScanScore: _calcSymbolScanScore,
         computeServerSigDir: _computeServerSigDir,
         sigDirBonus: _sigDirBonus,
+        updateServerSigDir: _updateServerSigDir,
+        getServerSigDirState: () => _serverSigDirState,
+        resetServerSigDirState: () => { _serverSigDirState = null; },
         setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },
         setMainCycleActiveForTest: (v) => { _mainCycleActiveOverrideForTest = v; },
     },
