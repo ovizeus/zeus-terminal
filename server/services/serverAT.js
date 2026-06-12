@@ -481,7 +481,32 @@ function _linkedOpsSeqToCleanup(pos) {
     return opsSeq;
 }
 
+// [SILENT-ARCHIVE-GUARD 2026-06-12] Pure detector for the months-old bug where a
+// still-live position is archived to at_closed with NO close logic (today: ETH
+// seq ...53353, live x10, archived 15:33:10 status:OPEN/closeReason:null → exchange
+// orphan → re-adopted as a lev=1 source=external row in the MANUAL journal at x1).
+// A real close always sets closeReason; a boot stuck-archive carries
+// live.status CLOSED/EMERGENCY_CLOSED. Anything else archived with no closeReason
+// while status==='OPEN' is the anomaly. Pure → unit-tested.
+function _isUnexpectedArchive(pos) {
+    if (!pos || typeof pos !== 'object') return false;
+    if (pos.closeReason) return false;
+    if (pos.status !== 'OPEN') return false;
+    const ls = pos.live && pos.live.status;
+    if (ls === 'CLOSED' || ls === 'EMERGENCY_CLOSED') return false;
+    return true;
+}
+
 function _persistClose(pos) {
+    // [SILENT-ARCHIVE-GUARD 2026-06-12] Passive instrumentation — NEVER blocks the
+    // close. Captures the exact call-site (stack trace) the next time a live
+    // position is archived without a close, so the root cause can be fixed.
+    try {
+        if (_isUnexpectedArchive(pos)) {
+            logger.warn('AT_ARCHIVE_GUARD', `[${pos && pos.seq}] SILENT ARCHIVE detected — status=${pos.status} closeReason=${pos.closeReason} live=${pos.live && pos.live.status} sym=${pos.symbol} side=${pos.side} qty=${pos.qty} lev=${pos.lev}\nSTACK:${new Error().stack}`);
+            try { audit.record('SAT_SILENT_ARCHIVE_GUARD', { userId: pos.userId, seq: pos.seq, symbol: pos.symbol, side: pos.side, status: pos.status, liveStatus: pos.live && pos.live.status, lev: pos.lev, qty: pos.qty }, 'SERVER_AT'); } catch (_) {}
+        }
+    } catch (_) { /* instrumentation must never break the close path */ }
     try {
         db.atArchiveClosed(pos);
     } catch (e) {
@@ -6252,6 +6277,8 @@ module.exports = {
     onPriceUpdate,
     _disasterStopPrice,
     _shouldDisasterClose,
+    // [SILENT-ARCHIVE-GUARD 2026-06-12] pure detector, unit-tested
+    __guards: { isUnexpectedArchive: _isUnexpectedArchive },
     // Getters
     getOpenPositions,
     getOpenCount,
