@@ -5,7 +5,7 @@
 import { getATR, getKlines } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
-import { BM, USER_SETTINGS } from '../core/config'
+import { BM } from '../core/config'
 import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -120,14 +120,18 @@ export async function startApp(): Promise<void> {
   try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
   initZeusGroups()
   initAdaptiveStrip(); w.initMTFStrip()
-  try {
-    useSettingsStore.getState().loadFromServer()
-      .then(() => {
-        try { localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS)) } catch (_) { }
-        try { w.loadUserSettings() } catch (_) { }
-      })
-      .catch(() => { try { w.loadUserSettings() } catch (_) { } })
-  } catch (_) { try { w.loadUserSettings() } catch (_) { } }
+  // [PERSIST-ROOT-CAUSE 2026-06-12] Boot order fix. Previously loadFromServer()
+  // ran first and its fire-and-forget .then() serialized the still-DEFAULT
+  // in-memory USER_SETTINGS (chart.colors=null, default indicators) over the
+  // `zeus_user_settings` localStorage cache BEFORE the GET landed — wiping the
+  // user's custom chart colors + indicators on every boot. Now: hydrate live
+  // state from the GOOD localStorage cache FIRST (loadUserSettings → _usApply
+  // seeds USER_SETTINGS + S.activeInds + chart colors), THEN refine from the
+  // server. loadImpl re-applies the server toggles to live state on arrival
+  // (settingsStore._applyLoadedTogglesToLiveState), so the premature LS write
+  // that destroyed the cache is removed entirely.
+  try { w.loadUserSettings() } catch (_) { }
+  try { useSettingsStore.getState().loadFromServer() } catch (_) { }
   // [Phase 8A4] ARES server-first boot: mirror the settings load above so the
   // ARES store hydrates from server at the same boot point instead of waiting
   // for useServerSync's 8s-delayed pull. Without this, ARES renders stale LS

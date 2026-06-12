@@ -1,9 +1,43 @@
 import { create } from 'zustand'
 import { userSettingsApi } from '../services/api'
 import { useATStore } from './atStore'
+import { useMarketStore } from './marketStore'
 import { _usApplyServerResponse, _usApplyPostResponse, _usGetSettingsRemoteTs } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
 import { debounce } from '../utils/debounce'
+
+// [PERSIST-ROOT-CAUSE 2026-06-12] After server settings land (or the offline
+// fallback projects from the LS cache), push the indicator toggles into the two
+// live-state surfaces that the boot-time _usApply does NOT refresh after the GET:
+//   • window.S.activeInds — read by legacy _usSave (config.ts:1837) on the very
+//     next save. If left at the boot default it re-derives defaults and clobbers
+//     the server again — the permanent-reset loop that lost the user's toggles.
+//   • useMarketStore.market.indicators — the React indicator panel's source of
+//     truth (marketStore ships a hard default that nothing else hydrated).
+// Chart colors are refreshed by TradingChart's existing post-mount poll, so they
+// are intentionally left untouched here. Never throws — the load path must not
+// be broken by this best-effort live-state sync.
+function _applyLoadedTogglesToLiveState(): void {
+  try {
+    const w = window as unknown as {
+      S?: { activeInds?: Record<string, boolean>; indicators?: Record<string, boolean> }
+      USER_SETTINGS?: { indicators?: Record<string, boolean> }
+    }
+    const inds = w.USER_SETTINGS && w.USER_SETTINGS.indicators
+    if (!inds || typeof inds !== 'object') return
+    if (w.S) {
+      w.S.activeInds = { ...(w.S.activeInds || {}), ...inds }
+      w.S.indicators = { ...(w.S.indicators || {}), ...inds }
+    }
+    const mkt = useMarketStore.getState()
+    const cur = mkt.market.indicators as unknown as Record<string, boolean>
+    const next: Record<string, boolean> = { ...cur }
+    for (const k of Object.keys(cur)) {
+      if (typeof inds[k] === 'boolean') next[k] = inds[k]
+    }
+    mkt.patch({ indicators: next as unknown as typeof mkt.market.indicators })
+  } catch (_) { /* defensive — never break the load path */ }
+}
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
 //
@@ -152,6 +186,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
         const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
         set({ settings: merged, loaded: true })
         _projectAll(merged)
+        _applyLoadedTogglesToLiveState()
         _reapplyBrainCfgForCurrentMode()
         return
       }
@@ -174,6 +209,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
       const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
       set({ settings: merged, loaded: true })
       _projectAll(merged)
+      _applyLoadedTogglesToLiveState()
       _reapplyBrainCfgForCurrentMode()
     } catch {
       set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })
@@ -199,8 +235,19 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   },
 
   saveToServer: async () => {
-    const { settings, saving } = getState()
+    const { settings, saving, loaded } = getState()
     if (saving) return
+    // [PERSIST-ROOT-CAUSE 2026-06-12] Boot-window clobber guard. Until the
+    // initial load resolves, `settings` still holds DEFAULT_SETTINGS
+    // (candleColors=null, default indicators). A direct caller firing in that
+    // window (e.g. AutoTradePanel) would POST those defaults; the server merges
+    // per-key, so candleColors/indSettings get overwritten with defaults and the
+    // user's chart colors + indicators reset PERMANENTLY (next boot's GET then
+    // restores defaults). `loaded` flips true in every loadImpl exit path
+    // (server success AND offline fallback, ~300ms after boot), so this never
+    // permanently blocks saves — it only closes the boot race. Mirrors the
+    // `_usApplyDone` + `loaded` guards already in legacy _usSave.
+    if (!loaded) { console.warn('[US] saveToServer skipped — settings not loaded yet (boot window)'); return }
     set({ saving: true })
     try {
       const w = window as unknown as ZeusWindowExt
