@@ -1714,6 +1714,29 @@ function _calcSymbolScanScore(inp) {
     return { score, dir };
 }
 
+// [SERVER-MULTISCAN 2026-06-12 FAZA 2] Pick the dominant directional symbol across
+// the scan — mirror of the client (arianova.ts:1425-1442): highest-scoring symbol
+// with a bull/bear direction, gated at score>=65. Returns 'bull'|'bear'|null.
+function _computeServerSigDir(scoreList) {
+    if (!Array.isArray(scoreList) || scoreList.length === 0) return null;
+    let best = { score: -Infinity, dir: null };
+    for (const s of scoreList) {
+        if (s && (s.dir === 'bull' || s.dir === 'bear') && Number.isFinite(+s.score) && +s.score > best.score) {
+            best = { score: +s.score, dir: s.dir };
+        }
+    }
+    return (best.score >= 65 && best.dir) ? best.dir : null;
+}
+
+// ±0.25 directional bonus with a 120s staleness window — mirror of the client
+// fusion (autotrade.ts:603-608). `state` = { dir, ts } | null.
+const _SIGDIR_STALE_MS = 120000;
+function _sigDirBonus(state, now) {
+    if (!state || !state.dir || !Number.isFinite(+state.ts)) return 0;
+    if (now - (+state.ts) > _SIGDIR_STALE_MS) return 0;
+    return state.dir === 'bull' ? 0.25 : state.dir === 'bear' ? -0.25 : 0;
+}
+
 function _calcConfluenceParity(snap, ind) {
     // rsi direction — identical to client (50 split, binary)
     const rsiV = (snap.rsi && snap.rsi['5m']) || 50;
@@ -2599,6 +2622,8 @@ module.exports = {
         runTestnetShadowCycle: _runTestnetShadowCycle,
         fuseDecision: _fuseDecision,
         calcSymbolScanScore: _calcSymbolScanScore,
+        computeServerSigDir: _computeServerSigDir,
+        sigDirBonus: _sigDirBonus,
         setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },
         setMainCycleActiveForTest: (v) => { _mainCycleActiveOverrideForTest = v; },
     },

@@ -54,3 +54,48 @@ describe('server _calcSymbolScanScore (unweighted mirror of client calcSymbolSco
     expect(r.score).toBe(50);
   });
 });
+
+// FAZA 2 — global sigDir aggregation + staleness. Mirrors the client:
+//   arianova.ts:1425-1442 (best scoring symbol, threshold score>=65)
+//   autotrade.ts:603-608 (±0.25 bonus, 120s staleness window).
+const pickSigDir = brain.__sp1.computeServerSigDir;
+const sigBonus = brain.__sp1.sigDirBonus;
+
+describe('server _computeServerSigDir (best directional symbol, threshold 65)', () => {
+  test('picks the highest-scoring directional symbol', () => {
+    expect(pickSigDir([{ dir: 'bull', score: 80 }, { dir: 'bear', score: 70 }])).toBe('bull');
+    expect(pickSigDir([{ dir: 'bull', score: 66 }, { dir: 'bear', score: 90 }])).toBe('bear');
+  });
+
+  test('returns null when no symbol reaches score>=65', () => {
+    expect(pickSigDir([{ dir: 'bull', score: 60 }, { dir: 'bear', score: 64 }])).toBe(null);
+  });
+
+  test('ignores neut entries even if higher score', () => {
+    expect(pickSigDir([{ dir: 'neut', score: 98 }, { dir: 'bull', score: 70 }])).toBe('bull');
+  });
+
+  test('empty / nullish list → null', () => {
+    expect(pickSigDir([])).toBe(null);
+    expect(pickSigDir(null)).toBe(null);
+  });
+});
+
+describe('server _sigDirBonus (±0.25, 120s staleness)', () => {
+  test('fresh bull → +0.25, fresh bear → -0.25', () => {
+    expect(sigBonus({ dir: 'bull', ts: 1000 }, 1000)).toBe(0.25);
+    expect(sigBonus({ dir: 'bear', ts: 1000 }, 1000)).toBe(-0.25);
+  });
+
+  test('stale (>120s old) → 0', () => {
+    expect(sigBonus({ dir: 'bull', ts: 1000 }, 1000 + 120001)).toBe(0);
+  });
+
+  test('within 120s window still applies', () => {
+    expect(sigBonus({ dir: 'bull', ts: 1000 }, 1000 + 119000)).toBe(0.25);
+  });
+
+  test('null state → 0', () => {
+    expect(sigBonus(null, 5000)).toBe(0);
+  });
+});
