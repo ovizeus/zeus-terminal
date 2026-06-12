@@ -1680,6 +1680,40 @@ function _runTestnetShadowCycle() {
 // consumes serverSentiment's cached globalLongShortAccountRatio (see below)
 // instead of hardcoded 'neut'.
 // ══════════════════════════════════════════════════════════════════
+// [SERVER-MULTISCAN 2026-06-12 FAZA 1] Pure per-symbol scan score — UNWEIGHTED
+// mirror of the client calcSymbolScore (client/src/data/klines.ts:139). PERF
+// weighting is intentionally omitted: it is client-specific learned state
+// (per-indicator win/loss history) that cannot transfer faithfully and would
+// diverge anyway; weight=1.0 == the client's behavior before PERF establishes.
+// Inputs are the already-computed per-symbol indicators the server holds
+// (snap.rsi['5m'], ind.macdDir, ind.stDir, ind.adx). Returns { score, dir }.
+function _calcSymbolScanScore(inp) {
+    const rsi = (inp && Number.isFinite(+inp.rsi)) ? +inp.rsi : null;
+    const macdDir = inp && inp.macdDir;
+    const stDir = inp && inp.stDir;
+    const adx = (inp && Number.isFinite(+inp.adx)) ? +inp.adx : null;
+    let bullPts = 0, bearPts = 0;
+    if (rsi !== null) {
+        if (rsi < 35) bullPts += 20;
+        else if (rsi < 45) bullPts += 10;
+        else if (rsi > 65) bearPts += 20;
+        else if (rsi > 55) bearPts += 10;
+    }
+    if (macdDir === 'bull') bullPts += 20;
+    else if (macdDir === 'bear') bearPts += 20;
+    if (stDir === 'bull') bullPts += 25;
+    else if (stDir === 'bear') bearPts += 25;
+    if (adx !== null) {
+        if (adx > 30) { bullPts += 10; bearPts += 10; }
+        else if (adx > 20) { bullPts += 5; bearPts += 5; }
+    }
+    const total = (bullPts + bearPts) || 1;
+    let dir = 'neut', score = 50;
+    if (bullPts > bearPts) { dir = 'bull'; score = Math.min(98, Math.round(50 + bullPts / total * 50)); }
+    else if (bearPts > bullPts) { dir = 'bear'; score = Math.min(98, Math.round(50 + bearPts / total * 50)); }
+    return { score, dir };
+}
+
 function _calcConfluenceParity(snap, ind) {
     // rsi direction — identical to client (50 split, binary)
     const rsiV = (snap.rsi && snap.rsi['5m']) || 50;
@@ -2564,6 +2598,7 @@ module.exports = {
         runShadowForUsers: _runShadowForUsers,
         runTestnetShadowCycle: _runTestnetShadowCycle,
         fuseDecision: _fuseDecision,
+        calcSymbolScanScore: _calcSymbolScanScore,
         setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },
         setMainCycleActiveForTest: (v) => { _mainCycleActiveOverrideForTest = v; },
     },
