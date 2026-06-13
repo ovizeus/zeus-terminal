@@ -1784,7 +1784,9 @@ export function renderBrainCockpit(): void {
     risk: { led: 'led-risk', lbl: 'lbl-risk', txt: 'Risk ' + (safety.risk ? 'OK' : 'FAIL') },
     spread: { led: 'led-spread', lbl: 'lbl-spread', txt: 'Spread/Slip ' + (safety.spread ? 'OK' : 'FAIL') },
     cooldown: { led: 'led-cooldown', lbl: 'lbl-cooldown', txt: 'Cooldown ' + (safety.cooldown ? 'OFF' : 'WAIT') },
-    news: { led: 'led-news', lbl: 'lbl-news', txt: 'News ' + (safety.news ? 'OK' : 'BLOCK-HIGH') },
+    // [2026-06-13] Honest label: this gate is driven by ATR volatility (BM.newsRisk
+    // is volatility-derived, not real news) — so it's a Volatility gate.
+    news: { led: 'led-news', lbl: 'lbl-news', txt: 'Volatility ' + (safety.news ? 'OK' : 'BLOCK-HIGH') },
     session: { led: 'led-session', lbl: 'lbl-session', txt: 'Session ' + (safety.session ? 'OK' : 'OFF') },
     noOpposite: { led: 'led-noopposite', lbl: 'lbl-noopposite', txt: 'No Opposite ' + (safety.noOpposite ? 'OK' : 'FAIL') },
     regime: { led: 'led-regime', lbl: 'lbl-regime', txt: 'Regime ' + (safety.regime ? 'STABLE' : 'UNSTABLE') }

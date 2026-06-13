@@ -302,7 +302,7 @@ export const BrainCockpit = memo(function BrainCockpit() {
               <div className="znc-gate-row"><div className="znc-led wait" id="led-risk"></div><span className="znc-gate-lbl wait" id="lbl-risk">Risk Limit OK</span></div>
               <div className="znc-gate-row"><div className="znc-led wait" id="led-spread"></div><span className="znc-gate-lbl wait" id="lbl-spread">Spread/Slip OK</span></div>
               <div className="znc-gate-row"><div className="znc-led wait" id="led-cooldown"></div><span className="znc-gate-lbl wait" id="lbl-cooldown">Cooldown OFF</span></div>
-              <div className="znc-gate-row"><div className="znc-led wait" id="led-news"></div><span className="znc-gate-lbl wait" id="lbl-news">News OK</span></div>
+              <div className="znc-gate-row"><div className="znc-led wait" id="led-news"></div><span className="znc-gate-lbl wait" id="lbl-news">Volatility OK</span></div>
               <div className="znc-gate-row"><div className="znc-led wait" id="led-session"></div><span className="znc-gate-lbl wait" id="lbl-session">Session OK</span></div>
               <div className="znc-gate-row"><div className="znc-led wait" id="led-noopposite"></div><span className="znc-gate-lbl wait" id="lbl-noopposite">No Opposite</span></div>
               <div className="znc-gate-row"><div className="znc-led wait" id="led-regime"></div><span className="znc-gate-lbl wait" id="lbl-regime">Regime Stable</span></div>
