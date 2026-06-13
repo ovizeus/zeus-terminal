@@ -251,6 +251,9 @@ export async function fetch24h(): Promise<void> {
 // real klines fetched at that interval (cached per interval). OI/FR/L-S/RSI stay
 // live/spot — no per-timeframe history exists for them client-side.
 const DT_TF_INTERVAL: Record<string, string> = { '1H': '1h', '4H': '4h', '12H': '12h', '1D': '1d', '1W': '1w' }
+// [2026-06-13] RSI is computed per-tf in w.S.rsi for 1h/4h/1d only — 12H/1W have
+// no series, so those tabs show "—" for RSI (honest, no fabricated value).
+const DT_TF_RSI_KEY: Record<string, string> = { '1H': '1h', '4H': '4h', '1D': '1d' }
 const _dtTfChange: Record<string, { pct: number | null; ts: number }> = {}
 const _dtTfInflight: Record<string, boolean> = {}
 const _DT_TF_TTL = 60000
@@ -309,11 +312,15 @@ export function updateMetrics(): void {
   if (dtls) dtls.textContent = w.S.ls ? w.S.ls.l.toFixed(1) + '% / ' + w.S.ls.s.toFixed(1) + '%' : '\u2014'
   if (dtlsc) dtlsc.textContent = '\u2014'
   if (dtlss) { const s = w.S.ls ? (w.S.ls.l > 55 ? 'LONG HEAVY' : w.S.ls.s > 55 ? 'SHORT HEAVY' : 'BALANCED') : '\u2014'; if (dtlss) dtlss.textContent = s; if (dtlss) dtlss.style.color = s === 'LONG HEAVY' ? 'var(--grn)' : s === 'SHORT HEAVY' ? 'var(--red)' : 'var(--dim)' }
+  // [2026-06-13] RSI per selected timeframe (1H/4H/1D have a series; 12H/1W don't
+  // \u2192 "\u2014"). CURRENT = tf RSI, CHANGE = live 5m RSI (now), SIGNAL from the tf RSI.
   const dtrsi = el('dtrsi'), dtrsic = el('dtrsic'), dtrsis = el('dtrsis')
-  const rsi5 = w.S.rsi['5m'], rsi1h = w.S.rsi['1h']
-  if (dtrsi) dtrsi.textContent = rsi5 ? rsi5.toFixed(1) : '\u2014'
-  if (dtrsic) dtrsic.textContent = rsi1h ? rsi1h.toFixed(1) : '\u2014'
-  if (dtrsis) { const s = rsi5 > 70 ? 'OVERBOUGHT' : rsi5 < 30 ? 'OVERSOLD' : 'NEUTRAL'; dtrsis.textContent = s; dtrsis.style.color = rsi5 > 70 ? 'var(--red)' : rsi5 < 30 ? 'var(--grn)' : 'var(--dim)' }
+  const _rsiKey = DT_TF_RSI_KEY[w.S.dtTf]
+  const _rsiTf = _rsiKey ? w.S.rsi[_rsiKey] : undefined
+  const _rsi5 = w.S.rsi['5m']
+  if (dtrsi) dtrsi.textContent = (_rsiTf != null) ? _rsiTf.toFixed(1) : '\u2014'
+  if (dtrsic) dtrsic.textContent = (_rsi5 != null) ? _rsi5.toFixed(1) : '\u2014'
+  if (dtrsis) { const _r = (_rsiTf != null) ? _rsiTf : _rsi5; const s = _r == null ? '\u2014' : _r > 70 ? 'OVERBOUGHT' : _r < 30 ? 'OVERSOLD' : 'NEUTRAL'; dtrsis.textContent = s; dtrsis.style.color = _r == null ? 'var(--dim)' : _r > 70 ? 'var(--red)' : _r < 30 ? 'var(--grn)' : 'var(--dim)' }
 }
 
 // ===== RSI DISPLAY =====

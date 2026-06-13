@@ -141,7 +141,7 @@ export function MarketMetricsPanel() {
           <div className="dtt" onClick={(e) => setDtTf('1W', e.currentTarget)}>1W</div>
         </div>
         <div style={{ fontSize: '7px', color: 'var(--dim)', letterSpacing: '0.5px', margin: '2px 0 4px' }}>
-          Timeframe drives PRICE change · OI / FR / L-S / RSI are live
+          Timeframe drives PRICE &amp; RSI (1H/4H/1D) · OI / FR / L-S are live
         </div>
         <div className="dttbl">
           <div className="dtrow hrow">
