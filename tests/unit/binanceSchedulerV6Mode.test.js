@@ -175,3 +175,62 @@ describe('binanceScheduler V6 mode gating — NORMAL', () => {
     expect(scheduler.canProceed({ pressure: 0.5, src: 'x', path: '/fapi/v1/depth' }).accept).toBe(true);
   });
 });
+
+// [2026-06-13] A Binance 418/429 IP ban (SUPPRESSED/WARM) must NOT gate calls to
+// OTHER exchanges. The radar's Bybit fallback was dying alongside Binance during
+// every ban window because the V6 mode gate was applied host-agnostically. Binance
+// ban state is meaningless for Bybit/OKX — exempt non-Binance hosts.
+// See memory project-radar-top300-p5-starvation.
+describe('binanceScheduler V6 — non-Binance hosts exempt from Binance ban gate', () => {
+  test('Bybit host ACCEPTED during SUPPRESSED (Binance ban does not gate Bybit)', () => {
+    db.prepare(`
+      INSERT INTO binance_rate_state (scope, banned_until, ban_reason, updated_at)
+      VALUES ('global', ?, 'test ban', ?)
+    `).run(Date.now() + 60_000, Date.now());
+
+    const d = scheduler.canProceed({ pressure: 0, src: 'bybit-tickers-fallback', path: '/v5/market/tickers', host: 'api.bybit.com' });
+    expect(d.accept).toBe(true);
+  });
+
+  test('Bybit host ACCEPTED during WARM (would be CLASS_B on Binance)', () => {
+    db.prepare(`
+      INSERT INTO binance_rate_state (scope, banned_until, warm_until, updated_at)
+      VALUES ('global', ?, ?, ?)
+    `).run(Date.now() - 1_000, Date.now() + 60_000, Date.now());
+
+    const d = scheduler.canProceed({ pressure: 0, src: 'bybit-tickers-fallback', path: '/v5/market/tickers', host: 'api.bybit.com' });
+    expect(d.accept).toBe(true);
+  });
+
+  test('OKX host ACCEPTED during SUPPRESSED', () => {
+    db.prepare(`
+      INSERT INTO binance_rate_state (scope, banned_until, ban_reason, updated_at)
+      VALUES ('global', ?, 'test ban', ?)
+    `).run(Date.now() + 60_000, Date.now());
+
+    const d = scheduler.canProceed({ pressure: 0, src: 'okx-something', path: '/api/v5/market/tickers', host: 'www.okx.com' });
+    expect(d.accept).toBe(true);
+  });
+
+  test('Binance host STILL rejected during SUPPRESSED (regression guard)', () => {
+    db.prepare(`
+      INSERT INTO binance_rate_state (scope, banned_until, ban_reason, updated_at)
+      VALUES ('global', ?, 'test ban', ?)
+    `).run(Date.now() + 60_000, Date.now());
+
+    const d = scheduler.canProceed({ pressure: 0, src: 'marketRadar:ticker24h', path: '/fapi/v1/ticker/24hr', host: 'fapi.binance.com' });
+    expect(d.accept).toBe(false);
+    expect(d.reason).toBe('suppressed_banned');
+  });
+
+  test('missing host STILL gated during SUPPRESSED (safe default = Binance)', () => {
+    db.prepare(`
+      INSERT INTO binance_rate_state (scope, banned_until, ban_reason, updated_at)
+      VALUES ('global', ?, 'test ban', ?)
+    `).run(Date.now() + 60_000, Date.now());
+
+    const d = scheduler.canProceed({ pressure: 0, src: 'marketRadar:ticker24h', path: '/fapi/v1/ticker/24hr' });
+    expect(d.accept).toBe(false);
+    expect(d.reason).toBe('suppressed_banned');
+  });
+});

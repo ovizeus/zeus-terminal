@@ -155,7 +155,7 @@ async function wrapFetch(fetchFn, url, opts) {
     let _skipA1 = false;  // set true when scheduler explicitly accepts P0/P1
     try { _scheduler = require('./binanceScheduler'); } catch (_) { _scheduler = null; }
     if (_scheduler) {
-        const decision = _scheduler.canProceed({ pressure, src, path });
+        const decision = _scheduler.canProceed({ pressure, src, path, host });
         if (!decision.accept) {
             recordCall({
                 host, path, source: src,

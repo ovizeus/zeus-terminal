@@ -143,9 +143,17 @@ function _isCriticalSectionActive() {
     return _criticalSections.size > 0;
 }
 
-function canProceed({ pressure, src, path }) {
+function canProceed({ pressure, src, path, host }) {
     const lane = laneForSrc(src);
     _stats.totalDecisions++;
+
+    // [2026-06-13] The V6 rate-state (SUPPRESSED/WARM) tracks the BINANCE IP ban
+    // exclusively. A Binance 418/429 ban says nothing about Bybit or OKX — so calls
+    // to non-Binance hosts (e.g. the radar's Bybit ticker fallback) must NOT be gated
+    // by it, otherwise the fallback dies in lockstep with Binance and defeats its
+    // whole purpose. Default (missing/unknown host) stays Binance-gated (safe).
+    // See memory project-radar-top300-p5-starvation.
+    const isBinanceHost = !host || /(^|\.)binance(future)?\.com$/i.test(host) || host === 'unknown';
 
     // [V6 2026-05-20] Mode-based gating — sits BEFORE lane logic.
     // Honors persistent rate state: SUPPRESSED rejects everything,
@@ -157,6 +165,7 @@ function canProceed({ pressure, src, path }) {
     // tests that don't mock the rate-state DB aren't affected by live ban rows.
     try {
         if (_v6Disabled) throw new Error('v6_test_skip');
+        if (!isBinanceHost) throw new Error('non_binance_host_exempt');
         const rateState = require('./binanceRateState');
         const now = _ts();
         // [V6.5 fix] Lazy state advance — if ban just expired and warm hasn't

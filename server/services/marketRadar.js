@@ -37,6 +37,8 @@
 
 const logger = require('./logger');
 const radarCache = require('./radarCache');
+const fs = require('fs');
+const path = require('path');
 
 // ── Env flags ──
 function _envEnabled() {
@@ -103,6 +105,46 @@ let _lastSnapshot = null;      // { ts, tickers: [{symbol, price, quoteVolume, p
 // /ticker/24hr is IP-blocked we fall back to Bybit; the UI title must reflect the
 // REAL source (no "BINANCE" label on Bybit data).
 let _source = 'binance';
+// [2026-06-13] P5-starvation fix: true when the in-memory snapshot was rehydrated
+// from disk (a previous run's last-good) and no live poll has refreshed it yet.
+// Surfaced via getTopSnapshot().stale so the panel shows last-good TOP 300 instead
+// of a blank "scanning…" after a reload / sustained quota starvation.
+let _snapshotStale = false;
+
+// Disk path for the last-good snapshot — survives reloads. Read at call-time so
+// tests can override via MARKET_RADAR_SNAPSHOT_PATH.
+function _snapshotPath() {
+    return process.env.MARKET_RADAR_SNAPSHOT_PATH
+        || path.join(__dirname, '..', '..', 'data', 'marketRadar-snapshot.json');
+}
+
+// Best-effort persist of the current snapshot. Never throws into the caller.
+function _persistSnapshotToDisk() {
+    if (!_lastSnapshot) return false;
+    try {
+        const p = _snapshotPath();
+        const payload = JSON.stringify({ ts: _lastSnapshot.ts, source: _source, tickers: _lastSnapshot.tickers });
+        const tmp = p + '.tmp';
+        fs.writeFileSync(tmp, payload);
+        fs.renameSync(tmp, p);   // atomic swap so a reader never sees a half-written file
+        return true;
+    } catch (_) { return false; }
+}
+
+// Load the last-good snapshot from disk INTO an empty in-memory slot only. Returns
+// true if it rehydrated. Never clobbers a live snapshot, never throws.
+function _rehydrateIfEmpty() {
+    if (_lastSnapshot) return false;
+    try {
+        const raw = fs.readFileSync(_snapshotPath(), 'utf8');
+        const obj = JSON.parse(raw);
+        if (!obj || typeof obj.ts !== 'number' || !Array.isArray(obj.tickers) || obj.tickers.length === 0) return false;
+        _lastSnapshot = { ts: obj.ts, tickers: obj.tickers };
+        if (typeof obj.source === 'string' && obj.source) _source = obj.source;
+        _snapshotStale = true;
+        return true;
+    } catch (_) { return false; }
+}
 
 function _broadcast(payload) {
     const fn = global.__zeusWsBroadcastAll;
@@ -534,6 +576,13 @@ function start() {
         return;
     }
     _running = true;
+    // [2026-06-13] Rehydrate last-good snapshot from disk so the TOP 300 panel
+    // serves the previous run's universe (marked stale) immediately on boot,
+    // instead of a blank "scanning…" until the first live poll lands — which can
+    // be minutes-to-days away under sustained Binance quota starvation (P5 lane).
+    if (_rehydrateIfEmpty()) {
+        logger.info('RADAR', `rehydrated last-good snapshot from disk (${_lastSnapshot.tickers.length} symbols, stale) — serving until first live poll`);
+    }
     // [V6 2026-05-20] Boot jitter — deterministic delay to spread the radar
     // first poll away from marketFeed first poll fire. Same key produces same
     // delay across PM2 reloads → predictable scheduling topology in soak logs.
@@ -585,6 +634,8 @@ function _setSnapshot(tickers) {
             priceChangePercent1h: typeof t.priceChangePercent1h === 'number' ? t.priceChangePercent1h : null,
         })),
     };
+    _snapshotStale = false;        // a live poll just landed — no longer last-good-from-disk
+    _persistSnapshotToDisk();      // best-effort; survives the next reload
 }
 
 // [Day 32A] Query latest snapshot — top gainers / losers / volume / oi.
@@ -606,6 +657,7 @@ function getTopSnapshot(opts) {
         ts: _lastSnapshot.ts,
         kind,
         source: _source, // [B5] honest source tag (binance|bybit)
+        stale: _snapshotStale, // [2026-06-13] true = last-good from a prior run, not yet refreshed
         universeSize: _lastSnapshot.tickers.length,
         symbols: all.slice(0, Math.min(limit, all.length)),
     };
@@ -622,11 +674,13 @@ function getSymbolFromSnapshot(input) {
 
 // Test hooks — never invoked în prod runtime
 function _ingestSnapshotForTest(tickers) { _setSnapshot(tickers); }
-function _resetSnapshotForTest() { _lastSnapshot = null; }
+function _resetSnapshotForTest() { _lastSnapshot = null; _snapshotStale = false; }
 
 module.exports = {
     start, stop, getState,
     // [Day 32A] Snapshot accessors for chat/analytics layer
     getTopSnapshot, getSymbolFromSnapshot,
     _ingestSnapshotForTest, _resetSnapshotForTest,
+    // [2026-06-13] P5-starvation fix — disk-persisted last-good snapshot
+    _persistSnapshotToDisk, _rehydrateIfEmpty,
 };
