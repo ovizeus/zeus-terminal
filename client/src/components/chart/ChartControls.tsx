@@ -105,6 +105,8 @@ export function ChartControls() {
 
   const [tfOpen, setTfOpen] = useState(false)
   const [ctOpen, setCtOpen] = useState(false)
+  const [symOpen, setSymOpen] = useState(false)
+  const symRef = useRef<HTMLDivElement>(null)
   const [candleType, setCandleType] = useState<CandleType>(
     ((USER_SETTINGS?.chart?.candleType as CandleType) || 'candles'),
   )
@@ -202,6 +204,7 @@ export function ChartControls() {
     function handleClick(e: MouseEvent) {
       if (tfRef.current && !tfRef.current.contains(e.target as Node)) setTfOpen(false)
       if (ctRef.current && !ctRef.current.contains(e.target as Node)) setCtOpen(false)
+      if (symRef.current && !symRef.current.contains(e.target as Node)) setSymOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -471,21 +474,30 @@ export function ChartControls() {
           </div>
           <button className="tfb ztf-sibling" title="Add Indicator" onClick={() => setIndPanelOpen(true)}>&#9776;</button>
           <span style={{ width: '8px' }}></span>
-          <select
-            id="symSel"
-            className="tfb"
-            value={symbol}
-            onChange={(e) => handleSymbolChange(e.target.value)}
-            style={{ height: '24px', padding: '2px 6px' }}
-          >
-            {SYMBOLS.map((g) => (
-              <optgroup key={g.label} label={g.label} style={{ color: '#888' }}>
-                {g.items.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
+          {/* [2026-06-13] Custom symbol dropdown (was a native <select> whose coin
+              list popup is unstyleable on mobile webview). Themeable amethyst list. */}
+          <div className={`ztf-wrap sym-wrap${symOpen ? ' open' : ''}`} ref={symRef} style={{ position: 'relative' }}>
+            <button id="symSel" className="tfb ztf-sibling" title="Symbol" onClick={() => setSymOpen(o => !o)} style={{ minWidth: '92px', display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+              <span>{SYMBOLS.flatMap(g => g.items).find(i => i.value === symbol)?.label || symbol}</span>
+              <span className="ztf-arrow">&#9662;</span>
+            </button>
+            {symOpen && (
+              <div className="sym-dropdown">
+                {SYMBOLS.map((g) => (
+                  <div key={g.label}>
+                    <div className="sym-group">{g.label.replace(/─/g, '').trim()}</div>
+                    {g.items.map((s) => (
+                      <button
+                        key={s.value}
+                        className={`sym-item${symbol === s.value ? ' act' : ''}`}
+                        onClick={() => { handleSymbolChange(s.value); setSymOpen(false) }}
+                      >{s.label}</button>
+                    ))}
+                  </div>
                 ))}
-              </optgroup>
-            ))}
-          </select>
+              </div>
+            )}
+          </div>
           <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => openModal('exposure')}>EXP</button>
         </div>
 

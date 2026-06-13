@@ -7604,3 +7604,35 @@ select option {
 #indPanel .ind-row button:not([role="switch"]):hover {
   border-color: #b07cff99 !important; box-shadow: 0 0 16px -4px #b07cff88 !important;
 }
+
+/* Custom symbol dropdown (#symSel button + .sym-dropdown list) — Amethyst [2026-06-13] */
+.sym-wrap .ztf-arrow { transition: transform .2s; font-size: 9px; color: #b07cff; }
+.sym-wrap.open .ztf-arrow { transform: rotate(180deg); }
+.sym-dropdown {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 8500;
+  min-width: 168px; max-height: 340px; overflow-y: auto;
+  background: radial-gradient(130% 60% at 50% 0%, #1c1430 0%, #0e0a18 60%, #0b0712 100%);
+  border: 1px solid #b07cff44; border-radius: 10px;
+  box-shadow: 0 18px 50px -16px #000000d9, 0 0 40px -14px #b07cff99, inset 0 1px 0 #ffffff10;
+  padding: 6px; animation: symDropIn .16s ease;
+}
+@keyframes symDropIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.sym-group {
+  font-size: 8px; letter-spacing: 2px; color: #8a7ca8; font-weight: 700;
+  padding: 8px 8px 4px; text-transform: uppercase;
+}
+.sym-item {
+  display: block; width: 100%; text-align: left;
+  padding: 7px 10px; margin: 1px 0; border: none; border-radius: 6px;
+  background: transparent; color: #d4c9e8; font-family: var(--ff); font-size: 11px;
+  cursor: pointer; transition: .12s; letter-spacing: .5px;
+}
+.sym-item:hover { background: #b07cff1c; color: #efe6ff; }
+.sym-item.act {
+  background: linear-gradient(90deg, #b07cff2a, #b07cff10);
+  color: #efe6ff; box-shadow: inset 2px 0 0 #b07cff;
+}
+.sym-dropdown::-webkit-scrollbar { width: 7px; }
+.sym-dropdown::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
+.sym-dropdown::-webkit-scrollbar-thumb:hover { background: #b07cff77; }
+.sym-dropdown::-webkit-scrollbar-track { background: transparent; }
