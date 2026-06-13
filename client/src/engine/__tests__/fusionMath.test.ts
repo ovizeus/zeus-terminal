@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dirFactorLive, confNDirectional, classifyEntryTier, lsRatioToSplit, oiWindowDeltaPct } from '../fusionMath'
+import { dirFactorLive, confNDirectional, classifyEntryTier, lsRatioToSplit, oiWindowDeltaPct, klineTfChangePct } from '../fusionMath'
 
 // Lever B — confluence denominator must count only LIVE directional feeds.
 // Bug: a dead feed ('neut', e.g. LS from the broken sentiment endpoint) was
@@ -175,5 +175,26 @@ describe('oiWindowDeltaPct (windowed OI change %)', () => {
   })
   it('negative change (deleveraging) is reported', () => {
     expect(oiWindowDeltaPct([{ oi: 200, ts: now - 100_000 }], 190, now, 300_000)).toBeCloseTo(-5)
+  })
+})
+
+// [2026-06-13] klineTfChangePct — open→close % change of the latest candle for a
+// given timeframe (drives the per-timeframe PRICE CHANGE in the ZEUS TRADER — AI
+// METRICS table once the 1H/4H/12H/1D/1W tabs were made functional).
+describe('klineTfChangePct (per-timeframe price change from klines)', () => {
+  it('positive change: open 100 → close 110 = +10%', () => {
+    expect(klineTfChangePct([[0, '100', '111', '99', '110', '5']])).toBeCloseTo(10, 6)
+  })
+  it('negative change: open 200 → close 190 = -5%', () => {
+    expect(klineTfChangePct([[0, '200', '201', '188', '190', '5']])).toBeCloseTo(-5, 6)
+  })
+  it('uses the LAST (current) candle when several are returned', () => {
+    expect(klineTfChangePct([[0, '100', '1', '1', '105', '1'], [1, '50', '1', '1', '60', '1']])).toBeCloseTo(20, 6)
+  })
+  it('returns null on empty / malformed / zero-open input', () => {
+    expect(klineTfChangePct([])).toBeNull()
+    expect(klineTfChangePct(null as any)).toBeNull()
+    expect(klineTfChangePct([[0, '0', '1', '1', '5']])).toBeNull()
+    expect(klineTfChangePct([[0, 'x', '1', '1', 'y']])).toBeNull()
   })
 })

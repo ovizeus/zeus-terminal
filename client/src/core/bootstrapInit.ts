@@ -40,7 +40,9 @@ export function initZeusGroups(): void {
   mv('dsl-strip', mi); mv('at-strip', mi); mv('pt-strip', mi); mv('nova-strip', mi)
   mv('mtf-strip', mi); mv('adaptive-strip', mi); mv('actfeed-strip', mi)
   mv('zeusBrain', mi); mv('brainExt', mi)
-  mvSec('#rsiupd', mi); mvSec('.dttabs', mi); mvSec('.conf-widget', mi); mvSec('.fgc', mi)
+  // [UI-COMPACT 2026-06-13] .dttabs (ZEUS TRADER — AI METRICS) no longer mvSec()'d
+  // — React-owned inside MarketMetricsPanel (data-panel-id="market-metrics").
+  mvSec('#rsiupd', mi); mvSec('.conf-widget', mi); mvSec('.fgc', mi)
   // [UI-COMPACT 2026-06-07] .lmcs / #tv / .fdlist (Liquidations Monitor +
   // Overview + Live Feed) no longer mvSec()'d — React-owned inside
   // LiquidationsPanel (same trap-avoidance as dhfSec above).

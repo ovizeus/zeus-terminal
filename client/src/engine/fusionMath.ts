@@ -116,3 +116,22 @@ export function oiWindowDeltaPct(
   if (!base || !(base.oi > 0)) return null
   return ((+oiNow - base.oi) / base.oi) * 100
 }
+
+/**
+ * [2026-06-13] Open→close % change of the latest candle in a klines array.
+ * Drives the per-timeframe PRICE CHANGE in the ZEUS TRADER — AI METRICS table:
+ * the 1H/4H/12H/1D/1W tabs fetch klines at that interval and this returns how
+ * far price moved within the current period of that timeframe.
+ *
+ * `bars` is the Binance-shape array: [openTime, open, high, low, close, ...].
+ * Returns null on empty / malformed / zero-open input (caller shows "—").
+ */
+export function klineTfChangePct(bars: any[]): number | null {
+  if (!Array.isArray(bars) || bars.length === 0) return null
+  const last = bars[bars.length - 1]
+  if (!Array.isArray(last) || last.length < 5) return null
+  const open = parseFloat(last[1])
+  const close = parseFloat(last[4])
+  if (!Number.isFinite(open) || !Number.isFinite(close) || open === 0) return null
+  return ((close - open) / open) * 100
+}

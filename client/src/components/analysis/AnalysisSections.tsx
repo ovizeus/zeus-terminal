@@ -118,57 +118,10 @@ export function AnalysisSections() {
           LiquidationsPanel.tsx (dedicated Liquidations dock page) — same
           pattern; bootstrapInit mvSec(".lmcs") removed in pair. */}
 
-      {/* ===== ZEUS TRADER — AI METRICS ===== */}
-      <div className="sec">
-        <div className="slbl" style={{ justifyContent: 'space-between' }}>
-          <span>ZEUS TRADER &mdash; AI METRICS</span>
-        </div>
-        <div className="dttabs">
-          <div className="dtt act">1H</div>
-          <div className="dtt">4H</div>
-          <div className="dtt">12H</div>
-          <div className="dtt">1D</div>
-          <div className="dtt">1W</div>
-        </div>
-        <div className="dttbl">
-          <div className="dtrow hrow">
-            <span>METRIC</span>
-            <span style={{ textAlign: 'right' }}>CURRENT</span>
-            <span style={{ textAlign: 'right' }}>CHANGE</span>
-            <span style={{ textAlign: 'right' }}>SIGNAL</span>
-          </div>
-          <div className="dtrow">
-            <span className="dtm">PRICE</span>
-            <span className="dtc" id="dtp">&mdash;</span>
-            <span className="dtch" id="dtpc">&mdash;</span>
-            <span className="dts" id="dtps">&mdash;</span>
-          </div>
-          <div className="dtrow">
-            <span className="dtm">OPEN INTEREST</span>
-            <span className="dtc" id="dtoi">&mdash;</span>
-            <span className="dtch" id="dtoic">&mdash;</span>
-            <span className="dts" id="dtois">&mdash;</span>
-          </div>
-          <div className="dtrow">
-            <span className="dtm">FUNDING RATE</span>
-            <span className="dtc" id="dtfr">&mdash;</span>
-            <span className="dtch" id="dtfrc">&mdash;</span>
-            <span className="dts" id="dtfrs">&mdash;</span>
-          </div>
-          <div className="dtrow">
-            <span className="dtm">LONG/SHORT</span>
-            <span className="dtc" id="dtls">&mdash;</span>
-            <span className="dtch" id="dtlsc">&mdash;</span>
-            <span className="dts" id="dtlss">&mdash;</span>
-          </div>
-          <div className="dtrow">
-            <span className="dtm">RSI</span>
-            <span className="dtc" id="dtrsi">&mdash;</span>
-            <span className="dtch" id="dtrsic">&mdash;</span>
-            <span className="dts" id="dtrsis">&mdash;</span>
-          </div>
-        </div>
-      </div>
+      {/* [UI-COMPACT 2026-06-13] ZEUS TRADER — AI METRICS (.dttabs + .dttbl) moved
+          1:1 into MarketMetricsPanel.tsx (Market Metrics dock page) and the dead
+          1H/4H/12H/1D/1W tabs re-wired to setDtTf (per-tf PRICE change). Paired:
+          bootstrapInit mvSec('.dttabs') removed so the boot mover can't yank it out. */}
 
       {/* ===== CONFLUENCE SCORE — ZEUS AI ===== */}
       <div className="sec">

@@ -12,7 +12,7 @@ import { getChartH } from './marketDataChart'
 import { updateMainMetrics, sendAlert } from './marketDataWS'
 import { updateLiveLiqPrice } from './marketDataTrading'
 import { updateDeepDive } from '../engine/indicators'
-import { lsRatioToSplit, oiWindowDeltaPct } from '../engine/fusionMath'
+import { lsRatioToSplit, oiWindowDeltaPct, klineTfChangePct } from '../engine/fusionMath'
 import { oiHistory } from '../core/state'
 const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
@@ -247,18 +247,50 @@ export async function fetch24h(): Promise<void> {
 }
 
 // ===== METRICS TABLE =====
+// [2026-06-13] The 1H/4H/12H/1D/1W tabs drive the PRICE row's CHANGE/SIGNAL via
+// real klines fetched at that interval (cached per interval). OI/FR/L-S/RSI stay
+// live/spot — no per-timeframe history exists for them client-side.
+const DT_TF_INTERVAL: Record<string, string> = { '1H': '1h', '4H': '4h', '12H': '12h', '1D': '1d', '1W': '1w' }
+const _dtTfChange: Record<string, { pct: number | null; ts: number }> = {}
+const _dtTfInflight: Record<string, boolean> = {}
+const _DT_TF_TTL = 60000
+
+async function _refreshTfChange(tf: any): Promise<void> {
+  const interval = DT_TF_INTERVAL[tf]
+  if (!interval) return
+  const cached = _dtTfChange[interval]
+  if (cached && (Date.now() - cached.ts) < _DT_TF_TTL) return   // still fresh
+  if (_dtTfInflight[interval]) return                           // already fetching
+  _dtTfInflight[interval] = true
+  try {
+    const sym = w.S.symbol || 'BTCUSDT'
+    const r = await fetch(`/api/market/klines?symbol=${encodeURIComponent(sym)}&interval=${interval}&limit=1`)
+    if (r.ok) { const bars = await r.json(); _dtTfChange[interval] = { pct: klineTfChangePct(bars), ts: Date.now() } }
+  } catch (_) { /* keep prior cache; updateMetrics shows last value or — */ }
+  finally { _dtTfInflight[interval] = false }
+  updateMetrics()   // reflect the freshly-fetched per-tf change
+}
+
 export function setDtTf(tf: any, btn: any): void {
   w.S.dtTf = tf
   document.querySelectorAll('.dtt').forEach((b: any) => b.classList.remove('act'))
   if (btn) btn.classList.add('act')
+  _refreshTfChange(tf)   // async — repaints PRICE change when klines arrive
   updateMetrics()
 }
 
 export function updateMetrics(): void {
   const dtp = el('dtp'), dtpc = el('dtpc'), dtps = el('dtps')
   if (dtp) dtp.textContent = w.S.price ? '$' + fP(w.S.price) : '\u2014'
-  if (dtpc) { const c = w.S.prevPrice ? ((w.S.price - w.S.prevPrice) / w.S.prevPrice * 100).toFixed(2) + '%' : '\u2014'; dtpc.textContent = c; dtpc.style.color = w.S.price >= w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
-  if (dtps) { dtps.textContent = w.S.price > w.S.prevPrice ? 'BULL' : 'BEAR'; dtps.style.color = w.S.price > w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
+  // [2026-06-13] CHANGE/SIGNAL reflect the selected timeframe tab (1H/4H/12H/1D/1W)
+  // from real klines (cached). Falls back to the last-tick change until the first
+  // per-tf fetch lands; kicks a refresh when the cache is stale.
+  const _tfInt = DT_TF_INTERVAL[w.S.dtTf] || '1h'
+  const _tfEntry = _dtTfChange[_tfInt]
+  if (!_tfEntry || (Date.now() - _tfEntry.ts) >= _DT_TF_TTL) { _refreshTfChange(w.S.dtTf || '1H') }
+  const _tfPct = _tfEntry ? _tfEntry.pct : (w.S.prevPrice ? ((w.S.price - w.S.prevPrice) / w.S.prevPrice * 100) : null)
+  if (dtpc) { dtpc.textContent = _tfPct != null ? _tfPct.toFixed(2) + '%' : '\u2014'; dtpc.style.color = _tfPct == null ? 'var(--dim)' : _tfPct >= 0 ? 'var(--grn)' : 'var(--red)' }
+  if (dtps) { if (_tfPct == null) { dtps.textContent = '\u2014'; dtps.style.color = 'var(--dim)' } else { dtps.textContent = _tfPct >= 0 ? 'BULL' : 'BEAR'; dtps.style.color = _tfPct >= 0 ? 'var(--grn)' : 'var(--red)' } }
   const dtoi = el('dtoi'), dtoic = el('dtoic'), dtois = el('dtois')
   if (dtoi) dtoi.textContent = w.S.oi ? '$' + fmt(w.S.oi) : '\u2014'
   // OI change over a real 5-minute window (the server refreshes OI ~60s, so the

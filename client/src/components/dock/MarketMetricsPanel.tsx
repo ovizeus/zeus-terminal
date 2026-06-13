@@ -1,3 +1,5 @@
+import { setDtTf } from '../../data/marketDataFeeds'
+
 /** Market Metrics dock page view — [UI-COMPACT 2026-06-13]
  *  BTC MARKET METRICS + BTC ORDER BOOK — LIVE + ZeuS S/R LEVELS — AUTO moved 1:1
  *  from AnalysisSections.tsx (home scroll zone) into a dedicated dock icon,
@@ -117,6 +119,66 @@ export function MarketMetricsPanel() {
             <span className="srl slz">ZeuS &#8595;</span>
             <span className="srp" id="szl">&mdash;</span>
             <span className="srd be" id="sdl">&mdash;</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== ZEUS TRADER — AI METRICS ===== */}
+      {/* [UI-COMPACT 2026-06-13] Moved 1:1 from AnalysisSections.tsx (was under RSI
+          MULTI-TIMEFRAME). The 1H/4H/12H/1D/1W tabs were dead in React (onClick lost
+          in migration) — re-wired here to setDtTf, which now drives the PRICE row's
+          CHANGE/SIGNAL from real per-interval klines. bootstrapInit mvSec('.dttabs')
+          removed in pair. */}
+      <div className="sec">
+        <div className="slbl" style={{ justifyContent: 'space-between' }}>
+          <span>ZEUS TRADER &mdash; AI METRICS</span>
+        </div>
+        <div className="dttabs">
+          <div className="dtt act" onClick={(e) => setDtTf('1H', e.currentTarget)}>1H</div>
+          <div className="dtt" onClick={(e) => setDtTf('4H', e.currentTarget)}>4H</div>
+          <div className="dtt" onClick={(e) => setDtTf('12H', e.currentTarget)}>12H</div>
+          <div className="dtt" onClick={(e) => setDtTf('1D', e.currentTarget)}>1D</div>
+          <div className="dtt" onClick={(e) => setDtTf('1W', e.currentTarget)}>1W</div>
+        </div>
+        <div style={{ fontSize: '7px', color: 'var(--dim)', letterSpacing: '0.5px', margin: '2px 0 4px' }}>
+          Timeframe drives PRICE change · OI / FR / L-S / RSI are live
+        </div>
+        <div className="dttbl">
+          <div className="dtrow hrow">
+            <span>METRIC</span>
+            <span style={{ textAlign: 'right' }}>CURRENT</span>
+            <span style={{ textAlign: 'right' }}>CHANGE</span>
+            <span style={{ textAlign: 'right' }}>SIGNAL</span>
+          </div>
+          <div className="dtrow">
+            <span className="dtm">PRICE</span>
+            <span className="dtc" id="dtp">&mdash;</span>
+            <span className="dtch" id="dtpc">&mdash;</span>
+            <span className="dts" id="dtps">&mdash;</span>
+          </div>
+          <div className="dtrow">
+            <span className="dtm">OPEN INTEREST</span>
+            <span className="dtc" id="dtoi">&mdash;</span>
+            <span className="dtch" id="dtoic">&mdash;</span>
+            <span className="dts" id="dtois">&mdash;</span>
+          </div>
+          <div className="dtrow">
+            <span className="dtm">FUNDING RATE</span>
+            <span className="dtc" id="dtfr">&mdash;</span>
+            <span className="dtch" id="dtfrc">&mdash;</span>
+            <span className="dts" id="dtfrs">&mdash;</span>
+          </div>
+          <div className="dtrow">
+            <span className="dtm">LONG/SHORT</span>
+            <span className="dtc" id="dtls">&mdash;</span>
+            <span className="dtch" id="dtlsc">&mdash;</span>
+            <span className="dts" id="dtlss">&mdash;</span>
+          </div>
+          <div className="dtrow">
+            <span className="dtm">RSI</span>
+            <span className="dtc" id="dtrsi">&mdash;</span>
+            <span className="dtch" id="dtrsic">&mdash;</span>
+            <span className="dts" id="dtrsis">&mdash;</span>
           </div>
         </div>
       </div>
