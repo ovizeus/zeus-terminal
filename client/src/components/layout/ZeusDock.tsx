@@ -179,6 +179,21 @@ const DOCK_ITEMS: DockItem[] = [
         <path d="M9 15a3 3 0 0 0 3 3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       </>
     ) },
+  // [UI-COMPACT 2026-06-13] Market Metrics page (BTC Market Metrics + Order Book +
+  // S/R Levels). MIRROR entry also added in ui/dock.ts DOCK_ITEMS — both lists
+  // must stay in sync (documented 2026-05-21 gotcha).
+  { id: 'market-metrics', label: 'Metrics', group: 'intel',
+    icon: (
+      <>
+        <path d="M3 21h18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <rect x="4" y="14" width="4" height="7" rx="1" fill="currentColor" opacity=".25" />
+        <rect x="4" y="14" width="4" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        <rect x="10" y="9" width="4" height="12" rx="1" fill="currentColor" opacity=".25" />
+        <rect x="10" y="9" width="4" height="12" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        <rect x="16" y="5" width="4" height="16" rx="1" fill="currentColor" opacity=".25" />
+        <rect x="16" y="5" width="4" height="16" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      </>
+    ) },
   { id: 'activity', label: 'Activity', group: 'review',
     icon: (
       <>

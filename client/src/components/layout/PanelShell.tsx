@@ -40,6 +40,7 @@ import { MTFPanel } from '../dock/MTFPanel'
 import { TeacherDockPanel } from '../dock/TeacherDockPanel'
 import { SignalRegistryPanel } from '../dock/SignalRegistryPanel'
 import { LiquidationsPanel } from '../dock/LiquidationsPanel'
+import { MarketMetricsPanel } from '../dock/MarketMetricsPanel'
 import { ActivityFeedPanel } from '../dock/ActivityFeedPanel'
 import { AUBPanel } from '../dock/AUBPanel'
 // ── Modals & Overlays (1:1 from old Zeus .mover modals) ──
@@ -99,6 +100,7 @@ const DOCK_TITLES: Record<string, string> = {
   'teacher': 'Teacher',
   'sigreg': 'Signals',
   'liquidations': 'Liquidations',
+  'market-metrics': 'Market Metrics',
   'activity': 'Activity',
   'aub': 'Alien',
 }
@@ -551,6 +553,9 @@ export function PanelShell() {
           </div>
           <div data-panel-id="liquidations" className={dockActive === 'liquidations' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <LiquidationsPanel />
+          </div>
+          <div data-panel-id="market-metrics" className={dockActive === 'market-metrics' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <MarketMetricsPanel />
           </div>
           <div data-panel-id="activity" className={dockActive === 'activity' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <ActivityFeedPanel />

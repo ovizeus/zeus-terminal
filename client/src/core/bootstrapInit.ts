@@ -44,7 +44,10 @@ export function initZeusGroups(): void {
   // [UI-COMPACT 2026-06-07] .lmcs / #tv / .fdlist (Liquidations Monitor +
   // Overview + Live Feed) no longer mvSec()'d — React-owned inside
   // LiquidationsPanel (same trap-avoidance as dhfSec above).
-  mvSec('#frv', mi); mvSec('#askc', mi); mvSec('.srgrid', mi)
+  // [UI-COMPACT 2026-06-13] #frv (MARKET METRICS) / #askc (ORDER BOOK) / .srgrid
+  // (S/R LEVELS) no longer mvSec()'d — React-owned inside MarketMetricsPanel
+  // (data-panel-id="market-metrics"); mv() here would yank them out of the panel
+  // wrapper (the documented legacy-DOM-override trap).
   // [UI-COMPACT 2026-06-06] dhfSec no longer mv()'d — it is React-owned inside
   // SignalRegistryPanel (data-panel-id="sigreg"); mv() here would yank it out
   // of the panel wrapper (the documented legacy-DOM-override trap).

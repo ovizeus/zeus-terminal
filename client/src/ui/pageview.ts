@@ -58,6 +58,9 @@ export const PAGE_VIEW_MODULES: Record<string, any> = {
   'liquidations': {
     title: 'Liquidations'
   },
+  'market-metrics': {
+    title: 'Market Metrics'
+  },
   'activity': {
     title: 'Activity'
   },
