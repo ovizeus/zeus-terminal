@@ -7554,3 +7554,53 @@ select option {
 :is(#malerts,#mnotifications,#mcharts) .sndbtn.on {
   color: #c9a8ff; border-color: #b07cff55; background: #b07cff14;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+ * CHART symbol selector (#symSel) + SELECT INDICATOR sheet (#indPanel)
+ * Amethyst skin to match the Settings family.  [2026-06-13]
+ * Targeted by id so the rest of the chart toolbar (.tfb timeframe buttons,
+ * global --gold) stays as-is. Toggles keep green on-state (semantic).
+ * ══════════════════════════════════════════════════════════════════ */
+
+/* Symbol picker */
+#symSel.tfb { border-color: #b07cff44; color: #d9c7ff; }
+#symSel.tfb:hover, #symSel.tfb:focus {
+  border-color: #b07cff99; color: #efe6ff;
+  box-shadow: 0 0 14px -5px #b07cff99; outline: none;
+}
+#symSel optgroup { background: #0e0a18; color: #8a7ca8; }
+#symSel option { background: #130d22; color: #e6dbfa; }
+
+/* SELECT INDICATOR bottom sheet */
+#indOverlay.ind-panel-overlay {
+  background: #0a0612b3;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+}
+#indPanel.ind-panel {
+  background: radial-gradient(130% 70% at 50% 0%, #1c1430 0%, #0e0a18 58%, #0b0712 100%);
+  border-top: 2px solid #b07cff99;
+  box-shadow: 0 -22px 64px -22px #b07cffb0, inset 0 1px 0 #ffffff12;
+}
+#indPanel .ind-panel-hdr { border-bottom: 1px solid #b07cff2e; }
+#indPanel .ind-panel-title { color: #e4d6ff; text-shadow: 0 0 18px #b07cff77; }
+#indPanel .ind-row { border-bottom: 1px solid #ffffff0a; }
+#indPanel .ind-row:hover { background: #b07cff14; }
+#indPanel .ind-row:active { background: #b07cff22; }
+#indPanel .ind-row-name { color: #e6dbfa; }
+#indPanel .ind-row-desc { color: #8a7ca8; }
+
+/* Per-indicator settings gear (inline gold → amethyst) */
+#indPanel .gear {
+  border: 1px solid #b07cff55 !important; color: #c9a8ff !important;
+  background: #b07cff14 !important; transition: .15s;
+}
+#indPanel .gear:hover { border-color: #b07cff99 !important; box-shadow: 0 0 12px -3px #b07cff88 !important; }
+
+/* modalOnly OPEN buttons (inline gold → amethyst glass); not the role=switch toggle */
+#indPanel .ind-row button:not([role="switch"]) {
+  background: linear-gradient(180deg, #1b1430, #140e24) !important;
+  color: #d9c7ff !important; border: 1px solid #b07cff55 !important;
+}
+#indPanel .ind-row button:not([role="switch"]):hover {
+  border-color: #b07cff99 !important; box-shadow: 0 0 16px -4px #b07cff88 !important;
+}
