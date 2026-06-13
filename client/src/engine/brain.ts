@@ -1991,7 +1991,10 @@ export function renderBrainCockpit(): void {
   if (dslEl) {
     const _dslMode = (w.S.mode || 'assist').toLowerCase()
     const _modeTag = _dslMode === 'auto' ? '<span style="color:#39ff14;font-size:10px">●AI</span>' : _dslMode === 'assist' ? '<span style="color:#f0c040;font-size:10px">●USR</span>' : '<span style="color:#2a4030;font-size:10px">●MAN</span>'
-    const autoPosnsAll = (getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed)
+    // [2026-06-13] Include LIVE positions, not just demo — the panel falsely said
+    // 'No AUTO position open' while live autotrade positions (e.g. server-side AT on
+    // testnet) were open. Mirrors the ACTIVE-POSITION ticker (demo || live).
+    const autoPosnsAll = [...getDemoPositions(), ...getLivePositions()].filter((p: any) => p.autoTrade && !p.closed)
     const activeDSLPosns = autoPosnsAll.filter((p: any) => getDSLPositions()?.[p.id]?.active)
     const waitDSLPosns = autoPosnsAll.filter((p: any) => getDSLPositions()?.[p.id] && !getDSLPositions()[p.id].active)
     if (!getDSLEnabled()) {

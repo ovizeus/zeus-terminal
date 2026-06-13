@@ -497,7 +497,7 @@ export const BrainCockpit = memo(function BrainCockpit() {
         {/* CELL 3: DSL STATUS */}
         <div className="znc-cockpit-cell">
           <div className="znc-cockpit-cell-title" style={{ color: '#00ffcc' }}>DSL STATUS</div>
-          <div className="znc-dsl-body" id="zncDslContract" style={{ fontSize: '8px', color: '#2a5040', lineHeight: 1.7 }}>DSL ENGINE: <b>READY</b> · Init...</div>
+          <div className="znc-dsl-body" id="zncDslContract" style={{ fontSize: '11px', color: '#7fd1a8', lineHeight: 1.6, fontWeight: 500 }}>DSL ENGINE: <b>READY</b> · Init...</div>
         </div>
 
       </div>{/* end cockpit panel */}
