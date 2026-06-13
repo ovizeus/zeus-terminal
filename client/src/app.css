@@ -5708,7 +5708,7 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   .adm-card > div { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important }
   .adm-btn { font-size: 8px !important; padding: 3px 6px !important }
   .adm-badge { font-size: 8px !important; padding: 1px 4px !important }
-  #msettings .modal { max-width: calc(100vw - 12px) !important }
+  :is(#msettings,#malerts,#mnotifications,#mcharts) .modal { max-width: calc(100vw - 12px) !important }
 }
 
 /* ── AUB on phones ── */
@@ -7419,14 +7419,14 @@ select option {
 
 /* ══════════════════════════════════════════════════════════════════
  * SETTINGS HUB — Amethyst / Royal premium skin   [2026-06-13]
- * Scoped to #msettings ONLY — the global --gold (used app-wide: brain,
+ * Scoped to :is(#msettings,#malerts,#mnotifications,#mcharts) ONLY — the global --gold (used app-wide: brain,
  * chart, etc.) is untouched. Replaces the "poor yellow" look with a
  * refined violet-on-obsidian luxury treatment: deep radial panel, soft
  * amethyst glow, glass header, fine violet hairlines, accent primaries.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Flip class-based gold → amethyst, scoped */
-#msettings {
+:is(#msettings,#malerts,#mnotifications,#mcharts) {
   --gold:      #b07cff;
   --gold-a20:  #b07cff24;
   --gold-a33:  #b07cff44;
@@ -7435,10 +7435,10 @@ select option {
 }
 
 /* Backdrop — deeper, faint violet wash */
-#msettings.mover { background: radial-gradient(120% 90% at 50% 30%, #120a20cc 0%, #000000e6 70%); }
+:is(#msettings,#malerts,#mnotifications,#mcharts).mover { background: radial-gradient(120% 90% at 50% 30%, #120a20cc 0%, #000000e6 70%); }
 
 /* Panel — obsidian-violet depth + amethyst aura */
-#msettings .modal {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .modal {
   background:
     radial-gradient(130% 80% at 50% -15%, #1c1430 0%, #0e0a18 52%, #0b0712 100%);
   border: 1px solid #b07cff3a;
@@ -7450,84 +7450,107 @@ select option {
 }
 
 /* Glass header */
-#msettings .mhdr {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mhdr {
   background: linear-gradient(180deg, #1a1230f2, #14102699);
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   border-bottom: 1px solid #b07cff2e;
   padding: 15px 18px 12px;
 }
-#msettings .mtitle {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mtitle {
   color: #e4d6ff;
   letter-spacing: 3px;
   font-weight: 800;
   text-shadow: 0 0 22px #b07cff77;
 }
-#msettings .mclose { color: #7c6f96; transition: .18s; border-radius: 6px; }
-#msettings .mclose:hover { color: #c9a8ff; background: #b07cff1a; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mclose { color: #7c6f96; transition: .18s; border-radius: 6px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mclose:hover { color: #c9a8ff; background: #b07cff1a; }
 
 /* Tabs */
-#msettings .mtabs { border-bottom: 1px solid #b07cff1f; padding: 0 6px; gap: 2px; }
-#msettings .mtab {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mtabs { border-bottom: 1px solid #b07cff1f; padding: 0 6px; gap: 2px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mtab {
   color: #7e7197; letter-spacing: 1.6px; font-weight: 600;
   border-bottom: 2px solid transparent; transition: .2s; border-radius: 6px 6px 0 0;
 }
-#msettings .mtab:hover { color: #c9b8e8; background: #b07cff10; }
-#msettings .mtab.act {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mtab:hover { color: #c9b8e8; background: #b07cff10; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mtab.act {
   color: #e7dcff; border-bottom-color: #b07cff;
   text-shadow: 0 0 16px #b07cff66;
   background: linear-gradient(180deg, #b07cff14, transparent);
 }
 
 /* Section dividers */
-#msettings .msec {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .msec {
   color: #c2acf0; letter-spacing: 2.6px; font-weight: 700;
   border-bottom: 1px solid #b07cff26; margin: 16px 0 8px;
 }
-#msettings .mrow { border-bottom: 1px solid #ffffff08; }
-#msettings .mlbl { color: #d4c9e8; }
-#msettings .mchk { color: #cfc3e6; }
-#msettings .mchk input { accent-color: #b07cff; }
-#msettings .hub-disabled-notice { color: #6f6388; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mrow { border-bottom: 1px solid #ffffff08; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mlbl { color: #d4c9e8; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mchk { color: #cfc3e6; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .mchk input { accent-color: #b07cff; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-disabled-notice { color: #6f6388; }
 
 /* Inputs / selects — violet-tinted, focus glow (override inline styles) */
-#msettings input:not([type=checkbox]):not([type=radio]),
-#msettings select,
-#msettings textarea {
+:is(#msettings,#malerts,#mnotifications,#mcharts) input:not([type=checkbox]):not([type=radio]),
+:is(#msettings,#malerts,#mnotifications,#mcharts) select,
+:is(#msettings,#malerts,#mnotifications,#mcharts) textarea {
   background: #130d22 !important;
   border: 1px solid #b07cff30 !important;
   color: #e6dbfa !important;
   border-radius: 7px !important;
   transition: border-color .15s, box-shadow .15s !important;
 }
-#msettings input:not([type=checkbox]):not([type=radio]):focus,
-#msettings select:focus,
-#msettings textarea:focus {
+:is(#msettings,#malerts,#mnotifications,#mcharts) input:not([type=checkbox]):not([type=radio]):focus,
+:is(#msettings,#malerts,#mnotifications,#mcharts) select:focus,
+:is(#msettings,#malerts,#mnotifications,#mcharts) textarea:focus {
   border-color: #b07cff99 !important;
   box-shadow: 0 0 0 3px #b07cff22, 0 0 18px -6px #b07cff88 !important;
   outline: none !important;
 }
 
 /* Buttons — glass violet; primary = accent (was green); danger stays inline red */
-#msettings .hub-sbtn {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn {
   background: linear-gradient(180deg, #1b1430, #140e24);
   border: 1px solid #b07cff2e; color: #c8b8ea;
   border-radius: 8px; transition: .16s;
 }
-#msettings .hub-sbtn:hover {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn:hover {
   border-color: #b07cff8c; color: #efe6ff;
   box-shadow: 0 0 20px -5px #b07cff80; transform: translateY(-1px);
 }
-#msettings .hub-sbtn.pri {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn.pri {
   background: linear-gradient(180deg, #2c1e4c, #1d1432);
   border-color: #b07cff5c; color: #efe4ff;
 }
-#msettings .hub-sbtn.pri:hover {
+:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn.pri:hover {
   border-color: #c9a8ff; background: linear-gradient(180deg, #36275c, #241838);
   box-shadow: 0 0 26px -5px #b07cffb0;
 }
 
 /* Premium thin scrollbar inside the panel */
-#msettings .modal *::-webkit-scrollbar { width: 7px; }
-#msettings .modal *::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
-#msettings .modal *::-webkit-scrollbar-thumb:hover { background: #b07cff77; }
-#msettings .modal *::-webkit-scrollbar-track { background: transparent; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar { width: 7px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar-thumb:hover { background: #b07cff77; }
+:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar-track { background: transparent; }
+
+/* [2026-06-13] Alerts / Notifications / Chart-settings use .sbtn2 (+ .sndbtn)
+ * instead of .hub-sbtn — refine them to match the Amethyst skin. The --gold flip
+ * above already recolours .sbtn2.pri/.act + .sndbtn.on; this adds the glass feel. */
+:is(#malerts,#mnotifications,#mcharts) .sbtn2 {
+  border-radius: 8px; border-color: #b07cff2e; color: #c8b8ea;
+  background: linear-gradient(180deg, #1b1430, #140e24);
+}
+:is(#malerts,#mnotifications,#mcharts) .sbtn2:hover {
+  border-color: #b07cff8c; color: #efe6ff;
+  box-shadow: 0 0 20px -5px #b07cff80; transform: translateY(-1px);
+}
+:is(#malerts,#mnotifications,#mcharts) .sbtn2.pri {
+  background: linear-gradient(180deg, #6a3fd0, #4a2aa0); color: #fff;
+  border-color: #b07cff88; text-shadow: 0 0 10px #00000066;
+}
+:is(#malerts,#mnotifications,#mcharts) .sbtn2.pri:hover {
+  background: linear-gradient(180deg, #7c4ee0, #5631b4);
+  box-shadow: 0 0 26px -5px #b07cffc0;
+}
+:is(#malerts,#mnotifications,#mcharts) .sndbtn.on {
+  color: #c9a8ff; border-color: #b07cff55; background: #b07cff14;
+}
