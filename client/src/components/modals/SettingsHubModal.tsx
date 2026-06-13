@@ -3,7 +3,7 @@ import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
-import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
+import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme, zeusGetTheme } from '../../ui/theme'
 import { OmegaMemorySection } from '../settings/OmegaMemorySection'
 
@@ -154,17 +154,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
             <option value="light">☀️ Ivory</option>
           </select>
         </div>
-        <div className="msec">UI SCALE</div>
-        <div className="mrow"><span className="mlbl">Interface size</span>
-          <select id="hubUiScale" style={{flex:1,maxWidth:'90px',background:'#0a121a',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'4px 8px',borderRadius:'2px',fontFamily:'var(--ff)',fontSize:'9px'}} defaultValue="1" onChange={(e) => setUiScale?.(e.target.value)}>
-            <option value="0.9">0.9×</option>
-            <option value="1">1.0×</option>
-            <option value="1.1">1.1×</option>
-            <option value="1.2">1.2×</option>
-            <option value="1.3">1.3×</option>
-            <option value="1.5">1.5×</option>
-          </select>
-        </div>
+        {/* [2026-06-13] UI SCALE removed — the control set --ui-scale but nothing
+            consumed it (0 var(--ui-scale) anywhere), so it never resized anything. */}
       </div>
 
       {/* ══ CONT & SECURITY ══ */}

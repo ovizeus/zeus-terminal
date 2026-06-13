@@ -552,30 +552,9 @@ export function _devEnsureVisible(): void {
 }
 // _devEnsureVisible — exported, consumers import directly
 
-// ════════════════════════════════════════════════════════════════
-// UI SCALE — CSS variable + localStorage persistence
-// ════════════════════════════════════════════════════════════════
-export function setUiScale(val: any): void {
-  let v = parseFloat(val)
-  if (isNaN(v) || v < 0.5 || v > 3) v = 1
-  document.documentElement.style.setProperty('--ui-scale', String(v))
-  try { localStorage.setItem('zeus_ui_scale', String(v)) } catch (_e) { /* */ }
-  if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('uiScale')
-  if (typeof w._userCtxPush === 'function') w._userCtxPush()
-  const sel = document.getElementById('hubUiScale') as HTMLSelectElement | null
-  if (sel) sel.value = String(v)
-}
-// setUiScale — exported, consumers import directly
-
-// Restore on script load
-;(function () {
-  try {
-    const saved = parseFloat(localStorage.getItem('zeus_ui_scale') || '')
-    if (!isNaN(saved) && saved >= 0.5 && saved <= 3) {
-      document.documentElement.style.setProperty('--ui-scale', String(saved))
-    }
-  } catch (_e) { /* */ }
-})()
+// [2026-06-13] UI SCALE removed — setUiScale set --ui-scale + the boot IIFE
+// restored it, but nothing in CSS consumed var(--ui-scale), so it never resized
+// anything. Dead control + dead code removed (Settings UI section removed too).
 
 // ════════════════════════════════════════════════════════════════
 // SETTINGS HUB
@@ -592,19 +571,11 @@ export function hubPopulate(): void {
 
     const devCb = document.getElementById('hubDevEnabled') as HTMLInputElement | null
     if (devCb) devCb.checked = DEV.enabled
-    const devCb2 = document.getElementById('hubDevEnabled2') as HTMLInputElement | null
-    if (devCb2) devCb2.checked = DEV.enabled
+    // [2026-06-13] hubDevEnabled2 (duplicate) + UI Scale select removed from Settings.
 
     // ── Theme ────────────────────────────────────────────────────
     const _ts = document.getElementById('themeSelect') as HTMLSelectElement | null
     if (_ts) _ts.value = zeusGetTheme ? zeusGetTheme() : 'native'
-
-    // ── UI Scale ────────────────────────────────────────────────
-    const scaleSel = document.getElementById('hubUiScale') as HTMLSelectElement | null
-    if (scaleSel) {
-      const sv = localStorage.getItem('zeus_ui_scale')
-      scaleSel.value = (sv && !isNaN(parseFloat(sv))) ? String(parseFloat(sv)) : '1'
-    }
 
     const _setV = function (id: string, val: any) {
       const elv = document.getElementById(id) as HTMLInputElement | null
