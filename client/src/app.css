@@ -7416,3 +7416,118 @@ select option {
 }
 .mtp-btn:disabled { opacity: 0.6; cursor: default; }
 .mtp-err { color: #ffb3b3; font-size: 11px; }
+
+/* ══════════════════════════════════════════════════════════════════
+ * SETTINGS HUB — Amethyst / Royal premium skin   [2026-06-13]
+ * Scoped to #msettings ONLY — the global --gold (used app-wide: brain,
+ * chart, etc.) is untouched. Replaces the "poor yellow" look with a
+ * refined violet-on-obsidian luxury treatment: deep radial panel, soft
+ * amethyst glow, glass header, fine violet hairlines, accent primaries.
+ * ══════════════════════════════════════════════════════════════════ */
+
+/* Flip class-based gold → amethyst, scoped */
+#msettings {
+  --gold:      #b07cff;
+  --gold-a20:  #b07cff24;
+  --gold-a33:  #b07cff44;
+  --gold-a40:  #b07cff66;
+  --ylw:       #c9a8ff;
+}
+
+/* Backdrop — deeper, faint violet wash */
+#msettings.mover { background: radial-gradient(120% 90% at 50% 30%, #120a20cc 0%, #000000e6 70%); }
+
+/* Panel — obsidian-violet depth + amethyst aura */
+#msettings .modal {
+  background:
+    radial-gradient(130% 80% at 50% -15%, #1c1430 0%, #0e0a18 52%, #0b0712 100%);
+  border: 1px solid #b07cff3a;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 #ffffff10,
+    0 28px 90px -24px #000000cc,
+    0 0 80px -28px #b07cffaa;
+}
+
+/* Glass header */
+#msettings .mhdr {
+  background: linear-gradient(180deg, #1a1230f2, #14102699);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  border-bottom: 1px solid #b07cff2e;
+  padding: 15px 18px 12px;
+}
+#msettings .mtitle {
+  color: #e4d6ff;
+  letter-spacing: 3px;
+  font-weight: 800;
+  text-shadow: 0 0 22px #b07cff77;
+}
+#msettings .mclose { color: #7c6f96; transition: .18s; border-radius: 6px; }
+#msettings .mclose:hover { color: #c9a8ff; background: #b07cff1a; }
+
+/* Tabs */
+#msettings .mtabs { border-bottom: 1px solid #b07cff1f; padding: 0 6px; gap: 2px; }
+#msettings .mtab {
+  color: #7e7197; letter-spacing: 1.6px; font-weight: 600;
+  border-bottom: 2px solid transparent; transition: .2s; border-radius: 6px 6px 0 0;
+}
+#msettings .mtab:hover { color: #c9b8e8; background: #b07cff10; }
+#msettings .mtab.act {
+  color: #e7dcff; border-bottom-color: #b07cff;
+  text-shadow: 0 0 16px #b07cff66;
+  background: linear-gradient(180deg, #b07cff14, transparent);
+}
+
+/* Section dividers */
+#msettings .msec {
+  color: #c2acf0; letter-spacing: 2.6px; font-weight: 700;
+  border-bottom: 1px solid #b07cff26; margin: 16px 0 8px;
+}
+#msettings .mrow { border-bottom: 1px solid #ffffff08; }
+#msettings .mlbl { color: #d4c9e8; }
+#msettings .mchk { color: #cfc3e6; }
+#msettings .mchk input { accent-color: #b07cff; }
+#msettings .hub-disabled-notice { color: #6f6388; }
+
+/* Inputs / selects — violet-tinted, focus glow (override inline styles) */
+#msettings input:not([type=checkbox]):not([type=radio]),
+#msettings select,
+#msettings textarea {
+  background: #130d22 !important;
+  border: 1px solid #b07cff30 !important;
+  color: #e6dbfa !important;
+  border-radius: 7px !important;
+  transition: border-color .15s, box-shadow .15s !important;
+}
+#msettings input:not([type=checkbox]):not([type=radio]):focus,
+#msettings select:focus,
+#msettings textarea:focus {
+  border-color: #b07cff99 !important;
+  box-shadow: 0 0 0 3px #b07cff22, 0 0 18px -6px #b07cff88 !important;
+  outline: none !important;
+}
+
+/* Buttons — glass violet; primary = accent (was green); danger stays inline red */
+#msettings .hub-sbtn {
+  background: linear-gradient(180deg, #1b1430, #140e24);
+  border: 1px solid #b07cff2e; color: #c8b8ea;
+  border-radius: 8px; transition: .16s;
+}
+#msettings .hub-sbtn:hover {
+  border-color: #b07cff8c; color: #efe6ff;
+  box-shadow: 0 0 20px -5px #b07cff80; transform: translateY(-1px);
+}
+#msettings .hub-sbtn.pri {
+  background: linear-gradient(180deg, #2c1e4c, #1d1432);
+  border-color: #b07cff5c; color: #efe4ff;
+}
+#msettings .hub-sbtn.pri:hover {
+  border-color: #c9a8ff; background: linear-gradient(180deg, #36275c, #241838);
+  box-shadow: 0 0 26px -5px #b07cffb0;
+}
+
+/* Premium thin scrollbar inside the panel */
+#msettings .modal *::-webkit-scrollbar { width: 7px; }
+#msettings .modal *::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
+#msettings .modal *::-webkit-scrollbar-thumb:hover { background: #b07cff77; }
+#msettings .modal *::-webkit-scrollbar-track { background: transparent; }
