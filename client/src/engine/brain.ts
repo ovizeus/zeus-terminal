@@ -213,7 +213,11 @@ export function updateBrainState(): void {
   if (hasAutoPos) {
     state = 'trading'
     const pos = (getDemoPositions()).find((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).find((p: any) => p.autoTrade && !p.closed)
-    const pnl = pos ? ((pos.side === 'LONG' ? getPrice() - pos.entry : pos.entry - getPrice()) / pos.entry * pos.size * (pos.lev || 1)) : 0
+    // [2026-06-13] Use the position's own per-symbol PnL (computed via getSymPrice +
+    // _safePnl in marketDataPositions). The old inline formula used getPrice() = the
+    // CHART symbol's price; against an off-chart position's entry that gave absurd
+    // values (e.g. +$11M from a ~900x price mismatch).
+    const pnl = pos && Number.isFinite(+pos.pnl) ? +pos.pnl : 0
     ticker = `ACTIVE POSITION ${pos?.side} @$${fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORING TP/SL...`
   } else if (score >= BRAIN_READY_SCORE && sigs >= BRAIN_MIN_SIGNALS) {
     state = 'ready'
