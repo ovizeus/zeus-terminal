@@ -24,7 +24,7 @@ export function SignalRegistryPanel() {
         <div className="v6-content">
           <div id="sr-strip-title"><span>SIGNAL REGISTRY</span></div>
           <div id="sr-strip-info">
-            <span className="sr-strip-stat" id="sr-strip-total">&mdash; semnale</span>
+            <span className="sr-strip-stat" id="sr-strip-total">&mdash; signals</span>
             <span className="sr-strip-stat" id="sr-strip-wr"></span>
             <span className="sr-strip-stat" id="sr-strip-last"></span>
             <span className="sr-strip-chev">▲</span>

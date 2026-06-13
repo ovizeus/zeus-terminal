@@ -53,6 +53,6 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
   if (typeof runBrainUpdate === 'function') runBrainUpdate()
   {
     brainThink(bullCount > bearCount ? 'ok' : bearCount > bullCount ? 'bad' : 'info',
-      `Scan: ${signals.length} semnale | Bull:${bullCount} Bear:${bearCount} | Score:${el('confScore')?.textContent || '—'}`)
+      `Scan: ${signals.length} signals | Bull:${bullCount} Bear:${bearCount} | Score:${el('confScore')?.textContent || '—'}`)
   }
 }

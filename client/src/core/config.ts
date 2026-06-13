@@ -209,7 +209,7 @@ export function _srRenderStats() {
   const wr = st.total ? st.winRate : '\u2014'
   const exp = st.total ? (st.expectancy >= 0 ? '+' : '') + st.expectancy : '\u2014'
   el_s.innerHTML =
-    `<span class="sr-stat">${_ZI.chart} ${st.total} semnale</span>` +
+    `<span class="sr-stat">${_ZI.chart} ${st.total} signals</span>` +
     `<span class="sr-stat ${st.wins >= st.losses ? 'sr-win' : 'sr-loss'}">${_ZI.ok} ${st.wins}W / ${_ZI.x} ${st.losses}L</span>` +
     `<span class="sr-stat">WR: <b>${wr}%</b></span>` +
     `<span class="sr-stat">Exp: <b>${exp}$</b></span>`
@@ -879,7 +879,7 @@ export function srStripUpdateBar() {
   const totalEl = document.getElementById('sr-strip-total')
   const wrEl = document.getElementById('sr-strip-wr')
   const lastEl = document.getElementById('sr-strip-last')
-  if (totalEl) totalEl.innerHTML = `<b>${st.total || 0}</b> semnale`
+  if (totalEl) totalEl.innerHTML = `<b>${st.total || 0}</b> signals`
   if (wrEl) {
     if (st.total) {
       const wrGood = st.winRate >= 50

@@ -146,7 +146,7 @@ async function _handleBack(): Promise<void> {
     }
     _lastBackPress = now;
     try { console.log('[MOB-5] root dashboard — show confirm-exit toast'); } catch (_) {}
-    _toast('Apasă Back din nou pentru a închide Zeus');
+    _toast('Press Back again to close Zeus');
 }
 
 export function initBackButtonHandler(): void {
