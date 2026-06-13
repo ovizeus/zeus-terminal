@@ -108,7 +108,9 @@ export async function startApp(): Promise<void> {
   const _earlyRestored = w.ZState.restore()
   if (_earlyRestored) console.log('[startApp] State restored immediately at boot — positions in TP before Phase 1')
 
-  w.BUILD = w.BUILD || { name: 'ZeuS', version: 'v1.2.1', features: ['ServerAT', 'DSL', 'Brain', 'ARES', 'Reconciliation', 'ZLOG'], ts: Date.now() }
+  // [2026-06-13] Keep in sync with server/version.js on each deploy (manual, same
+  // as the server file). Was stale at v1.2.1 while the app was v1.7.102.
+  w.BUILD = w.BUILD || { name: 'Zeus Terminal', version: 'v1.7.102 (b128)', features: ['ServerAT', 'DSL', 'Brain', 'ARES', 'Reconciliation', 'ZLOG'], ts: Date.now() }
   console.log('[startApp] boot sequence starting | __wsGen=', w.__wsGen)
 
   _pinCheckLock()

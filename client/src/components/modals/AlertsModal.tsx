@@ -11,6 +11,7 @@ interface Props { visible: boolean; onClose: () => void }
 
 export function AlertsModal({ visible, onClose }: Props) {
   const openModal = useUiStore((s) => s.openModal)
+  const modalReturnTo = useUiStore((s) => s.modalReturnTo)
   const symbol = useMarketStore((s) => s.market.symbol)
 
   // [BUG7] Sync the Sound Notifications button icon with the BUG5 master mute
@@ -33,6 +34,14 @@ export function AlertsModal({ visible, onClose }: Props) {
   return (
     <ModalOverlay id="malerts" visible={visible} onClose={onClose}>
       <ModalHeader title={`PRICE ALERTS — ${symbol}`} onClose={onClose} />
+
+      {/* [2026-06-13] Back to Settings — shown only when opened from the Settings hub */}
+      {modalReturnTo === 'settings' && (
+        <div style={{ padding: '6px 16px', borderBottom: '1px solid #1e2530' }}>
+          <button className="sbtn2 sec" style={{ fontSize: 9, padding: '4px 10px' }}
+            onClick={() => openModal('settings')}>← Back to Settings</button>
+        </div>
+      )}
 
       <div style={{ padding: '12px 16px', overflowY: 'auto', maxHeight: '75vh' }}>
 

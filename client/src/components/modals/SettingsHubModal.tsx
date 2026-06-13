@@ -4,7 +4,7 @@ import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
-import { zeusApplyTheme } from '../../ui/theme'
+import { zeusApplyTheme, zeusGetTheme } from '../../ui/theme'
 import { OmegaMemorySection } from '../settings/OmegaMemorySection'
 
 const w = window as any
@@ -148,7 +148,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className="msec">APPEARANCE</div>
         <div className="mrow" style={{display:'flex',alignItems:'center',gap:'8px'}}>
           <span className="mlbl" style={{flex:'0 0 70px'}}>Theme</span>
-          <select id="themeSelect" style={{flex:1,background:'var(--sf-input,#0a121a)',border:'1px solid var(--brd)',color:'var(--whi)',padding:'6px 8px',borderRadius:'var(--r-sm)',fontFamily:'var(--ff)',fontSize:'10px'}} defaultValue="native" onChange={(e) => zeusApplyTheme?.(e.target.value)}>
+          <select id="themeSelect" style={{flex:1,background:'var(--sf-input,#0a121a)',border:'1px solid var(--brd)',color:'var(--whi)',padding:'6px 8px',borderRadius:'var(--r-sm)',fontFamily:'var(--ff)',fontSize:'10px'}} defaultValue={zeusGetTheme()} onChange={(e) => zeusApplyTheme?.(e.target.value)}>
             <option value="native">⬛ Obsidian</option>
             <option value="dark">🌑 Onyx</option>
             <option value="light">☀️ Ivory</option>
@@ -255,7 +255,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       {/* ══ ALERTS ══ */}
       <div className="mbody" id="set-alerts" style={{display:tab==='alerts'?'block':'none'}}>
         <div style={{marginBottom:'10px'}}>
-          <button className="hub-sbtn pri" style={{width:'100%',padding:'8px',fontSize:'10px'}} onClick={() => { onClose(); openModal('alerts') }}>
+          <button className="hub-sbtn pri" style={{width:'100%',padding:'8px',fontSize:'10px'}} onClick={() => { onClose(); openModal('alerts', 'settings') }}>
             <svg className="z-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width:'14px',height:'14px',verticalAlign:'middle',marginRight:'4px'}}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> OPEN FULL ALERTS PANEL
           </button>
         </div>
@@ -297,9 +297,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
 
       {/* ══ DEVELOPER ══ */}
       <div className="mbody" id="set-dev" style={{display:tab==='developer'?'block':'none'}}>
-        <div className="msec">DEVELOPER MODE</div>
-        <label className="mchk"><input type="checkbox" id="hubDevEnabled2" onChange={(e) => hubToggleDev(e.target.checked)} /> Enable Developer Mode</label>
-        <div className="hub-disabled-notice">Shows test harness panel in Market Intelligence.</div>
+        {/* [2026-06-13] Removed duplicate 'Enable Developer Mode' toggle — the single
+            source is the General tab (#hubDevEnabled). Two checkboxes desynced. */}
         <div className="msec">DEV LOG ACTIONS</div>
         <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'4px'}}>
           <button className="hub-sbtn" onClick={() => devClearLog()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear Dev Log</button>
@@ -322,7 +321,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           Max 400 entries · dedup 2s · export without server.
         </div>
         <div className="msec">BUILD INFO</div>
-        <div id="hub-build-info" style={{fontSize:'7px',color:'#556677',lineHeight:'1.8'}}>ZeuS v108 — FIX: chart negru la schimb simbol/TF + _adaptClamp + PostMortem + RegimeWatch</div>
+        <div id="hub-build-info" style={{fontSize:'8px',color:'#7fa0b0',lineHeight:'1.8'}}>Zeus Terminal v1.7.102 · build 128 · 2026-06-11</div>
       </div>
 
       {/* ══ OMEGA — Sub-A chat persistence + Sub-C.1 long-term memory ══ */}

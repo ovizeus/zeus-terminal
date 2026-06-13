@@ -14,6 +14,9 @@ interface UiStore {
   connected: boolean
   /** Currently open modal (null = none) */
   activeModal: ModalId | null
+  /** [2026-06-13] When a modal was opened FROM another (e.g. Settings → Alerts),
+   *  this holds the modal to return to so the target can show a "← Back" button. */
+  modalReturnTo: ModalId | null
 
   /** Set theme and persist to localStorage */
   setTheme: (theme: ThemeId) => void
@@ -23,8 +26,9 @@ interface UiStore {
   toggleSettings: () => void
   /** Set connection status */
   setConnected: (connected: boolean) => void
-  /** Open a modal by ID */
-  openModal: (id: ModalId) => void
+  /** Open a modal by ID. `from` records the modal to return to (shows a "← Back"
+   *  button in the target); omitting it clears any stale return target. */
+  openModal: (id: ModalId, from?: ModalId | null) => void
   /** Close current modal */
   closeModal: () => void
   /** Server environment info */
@@ -93,6 +97,7 @@ export const useUiStore = create<UiStore>()((set) => ({
   settingsOpen: false,
   connected: false,
   activeModal: null,
+  modalReturnTo: null,
   apiConfigured: false,
   exchangeMode: null,
   resolvedEnv: 'DEMO',
@@ -127,8 +132,8 @@ export const useUiStore = create<UiStore>()((set) => ({
   setActivePanel: (panel) => set({ activePanel: panel }),
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
   setConnected: (connected) => set({ connected }),
-  openModal: (id) => set({ activeModal: id }),
-  closeModal: () => set({ activeModal: null }),
+  openModal: (id, from = null) => set({ activeModal: id, modalReturnTo: from }),
+  closeModal: () => set({ activeModal: null, modalReturnTo: null }),
   patch: (partial) => set((s) => ({ ...s, ...partial })),
   // [Phase 3B] Logout reset — clears ownership/env/mode/UI-connection fields to defaults.
   // Theme is preserved intentionally (UX preference, not user-bound truth).
