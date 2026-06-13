@@ -379,17 +379,19 @@ export const BrainCockpit = memo(function BrainCockpit() {
         {/* ═══ RIGHT COLUMN ═══ */}
         <div className="znc-right">
 
-          {/* GAUGES: NEWS + LIQ */}
+          {/* GAUGES: VOLATILITY + LIQ + VOL — single real panel (THREAT RADAR merged
+              in, NEWS removed as fictive). VOLATILITY=real ATR, LIQ=real liquidations,
+              VOL=real-time volume rate. [2026-06-13] */}
           <div className="znc-gauges">
             <div className="znc-g-wrap">
-              <div className="znc-g-lbl">NEWS</div>
+              <div className="znc-g-lbl">VOLATILITY</div>
               <svg width="56" height="32" viewBox="0 0 56 32">
                 <path d="M4,28 A24,24,0,0,1,52,28" fill="none" stroke="#0a1a0a" strokeWidth="5" />
                 <path d="M4,28 A24,24,0,0,1,52,28" fill="none" stroke="#39ff14" strokeWidth="5" strokeDasharray="0 75"
-                  id="newsGaugeArc" strokeLinecap="round" style={{ transition: 'all .5s' }} />
+                  id="volatGaugeArc" strokeLinecap="round" style={{ transition: 'all .5s' }} />
               </svg>
               <div style={{ marginTop: '-8px', textAlign: 'center' }}>
-                <div className="znc-g-val" id="newsGaugeVal" style={{ color: '#39ff14' }}>0</div>
+                <div className="znc-g-val" id="volatGaugeVal" style={{ color: '#39ff14' }}>0</div>
               </div>
             </div>
             <div className="znc-g-wrap">
@@ -401,6 +403,17 @@ export const BrainCockpit = memo(function BrainCockpit() {
               </svg>
               <div style={{ marginTop: '-8px', textAlign: 'center' }}>
                 <div className="znc-g-val" id="liqGaugeVal" style={{ color: '#f0c040' }}>0</div>
+              </div>
+            </div>
+            <div className="znc-g-wrap">
+              <div className="znc-g-lbl">VOL</div>
+              <svg width="56" height="32" viewBox="0 0 56 32">
+                <path d="M4,28 A24,24,0,0,1,52,28" fill="none" stroke="#0a1a0a" strokeWidth="5" />
+                <path d="M4,28 A24,24,0,0,1,52,28" fill="none" stroke="#00e5ff" strokeWidth="5" strokeDasharray="0 75"
+                  id="volGaugeArc" strokeLinecap="round" style={{ transition: 'all .5s' }} />
+              </svg>
+              <div style={{ marginTop: '-8px', textAlign: 'center' }}>
+                <div className="znc-g-val" id="volGaugeVal" style={{ color: '#00e5ff' }}>0</div>
               </div>
             </div>
           </div>
@@ -418,24 +431,9 @@ export const BrainCockpit = memo(function BrainCockpit() {
             <RegimeDetail />
           </div>
 
-          {/* THREAT RADAR */}
-          <div className="znc-threat">
-            <div className="znc-threat-lbl">THREAT RADAR</div>
-            <div className="znc-circles">
-              <div className="znc-circ low" id="threat-news">
-                <div className="znc-circ-lbl">NEWS</div>
-                <div className="znc-circ-val" id="threatNewsVal" style={{ color: '#39ff14' }}>0</div>
-              </div>
-              <div className="znc-circ low" id="threat-liq">
-                <div className="znc-circ-lbl">LIQ</div>
-                <div className="znc-circ-val" id="threatLiqVal" style={{ color: '#39ff14' }}>0</div>
-              </div>
-              <div className="znc-circ low" id="threat-vol">
-                <div className="znc-circ-lbl">VOL</div>
-                <div className="znc-circ-val" id="threatVolVal" style={{ color: '#39ff14' }}>0</div>
-              </div>
-            </div>
-          </div>
+          {/* [2026-06-13] THREAT RADAR removed — it duplicated NEWS+LIQ from the
+              gauges above. Merged into the single real gauges panel (VOLATILITY +
+              LIQ + VOL). */}
 
           {/* Sessions compat stubs */}
           <div style={{ display: 'none' }}>

@@ -11,6 +11,7 @@ import { el, escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , DSL_PRESETS, _NEURO_SYMS, BM, BRAIN as BR } from '../core/config'
 import { calcConfluenceScore } from './confluence'
+import { liqIntensityScore, volumeIntensityScore } from './fusionMath'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
 import { _syncDslAssistUI } from '../trading/dsl'
@@ -1909,22 +1910,18 @@ export function renderBrainCockpit(): void {
   const orbWrap = el('zncOrbWrap')
   if (orbWrap) orbWrap.style.animation = chaos > 80 ? 'zHeat .15s infinite' : ''
 
-  // ── THREAT CIRCLES ──
-  const newsScore = BM.newsRisk === 'high' ? 80 : BM.newsRisk === 'med' ? 40 : 10
-  const liqScore = Math.round((BR.ofi?.sell || 50) / 100 * 60)
-  const volScore = Math.round(Math.min(100, (BR.regimeAtrPct || 0) * 20));
-  [[newsScore, 'threat-news', 'threatNewsVal'], [liqScore, 'threat-liq', 'threatLiqVal'], [volScore, 'threat-vol', 'threatVolVal']].forEach(([v, cid, vid]: any) => {
-    const c = el(cid), vv = el(vid)
-    const col2 = v < 33 ? '#39ff14' : v < 66 ? '#f0c040' : '#ff3355'
-    if (c) c.className = 'znc-circ ' + (v < 33 ? 'low' : v < 66 ? 'med' : 'high')
-    if (vv) { vv.textContent = v; vv.style.color = col2 }
+  // ── GAUGES: VOLATILITY + LIQ + VOL (all real; THREAT RADAR merged in here) ──
+  // [2026-06-13] Single honest panel. VOLATILITY = real ATR%; LIQ = real recent
+  // liquidations (w.S.events, 60s window, Bybit/OKX feed); VOL = real-time volume
+  // intensity from klines (latest bar vs trailing avg — the rate volume enters).
+  const volatScore = Math.round(Math.min(100, (BR.regimeAtrPct || 0) * 20))
+  const liqScore = liqIntensityScore((w.S && w.S.events) || [], Date.now(), 60_000, 1_000_000)
+  const volScore = volumeIntensityScore((w.S && w.S.klines) || [], 20)
+  const _gaugeCol = (v: number) => v < 33 ? '#39ff14' : v < 66 ? '#f0c040' : '#ff3355';
+  [['volatGaugeArc', 'volatGaugeVal', volatScore], ['liqGaugeArc', 'liqGaugeVal', liqScore], ['volGaugeArc', 'volGaugeVal', volScore]].forEach(([aid, vid, v]: any) => {
+    const a = el(aid); if (a) a.setAttribute('stroke-dasharray', `${v / 100 * 75} 75`)
+    const vv = el(vid); if (vv) { vv.textContent = String(v); vv.style.color = _gaugeCol(v) }
   })
-
-  // ── GAUGES ──
-  const na = el('newsGaugeArc'); if (na) na.setAttribute('stroke-dasharray', `${newsScore / 100 * 75} 75`)
-  const la = el('liqGaugeArc'); if (la) la.setAttribute('stroke-dasharray', `${liqScore / 100 * 75}  75`)
-  const nv = el('newsGaugeVal'); if (nv) { nv.textContent = String(newsScore); nv.style.color = newsScore < 33 ? '#39ff14' : newsScore < 66 ? '#f0c040' : '#ff3355' }
-  const lv = el('liqGaugeVal'); if (lv) { lv.textContent = String(liqScore); lv.style.color = liqScore < 33 ? '#39ff14' : liqScore < 66 ? '#f0c040' : '#ff3355' }
 
   // ── ARM DETAIL + TOP BLOCK REASON (uses S.* canonical) ──
   const trigType = sw.reclaim ? 'Sweep+Reclaim' : sw.displacement ? 'Displacement' : '—'

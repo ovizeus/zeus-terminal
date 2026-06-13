@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dirFactorLive, confNDirectional, classifyEntryTier, lsRatioToSplit, oiWindowDeltaPct, klineTfChangePct } from '../fusionMath'
+import { dirFactorLive, confNDirectional, classifyEntryTier, lsRatioToSplit, oiWindowDeltaPct, klineTfChangePct, liqIntensityScore, volumeIntensityScore } from '../fusionMath'
 
 // Lever B — confluence denominator must count only LIVE directional feeds.
 // Bug: a dead feed ('neut', e.g. LS from the broken sentiment endpoint) was
@@ -196,5 +196,44 @@ describe('klineTfChangePct (per-timeframe price change from klines)', () => {
     expect(klineTfChangePct(null as any)).toBeNull()
     expect(klineTfChangePct([[0, '0', '1', '1', '5']])).toBeNull()
     expect(klineTfChangePct([[0, 'x', '1', '1', 'y']])).toBeNull()
+  })
+})
+
+// [2026-06-13] THREAT RADAR merge → single panel VOLATILITY + LIQ + VOL, all real.
+// liqIntensityScore: recent real liquidation USD (w.S.events window) → 0-100.
+describe('liqIntensityScore (real recent liquidation intensity)', () => {
+  const ev = (usd: number, ts: number) => ({ usd, ts })
+  it('sums USD within the window and scales to the cap', () => {
+    const now = 1_000_000
+    const events = [ev(300_000, now - 1000), ev(200_000, now - 30_000), ev(999, now - 120_000)]
+    // 500k in last 60s, cap 1M → 50
+    expect(liqIntensityScore(events, now, 60_000, 1_000_000)).toBe(50)
+  })
+  it('clamps to 100 when recent liqs exceed the cap', () => {
+    const now = 1_000_000
+    expect(liqIntensityScore([{ usd: 5_000_000, ts: now }], now, 60_000, 1_000_000)).toBe(100)
+  })
+  it('returns 0 for no recent liqs / empty / malformed', () => {
+    const now = 1_000_000
+    expect(liqIntensityScore([{ usd: 9_000_000, ts: now - 200_000 }], now, 60_000, 1_000_000)).toBe(0)
+    expect(liqIntensityScore([], now, 60_000, 1_000_000)).toBe(0)
+    expect(liqIntensityScore(null as any, now, 60_000, 1_000_000)).toBe(0)
+  })
+})
+
+// volumeIntensityScore: latest bar volume vs trailing average → 0-100 (live rate).
+describe('volumeIntensityScore (real-time volume rate from klines)', () => {
+  const bars = (vols: number[]) => vols.map((v, i) => ({ time: i, open: 1, high: 1, low: 1, close: 1, volume: v }))
+  it('normal volume (ratio ~1) → low-mid score', () => {
+    expect(volumeIntensityScore(bars([10, 10, 10, 10, 10]), 4)).toBe(25) // ratio 1 → (1-0.5)*50
+  })
+  it('2x spike → high score', () => {
+    expect(volumeIntensityScore(bars([10, 10, 10, 10, 20]), 4)).toBe(75) // ratio 2 → (2-0.5)*50
+  })
+  it('clamps 0..100 and handles insufficient / zero-avg data', () => {
+    expect(volumeIntensityScore(bars([10, 10, 10, 10, 100]), 4)).toBe(100) // ratio 10 → clamp 100
+    expect(volumeIntensityScore(bars([5]), 4)).toBe(0)        // not enough bars
+    expect(volumeIntensityScore([], 4)).toBe(0)
+    expect(volumeIntensityScore(bars([0, 0, 0, 5]), 3)).toBe(0) // zero avg → 0
   })
 })

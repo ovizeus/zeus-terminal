@@ -135,3 +135,42 @@ export function klineTfChangePct(bars: any[]): number | null {
   if (!Number.isFinite(open) || !Number.isFinite(close) || open === 0) return null
   return ((close - open) / open) * 100
 }
+
+/**
+ * [2026-06-13] Real liquidation intensity 0-100 from the recent-events ring
+ * (w.S.events: {usd, ts}). Sums USD liquidated within `windowMs` and scales it
+ * against `capUsd` (cap → 100). Replaces the old OFI-sell proxy so the LIQ gauge
+ * reflects ACTUAL liquidations from the Bybit/OKX feed.
+ */
+export function liqIntensityScore(events: Array<{ usd: number; ts: number }>, now: number, windowMs: number, capUsd: number): number {
+  if (!Array.isArray(events) || events.length === 0 || !(capUsd > 0)) return 0
+  const cutoff = now - windowMs
+  let sum = 0
+  for (const e of events) {
+    if (e && e.ts >= cutoff && Number.isFinite(+e.usd)) sum += +e.usd
+  }
+  if (sum <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((sum / capUsd) * 100)))
+}
+
+/**
+ * [2026-06-13] Real-time volume intensity 0-100: latest bar volume vs the trailing
+ * average of the previous `lookback` bars (the rate at which volume is entering the
+ * market). ratio 1 (normal) → 25, 1.5 → 50, 2 → 75, ≥2.5 → 100. Drives the VOL gauge.
+ */
+export function volumeIntensityScore(klines: Array<{ volume: number }>, lookback: number): number {
+  if (!Array.isArray(klines) || klines.length < 2) return 0
+  const last = klines[klines.length - 1]
+  const lastVol = last && Number.isFinite(+last.volume) ? +last.volume : NaN
+  if (!Number.isFinite(lastVol)) return 0
+  const n = Math.max(1, Math.min(lookback, klines.length - 1))
+  let sum = 0, cnt = 0
+  for (let i = klines.length - 1 - n; i < klines.length - 1; i++) {
+    const v = klines[i] && Number.isFinite(+klines[i].volume) ? +klines[i].volume : NaN
+    if (Number.isFinite(v)) { sum += v; cnt++ }
+  }
+  const avg = cnt > 0 ? sum / cnt : 0
+  if (!(avg > 0)) return 0
+  const ratio = lastVol / avg
+  return Math.max(0, Math.min(100, Math.round((ratio - 0.5) * 50)))
+}
