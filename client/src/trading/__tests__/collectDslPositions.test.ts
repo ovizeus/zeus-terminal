@@ -70,6 +70,42 @@ describe('_collectDslPositions (DSL position source)', () => {
     expect(out[0].owner).toBe('AT')
   })
 
+  // [2026-06-14] liveApiSyncState classifies a server-AT position as "safe-unknown"
+  // (autoTrade:null) during a race. The DSL panel then rendered it as a "PAPER"
+  // card (AT/Manual panels exclude limbo positions; DSL renders all). Reclassify
+  // from the authoritative server snapshot (w._lastServerPositions) so the DSL
+  // label is correct immediately, without needing a DSL off/on toggle.
+  it('reclassifies a limbo (autoTrade:null) live position as AT when the server snapshot confirms it', () => {
+    w._lastServerPositions = [{ symbol: 'ETHUSDT', side: 'SHORT', autoTrade: true, sourceMode: 'auto' }]
+    w.TP.livePositions = [
+      { id: 'ETHUSDT_SHORT_1.0', sym: 'ETHUSDT', side: 'SHORT', mode: 'live', autoTrade: null, sourceMode: 'unknown' },
+    ]
+    const out = _collectDslPositions()
+    expect(out.length).toBe(1)
+    expect(out[0].autoTrade).toBe(true)
+    delete w._lastServerPositions
+  })
+
+  it('leaves a limbo position unclassified when the server snapshot has no matching AT entry', () => {
+    w._lastServerPositions = [{ symbol: 'XRPUSDT', side: 'LONG', autoTrade: true }]
+    w.TP.livePositions = [
+      { id: 'ETHUSDT_SHORT_1.0', sym: 'ETHUSDT', side: 'SHORT', mode: 'live', autoTrade: null },
+    ]
+    const out = _collectDslPositions()
+    expect(out[0].autoTrade == null).toBe(true)
+    delete w._lastServerPositions
+  })
+
+  it('does not flip an explicit manual (autoTrade:false) position to AT', () => {
+    w._lastServerPositions = [{ symbol: 'ETHUSDT', side: 'SHORT', autoTrade: true }]
+    w.TP.livePositions = [
+      { id: 'ETHUSDT_SHORT_1.0', sym: 'ETHUSDT', side: 'SHORT', mode: 'live', autoTrade: false },
+    ]
+    const out = _collectDslPositions()
+    expect(out[0].autoTrade).toBe(false)
+    delete w._lastServerPositions
+  })
+
   it('collapses the store(seq-id) and TP(sym_side_qty-id) copies of one position into a single card', () => {
     usePositionsStore.setState({
       livePositions: [{ id: 999, sym: 'BTCUSDT', side: 'SHORT', mode: 'live', autoTrade: true }] as any,

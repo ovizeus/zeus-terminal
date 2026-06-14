@@ -311,6 +311,35 @@ export function _dslSanitizeParams(raw: any, posId: any): any {
 // server-authoritative positions live, fed by positions.changed) with the
 // legacy w.TP arrays. getDemoPositions()/getLivePositions() read only w.TP,
 // which is empty on the server path, so the DSL panel was blank. Deduped by id.
+// [2026-06-14] Reclassify a "safe-unknown" live position (autoTrade null/undefined)
+// as AT using the authoritative server snapshot (w._lastServerPositions — the same
+// signal liveApiSyncState uses). liveApiSyncState marks an AT position safe-unknown
+// during a race; that copy then rendered as a confident "PAPER" card. Returns a
+// shallow-enriched COPY when it matches; the original otherwise. Explicit manual
+// (autoTrade === false) is never touched. Applied both in _collectDslPositions and
+// at the renderDSLWidget choke point (some callers pass raw w.TP, bypassing collect).
+export function _reclassifyLimboAT(p: any): any {
+  const snap = Array.isArray(w._lastServerPositions) ? w._lastServerPositions : null
+  if (!p || !snap) return p
+  if (p.autoTrade === true || p.autoTrade === false) return p
+  if (!(p.mode === 'live' || p.isLive === true)) return p
+  const sym = String(p.sym || p.symbol || '').toUpperCase()
+  const side = String(p.side || '').toUpperCase()
+  if (!sym || !side) return p
+  const isAT = snap.some((sp: any) =>
+    String(sp.symbol || sp.sym || '').toUpperCase() === sym &&
+    String(sp.side || '').toUpperCase() === side &&
+    sp.autoTrade === true)
+  if (!isAT) return p
+  return {
+    ...p,
+    autoTrade: true,
+    owner: p.owner || 'AT',
+    sourceMode: p.sourceMode && p.sourceMode !== 'unknown' ? p.sourceMode : 'auto',
+    controlMode: p.controlMode && p.controlMode !== 'unknown' ? p.controlMode : 'auto',
+  }
+}
+
 export function _collectDslPositions(): any[] {
   // Dedup by STABLE identity (sym|side|mode), not by id. The same physical
   // position appears in both the React store (id = server seq) and w.TP (id =
@@ -343,7 +372,8 @@ export function _collectDslPositions(): any[] {
   }
   try { const ps = usePositionsStore.getState(); add(ps.demoPositions); add(ps.livePositions) } catch (_) { /* defensive */ }
   add(getDemoPositions()); add(getLivePositions())
-  return order.map((k) => byKey.get(k)).filter(Boolean)
+
+  return order.map((k) => _reclassifyLimboAT(byKey.get(k))).filter(Boolean)
 }
 
 export function runDSLBrain(): void {
@@ -999,7 +1029,10 @@ export function renderDSLWidget(positions: any[]): void {
   if (!container) return
 
   const _activeMode = getATMode() || 'demo'
-  const modeFiltered = positions.filter(function (p: any) {
+  // Reclassify limbo (safe-unknown) live positions here too — some callers
+  // (_pushDslPosition in positions.ts) pass raw w.TP arrays that never went
+  // through _collectDslPositions, so a limbo AT position would render as "PAPER".
+  const modeFiltered = positions.map(_reclassifyLimboAT).filter(function (p: any) {
     var posMode = p.mode || 'demo'
     return posMode === _activeMode
   })

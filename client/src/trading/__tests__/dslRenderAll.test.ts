@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { renderDSLWidget } from '../dsl'
 import { DSL } from '../../core/config'
+import { useATStore } from '../../stores/atStore'
 
 const w = globalThis as any
 
@@ -44,5 +45,22 @@ describe('renderDSLWidget — renders positions even without a DSL attachment', 
     const container = document.getElementById('dslPositionCards')!
     expect(container.querySelectorAll('.dsl-pos-card').length).toBe(0)
     expect(container.querySelector('.dsl-radar-txt')).not.toBeNull()
+  })
+
+  // [2026-06-14] renderDSLWidget is called from paths that pass RAW w.TP positions
+  // (e.g. _pushDslPosition in positions.ts), bypassing _collectDslPositions. A
+  // limbo (autoTrade:null) live position therefore rendered as a "PAPER" card.
+  // Reclassify at the render choke point so EVERY caller gets the correct AT label.
+  it('labels a limbo (autoTrade:null) live position as AT when the server snapshot confirms it', () => {
+    useATStore.setState({ mode: 'live' })
+    w._lastServerPositions = [{ symbol: 'BNBUSDT', side: 'SHORT', autoTrade: true }]
+    const pos = { id: 'BNBUSDT_SHORT_16.05', sym: 'BNBUSDT', side: 'SHORT', mode: 'live', isLive: true, autoTrade: null, sourceMode: 'unknown', entry: 605, size: 100, lev: 10, sl: 610, tp: 590 }
+    renderDSLWidget([pos] as any)
+    const container = document.getElementById('dslPositionCards')!
+    const srcSpan = container.querySelector('.dsl-pos-card span')
+    expect(srcSpan?.textContent || '').toMatch(/^AT\b/)
+    expect(srcSpan?.textContent || '').not.toMatch(/PAPER/)
+    delete w._lastServerPositions
+    useATStore.setState({ mode: 'demo' })
   })
 })
