@@ -226,7 +226,19 @@ export function renderDemoPositions(): void {
     totalPnL += pos.pnl
   })
 
-  usePositionsStore.getState().setDemoPositions(TP.demoPositions.slice())
+  // [2026-06-14 APPEAR-THEN-VANISH FIX] When server owns positions, they live
+  // ONLY in the React store (fed by the positions.changed WS via applyDelta) —
+  // w.TP.demoPositions is empty on that path. Overwriting the store from the
+  // empty TP array wiped them on the very next price tick → operator saw the
+  // positions "appear and disappear immediately". When _positionsChangedActive,
+  // leave the store's positions intact and only nudge a re-render (fresh array
+  // ref) so rows recompute pnl from the live price.
+  if ((window as any)._positionsChangedActive === true) {
+    const _ps = usePositionsStore.getState()
+    _ps.setDemoPositions(_ps.demoPositions.slice())
+  } else {
+    usePositionsStore.getState().setDemoPositions(TP.demoPositions.slice())
+  }
 
   // Stats
   let _statsWins = 0, _statsLosses = 0, _statsPnl = 0, _statsTrades = 0
