@@ -6,6 +6,7 @@ import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme, zeusGetTheme } from '../../ui/theme'
 import { OmegaMemorySection } from '../settings/OmegaMemorySection'
+import { SupportChat } from './SupportChat'
 
 const w = window as any
 
@@ -387,6 +388,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <a className="hub-sbtn pri" href={_supportMailto('General support')} style={{width:'100%',padding:'9px',justifyContent:'center',textDecoration:'none',display:'flex',alignItems:'center',gap:'6px'}}>
           <svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Email Support
         </a>
+
+        <SupportChat active={tab === 'support'} />
 
         <div className="msec">REPORT A PROBLEM</div>
         <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
