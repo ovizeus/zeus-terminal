@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useMarketStore, useUiStore } from '../../stores'
 import { setTF } from '../../data/marketDataFeeds'
 import { togInd as togIndFn } from '../../ui/dom2'
@@ -708,7 +709,8 @@ export function ChartControls() {
     function handleClick(e: MouseEvent) {
       if (tfRef.current && !tfRef.current.contains(e.target as Node)) setTfOpen(false)
       if (ctRef.current && !ctRef.current.contains(e.target as Node)) setCtOpen(false)
-      if (symRef.current && !symRef.current.contains(e.target as Node)) setSymOpen(false)
+      // sym dropdown is portaled to <body> (keyboard-safe fixed panel) — closed via
+      // its own backdrop, not this handler (it lives outside symRef in the DOM).
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
@@ -985,35 +987,41 @@ export function ChartControls() {
               <span>{SYMBOLS.flatMap(g => g.items).find(i => i.value === symbol)?.label || symbol}</span>
               <span className="ztf-arrow">&#9662;</span>
             </button>
-            {symOpen && (
-              <div className="sym-dropdown">
-                <div className="sym-search">
-                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
-                  <input value={symSearch} onChange={(e) => setSymSearch(e.target.value)} placeholder="Search coin…" spellCheck={false} />
-                  {symSearch && <span className="sym-clear" onClick={() => setSymSearch('')}>&#10005;</span>}
+            {symOpen && createPortal(
+              <>
+                <div className="sym-backdrop" onClick={() => setSymOpen(false)} />
+                <div className="sym-dropdown" role="dialog" aria-label="Select symbol">
+                  <div className="sym-search">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+                    <input value={symSearch} onChange={(e) => setSymSearch(e.target.value)} placeholder="Search coin…" spellCheck={false} />
+                    {symSearch
+                      ? <span className="sym-clear" onClick={() => setSymSearch('')}>&#10005;</span>
+                      : <span className="sym-clear" onClick={() => setSymOpen(false)}>&#10005;</span>}
+                  </div>
+                  <div className="sym-list">
+                    {(() => {
+                      const q = symSearch.trim().toUpperCase()
+                      const groups = q
+                        ? SYMBOLS.map(g => ({ label: g.label, items: g.items.filter(s => s.value.includes(q) || s.label.toUpperCase().includes(q)) })).filter(g => g.items.length)
+                        : SYMBOLS
+                      if (!groups.length) return <div className="sym-empty">No coin matches “{symSearch}”</div>
+                      return groups.map((g) => (
+                        <div key={g.label}>
+                          <div className="sym-group">{g.label.replace(/─/g, '').trim()}</div>
+                          {g.items.map((s) => (
+                            <button
+                              key={s.value}
+                              className={`sym-item${symbol === s.value ? ' act' : ''}`}
+                              onClick={() => { handleSymbolChange(s.value); setSymOpen(false) }}
+                            >{s.label}</button>
+                          ))}
+                        </div>
+                      ))
+                    })()}
+                  </div>
                 </div>
-                <div className="sym-list">
-                  {(() => {
-                    const q = symSearch.trim().toUpperCase()
-                    const groups = q
-                      ? SYMBOLS.map(g => ({ label: g.label, items: g.items.filter(s => s.value.includes(q) || s.label.toUpperCase().includes(q)) })).filter(g => g.items.length)
-                      : SYMBOLS
-                    if (!groups.length) return <div className="sym-empty">No coin matches “{symSearch}”</div>
-                    return groups.map((g) => (
-                      <div key={g.label}>
-                        <div className="sym-group">{g.label.replace(/─/g, '').trim()}</div>
-                        {g.items.map((s) => (
-                          <button
-                            key={s.value}
-                            className={`sym-item${symbol === s.value ? ' act' : ''}`}
-                            onClick={() => { handleSymbolChange(s.value); setSymOpen(false) }}
-                          >{s.label}</button>
-                        ))}
-                      </div>
-                    ))
-                  })()}
-                </div>
-              </div>
+              </>,
+              document.body,
             )}
           </div>
           <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => openModal('exposure')}>EXP</button>
