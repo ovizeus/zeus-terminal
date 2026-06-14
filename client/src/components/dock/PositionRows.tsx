@@ -12,7 +12,7 @@ import { fP, fmt } from '../../utils/format'
 import { attachConfirmClose } from '../../engine/events'
 import { getSymPrice, savePosSLTP, cancelPendingOrder, modifyPendingPrice, closeLivePos, calcPosPnL } from '../../data/marketDataPositions'
 import { closeDemoPos } from '../../data/marketDataClose'
-import { _safePnl } from '../../utils/guards'
+import { _safePnl, resolveDisplayPnl } from '../../utils/guards'
 import { useUiStore } from '../../stores'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
@@ -305,9 +305,10 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
   // unrealizedPnL (pos.pnl, mark-price-based). Local last-price calc differs
   // from Binance UI on volatile assets. Server-authoritative positions don't
   // have fromExchange flag but DO have pos.pnl populated from periodic sync.
-  const pnl = ((pos.fromExchange || pos.mode === 'live') && Number.isFinite(pos.pnl))
-    ? pos.pnl
-    : calcPosPnL(pos, cur)
+  // [2026-06-14] resolveDisplayPnl: an uncomputed/stale exchange pnl of exactly 0
+  // must not mask the real price-based PnL (a live position with entry != cur
+  // cannot be exactly 0). Trust pos.pnl only when it's a real non-zero value.
+  const pnl = resolveDisplayPnl(pos.fromExchange || pos.mode === 'live', pos.pnl, calcPosPnL(pos, cur))
   if (!pos.fromExchange) pos.pnl = pnl
   const pnlPct = pos.size > 0 ? (pnl / (pos.size || 1) * 100).toFixed(2) : '0.00'
 

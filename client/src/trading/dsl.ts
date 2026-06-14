@@ -994,7 +994,15 @@ export function renderDSLWidget(positions: any[]): void {
     return
   }
 
-  const allDisplayPosns = dslAttached
+  // [2026-06-14] Render ALL mode-filtered positions, not only those with a
+  // DSL.positions[id] attachment. Previously the DSL panel hid positions that
+  // had no attachment object yet — but attachment is keyed on a qty-derived id
+  // (sym_side_positionAmt) that churns on partial/add-on, and re-attach is gated
+  // (price valid / not stalled / not reconnecting). So positions visible in the
+  // AT panel (which renders the array directly) silently vanished from DSL until
+  // a toggle forced a re-attach. _renderDslCard already handles a missing
+  // attachment gracefully (renders a plain WAITING card with native SL/TP).
+  const allDisplayPosns = modeFiltered
   const activeCount = allDisplayPosns.filter((p: any) => DSL.positions[String(p.id)]?.active).length
   _dslUI({ activeCountText: activeCount + ' active' })
 

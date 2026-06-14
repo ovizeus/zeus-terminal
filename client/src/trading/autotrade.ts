@@ -87,7 +87,7 @@ import { runPostMortem } from '../engine/postMortem'
 import { computeOrderGeometry } from './orderGeometry'
 import { onTradeExecuted } from '../trading/positions'
 import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
-import { _isExecAllowed , _safePnl } from '../utils/guards'
+import { _isExecAllowed , _safePnl, resolveDisplayPnl } from '../utils/guards'
 import { _showConfirmDialog, _showConfirmDialog3 } from '../data/marketDataTrading'
 import { computeProbScore } from '../engine/forecast'
 import { PREDATOR, computePredatorState } from '../engine/events'
@@ -1972,9 +1972,10 @@ export function renderATPositions(): void {
     // Falls back to local computation when pnl missing/NaN (e.g., during
     // first 60s before liveApiSyncState polls).
     const _localPnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
-    const pnl = ((pos.mode === 'live' || pos.fromExchange) && Number.isFinite(pos.pnl))
-      ? pos.pnl
-      : _localPnl
+    // [2026-06-14] resolveDisplayPnl: trust the exchange pnl only when it's a real
+    // non-zero value — an uncomputed/stale server pnl of exactly 0 was being shown
+    // as +$0.00 even though entry != current price (impossible for a live position).
+    const pnl = resolveDisplayPnl(pos.mode === 'live' || pos.fromExchange, pos.pnl, _localPnl)
     const pnlPct = (w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00')
     const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))
     const safeSide = escHtml(pos.side)

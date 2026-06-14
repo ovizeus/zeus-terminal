@@ -70,6 +70,19 @@ export function _safePnl(side: string, curOrDiff: any, entry: any, size: any, le
   return _diff / _entry * _size * _lev
 }
 
+// [2026-06-14] Resolve the PnL to DISPLAY for a position.
+// Live/exchange positions carry an authoritative unrealized PnL in `serverPnl`
+// (Binance positionRisk via liveApiSyncState). But that value is only populated
+// when an exchange is actually connected in this client; otherwise it stays at
+// the uncomputed default of 0. Trusting any finite value (incl. 0) made a SHORT
+// with entry != current price render as +$0.00. Rule: use the live value only
+// when it is a real non-zero number; otherwise fall back to the price-based
+// local computation (which is itself ~0 when the position is genuinely flat).
+export function resolveDisplayPnl(isLive: boolean, serverPnl: any, localPnl: number): number {
+  if (isLive && Number.isFinite(serverPnl) && serverPnl !== 0) return serverPnl
+  return localPnl
+}
+
 // Recovery mode state
 let _recoveryMode = false
 
