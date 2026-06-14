@@ -312,21 +312,38 @@ export function _dslSanitizeParams(raw: any, posId: any): any {
 // legacy w.TP arrays. getDemoPositions()/getLivePositions() read only w.TP,
 // which is empty on the server path, so the DSL panel was blank. Deduped by id.
 export function _collectDslPositions(): any[] {
-  const seen = new Set<string>()
-  const out: any[] = []
+  // Dedup by STABLE identity (sym|side|mode), not by id. The same physical
+  // position appears in both the React store (id = server seq) and w.TP (id =
+  // sym_side_qty) with DIFFERENT ids, so id-dedup kept both. Worse, the live-sync
+  // rebuild (liveApiSyncState) can drop ownership fields and classify a copy as
+  // "safe-unknown" (autoTrade:null) — that copy then rendered as a "PAPER" card.
+  // (sym, side, mode) is unique per open position (DB partial-unique index), so
+  // we collapse copies and keep the best-classified one (AT > manual > unknown).
+  const byKey = new Map<string, any>()
+  const order: string[] = []
+  const keyOf = (p: any) => {
+    const sym = String(p.sym || p.symbol || '').toUpperCase()
+    const side = String(p.side || '').toUpperCase()
+    const mode = String(p.mode || (p.isLive ? 'live' : 'demo'))
+    if (sym && side) return sym + '|' + side + '|' + mode
+    return 'id:' + String(p.id != null ? p.id : (p._serverSeq || p.seq || ''))
+  }
+  // AT-classified (autoTrade===true) beats explicit-manual (false) beats
+  // unclassified/limbo (null/undefined) — so the real AT label wins over PAPER.
+  const score = (p: any) => (p.autoTrade === true ? 2 : (p.autoTrade === false ? 1 : 0))
   const add = (arr: any[]) => {
     if (!Array.isArray(arr)) return
     for (const p of arr) {
       if (!p || p.closed) continue
-      const k = String(p.id != null ? p.id : (p._serverSeq || p.seq || ''))
-      if (k && seen.has(k)) continue
-      if (k) seen.add(k)
-      out.push(p)
+      const k = keyOf(p)
+      const prev = byKey.get(k)
+      if (!prev) { byKey.set(k, p); order.push(k) }
+      else if (score(p) > score(prev)) byKey.set(k, p)
     }
   }
   try { const ps = usePositionsStore.getState(); add(ps.demoPositions); add(ps.livePositions) } catch (_) { /* defensive */ }
   add(getDemoPositions()); add(getLivePositions())
-  return out
+  return order.map((k) => byKey.get(k)).filter(Boolean)
 }
 
 export function runDSLBrain(): void {
