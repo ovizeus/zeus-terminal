@@ -989,7 +989,7 @@ export function ChartControls() {
               <div className="sym-dropdown">
                 <div className="sym-search">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
-                  <input autoFocus value={symSearch} onChange={(e) => setSymSearch(e.target.value)} placeholder="Search coin…" spellCheck={false} />
+                  <input value={symSearch} onChange={(e) => setSymSearch(e.target.value)} placeholder="Search coin…" spellCheck={false} />
                   {symSearch && <span className="sym-clear" onClick={() => setSymSearch('')}>&#10005;</span>}
                 </div>
                 <div className="sym-list">
