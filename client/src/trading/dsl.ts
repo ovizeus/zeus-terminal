@@ -7,6 +7,7 @@ import { getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExt
 import { DSL } from '../core/config'
 import { useDslStore } from '../stores/dslStore'
 import type { DSLUI } from '../stores/dslStore'
+import { usePositionsStore } from '../stores/positionsStore'
 import { el, escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
@@ -306,22 +307,48 @@ export function _dslSanitizeParams(raw: any, posId: any): any {
   return out
 }
 
+// [2026-06-14] DSL position source — union the React positionsStore (where
+// server-authoritative positions live, fed by positions.changed) with the
+// legacy w.TP arrays. getDemoPositions()/getLivePositions() read only w.TP,
+// which is empty on the server path, so the DSL panel was blank. Deduped by id.
+export function _collectDslPositions(): any[] {
+  const seen = new Set<string>()
+  const out: any[] = []
+  const add = (arr: any[]) => {
+    if (!Array.isArray(arr)) return
+    for (const p of arr) {
+      if (!p || p.closed) continue
+      const k = String(p.id != null ? p.id : (p._serverSeq || p.seq || ''))
+      if (k && seen.has(k)) continue
+      if (k) seen.add(k)
+      out.push(p)
+    }
+  }
+  try { const ps = usePositionsStore.getState(); add(ps.demoPositions); add(ps.livePositions) } catch (_) { /* defensive */ }
+  add(getDemoPositions()); add(getLivePositions())
+  return out
+}
+
 export function runDSLBrain(): void {
-  // [AT-UNIFY] When server AT is active, server DSL handles SL management.
-  if (w._serverATEnabled) {
-    const allOpenPosns = [
-      ...(getDemoPositions()),
-      ...(getLivePositions())
-    ].filter((p: any) => !p.closed)
+  const allOpenPosns = _collectDslPositions()
+  // Server-owned positions carry server DSL state (field `_dsl` on the mapped
+  // path, `dsl` on the positions.changed snapshot path).
+  const _serverDslPosns = allOpenPosns.filter((p: any) => !!p.autoTrade && (p._dsl || p.dsl))
+
+  // [AT-UNIFY] Bridge server DSL state (read-only) when the server owns
+  // positions. Enter on _serverATEnabled OR whenever server-owned DSL positions
+  // exist — demo server positions report serverActive:false but are still
+  // server-managed, so the flag alone missed them (DSL panel stayed blank).
+  if (w._serverATEnabled || _serverDslPosns.length) {
     if (!allOpenPosns.length) { renderDSLWidget([]); return }
 
-    const _atPositions = allOpenPosns.filter((p: any) => !!p.autoTrade && p._dsl)
-    const _manualPositions = allOpenPosns.filter((p: any) => !p.autoTrade || !p._dsl)
+    const _atPositions = _serverDslPosns
+    const _manualPositions = allOpenPosns.filter((p: any) => !p.autoTrade || !(p._dsl || p.dsl))
 
     // Bridge server DSL state for AT positions
     _atPositions.forEach((pos: any) => {
       const _dslKey = String(pos.id)
-      const serverDsl = pos._dsl
+      const serverDsl = pos._dsl || pos.dsl
       DSL.positions[_dslKey] = DSL.positions[_dslKey] || {}
       const dsl = DSL.positions[_dslKey]
       const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
@@ -380,10 +407,6 @@ export function runDSLBrain(): void {
   if (!DSL.enabled) return
   if (!Number.isFinite(getPrice()) || getPrice() <= 0) return
   if (w._SAFETY.dataStalled || w._SAFETY.isReconnecting) return
-  const allOpenPosns = [
-    ...(getDemoPositions()),
-    ...(getLivePositions())
-  ].filter((p: any) => !p.closed)
   if (!allOpenPosns.length) { renderDSLWidget([]); return }
 
   _runClientDSLOnPositions(allOpenPosns)
