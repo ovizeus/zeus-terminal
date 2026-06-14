@@ -1202,6 +1202,7 @@ app.use('/api/ring5', ring5Routes);
 
 // [Task B 2026-05-28] Admin operations — global halt toggle endpoint
 app.use('/api/admin', require('./server/routes/admin'));
+app.use('/api/support', require('./server/routes/support'));
 
 // ─── Health Routes (Tasks 54-56: feed / locks / recovery) ───
 const healthRoutes = require('./server/routes/health');
