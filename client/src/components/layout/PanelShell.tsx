@@ -120,13 +120,16 @@ export function PanelShell() {
   // behind the fixed overlay (.zpv). Without this, touch events on the panel
   // can propagate to body, displacing main page scroll position. On close,
   // the page appears "half black" because it scrolled past content.
+  // [2026-06-13] Also lock for modal overlays (search palette, decision log, the
+  // missed/session/regime/performance/compare sub-views, etc.) — without this their
+  // touch scroll displaced the page and on close it stayed 'half black'.
   useEffect(() => {
-    if (dockActive) {
+    if (dockActive || activeModal) {
       const prev = document.body.style.overflow
       document.body.style.overflow = 'hidden'
       return () => { document.body.style.overflow = prev }
     }
-  }, [dockActive])
+  }, [dockActive, activeModal])
 
   // ── Listen for legacy JS requesting modal open/close ──
   useEffect(() => {

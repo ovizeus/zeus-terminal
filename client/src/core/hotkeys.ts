@@ -85,7 +85,11 @@ const w = window as any
   }
   function _toggleHelp() {
     const h = _buildHelp()
-    h.style.display = h.style.display === 'none' ? 'flex' : 'none'
+    const willShow = h.style.display === 'none'
+    h.style.display = willShow ? 'flex' : 'none'
+    // [2026-06-13] Lock body scroll while open so touch-scrolling the overlay can't
+    // displace the page (left it 'half black' after close on mobile).
+    try { document.body.style.overflow = willShow ? 'hidden' : '' } catch (_) { /* */ }
   }
 
   // ── Toast feedback (non-intrusive, bottom-right) ──
