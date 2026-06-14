@@ -451,9 +451,16 @@ export function runDSLBrain(): void {
     renderATPositions()
     return
   }
-  if (!DSL.enabled) return
-  if (!Number.isFinite(getPrice()) || getPrice() <= 0) return
-  if (w._SAFETY.dataStalled || w._SAFETY.isReconnecting) return
+  // [2026-06-14] Engine OFF or gated (no chart price / data stalled / reconnecting)
+  // must still RENDER the positions — otherwise the DSL panel freezes on its last
+  // render (often a boot-race mislabel) and only a DSL on/off toggle refreshes it.
+  // Mirror the server branch: render current positions, just skip the client engine.
+  if (!DSL.enabled || !Number.isFinite(getPrice()) || getPrice() <= 0
+      || w._SAFETY.dataStalled || w._SAFETY.isReconnecting) {
+    renderDSLWidget(allOpenPosns)
+    renderATPositions()
+    return
+  }
   if (!allOpenPosns.length) { renderDSLWidget([]); return }
 
   _runClientDSLOnPositions(allOpenPosns)
@@ -1490,3 +1497,7 @@ export function _dslTrimAll(): void {
 
 // [DSL-OFF] Expose toggleDSL on window so other modules (e.g. autotrade) can call without circular import
 ;(window as any).toggleDSL = toggleDSL
+// [2026-06-14] Expose runDSLBrain so positions.changed can refresh the DSL panel
+// even when the engine interval is stopped (DSL toggled off) — avoids the panel
+// freezing on a stale/mislabeled render until the user toggles DSL on.
+;(window as any).runDSLBrain = runDSLBrain

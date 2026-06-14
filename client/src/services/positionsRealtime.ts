@@ -57,6 +57,13 @@ export function startPositionsRealtime(): void {
     } catch {
       /* store handles dedup + validation silently */
     }
+
+    // [2026-06-14] Refresh the DSL panel on every position change. The DSL panel
+    // otherwise only re-renders on the runDSLBrain interval, which is stopped when
+    // the DSL engine is off — so a stale/mislabeled card (e.g. a boot-race "PAPER"
+    // classification) would persist until the user toggled DSL on. runDSLBrain
+    // re-collects (+ reclassifies) and renders; it is safe to call off-interval.
+    try { (window as any).runDSLBrain?.() } catch { /* never let a render break the subscriber */ }
   })
 
   // [FLICKER-FIX] Staleness check — if no positions.changed for 120s, fall back to REST

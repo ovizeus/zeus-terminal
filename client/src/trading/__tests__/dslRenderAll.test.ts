@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { renderDSLWidget } from '../dsl'
+import { renderDSLWidget, runDSLBrain } from '../dsl'
 import { DSL } from '../../core/config'
 import { useATStore } from '../../stores/atStore'
+import { usePositionsStore } from '../../stores/positionsStore'
 
 const w = globalThis as any
 
@@ -62,5 +63,26 @@ describe('renderDSLWidget — renders positions even without a DSL attachment', 
     expect(srcSpan?.textContent || '').not.toMatch(/PAPER/)
     delete w._lastServerPositions
     useATStore.setState({ mode: 'demo' })
+  })
+
+  // [2026-06-14] When the DSL engine is OFF, runDSLBrain's legacy branch used to
+  // `return` without rendering, freezing the panel on its last (possibly
+  // boot-race-mislabeled) render until a DSL on/off toggle. It must still render.
+  it('runDSLBrain renders positions even when the DSL engine is OFF', () => {
+    DSL.enabled = false
+    w._serverATEnabled = false
+    w._SAFETY = {}
+    w.S = w.S || {}
+    useATStore.setState({ mode: 'demo' })
+    usePositionsStore.setState({
+      demoPositions: [{ id: 'x1', sym: 'BTCUSDT', side: 'LONG', mode: 'demo', autoTrade: false, entry: 60000, size: 100, lev: 10, sl: 59000, tp: 62000 }] as any,
+      livePositions: [],
+    })
+    runDSLBrain()
+    const container = document.getElementById('dslPositionCards')!
+    expect(container.querySelectorAll('.dsl-pos-card').length).toBe(1)
+    DSL.enabled = true
+    delete w._serverATEnabled
+    usePositionsStore.setState({ demoPositions: [], livePositions: [] })
   })
 })
