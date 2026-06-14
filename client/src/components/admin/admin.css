@@ -445,8 +445,24 @@
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
-  .zac { grid-template-columns: 1fr; grid-template-areas: "header" "main"; }
-  .zac-brand, .zac-side { display: none; }
+  .zac {
+    grid-template-columns: 1fr;
+    grid-template-rows: 64px auto 1fr;
+    grid-template-areas: "header" "side" "main";
+  }
+  .zac-brand { display: none; }
+  /* [2026-06-14] On phones the vertical sidebar was display:none, leaving the
+     admin panel stuck on Dashboard with no way to reach Support / Ops (or any
+     other section). Render it as a horizontal scroll strip under the header. */
+  .zac-side {
+    display: flex; flex-direction: row; align-items: center; gap: 6px;
+    padding: 8px 10px; border-right: none;
+    border-bottom: 1px solid var(--ac-border);
+    overflow-x: auto; overflow-y: hidden; white-space: nowrap;
+  }
+  .zac-nav-group { display: flex; flex-direction: row; gap: 6px; padding: 0; margin: 0; }
+  .zac-nav-label { display: none; }
+  .zac-nav-item { white-space: nowrap; flex: 0 0 auto; }
   .zac-main { padding: 12px; }
 }
 
