@@ -38,6 +38,7 @@ import { fetchSymbolKlines, runMultiSymbolScan } from '../data/klines'
 import { fetchAllRSI, fetchATR as fetchATRRaw, fetchFG, fetchOI, fetchLS, fetch24h } from '../data/marketDataFeeds'
 import { _devEnsureVisible , safeAsync , devLog } from '../utils/dev'
 import { connectWatchlist } from '../services/symbols'
+import { startPositionPriceFeed } from '../data/positionPriceFeed'
 import { initSafetyEngine } from '../utils/guards'
 import { updateQuantumClock, updateBrainExtension, renderDHF, renderPerfTracker } from '../ui/render'
 import { runQuantumExitUpdate, updateScenarioUI } from '../engine/forecast'
@@ -271,6 +272,10 @@ export async function startApp(): Promise<void> {
     console.log('[startApp] phase 3: connecting WebSockets | __wsGen=', w.__wsGen)
     connectBNB(); connectBYB()
     if (typeof connectWatchlist === 'function') connectWatchlist()
+    // [2026-06-14] Keep w.allPrices populated for OPEN-position symbols so
+    // off-chart positions (e.g. server AT BTC/ETH/BNB while the chart is
+    // elsewhere) show real PnL instead of 0 in the AT panel and DSL.
+    try { startPositionPriceFeed() } catch (_) {}
   }, 1500)
 
   // ═══ PHASE 4 — UI ═══
