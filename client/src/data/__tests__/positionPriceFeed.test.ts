@@ -1,13 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { collectOpenSymbols, applyTickerPrices } from '../positionPriceFeed'
+import { usePositionsStore } from '../../stores/positionsStore'
 
 const w = globalThis as any
 
 beforeEach(() => {
   w.TP = { demoPositions: [], livePositions: [] }
   w.allPrices = {}
+  usePositionsStore.setState({ demoPositions: [], livePositions: [] })
 })
-afterEach(() => { delete w.TP; delete w.allPrices })
+afterEach(() => { delete w.TP; delete w.allPrices; usePositionsStore.setState({ demoPositions: [], livePositions: [] }) })
 
 describe('collectOpenSymbols', () => {
   it('collects unique open symbols from demo + live, excludes closed', () => {
@@ -26,6 +28,21 @@ describe('collectOpenSymbols', () => {
 
   it('returns empty array when no positions', () => {
     expect(collectOpenSymbols()).toEqual([])
+  })
+
+  it('reads positions from the React positionsStore (server-authoritative path)', () => {
+    // w.TP stays empty — positions arrived via positions.changed → store only
+    usePositionsStore.setState({
+      demoPositions: [{ sym: 'BTCUSDT' }, { sym: 'ETHUSDT' }] as any,
+      livePositions: [{ symbol: 'BNBUSDT' }] as any,
+    })
+    expect(collectOpenSymbols().sort()).toEqual(['BNBUSDT', 'BTCUSDT', 'ETHUSDT'])
+  })
+
+  it('unions w.TP and the store, deduped', () => {
+    w.TP.demoPositions = [{ sym: 'BTCUSDT' }]
+    usePositionsStore.setState({ demoPositions: [{ sym: 'BTCUSDT' }, { sym: 'SOLUSDT' }] as any })
+    expect(collectOpenSymbols().sort()).toEqual(['BTCUSDT', 'SOLUSDT'])
   })
 
   it('uppercases symbols', () => {

@@ -11,11 +11,15 @@
  * direct WS is filtered) and write lastPrice into w.allPrices.
  */
 
-import { renderDemoPositions, renderLivePositions } from './marketDataPositions'
+import { usePositionsStore } from '../stores/positionsStore'
 
 const w = window as any
 
-/** Collect unique symbols of all OPEN positions (demo + live, auto + manual). */
+/** Collect unique symbols of all OPEN positions (demo + live, auto + manual).
+ *  Reads BOTH the React positionsStore (the source the panels actually render —
+ *  populated by the positions.changed WS via applyDelta) AND the legacy w.TP
+ *  arrays (client-opened positions before server register). Server-authoritative
+ *  AT positions live ONLY in the React store, so reading w.TP alone missed them. */
 export function collectOpenSymbols(): string[] {
   const out = new Set<string>()
   const push = (arr: any[]) => {
@@ -27,6 +31,10 @@ export function collectOpenSymbols(): string[] {
     }
   }
   try { push(w.TP?.demoPositions); push(w.TP?.livePositions) } catch (_) { /* defensive */ }
+  try {
+    const st = usePositionsStore.getState()
+    push(st.demoPositions); push(st.livePositions)
+  } catch (_) { /* defensive */ }
   return Array.from(out)
 }
 
@@ -59,13 +67,15 @@ export async function pollPositionPrices(): Promise<void> {
     const list = Array.isArray(body) ? body : (body && body.data) || []
     const updated = applyTickerPrices(list)
     if (updated.length) {
-      // New prices are in w.allPrices; force the position rows to re-render so
-      // they recompute pnl. renderDemoPositions/renderLivePositions push fresh
-      // store slices (new array refs) — the memoized rows then recompute.
+      // New prices are in w.allPrices; nudge the position rows to recompute pnl
+      // by re-setting the store arrays with fresh refs (same objects). We must
+      // NOT call renderDemoPositions here — it copies from w.TP, which is empty
+      // on the server-authoritative path and would WIPE the store's positions.
       try {
-        renderDemoPositions()
-        renderLivePositions()
-      } catch (_) { /* render optional */ }
+        const ps = usePositionsStore.getState()
+        ps.setDemoPositions(ps.demoPositions.slice())
+        ps.setLivePositions(ps.livePositions.slice())
+      } catch (_) { /* render nudge optional */ }
     }
   } catch (_) { /* quiet — best-effort price feed */ }
 }
