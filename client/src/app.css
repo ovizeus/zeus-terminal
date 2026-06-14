@@ -7666,3 +7666,74 @@ select option {
 .sym-list::-webkit-scrollbar-thumb:hover { background: #b07cff77; }
 .sym-list::-webkit-scrollbar-track { background: transparent; }
 .sym-dropdown::-webkit-scrollbar-track { background: transparent; }
+
+/* ══════════════════════════════════════════════════════════════════
+ * Header Search (Cmd Palette) + Decision Log + Logout confirm — Amethyst
+ * [2026-06-13] Same violet-on-obsidian family as Settings/Alerts/etc.
+ * ══════════════════════════════════════════════════════════════════ */
+
+/* Search / command palette */
+#cmdPalette.cmd-overlay { background: #0a0612cc; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+#cmdPalette .cmd-panel {
+  background: radial-gradient(130% 70% at 50% 0%, #1c1430 0%, #0e0a18 58%, #0b0712 100%);
+  border: 1px solid #b07cff55; border-radius: 14px;
+  box-shadow: 0 28px 80px -22px #000000e6, 0 0 60px -20px #b07cffaa, inset 0 1px 0 #ffffff12;
+}
+#cmdPalette .cmd-input-wrap { border-bottom: 1px solid #b07cff2e; }
+#cmdPalette .cmd-input-wrap svg { color: #b07cff; stroke: #b07cff; }
+#cmdPalette .cmd-input { color: #e6dbfa; }
+#cmdPalette .cmd-input::placeholder { color: #6f6388; }
+#cmdPalette .cmd-hint { color: #8a7ca8; border-color: #b07cff33; background: #b07cff10; }
+#cmdPalette .cmd-item { color: #c4b3e6; border-bottom: 1px solid #ffffff08; }
+#cmdPalette .cmd-item:hover, #cmdPalette .cmd-item.active { background: #b07cff1f; color: #efe6ff; }
+#cmdPalette .cmd-results::-webkit-scrollbar { width: 7px; }
+#cmdPalette .cmd-results::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
+
+/* Decision log */
+#dlogPanel.dlog-overlay { background: #0a0612cc; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+#dlogPanel .dlog-panel {
+  background: radial-gradient(120% 50% at 50% 0%, #1a1230 0%, #0e0a18 55%, #0b0712 100%);
+  border: 1px solid #b07cff55; border-radius: 12px;
+  box-shadow: 0 28px 80px -22px #000000e6, 0 0 60px -20px #b07cff99, inset 0 1px 0 #ffffff10;
+}
+#dlogPanel .dlog-hdr { border-bottom: 1px solid #b07cff2e; }
+#dlogPanel .dlog-title { color: #e4d6ff; text-shadow: 0 0 16px #b07cff66; }
+#dlogPanel .dlog-close { color: #7c6f96; }
+#dlogPanel .dlog-close:hover { color: #c9a8ff; }
+#dlogPanel .dlog-fbtn { border-color: #b07cff2e; background: #150f24; color: #9a8cb8; }
+#dlogPanel .dlog-fbtn.active { color: #d9c7ff; border-color: #b07cff66; background: #b07cff1c; }
+#dlogPanel .dlog-stats span { color: #b9a3e6; }
+#dlogPanel .dlog-list::-webkit-scrollbar { width: 7px; }
+#dlogPanel .dlog-list::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
+
+/* Logout confirm dialog (custom, replaces native confirm) */
+.zconfirm-overlay {
+  position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: #0a0612d9; -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  animation: zcFade .15s ease;
+}
+@keyframes zcFade { from { opacity: 0 } to { opacity: 1 } }
+.zconfirm {
+  width: min(330px, calc(100vw - 32px)); text-align: center;
+  background: radial-gradient(130% 90% at 50% 0%, #221636 0%, #100b1c 60%, #0b0712 100%);
+  border: 1px solid #b07cff5c; border-radius: 16px; padding: 26px 24px 22px;
+  box-shadow: 0 30px 90px -24px #000000f2, 0 0 70px -18px #b07cffb0, inset 0 1px 0 #ffffff14;
+  animation: zcPop .18s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes zcPop { from { opacity: 0; transform: translateY(10px) scale(.96) } to { opacity: 1; transform: translateY(0) scale(1) } }
+.zconfirm-icon {
+  width: 50px; height: 50px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; color: #c9a8ff; background: #b07cff1a; border: 1px solid #b07cff44;
+  box-shadow: 0 0 24px -6px #b07cff88;
+}
+.zconfirm-title { color: #e9ddff; font-size: 15px; font-weight: 800; letter-spacing: 1px; font-family: var(--ff); }
+.zconfirm-msg { color: #b3a2d4; font-size: 11px; line-height: 1.6; margin: 8px 0 20px; font-family: var(--ff); }
+.zconfirm-btns { display: flex; gap: 10px; }
+.zconfirm-cancel, .zconfirm-go {
+  flex: 1; padding: 10px; border-radius: 9px; font-family: var(--ff); font-size: 11px; font-weight: 700;
+  letter-spacing: .5px; cursor: pointer; transition: .15s;
+}
+.zconfirm-cancel { background: linear-gradient(180deg, #1b1430, #140e24); border: 1px solid #b07cff33; color: #c4b3e6; }
+.zconfirm-cancel:hover { border-color: #b07cff77; color: #efe6ff; }
+.zconfirm-go { background: linear-gradient(180deg, #6a3fd0, #4a2aa0); border: 1px solid #b07cff88; color: #fff; }
+.zconfirm-go:hover { background: linear-gradient(180deg, #7c4ee0, #5631b4); box-shadow: 0 0 26px -5px #b07cffc0; }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
 
 export function Header() {
@@ -39,6 +40,7 @@ export function Header() {
   // + on window focus, so new registration requests are visible without
   // opening the admin panel — like an unread-messages badge.
   const [pendingCount, setPendingCount] = useState(0)
+  const [confirmLogout, setConfirmLogout] = useState(false)
   useEffect(() => {
     if (role !== 'admin') return
     let alive = true
@@ -54,8 +56,8 @@ export function Header() {
     return () => { alive = false; clearInterval(id); window.removeEventListener('focus', load) }
   }, [role])
 
-  function handleLogout() {
-    if (!confirm('Are you sure you want to log out?')) return
+  function handleLogout() { setConfirmLogout(true) }
+  function doLogout() {
     const wipeAndGo = () => {
       clearAuth()
       // [Phase 3B] Explicitly reset per-user client stores so any render cycle
@@ -122,6 +124,23 @@ export function Header() {
 
   return (
     <div className="zeus-fixed-top">
+      {/* [2026-06-13] Custom Amethyst logout confirm (replaces native confirm()) */}
+      {confirmLogout && createPortal(
+        <div className="zconfirm-overlay" onClick={() => setConfirmLogout(false)}>
+          <div className="zconfirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Confirm logout">
+            <div className="zconfirm-icon">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+            </div>
+            <div className="zconfirm-title">Log out?</div>
+            <div className="zconfirm-msg">You'll be signed out of Zeus Terminal on this device.</div>
+            <div className="zconfirm-btns">
+              <button className="zconfirm-cancel" onClick={() => setConfirmLogout(false)}>Cancel</button>
+              <button className="zconfirm-go" onClick={() => { setConfirmLogout(false); doLogout() }}>Log out</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
       {/* ═══ Header — exact copy of .hdr ═══ */}
       <div className="hdr">
         <div className="brand">
