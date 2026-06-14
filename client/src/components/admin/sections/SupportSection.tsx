@@ -15,6 +15,7 @@ export function SupportSection() {
   const [sending, setSending] = useState(false)
   const adminUnread = useSupportStore((s) => s.adminUnread)
   const setAdminUnread = useSupportStore((s) => s.setAdminUnread)
+  const prevUnread = useRef(0)
   const listRef = useRef<HTMLDivElement>(null)
   const threadAbort = useRef<AbortController | null>(null)
 
@@ -25,8 +26,14 @@ export function SupportSection() {
       .catch(() => {})
   }
 
-  // Initial + whenever a live message arrives (adminUnread changes).
-  useEffect(loadInbox, [adminUnread])
+  // Initial load (once on mount).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadInbox() }, [])
+  // Refetch only on a genuine WS-driven increase in unread.
+  useEffect(() => {
+    if (adminUnread > prevUnread.current) loadInbox()
+    prevUnread.current = adminUnread
+  }, [adminUnread])
 
   const openThread = (uid: number) => {
     threadAbort.current?.abort()

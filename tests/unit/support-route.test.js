@@ -132,4 +132,15 @@ describe('/api/support', () => {
       .send({ message: 'hi' });
     expect(res.status).toBe(400);
   });
+
+  test('admin sending via /send does not push to themselves', async () => {
+    const broadcast = jest.fn();
+    const { app } = buildApp(broadcast);
+    // admin (uid 1) is the only admin (getAdminUserIds → [1]); sending as uid 1
+    const res = await supertest(app)
+      .post('/api/support/send').set('x-test-uid', '1').set('x-test-role', 'admin')
+      .send({ message: 'note to self' });
+    expect(res.status).toBe(200);
+    expect(broadcast).not.toHaveBeenCalled();
+  });
 });

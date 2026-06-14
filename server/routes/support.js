@@ -42,7 +42,10 @@ router.post('/send', _requireAuth, (req, res) => {
     if (!message) return res.status(400).json({ ok: false, error: 'empty or too long' });
     try {
         const row = db.insertSupportMessage(req.user.id, 'user', message);
-        for (const adminId of db.getAdminUserIds()) _push(req, adminId, row);
+        for (const adminId of db.getAdminUserIds()) {
+            if (adminId === req.user.id) continue;
+            _push(req, adminId, row);
+        }
         res.json({ ok: true, msg: row });
     } catch (err) {
         res.status(500).json({ ok: false, error: String(err && err.message || err) });
