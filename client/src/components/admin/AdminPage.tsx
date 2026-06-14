@@ -6,7 +6,8 @@ import { DashboardSection } from './sections/DashboardSection'
 import { UsersSection } from './sections/UsersSection'
 import { AuditSection } from './sections/AuditSection'
 import { UserDetailDrawer } from './sections/UserDetailDrawer'
-import { RolesSection, SecuritySection, BillingSection, SupportSection, MonitoringSection, SettingsSection } from './sections/stubs'
+import { RolesSection, SecuritySection, BillingSection, MonitoringSection, SettingsSection } from './sections/stubs'
+import { SupportSection } from './sections/SupportSection'
 import './admin.css'
 
 export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () => void }) {

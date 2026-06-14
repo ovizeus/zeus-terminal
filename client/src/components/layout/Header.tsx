@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
+import { useSupportStore } from '../../stores/supportStore'
 
 export function Header() {
   const connected = useUiStore((s) => s.connected)
@@ -41,6 +42,18 @@ export function Header() {
   // opening the admin panel — like an unread-messages badge.
   const [pendingCount, setPendingCount] = useState(0)
   const [confirmLogout, setConfirmLogout] = useState(false)
+  const supportUnread = useSupportStore((s) => s.adminUnread)
+  const setSupportUnread = useSupportStore((s) => s.setAdminUnread)
+
+  // Seed admin support badge on mount (best-effort, never breaks the header).
+  useEffect(() => {
+    if (role !== 'admin') return
+    fetch('/api/support/inbox', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((j) => { if (j && j.ok) setSupportUnread(j.totalUnread || 0) })
+      .catch(() => {})
+  }, [role, setSupportUnread])
+
   useEffect(() => {
     if (role !== 'admin') return
     let alive = true
@@ -202,7 +215,8 @@ export function Header() {
                 textAlign: 'center', pointerEvents: 'none',
                 boxShadow: '0 0 0 2px #0a0f16',
               }}>{pendingCount > 9 ? '9+' : pendingCount}</span>
-            )}</button>
+            )}
+            {supportUnread > 0 && <span className="hdr-support-badge">{supportUnread > 9 ? '9+' : supportUnread}</span>}</button>
             <button className="sbtn" id="logoutBtn" title="Logout" onClick={handleLogout}><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
               strokeLinejoin="round">

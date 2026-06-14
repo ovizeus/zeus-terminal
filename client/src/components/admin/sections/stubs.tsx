@@ -328,53 +328,6 @@ export function BillingSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SUPPORT — workspace scaffold
-// ═══════════════════════════════════════════════════════════════════════════
-
-export function SupportSection() {
-  const users = useAdminStore((s) => s.users)
-  const setSection = useAdminStore((s) => s.setSection)
-
-  return (
-    <>
-      <div className="zac-panel">
-        <div className="zac-panel-header"><div className="zac-panel-title">Quick Support Tools</div></div>
-        <div className="zac-qa-grid">
-          <div className="zac-qa" onClick={() => setSection('users')}>
-            <span className="zac-qa-ico">◐</span>
-            <span className="zac-qa-label">Find User</span>
-          </div>
-          <div className="zac-qa" onClick={() => setSection('audit')}>
-            <span className="zac-qa-ico">☰</span>
-            <span className="zac-qa-label">Audit Trail</span>
-          </div>
-          <div className="zac-qa" onClick={() => setSection('security')}>
-            <span className="zac-qa-ico">⬡</span>
-            <span className="zac-qa-label">Sessions</span>
-          </div>
-        </div>
-      </div>
-      <div className="zac-panel">
-        <div className="zac-panel-header"><div className="zac-panel-title">User Directory ({users.length})</div></div>
-        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-          {users.slice(0, 25).map((u) => (
-            <div key={u.id} style={{ padding: '6px 10px', fontSize: 11, borderBottom: '1px solid #0f1725', display: 'flex', justifyContent: 'space-between' }}>
-              <span>{u.email}</span>
-              <span style={{ color: 'var(--ac-fg-mute)', fontSize: 9 }}>#{u.id} · {u.status}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="zac-panel">
-        <div className="zac-panel-header"><div className="zac-panel-title">Support Cases</div></div>
-        <ScaffoldBanner todo="case tracker (open/close/assign) + one-click resync/repair flows (planned Faza C). The quick tools and user directory above ARE functional." />
-        <Placeholder title="Support cases, resync tools, repair actions" note="Case tracker + one-click resync/repair flows arrive in Faza C. The user list and audit search above cover routine triage today." />
-      </div>
-    </>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // MONITORING
 // ═══════════════════════════════════════════════════════════════════════════
 
