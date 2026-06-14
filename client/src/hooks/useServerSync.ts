@@ -276,6 +276,11 @@ export function useServerSync(authenticated: boolean) {
         // Live balance refresh is wired via the uiStore subscription below
         // (see section 7) — it re-arms whenever executionEnv/apiConfigured flip.
       }
+      if (msg.type === 'support.message' && msg.data) {
+        import('../stores/supportStore').then(({ useSupportStore }) => {
+          useSupportStore.getState().onIncoming(msg.data)
+        }).catch(() => {})
+      }
       if (msg.type === 'sync') {
         // Cross-device sync signal — re-pull balance only; positions via state.ts bridge
         syncApi.pullState().then((res) => {

@@ -1,10 +1,16 @@
 import type { Position } from './position'
+import type { SupportMsg } from './support'
 
 /**
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar | WsMarketRadarSnapshot | WsExchangeChanged
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar | WsMarketRadarSnapshot | WsExchangeChanged | WsSupportMessage
+
+export interface WsSupportMessage {
+  type: 'support.message'
+  data: SupportMsg
+}
 
 /**
  * [Phase 11.2] Market Radar event broadcast.
