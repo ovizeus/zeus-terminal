@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Placeholder, fmtRelative, actionColor } from '../shared/components'
 import { useAdminStore } from '../../../stores/adminStore'
+import { GlobalHaltControl } from './GlobalHaltControl'
 
 // [P3 2026-06-06] Operator decision: scaffold sections STAY visible (so the
 // roadmap isn't forgotten) but must say loudly that they are not functional
@@ -524,11 +525,10 @@ export function SettingsSection() {
         })}
       </div>
 
-      <div className="zac-panel">
-        <div className="zac-panel-header"><div className="zac-panel-title">Safety Toggles</div></div>
-        <ScaffoldBanner todo="global trading lock + emergency broadcast + global force-logout as one-click switches (the halt API exists at POST /api/admin/halt — only the UI binding is missing)." />
-        <Placeholder title="Emergency switches" note="Global trading lock, emergency admin broadcast, global force-logout. Destructive toggles — require superadmin role binding before enabling." />
-      </div>
+      {/* [2026-06-14] Real Global Trading Lock wired to POST /api/admin/halt
+          (the scaffold placeholder is gone). Emergency broadcast + global
+          force-logout stay unbuilt — no global server API exists for them yet. */}
+      <GlobalHaltControl />
 
       {confirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 9900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
