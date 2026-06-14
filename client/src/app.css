@@ -7793,3 +7793,7 @@ select option {
 #adminSupport .as-send:hover:not(:disabled) { background: linear-gradient(180deg,#8a5dff,#6a3fe6); }
 #adminSupport .as-send:disabled { opacity: .45; cursor: default; }
 #adminBtn .hdr-support-badge { position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; }
+
+/* ── Support unread badges (user side): Settings icon + SUPPORT tab ── */
+.sbtn-badge { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; pointer-events: none; box-shadow: 0 0 0 2px #0b0712; }
+.mtab-badge { display: inline-block; margin-left: 5px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; vertical-align: middle; }

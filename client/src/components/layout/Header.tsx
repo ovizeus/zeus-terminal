@@ -44,6 +44,8 @@ export function Header() {
   const [confirmLogout, setConfirmLogout] = useState(false)
   const supportUnread = useSupportStore((s) => s.adminUnread)
   const setSupportUnread = useSupportStore((s) => s.setAdminUnread)
+  const userUnread = useSupportStore((s) => s.userUnread)
+  const setUserUnread = useSupportStore((s) => s.setUserUnread)
 
   // Seed admin support badge on mount (best-effort, never breaks the header).
   useEffect(() => {
@@ -53,6 +55,17 @@ export function Header() {
       .then((j) => { if (j && j.ok) setSupportUnread(j.totalUnread || 0) })
       .catch(() => {})
   }, [role, setSupportUnread])
+
+  // Seed the USER's own unread-reply badge on mount (every logged-in user) so a
+  // reply that arrived while they were offline still shows on the Settings icon.
+  // Live increments come via the support.message WS frame (useServerSync).
+  useEffect(() => {
+    if (!role) return
+    fetch('/api/support/unread', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((j) => { if (j && j.ok) setUserUnread(j.unread || 0) })
+      .catch(() => {})
+  }, [role, setUserUnread])
 
   useEffect(() => {
     if (role !== 'admin') return
@@ -196,11 +209,11 @@ export function Header() {
               strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg></button>
-            <button className="sbtn" onClick={() => openModal('settings')} title="Settings Hub"><svg width="16"
+            <button className="sbtn" onClick={() => openModal('settings')} title={userUnread > 0 ? 'Settings — support replied' : 'Settings Hub'} style={{ position: 'relative' }}><svg width="16"
               height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg></button>
+            </svg>{userUnread > 0 && <span className="sbtn-badge">{userUnread > 9 ? '9+' : userUnread}</span>}</button>
             <button className="sbtn" id="adminBtn" title={pendingCount > 0 ? `Admin Panel — ${pendingCount} pending approval${pendingCount > 1 ? 's' : ''}` : 'Admin Panel'}
               style={{ display: role === 'admin' ? undefined : 'none', position: 'relative' }} onClick={() => openModal('adminPage')}><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"

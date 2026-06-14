@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
+import { useSupportStore } from '../../stores/supportStore'
 import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
@@ -70,6 +71,7 @@ function val(id: string) {
 
 export function SettingsHubModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('general')
+  const supportUnread = useSupportStore((s) => s.userUnread)
   const openModal = useUiStore((s) => s.openModal)
 
   // [BATCH3-S] When Security tab opens, sync PIN UI (show/hide Current PIN field).
@@ -162,7 +164,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className={`mtab${tab==='developer'?' act':''}`} onClick={()=>setTab('developer')}>DEVELOPER</div>
         <div className={`mtab${tab==='omega'?' act':''}`} onClick={()=>setTab('omega')}>OMEGA</div>
         <div className={`mtab${tab==='security'?' act':''}`} onClick={()=>setTab('security')}><svg className="z-i" viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 016 0v2M4 7h8v7H4z" /></svg> ACCOUNT &amp; SECURITY</div>
-        <div className={`mtab${tab==='support'?' act':''}`} onClick={()=>setTab('support')}>SUPPORT</div>
+        <div className={`mtab${tab==='support'?' act':''}`} onClick={()=>setTab('support')}>SUPPORT{supportUnread > 0 && <span className="mtab-badge">{supportUnread > 9 ? '9+' : supportUnread}</span>}</div>
       </div>
 
       {/* ══ GENERAL ══ */}
