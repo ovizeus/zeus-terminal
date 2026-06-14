@@ -415,6 +415,7 @@ export function setSymbol(sym: string): void {
     if (w.S.wsK) { try { w.S.wsK.close() } catch (_) { } w.S.wsK = null }
     if (typeof clearAllSessionOverlays === 'function') clearAllSessionOverlays()
     w.S.symbol = sym
+    try { localStorage.setItem('zeus_chart_symbol', sym) } catch (_) { /* persist choice across reloads */ }
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SYM] \u2192 ' + sym)
     const lbl = el('chartTitleLbl'); if (lbl) lbl.textContent = sym
     w.S.klines = []; w.S.btcClusters = {}; w.S.events = []

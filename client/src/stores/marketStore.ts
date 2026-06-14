@@ -52,7 +52,7 @@ const defaultMarket: MarketState = {
   dtTf: '1H',
   soundOn: false,
   chartTf: '5m',
-  symbol: 'BTCUSDT',
+  symbol: (() => { try { const s = localStorage.getItem('zeus_chart_symbol'); return (s && /^[A-Z0-9]{2,20}USDT$/.test(s)) ? s : 'BTCUSDT' } catch { return 'BTCUSDT' } })(),
   tz: 'Europe/Bucharest',
   magnetBias: 'neut',
   cloudEmail: '',

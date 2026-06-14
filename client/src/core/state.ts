@@ -1768,7 +1768,8 @@ export const S: any = {
   overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false, ovi: false },
   llvSettings: { bucketPct: 0.3, maxBarWidthPct: 30, opacity: 0.7, minUsd: 0, longCol: '#00d4aa', shortCol: '#ff4466', showLabels: true, labelMode: 'compact' },
   klines: [], liqMinUsd: 100 /* [LIQ-WARMUP 2026-06-07] 500→100, see marketStore */, liqSym: 'BTC', wsK: null,
-  symbol: 'BTCUSDT', tz: 'Europe/Bucharest',
+  // [2026-06-13] Persist the chosen symbol across reloads (operator request).
+  symbol: (() => { try { const s = localStorage.getItem('zeus_chart_symbol'); return (s && /^[A-Z0-9]{2,20}USDT$/.test(s)) ? s : 'BTCUSDT' } catch { return 'BTCUSDT' } })(), tz: 'Europe/Bucharest',
   magnetBias: 'neut',
   cloudEmail: '',
   alerts: { enabled: false, volSpike: true, volThreshold: 500, pivotCross: false, divergence: true, rsiAlerts: true, whaleOrders: true, whaleMinBtc: 100, liqAlerts: true, liqMinBtc: 1 },
