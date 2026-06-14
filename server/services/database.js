@@ -10174,6 +10174,22 @@ migrate('407_ml_live_optin', () => {
     `);
 });
 
+migrate('408_support_messages', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS support_messages (
+            id            INTEGER PRIMARY KEY,
+            user_id       INTEGER NOT NULL,
+            sender        TEXT NOT NULL CHECK(sender IN ('user','admin')),
+            message       TEXT NOT NULL,
+            read_by_admin INTEGER NOT NULL DEFAULT 0,
+            read_by_user  INTEGER NOT NULL DEFAULT 0,
+            created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_support_user   ON support_messages(user_id, id);
+        CREATE INDEX IF NOT EXISTS idx_support_unread ON support_messages(read_by_admin);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -11365,6 +11381,51 @@ function recordSlowQuery(userId, resolvedEnv, operation, durationMs) {
     } catch (_) { /* never block on contention telemetry */ }
 }
 
+// ─── Support chat helpers ───
+const _supInsert = db.prepare(
+    'INSERT INTO support_messages (user_id, sender, message, read_by_admin, read_by_user) VALUES (?, ?, ?, ?, ?)'
+);
+const _supGetById = db.prepare('SELECT * FROM support_messages WHERE id = ?');
+const _supThread = db.prepare('SELECT * FROM support_messages WHERE user_id = ? ORDER BY id ASC');
+const _supUnreadUser = db.prepare(
+    "SELECT COUNT(*) AS n FROM support_messages WHERE user_id = ? AND sender = 'admin' AND read_by_user = 0"
+);
+const _supTotalUnreadAdmin = db.prepare(
+    "SELECT COUNT(*) AS n FROM support_messages WHERE sender = 'user' AND read_by_admin = 0"
+);
+const _supMarkAdmin = db.prepare(
+    "UPDATE support_messages SET read_by_admin = 1 WHERE user_id = ? AND sender = 'user'"
+);
+const _supMarkUser = db.prepare(
+    "UPDATE support_messages SET read_by_user = 1 WHERE user_id = ? AND sender = 'admin'"
+);
+const _supInbox = db.prepare(`
+    SELECT m.user_id                                   AS user_id,
+           u.email                                     AS email,
+           (SELECT message FROM support_messages x WHERE x.user_id = m.user_id ORDER BY x.id DESC LIMIT 1) AS last_message,
+           (SELECT created_at FROM support_messages x WHERE x.user_id = m.user_id ORDER BY x.id DESC LIMIT 1) AS last_at,
+           SUM(CASE WHEN m.sender = 'user' AND m.read_by_admin = 0 THEN 1 ELSE 0 END) AS unread_count
+    FROM support_messages m
+    LEFT JOIN users u ON u.id = m.user_id
+    GROUP BY m.user_id
+    ORDER BY last_at DESC
+`);
+const _supAdminIds = db.prepare("SELECT id FROM users WHERE role = 'admin'");
+
+function insertSupportMessage(userId, sender, message) {
+    const readByAdmin = sender === 'admin' ? 1 : 0;
+    const readByUser = sender === 'user' ? 1 : 0;
+    const info = _supInsert.run(userId, sender, message, readByAdmin, readByUser);
+    return _supGetById.get(info.lastInsertRowid);
+}
+function getSupportThread(userId) { return _supThread.all(userId); }
+function getSupportUnreadForUser(userId) { return _supUnreadUser.get(userId).n; }
+function getSupportTotalUnreadForAdmin() { return _supTotalUnreadAdmin.get().n; }
+function markSupportThreadReadByAdmin(userId) { _supMarkAdmin.run(userId); }
+function markSupportThreadReadByUser(userId) { _supMarkUser.run(userId); }
+function getSupportInbox() { return _supInbox.all(); }
+function getAdminUserIds() { return _supAdminIds.all().map(r => r.id); }
+
 module.exports = {
     db,
     USER_STATUS, // [M6]
@@ -11608,4 +11669,13 @@ module.exports = {
     loginAttemptPruneExpired: (now) => _stmts.loginAttemptPruneExpired.run(now).changes,
     // [Wave 1] R0 DB contention monitor — records slow operations for diagnostics.
     recordSlowQuery,
+    // [Task 1 support chat] DB helpers for support_messages table
+    insertSupportMessage,
+    getSupportThread,
+    getSupportUnreadForUser,
+    getSupportTotalUnreadForAdmin,
+    markSupportThreadReadByAdmin,
+    markSupportThreadReadByUser,
+    getSupportInbox,
+    getAdminUserIds,
 };
