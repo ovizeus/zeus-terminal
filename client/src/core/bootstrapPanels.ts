@@ -7,7 +7,6 @@ import { escHtml } from '../utils/dom'
 import { _toggleDecisionPanel } from './bootstrapError'
 import { hubPopulate } from '../utils/dev'
 import { toggleFS } from '../data/marketDataFeeds'
-import { setSymbol } from '../data/marketDataWS'
 import { api } from '../services/api'
 
 const w = window as any
@@ -64,9 +63,8 @@ function _fetchExpoInline(): void {
 let _cmdOpen = false
 let _cmdIdx = 0
 const _CMD_ACTIONS: any[] = [
-  { cat: 'symbol', label: 'BTC \u2014 Bitcoin', icon: '\u20BF', action: function () { (typeof w.setSymbol === 'function' ? w.setSymbol : setSymbol)('BTCUSDT') }, keys: 'btc bitcoin' },
-  { cat: 'symbol', label: 'ETH \u2014 Ethereum', icon: '\u039E', action: function () { (typeof w.setSymbol === 'function' ? w.setSymbol : setSymbol)('ETHUSDT') }, keys: 'eth ethereum' },
-  { cat: 'symbol', label: 'SOL \u2014 Solana', icon: '\u25CE', action: function () { (typeof w.setSymbol === 'function' ? w.setSymbol : setSymbol)('SOLUSDT') }, keys: 'sol solana' },
+  // [2026-06-13] Symbol commands (BTC/ETH/SOL) removed \u2014 the chart's dedicated coin
+  // picker (527 coins + search) is the place to switch symbols, not the palette.
   { cat: 'nav', label: 'Open Settings', icon: '\u2699', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'settings' })); hubPopulate() }, keys: 'settings config preferences' },
   { cat: 'nav', label: 'Open Decision Log', icon: '\uD83D\uDCCB', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'decisionlog' })) }, keys: 'decisions dlog brain' },
   { cat: 'nav', label: 'View Missed Trades', icon: '\uD83D\uDEAB', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'missed' })); setTimeout(_showMissedTrades, 50) }, keys: 'missed trades blocked' },

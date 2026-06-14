@@ -18,7 +18,7 @@ export function CommandPalette({ visible, onClose }: Props) {
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="cmd-hint">ESC</span>
+          <button className="cmd-close" onClick={onClose} title="Close" aria-label="Close">&#10005;</button>
         </div>
         <div id="cmdResults" className="cmd-results"></div>
       </div>

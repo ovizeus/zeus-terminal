@@ -33,27 +33,26 @@ const w = window as any
   let _helpEl: HTMLElement | null = null
   function _buildHelp() {
     if (_helpEl) return _helpEl
+    // [2026-06-13] Amethyst theme + a real ✕ button and tap-outside backdrop —
+    // on mobile there's no keyboard so "press ? / Esc" left no way out.
     const d = document.createElement('div')
     d.id = 'zeus-hotkey-help'
     d.style.cssText = [
-      'display:none', 'position:fixed', 'top:50%', 'left:50%',
-      'transform:translate(-50%,-50%)', 'z-index:100000',
-      'background:#0d1520', 'border:1px solid #1e2530',
-      'border-radius:12px', 'padding:24px 32px',
-      'color:#7a9ab8', 'font-family:var(--ff,monospace)',
-      'font-size:13px', 'min-width:340px', 'max-width:440px',
-      'box-shadow:0 8px 32px rgba(0,0,0,.6)',
-      'backdrop-filter:blur(8px)'
+      'display:none', 'position:fixed', 'inset:0', 'z-index:100000',
+      'align-items:center', 'justify-content:center', 'padding:20px',
+      'background:#0a0612cc', '-webkit-backdrop-filter:blur(3px)', 'backdrop-filter:blur(3px)'
     ].join(';')
     d.innerHTML = [
-      '<div style="color:#f0c040;font-weight:700;font-size:15px;margin-bottom:14px;letter-spacing:1px">KEYBOARD SHORTCUTS</div>',
+      '<div id="hkHelpPanel" style="position:relative;max-height:84vh;overflow-y:auto;background:radial-gradient(130% 80% at 50% 0%,#1c1430 0%,#0e0a18 58%,#0b0712 100%);border:1px solid #b07cff55;border-radius:14px;padding:24px 28px;color:#b3a2d4;font-family:var(--ff,monospace);font-size:13px;min-width:300px;max-width:440px;box-shadow:0 28px 80px -22px #000000e6,0 0 60px -20px #b07cffaa,inset 0 1px 0 #ffffff12">',
+      '<button id="hkHelpClose" title="Close" style="position:absolute;top:12px;right:14px;width:28px;height:28px;border-radius:8px;background:#b07cff1a;border:1px solid #b07cff44;color:#c9a8ff;cursor:pointer;font-size:14px;line-height:1">✕</button>',
+      '<div style="color:#e4d6ff;font-weight:700;font-size:15px;margin-bottom:14px;letter-spacing:1px;text-shadow:0 0 16px #b07cff66">KEYBOARD SHORTCUTS</div>',
       _row('?', 'Show / hide this help'),
       _row('Esc', 'Close modal or panel'),
       _row('F', 'Fullscreen chart'),
-      '<div style="margin:10px 0 6px;color:#3a5068;font-size:11px;letter-spacing:1px">TIMEFRAMES</div>',
+      '<div style="margin:10px 0 6px;color:#8a7ca8;font-size:11px;letter-spacing:1px">TIMEFRAMES</div>',
       _row('1', '1m'), _row('2', '5m'), _row('3', '15m'),
       _row('4', '1h'), _row('5', '4h'), _row('6', '1d'),
-      '<div style="margin:10px 0 6px;color:#3a5068;font-size:11px;letter-spacing:1px">PANELS  (Alt + key)</div>',
+      '<div style="margin:10px 0 6px;color:#8a7ca8;font-size:11px;letter-spacing:1px">PANELS  (Alt + key)</div>',
       _row('Alt+A', 'AutoTrade panel'),
       _row('Alt+D', 'DSL panel'),
       _row('Alt+P', 'PnL Lab'),
@@ -63,26 +62,30 @@ const w = window as any
       _row('Alt+N', 'Notifications'),
       _row('Alt+E', 'Exposure Dashboard'),
       _row('Ctrl+K', 'Command Palette / Search'),
-      '<div style="margin:10px 0 6px;color:#3a5068;font-size:11px;letter-spacing:1px">OVERLAYS</div>',
+      '<div style="margin:10px 0 6px;color:#8a7ca8;font-size:11px;letter-spacing:1px">OVERLAYS</div>',
       _row('L', 'Liquidity (LIQ)'),
       _row('S', 'Support / Resistance'),
       _row('V', 'VWAP / Supremus'),
       _row('T', 'Time &amp; Sales tape'),
       _row('H', 'Horizontal line tool'),
-      '<div style="margin-top:16px;text-align:center;color:#3a5068;font-size:10px">Press ? or Esc to close</div>'
+      '<div style="margin-top:16px;text-align:center;color:#8a7ca8;font-size:10px">Tap ✕ or press ? / Esc to close</div>',
+      '</div>'
     ].join('')
     document.body.appendChild(d)
+    // close on backdrop tap or ✕ (mobile has no keyboard)
+    d.addEventListener('click', function (e: any) { if (e.target === d) _toggleHelp() })
+    const _cb = d.querySelector('#hkHelpClose'); if (_cb) _cb.addEventListener('click', function () { _toggleHelp() })
     _helpEl = d
     return d
   }
   function _row(key: string, desc: string) {
     return '<div style="display:flex;justify-content:space-between;padding:3px 0">' +
-      '<kbd style="background:#1a2530;border:1px solid #2a3540;border-radius:4px;padding:1px 8px;color:#d8eaf8;font-size:12px;min-width:50px;text-align:center">' + key + '</kbd>' +
-      '<span style="color:#7a9ab8;margin-left:16px;flex:1;text-align:right">' + desc + '</span></div>'
+      '<kbd style="background:#1b1430;border:1px solid #b07cff3a;border-radius:4px;padding:1px 8px;color:#d9c7ff;font-size:12px;min-width:50px;text-align:center">' + key + '</kbd>' +
+      '<span style="color:#b3a2d4;margin-left:16px;flex:1;text-align:right">' + desc + '</span></div>'
   }
   function _toggleHelp() {
     const h = _buildHelp()
-    h.style.display = h.style.display === 'none' ? 'block' : 'none'
+    h.style.display = h.style.display === 'none' ? 'flex' : 'none'
   }
 
   // ── Toast feedback (non-intrusive, bottom-right) ──
