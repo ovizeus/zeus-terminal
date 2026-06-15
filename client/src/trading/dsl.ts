@@ -154,6 +154,7 @@ export function _computeDslMagnetSnap(basePrice: any, _pos: any, side: any, kind
 // DSL toggle + assist
 export function toggleDSL(): void {
   try {
+    _dslDiag('toggle')
     const _mode = (w.S?.mode || 'assist').toLowerCase()
     if (_mode === 'auto') {
       toast('AUTO: DSL is controlled by AI', 0, _ZI?.robot)
@@ -376,8 +377,25 @@ export function _collectDslPositions(): any[] {
   return order.map((k) => _reclassifyLimboAT(byKey.get(k))).filter(Boolean)
 }
 
+// [DSL DIAG 2026-06-15 — TEMPORARY] Fire once per `tag` (no setTimeout — robust
+// against mobile background throttling). Captures the live DSL loop state to the
+// server log so the "DSL empty until toggle" cause is ground-truth, not guessed.
+// Remove after diagnosis.
+function _dslDiag(tag: string): void {
+  try {
+    const key = '_dslDiagSent_' + tag
+    if ((w as any)[key]) return
+    ;(w as any)[key] = true
+    const _ps = usePositionsStore.getState()
+    const cardEl = document.getElementById('dslPositionCards')
+    const reason = `DSL_DIAG[${tag}] brainRuns=${(w as any)._dslBrainRuns || 0} intervalAlive=${!!DSL.checkInterval} cards=${cardEl ? cardEl.querySelectorAll('.dsl-pos-card').length : -1} waiting=${cardEl ? !!cardEl.querySelector('.dsl-radar-txt') : 'na'} storeLive=${(_ps.livePositions || []).length} storeDemo=${(_ps.demoPositions || []).length} tpLive=${((w.TP && w.TP.livePositions) || []).length} tpDemo=${((w.TP && w.TP.demoPositions) || []).length} collect=${_collectDslPositions().length} atMode=${getATMode()} dslEn=${DSL.enabled} srvAT=${w._serverATEnabled}`.slice(0, 300)
+    fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' }, body: JSON.stringify({ kind: 'dsl-diag-' + tag, reason, ts: Date.now() }) }).catch(() => {})
+  } catch (_) { /* never break */ }
+}
+
 export function runDSLBrain(): void {
   ;(w as any)._dslBrainRuns = ((w as any)._dslBrainRuns || 0) + 1
+  if ((w as any)._dslBrainRuns === 2) _dslDiag('brain')
   const allOpenPosns = _collectDslPositions()
   // Server-owned positions carry server DSL state (field `_dsl` on the mapped
   // path, `dsl` on the positions.changed snapshot path).
@@ -1497,23 +1515,7 @@ export function startDSLIntervals(): void {
   if (DSL.checkInterval) return
   _emitDSLChanged()
   _pushDslCheckInterval(w.Intervals.set('dsl', runDSLBrain, 3000))
-  // [DSL-BOOT DIAG 2026-06-15 — TEMPORARY] ~14s after the interval starts, report
-  // the live DSL loop state once: did runDSLBrain run, is the interval alive, are
-  // there positions, did any cards render. Reveals whether the "DSL empty until
-  // toggle" is a dead loop, a throwing runDSLBrain, or an empty source. Remove after.
-  try {
-    if (!(w as any)._dslBootDiagArmed) {
-      ;(w as any)._dslBootDiagArmed = true
-      setTimeout(() => {
-        try {
-          const _ps = usePositionsStore.getState()
-          const cardEl = document.getElementById('dslPositionCards')
-          const reason = `DSL_BOOT_DIAG brainRuns=${(w as any)._dslBrainRuns || 0} intervalAlive=${!!DSL.checkInterval} cards=${cardEl ? cardEl.querySelectorAll('.dsl-pos-card').length : -1} waiting=${cardEl ? !!cardEl.querySelector('.dsl-radar-txt') : 'na'} storeLive=${(_ps.livePositions || []).length} storeDemo=${(_ps.demoPositions || []).length} tpLive=${((w.TP && w.TP.livePositions) || []).length} tpDemo=${((w.TP && w.TP.demoPositions) || []).length} collect=${_collectDslPositions().length} atMode=${getATMode()} dslEn=${DSL.enabled} srvAT=${w._serverATEnabled}`.slice(0, 300)
-          fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' }, body: JSON.stringify({ kind: 'dsl-boot-diag', reason, ts: Date.now() }) }).catch(() => {})
-        } catch (_) { /* never break */ }
-      }, 14000)
-    }
-  } catch (_) { /* never break */ }
+  _dslDiag('start')
   DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
     const posns = [
