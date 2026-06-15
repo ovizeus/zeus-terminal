@@ -1064,6 +1064,19 @@ export function renderDSLWidget(positions: any[]): void {
   _dslUI({ activeCountText: activeCount + ' active' })
 
   if (!allDisplayPosns.length) {
+    // [DSL-EMPTY DIAG 2026-06-15 — TEMPORARY] Panel renders empty. If positions
+    // actually exist (store/TP) this is the "AT positions don't show in DSL until
+    // off/on" bug — capture WHY (input vs mode-filter vs source) once, server log.
+    try {
+      const _ps = usePositionsStore.getState()
+      const _storeLive = (_ps.livePositions || []).length, _storeDemo = (_ps.demoPositions || []).length
+      const _tpLive = ((w.TP && w.TP.livePositions) || []).length, _tpDemo = ((w.TP && w.TP.demoPositions) || []).length
+      if ((_storeLive + _storeDemo + _tpLive + _tpDemo) > 0 && !(w as any)._dslEmptyDiagSent) {
+        ;(w as any)._dslEmptyDiagSent = true
+        const reason = `DSL_EMPTY_DIAG inputLen=${Array.isArray(positions) ? positions.length : 'na'} modeFiltered=${modeFiltered.length} atMode=${_activeMode} storeLive=${_storeLive} storeDemo=${_storeDemo} tpLive=${_tpLive} tpDemo=${_tpDemo} collect=${_collectDslPositions().length} dslEn=${DSL.enabled} srvAT=${w._serverATEnabled} flagsLoaded=${(w as any)._srvPosFlagsLoaded} inputModes=${(Array.isArray(positions) ? positions.slice(0, 4).map((p: any) => (p && (p.sym || p.symbol)) + ':' + (p && p.mode)).join(',') : '')}`.slice(0, 300)
+        fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' }, body: JSON.stringify({ kind: 'dsl-empty-diag', reason, ts: Date.now() }) }).catch(() => {})
+      }
+    } catch (_) { /* diag must never break render */ }
     // [DSL-OFF] Distinct waiting text when engine is off vs. scanning for activation
     const _engineOff = !DSL.enabled
     const _headline = _engineOff ? 'DSL ENGINE OFF' : 'WAITING DYNAMIC SL...'
