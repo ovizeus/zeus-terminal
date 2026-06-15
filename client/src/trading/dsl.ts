@@ -395,7 +395,7 @@ function _dslDiag(tag: string): void {
 
 export function runDSLBrain(): void {
   ;(w as any)._dslBrainRuns = ((w as any)._dslBrainRuns || 0) + 1
-  if ((w as any)._dslBrainRuns === 2) _dslDiag('brain')
+  if ((w as any)._dslBrainRuns === 5) _dslDiag('brain') // ~15s in — past the [start] diag's 5s server throttle
   const allOpenPosns = _collectDslPositions()
   // Server-owned positions carry server DSL state (field `_dsl` on the mapped
   // path, `dsl` on the positions.changed snapshot path).
