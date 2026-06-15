@@ -377,6 +377,7 @@ export function _collectDslPositions(): any[] {
 }
 
 export function runDSLBrain(): void {
+  ;(w as any)._dslBrainRuns = ((w as any)._dslBrainRuns || 0) + 1
   const allOpenPosns = _collectDslPositions()
   // Server-owned positions carry server DSL state (field `_dsl` on the mapped
   // path, `dsl` on the positions.changed snapshot path).
@@ -1496,6 +1497,23 @@ export function startDSLIntervals(): void {
   if (DSL.checkInterval) return
   _emitDSLChanged()
   _pushDslCheckInterval(w.Intervals.set('dsl', runDSLBrain, 3000))
+  // [DSL-BOOT DIAG 2026-06-15 — TEMPORARY] ~14s after the interval starts, report
+  // the live DSL loop state once: did runDSLBrain run, is the interval alive, are
+  // there positions, did any cards render. Reveals whether the "DSL empty until
+  // toggle" is a dead loop, a throwing runDSLBrain, or an empty source. Remove after.
+  try {
+    if (!(w as any)._dslBootDiagArmed) {
+      ;(w as any)._dslBootDiagArmed = true
+      setTimeout(() => {
+        try {
+          const _ps = usePositionsStore.getState()
+          const cardEl = document.getElementById('dslPositionCards')
+          const reason = `DSL_BOOT_DIAG brainRuns=${(w as any)._dslBrainRuns || 0} intervalAlive=${!!DSL.checkInterval} cards=${cardEl ? cardEl.querySelectorAll('.dsl-pos-card').length : -1} waiting=${cardEl ? !!cardEl.querySelector('.dsl-radar-txt') : 'na'} storeLive=${(_ps.livePositions || []).length} storeDemo=${(_ps.demoPositions || []).length} tpLive=${((w.TP && w.TP.livePositions) || []).length} tpDemo=${((w.TP && w.TP.demoPositions) || []).length} collect=${_collectDslPositions().length} atMode=${getATMode()} dslEn=${DSL.enabled} srvAT=${w._serverATEnabled}`.slice(0, 300)
+          fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' }, body: JSON.stringify({ kind: 'dsl-boot-diag', reason, ts: Date.now() }) }).catch(() => {})
+        } catch (_) { /* never break */ }
+      }, 14000)
+    }
+  } catch (_) { /* never break */ }
   DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
     const posns = [
