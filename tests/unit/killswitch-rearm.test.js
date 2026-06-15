@@ -29,6 +29,33 @@ describe('[killswitch] re-arm invariant (existing pnlAtReset behavior)', () => {
     expect(serverAT._uStateForTest(UID).killActive).toBe(true);
   });
 
+  // [2026-06-15] Operator: after manual deactivate, a residual "kill switch active"
+  // message lingered AND the kill could re-activate before the next loss. Root: resetKill
+  // cleared killActive + re-baselined pnlAtReset, but LEFT killActiveAt/killReason/killLoss/
+  // killLimit stale. The client mirrors those (residual UI) and, because state.ts only wipes
+  // its realizedDailyPnL counter when `!killActive && killActiveAt===0`, that wipe never
+  // fired → a journal recompute could re-trigger. resetKill must FULLY clear the metadata.
+  test('[2026-06-15] resetKill fully clears kill metadata (no residual, no re-trigger)', () => {
+    const UID3 = 990003;
+    const us = serverAT._uStateForTest(UID3);
+    us.engineMode = 'demo'; us.demoStartBalance = 10000; us.killPct = 5; // limit = $500
+    us.killActive = false; us.pnlAtReset = 0;
+    us.dailyPnL = -500;
+    serverAT._checkKillSwitchForTest(UID3);
+    expect(us.killActive).toBe(true);
+    expect(us.killActiveAt).toBeGreaterThan(0);
+    expect(us.killReason).toBe('daily_loss');
+
+    serverAT.resetKill(UID3);
+    const s = serverAT._uStateForTest(UID3);
+    expect(s.killActive).toBe(false);
+    expect(s.killActiveAt).toBe(0);   // ← was left stale → residual + blocked the client realized-PnL wipe
+    expect(s.killReason).toBe(null);
+    expect(s.killLoss).toBe(0);
+    expect(s.killLimit).toBe(0);
+    expect(s.pnlAtReset).toBe(-500);  // still re-baselined → won't re-fire until another full limit
+  });
+
   test('[KILL-REARM 2026-06-07] reset has NO cooldown — consecutive resets both succeed', () => {
     // Operator rule: deactivation is always allowed; the pnlAtReset baseline
     // (not a timer) is what prevents instant re-triggering. The old 5-min

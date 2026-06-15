@@ -3058,6 +3058,20 @@ function resetKill(userId) {
     const us = _uState(userId);
     us.killActive = false;
     us.pnlAtReset = us.dailyPnL;
+    // [2026-06-15] Fully clear the kill metadata on manual deactivate. Previously
+    // killActiveAt/killReason/killLoss/killLimit were left stale, so (a) the client
+    // mirrored them → a residual "kill switch" message lingered in the panel, and
+    // (b) state.ts only wipes its local realizedDailyPnL counter when
+    // `!killActive && killActiveAt === 0` — with killActiveAt stale that wipe never
+    // fired, letting a journal recompute re-trigger the kill before the next loss.
+    // Clearing them makes deactivate total: no residual, no re-arm until another
+    // full killPct loss (pnlAtReset baseline still enforces that).
+    us.killActiveAt = 0;
+    us.killReason = null;
+    us.killLoss = 0;
+    us.killLimit = 0;
+    us.killBalRef = 0;
+    us.killModeAtTrigger = null;
     _persistState(userId);
     audit.record('KILL_SWITCH_RESET', { userId, dailyPnL: us.dailyPnL, mode: us.engineMode }, 'user');
     const balRef = us.engineMode === 'live'
