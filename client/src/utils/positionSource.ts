@@ -48,6 +48,23 @@ export function resolveSrvPosActive(
   return resolveEffectiveFlag(flags, mode)
 }
 
+// [2026-06-15] Gate for orphan REPORTING (which arms the kill switch via
+// srvPos.js orphan-report). Only report when the server snapshot is loaded AND
+// non-empty — during the boot/refresh window, or before the server book arrives,
+// the operator's real positions falsely look like orphans (empty serverPositions
+// → every exchange position is "unmatched"), and 5 false reports in 5 min suspend
+// AT. Genuine orphans on a truly-empty server book are still caught server-side by
+// the 60s exchange-truth recon.
+export function shouldReportOrphans(
+  serverSnapshotLoaded: boolean,
+  serverPositions: any[],
+  orphans: any[],
+): boolean {
+  if (!serverSnapshotLoaded) return false
+  if (!Array.isArray(serverPositions) || serverPositions.length === 0) return false
+  return Array.isArray(orphans) && orphans.length > 0
+}
+
 export function buildPriceUpdateMap(exchangePositions: any[]): Map<string, PriceUpdate> {
   const map = new Map<string, PriceUpdate>()
   if (!Array.isArray(exchangePositions)) return map

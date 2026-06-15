@@ -9,7 +9,7 @@ import { addTradeToJournal } from '../services/storage'
 import { atLog } from './autotrade'
 import { usePositionsStore } from '../stores/positionsStore'
 import { acquirePositionWrite, releasePositionWrite } from '../utils/positionMutex'
-import { resolveSrvPosActive, buildPriceUpdateMap, detectOrphans } from '../utils/positionSource'
+import { resolveSrvPosActive, buildPriceUpdateMap, detectOrphans, shouldReportOrphans } from '../utils/positionSource'
 
 const w = window as any
 
@@ -204,10 +204,14 @@ export async function liveApiSyncState(): Promise<any> {
           }
         }
       }
-      // Orphan detection: exchange has position server doesn't know about
+      // Orphan detection: exchange has position server doesn't know about.
+      // [2026-06-15 KILL-REARM ROOT FIX] Only REPORT when the server snapshot is
+      // loaded + non-empty — otherwise a boot/refresh-window empty _lastServerPositions
+      // makes the operator's real positions look like orphans, and orphan-report arms
+      // the kill switch (5/5min). That was the "kill keeps coming back after refresh".
       const serverPositions = w._lastServerPositions || []
       const orphans = detectOrphans(serverPositions, positions)
-      if (orphans.length > 0) {
+      if (shouldReportOrphans(!!w._srvPosFlagsLoaded, serverPositions, orphans)) {
         console.warn(`[SRV-POS] ${orphans.length} ORPHAN positions detected:`, orphans.map(o => `${o.sym}/${o.side}`))
         // Mark orphan positions in TP for UI badge display
         const orphanKeys = new Set(orphans.map(o => `${o.sym}/${o.side}`))
