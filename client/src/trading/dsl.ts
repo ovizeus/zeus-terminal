@@ -1156,6 +1156,32 @@ export function renderDSLWidget(positions: any[]): void {
 }
 
 // ── Render a single DSL position card ──────────────────────────
+// [DSL-PAPER DIAG 2026-06-15 — TEMPORARY] One-shot-per-position diagnostic. When a
+// LIVE position renders as a PAPER card in the DSL panel, POST the full
+// classification context to /api/client-error (logged server-side as
+// [CLIENT_ERR]) so the REAL cause is captured in the operator's session — this
+// path can't be reproduced headless (liveApiSyncState needs a live exchange).
+// If the same-side-dup-guard fix already resolved it, this never fires. Remove
+// after confirmation.
+const _dslPaperDiagReported = new Set<string>()
+function _dslPaperDiag(pos: any, srcLabel: string): void {
+  try {
+    const id = String(pos && pos.id != null ? pos.id : ((pos && (pos._serverSeq || pos.seq)) || ''))
+    if (!id || _dslPaperDiagReported.has(id)) return
+    _dslPaperDiagReported.add(id)
+    const sym = String(pos.sym || pos.symbol || '').toUpperCase()
+    const side = String(pos.side || '')
+    const snap = Array.isArray(w._lastServerPositions) ? w._lastServerPositions : []
+    const lspAT = snap.some((sp: any) => String(sp.symbol || sp.sym || '').toUpperCase() === sym && String(sp.side || '') === side && sp.autoTrade === true)
+    const reason = `DSL_PAPER_DIAG ${sym}/${side} label="${srcLabel}" aT=${pos.autoTrade} mode=${pos.mode} isLive=${pos.isLive} owner=${pos.owner} src=${pos.source} srcMode=${pos.sourceMode} clSrc=${pos._classifySource} env=${w._executionEnv} srvAT=${w._serverATEnabled} dslEn=${DSL.enabled} lspAT=${lspAT} id=${id}`.slice(0, 300)
+    fetch('/api/client-error', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' },
+      body: JSON.stringify({ kind: 'dsl-paper-diag', reason, ts: Date.now() }),
+    }).catch(() => {})
+  } catch (_) { /* diagnostic must never break render */ }
+}
+
 export function _renderDslCard(pos: any): string {
   const dsl = DSL.positions[String(pos.id)]
   const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
@@ -1195,6 +1221,9 @@ export function _renderDslCard(pos: any): string {
   const _srcLabel = _isAT
     ? ('AT ' + _atEnvLabel)
     : (_isLiveP ? _paperLiveLabel : 'PAPER DEMO')
+  // [DSL-PAPER DIAG — TEMPORARY] a LIVE position rendering as PAPER is the bug —
+  // capture its full classification context once (server log) for ground truth.
+  if (!_isAT && _isLiveP) _dslPaperDiag(pos, _srcLabel)
   const _srcMap: any = {
     'AT DEMO': { color: '#aa44ff', bg: '#aa44ff18', border: '#aa44ff44', icon: '' },
     'AT TESTNET': { color: '#f0c040', bg: '#f0c04018', border: '#f0c04044', icon: '' },
