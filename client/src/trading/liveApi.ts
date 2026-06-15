@@ -9,7 +9,7 @@ import { addTradeToJournal } from '../services/storage'
 import { atLog } from './autotrade'
 import { usePositionsStore } from '../stores/positionsStore'
 import { acquirePositionWrite, releasePositionWrite } from '../utils/positionMutex'
-import { resolveEffectiveFlag, buildPriceUpdateMap, detectOrphans } from '../utils/positionSource'
+import { resolveSrvPosActive, buildPriceUpdateMap, detectOrphans } from '../utils/positionSource'
 
 const w = window as any
 
@@ -185,7 +185,11 @@ export async function liveApiSyncState(): Promise<any> {
 
     // [SRV-POS 4.3] Flag-gated: when ON, server positions are canonical.
     // liveApi only updates prices on existing positions + detects orphans.
-    const _srvPosActive = resolveEffectiveFlag(w._srvPosFlags, w._executionEnv === 'REAL' ? 'real' : (w._executionEnv === 'TESTNET' ? 'testnet' : 'demo'))
+    // [PAPER-LOCKED ROOT FIX 2026-06-15] Use the boot-race-safe resolver: until the
+    // server AT-state sync loads _srvPosFlags (default {master:false}) + _executionEnv,
+    // treat as server-authoritative (price-only) so the legacy rebuild below — which
+    // DROPS autoTrade → "PAPER LOCKED" — never runs on uninitialized boot/refresh state.
+    const _srvPosActive = resolveSrvPosActive(w._srvPosFlags, !!w._srvPosFlagsLoaded, w._executionEnv)
     if (_srvPosActive) {
       // Price-only update: apply mark price + uPnL + liqPrice to existing TP positions
       const priceMap = buildPriceUpdateMap(positions)

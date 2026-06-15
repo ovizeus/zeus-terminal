@@ -30,6 +30,24 @@ export function resolveEffectiveFlag(flags: SrvPosFlags | undefined, mode: strin
   return false
 }
 
+// [PAPER-LOCKED ROOT FIX 2026-06-15] Decide whether liveApiSyncState should use the
+// server-authoritative (price-only, NON-destructive) path. On boot/refresh,
+// w._srvPosFlags defaults to {master:false} until the AT-state sync loads the real
+// flags; during that window resolveEffectiveFlag returned false → liveApiSyncState
+// ran the LEGACY rebuild that DROPS autoTrade → positions rendered "PAPER LOCKED"
+// until the next full sync. Treat "flags not yet loaded" as server-authoritative
+// so the destructive rebuild never runs on uninitialized state. Once loaded, defer
+// to resolveEffectiveFlag with the env-derived mode (undefined env → 'demo').
+export function resolveSrvPosActive(
+  flags: SrvPosFlags | undefined,
+  flagsLoaded: boolean,
+  env: string | null | undefined,
+): boolean {
+  if (!flagsLoaded) return true
+  const mode = env === 'REAL' ? 'real' : (env === 'TESTNET' ? 'testnet' : 'demo')
+  return resolveEffectiveFlag(flags, mode)
+}
+
 export function buildPriceUpdateMap(exchangePositions: any[]): Map<string, PriceUpdate> {
   const map = new Map<string, PriceUpdate>()
   if (!Array.isArray(exchangePositions)) return map

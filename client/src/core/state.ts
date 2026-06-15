@@ -1192,6 +1192,10 @@ export const ZState = (() => {
     }
     if (state.srvPosFlags) {
       w._srvPosFlags = state.srvPosFlags
+      // [PAPER-LOCKED ROOT FIX 2026-06-15] Mark flags as server-loaded so
+      // liveApiSyncState stops treating the default {master:false} as "legacy
+      // path" during the boot/refresh window (which dropped autoTrade → PAPER).
+      w._srvPosFlagsLoaded = true
     }
     const _now = Date.now()
     Object.keys(_pendingServerCloses).forEach(function (k) {
