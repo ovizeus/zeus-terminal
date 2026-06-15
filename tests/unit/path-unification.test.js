@@ -193,6 +193,11 @@ describe('Path unification — Path B → Path A delegation (M1.1 Cat C)', () =>
     });
 
     describe('_syncExternalPosition (NEW function for recon-discovered external positions)', () => {
+        // [DUAL-WRITE DUP FIX 2026-06-15] These tests adopt the same ETHUSDT LONG
+        // external fixture; without isolation the first adopt leaves an OPEN row
+        // that the new same-side-duplicate guard (correctly) refuses to re-adopt.
+        // Reset the in-memory book before each so each test adopts a GENUINE external.
+        beforeEach(() => { try { serverAT._reconTestHooks.reset(); } catch (_) {} });
         it('registers external position without SL placement (source=external)', () => {
             // Function doesn't exist yet — TDD RED catches "_syncExternalPosition is not a function"
             const result = serverAT._syncExternalPosition(validExternalSyncEntry);

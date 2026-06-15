@@ -1069,6 +1069,24 @@ function _findSameModeOpposite(positions, { userId, side, mode } = {}) {
     ) || null;
 }
 
+// [DUAL-WRITE DUP FIX 2026-06-15] Pure same-side open-duplicate predicate. On a
+// ONE-WAY account there can be only ONE position per (symbol, side). If recon /
+// userDataStream proposes adopting an "external" position for a (user, symbol,
+// side) that serverAT already holds OPEN in the same (non-demo) book, that is the
+// SAME physical position — adopting it again creates a duplicate row that (a)
+// shows in the Manual panel (source=external, autoTrade undefined) and (b)
+// double-counts PnL when both rows close against the one exchange close.
+// Demo & live are independent books, so a demo row never blocks a live adoption.
+// Pure → unit-testable in isolation. Returns the existing dup or null.
+function _findSameSideOpenDup(positions, { userId, symbol, side, mode } = {}) {
+    if (!Array.isArray(positions)) return null;
+    const m = mode || 'live';
+    return positions.find(p =>
+        p && p.userId === userId && p.symbol === symbol && p.side === side &&
+        p.status === 'OPEN' && (p.mode || 'demo') !== 'demo' && (p.mode || 'live') === m
+    ) || null;
+}
+
 // [PHANTOM-SHORT FIX 2026-06-08 — part b] A position must be reconciled against
 // the exchange iff it is a REAL (non-demo) position WITH a live exchange leg.
 // Pre-fix the recon filter required mode==='live', which EXCLUDED real rows
@@ -4630,6 +4648,19 @@ function _syncExternalPosition(data) {
         return { ok: false, error: 'Missing required fields (userId, symbol, side, entryPrice, qty)' };
     }
     const userId = data.userId;
+    // [DUAL-WRITE DUP FIX 2026-06-15] Refuse to adopt a same-side duplicate. If
+    // serverAT already holds an OPEN non-demo position for this (user, symbol,
+    // side), the exchange position recon "found" IS that same physical position
+    // (one-way account). Adopting it again spawned the orphan the operator saw in
+    // the Manual panel (source=external, lev=1) and double-counted the PnL when
+    // both rows closed against one exchange close (e.g. BNBUSDT SHORT: -100.76 +
+    // -100.10 for one trade). Skip BEFORE allocating a seq / pushing / persisting.
+    const _dup = _findSameSideOpenDup(_positions, { userId, symbol: data.symbol, side: data.side, mode: 'live' });
+    if (_dup) {
+        logger.warn('AT_RECON', `External adopt SKIPPED uid=${userId} sym=${data.symbol} side=${data.side} qty=${data.qty} — already tracking OPEN seq=${_dup.seq} same side (one-way account: would duplicate + double-count PnL + show in Manual)`);
+        try { audit.record('SAT_EXTERNAL_ADOPT_SKIPPED_DUP', { userId, symbol: data.symbol, side: data.side, qty: data.qty, existingSeq: _dup.seq, existingSource: _dup.source || null }, 'SERVER_AT'); } catch (_) {}
+        return { ok: false, skipped: true, reason: 'duplicate_same_side_open', existingSeq: _dup.seq };
+    }
     const us = _uState(userId);
     const seq = ++us.seq;
     // [SP2 policy L] Attach a SERVER-side protective SL (markPrice ∓2%, entryPrice
@@ -6328,6 +6359,7 @@ module.exports = {
     _exitFillTracker, // [BUG B] SL/TP fill ↔ POSITION_CLOSED correlation (unit-tested)
     _closeRaceGuard, // [PHANTOM ROOT FIX] suppress phantom adoption near our own closes (unit-tested)
     _buildExternalEntry, // [PHANTOM ROOT FIX] exported to pin status:'OPEN' (unit-tested)
+    _findSameSideOpenDup, // [DUAL-WRITE DUP FIX 2026-06-15] same-side open-dup predicate (unit-tested)
     _enqueueEmergencyClose, // [ORPHAN ROOT FIX] failed closes REALLY enqueue now (unit-tested)
     // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
     // source='external' marker, NO SL placement responsibility, warning log.
