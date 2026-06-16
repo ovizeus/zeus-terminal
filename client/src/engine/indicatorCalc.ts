@@ -1742,6 +1742,64 @@ export function argus(_opens: number[], highs: number[], lows: number[], closes:
   return { indicators, tfs, cells, pctUp, trend, strength }
 }
 
+export interface OrionSig { index: number; dir: 'buy' | 'sell' }
+export interface Orion { fast: (number | null)[]; slow: (number | null)[]; signals: OrionSig[]; buyPct: number; sellPct: number }
+
+/**
+ * ORION — the hunter (invented for Zeus, modelled on the "Trade Hunter" MT4 reference).
+ * Three parts: (1) a fast & slow EMA whose gap the engine fills blue (fast above slow =
+ * bullish) or red (bearish) — the "MA Filling" cloud; (2) buy ▲ / sell ▼ arrows at swing
+ * pivots; (3) Buy/Sell POWER — over the last `powerLen` bars the share of up-movement vs
+ * down-movement, shown as Buy %/Sell % in a HUD.
+ */
+export function orion(highs: number[], lows: number[], closes: number[], _volumes: number[], fast = 10, slow = 30, swing = 3, powerLen = 20): Orion {
+  const n = closes.length
+  const ef = ema(closes, fast), es = ema(closes, slow)
+  const L = Math.max(1, Math.round(swing))
+  const signals: OrionSig[] = []
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) { if (j === i) continue; if (highs[j] > highs[i]) isH = false; if (lows[j] < lows[i]) isL = false }
+    if (isH) signals.push({ index: i, dir: 'sell' })
+    if (isL) signals.push({ index: i, dir: 'buy' })
+  }
+  let up = 0, dn = 0
+  const pl = Math.max(2, Math.round(powerLen))
+  for (let i = Math.max(1, n - pl); i < n; i++) { const d = closes[i] - closes[i - 1]; if (d > 0) up += d; else dn += -d }
+  const tot = up + dn
+  const buyPct = tot > 0 ? Math.round(1000 * up / tot) / 10 : 50
+  const sellPct = Math.round((100 - buyPct) * 10) / 10
+  return { fast: ef, slow: es, signals, buyPct, sellPct }
+}
+
+export interface PhoenixSig { index: number; dir: 'L' | 'S' }
+export interface Phoenix { ma: (number | null)[]; signals: PhoenixSig[]; strength: number }
+
+/**
+ * PHOENIX — reborn in fire (invented for Zeus, modelled on the "Impossible" TradingView
+ * reference — the one that RECOLOURS the candles). The engine paints candles yellow (up)
+ * / red (down) while active. Math layer: a smoothed Hull-MA baseline, L (long) markers at
+ * swing lows and S (sell) markers at swing highs, and a 0–100 `strength` = the directional
+ * consistency of the last `strengthLen` bars relative to the MA (how one-sided the move is).
+ */
+export function phoenix(highs: number[], lows: number[], closes: number[], smoothLen = 20, swing = 4, strengthLen = 14): Phoenix {
+  const n = closes.length
+  const ma = hma(closes, smoothLen)
+  const L = Math.max(1, Math.round(swing))
+  const signals: PhoenixSig[] = []
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) { if (j === i) continue; if (highs[j] > highs[i]) isH = false; if (lows[j] < lows[i]) isL = false }
+    if (isH) signals.push({ index: i, dir: 'S' })
+    if (isL) signals.push({ index: i, dir: 'L' })
+  }
+  const sl = Math.max(2, Math.round(strengthLen))
+  let above = 0, below = 0, cnt = 0
+  for (let i = Math.max(0, n - sl); i < n; i++) { if (ma[i] == null) continue; cnt++; if (closes[i] > (ma[i] as number)) above++; else below++ }
+  const strength = cnt > 0 ? Math.round(100 * Math.abs(above - below) / cnt) : 0
+  return { ma, signals, strength }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

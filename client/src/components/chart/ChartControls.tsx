@@ -653,6 +653,8 @@ const IND_LIST: IndMeta[] = [
   { id: 'okeanos',  ico: '🌊', name: 'OKEANOS',           desc: 'Forex-Lines ribbon — fan + centre + rails + signals (Zeus original)', hasGenericSettings: true },
   { id: 'aurora',   ico: '🌌', name: 'AURORA',            desc: 'Glowing momentum cloud behind price (Zeus original)', hasGenericSettings: true },
   { id: 'argus',    ico: '👁️', name: 'ARGUS',             desc: 'Multi-timeframe × multi-indicator matrix HUD (Zeus original)', hasGenericSettings: false },
+  { id: 'orion',    ico: '🏹', name: 'ORION',             desc: 'Trade Hunter — MA-fill cloud + arrows + buy/sell power (Zeus original)', hasGenericSettings: true },
+  { id: 'phoenix',  ico: '🔥', name: 'PHOENIX',           desc: 'Recolours candles yellow/red + MA + S/L + strength (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

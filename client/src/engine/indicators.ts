@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -442,6 +442,26 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (show) { initArgusHud(); updateArgus() }
       else if (w._argusHud) w._argusHud.style.display = 'none'
       break
+    case 'orion':
+      if (show) { initOrionSeries(); updateOrion() }
+      else {
+        ;(w._orAll || []).forEach((sx: any) => { if (sx) { try { sx.applyOptions({ visible: false }); if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
+        if (w._orionHud) w._orionHud.style.display = 'none'
+      }
+      break
+    case 'phoenix':
+      if (show) {
+        // recolour the candles fire yellow/red — save the current colours to restore later
+        if (!w._phoenixPrev && w.cSeries) { try { const o = w.cSeries.options(); w._phoenixPrev = { upColor: o.upColor, downColor: o.downColor, borderUpColor: o.borderUpColor, borderDownColor: o.borderDownColor, wickUpColor: o.wickUpColor, wickDownColor: o.wickDownColor } } catch (_) { } }
+        try { w.cSeries && w.cSeries.applyOptions({ upColor: '#ffd600', downColor: '#ff3b30', borderUpColor: '#ffd600', borderDownColor: '#ff3b30', wickUpColor: '#ffd60099', wickDownColor: '#ff3b3099' }) } catch (_) { }
+        initPhoenixSeries(); updatePhoenix()
+      } else {
+        if (w._phoenixPrev && w.cSeries) { try { w.cSeries.applyOptions(w._phoenixPrev) } catch (_) { } w._phoenixPrev = null }
+        ;[w.phMaS, w.phMarkS].forEach((sx: any) => { if (sx) { try { sx.applyOptions({ visible: false }); if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
+        const px = document.getElementById('phoenixChart'); if (px) px.style.display = 'none'
+        if (w._phoenixHud) w._phoenixHud.style.display = 'none'
+      }
+      break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
       else {
@@ -570,7 +590,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %', meanPeriod: 'Mean Period', zThr: 'Z Threshold', rsiHi: 'RSI High', rsiLo: 'RSI Low', atrLen: 'ATR Length', bandMult: 'Band ×ATR', spacing: 'Fan Spacing'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %', meanPeriod: 'Mean Period', zThr: 'Z Threshold', rsiHi: 'RSI High', rsiLo: 'RSI Low', atrLen: 'ATR Length', bandMult: 'Band ×ATR', spacing: 'Fan Spacing', powerLen: 'Power Length', strengthLen: 'Strength Length'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -2572,6 +2592,94 @@ export function updateArgus(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ORION — invented "Trade-Hunter" system (main-chart): MA-Filling cloud (blue
+// bull / red bear) + buy/sell swing arrows + Buy/Sell Power HUD.
+// ═══════════════════════════════════════════════════════════════
+
+const _OR_FILL = 6
+
+export function initOrionSeries(): void {
+  if (w.orFastS || !w.mainChart) return
+  const ln = (color: string, lw: number) => w.mainChart.addLineSeries({ color, lineWidth: lw, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.orFill = []
+  for (let i = 0; i < _OR_FILL; i++) w.orFill.push(ln('rgba(0,0,0,0)', 2))   // interpolated fill bands (coloured per-point)
+  w.orSlowS = ln('rgba(150,170,200,0.5)', 1)
+  w.orFastS = ln('rgba(0,0,0,0)', 2)
+  w.orMarkS = ln('rgba(0,0,0,0)', 1)
+  w._orAll = [...w.orFill, w.orSlowS, w.orFastS, w.orMarkS]
+  // Buy/Sell Power HUD (bottom-right)
+  const mc = document.getElementById('mc')
+  if (mc && !w._orionHud) { try { if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative' } catch (_) { } const h = document.createElement('div'); h.id = 'orionHud'; h.className = 'orion-hud'; mc.appendChild(h); w._orionHud = h }
+}
+export function updateOrion(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initOrionSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.orion || {}
+  const r = _calcORION(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), Math.round(s.fast) || 10, Math.round(s.slow) || 30, Math.round(s.swing) || 3, Math.round(s.powerLen) || 20)
+  const fast: any[] = [], slow: any[] = []
+  const fills: any[][] = Array.from({ length: _OR_FILL }, () => [])
+  for (let i = 0; i < r.fast.length; i++) {
+    if (r.fast[i] == null || r.slow[i] == null || !k[i]) continue
+    const ef = r.fast[i] as number, es = r.slow[i] as number, t = k[i].time
+    const bull = ef >= es
+    const fillCol = bull ? 'rgba(40,130,255,0.28)' : 'rgba(255,51,85,0.28)'
+    fast.push({ time: t, value: ef, color: bull ? '#2b7bff' : '#ff3355' })
+    slow.push({ time: t, value: es })
+    for (let j = 0; j < _OR_FILL; j++) { const v = es + (ef - es) * (j + 1) / (_OR_FILL + 1); fills[j].push({ time: t, value: v, color: fillCol }) }
+  }
+  const marks = r.signals.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time, position: g.dir === 'buy' ? 'belowBar' : 'aboveBar', shape: g.dir === 'buy' ? 'arrowUp' : 'arrowDown',
+    color: g.dir === 'buy' ? '#2b7bff' : '#ff3355',
+  }))
+  try {
+    w.orFastS.setData(fast); w.orSlowS.setData(slow)
+    for (let j = 0; j < _OR_FILL; j++) w.orFill[j].setData(fills[j])
+    w.orMarkS.setData(slow); w.orMarkS.setMarkers(marks)
+    ;(w._orAll || []).forEach((sx: any) => sx && sx.applyOptions({ visible: true }))
+  } catch (_) { }
+  if (w._orionHud) {
+    w._orionHud.style.display = ''
+    w._orionHud.innerHTML = `<div style="color:#f0c040;font-weight:700;margin-bottom:2px">🏹 BUY/SELL POWER</div>` +
+      `<div style="color:#26ff9a">Buy = ${r.buyPct}%</div>` +
+      `<div style="color:#ff5277">Sell = ${r.sellPct}% ${r.sellPct > r.buyPct ? 'Dn' : 'Up'}</div>`
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHOENIX — invented "Impossible" system (RECOLOURS the candles yellow/red):
+// smoothed MA + S/L swing labels + strength meter HUD + momentum oscillator pane.
+// ═══════════════════════════════════════════════════════════════
+
+export function initPhoenixSeries(): void {
+  if (w.phMaS || !w.mainChart) return
+  w.phMaS = w.mainChart.addLineSeries({ color: '#eceff1', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.phMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  const mc = document.getElementById('mc')
+  if (mc && !w._phoenixHud) { try { if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative' } catch (_) { } const h = document.createElement('div'); h.id = 'phoenixHud'; h.className = 'phoenix-hud'; mc.appendChild(h); w._phoenixHud = h }
+}
+export function updatePhoenix(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initPhoenixSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.phoenix || {}
+  const r = _calcPHOENIX(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.smoothLen) || 20, Math.round(s.swing) || 4, Math.round(s.strengthLen) || 14)
+  const ma: any[] = []
+  for (let i = 0; i < r.ma.length; i++) { if (r.ma[i] == null || !k[i]) continue; ma.push({ time: k[i].time, value: r.ma[i] }) }
+  const marks = r.signals.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time, position: g.dir === 'S' ? 'aboveBar' : 'belowBar', shape: 'square',
+    color: g.dir === 'S' ? '#ff3b30' : '#ffd600', text: g.dir,
+  }))
+  try { w.phMaS.setData(ma); w.phMarkS.setData(ma.length ? ma : k.map((b: any) => ({ time: b.time, value: b.close }))); w.phMarkS.setMarkers(marks); w.phMaS.applyOptions({ visible: true }); w.phMarkS.applyOptions({ visible: true }) } catch (_) { }
+  // strength meter HUD (bottom-left)
+  if (w._phoenixHud) {
+    w._phoenixHud.style.display = ''
+    const seg = Math.round(r.strength / 10)
+    const col = r.strength >= 70 ? '#00e676' : r.strength >= 40 ? '#ffab40' : '#90a4ae'
+    const bars = `<span style="color:${col}">${'▰'.repeat(seg)}</span><span style="color:#33414d">${'▱'.repeat(10 - seg)}</span>`
+    w._phoenixHud.innerHTML = `<div style="color:#ffd600;font-weight:700;margin-bottom:2px">🔥 PHOENIX</div><div>${bars} ${r.strength}%</div>`
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2646,6 +2754,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.okeanos) updateOkeanos()
   if (w.S.activeInds.aurora) updateAurora()
   if (w.S.activeInds.argus) updateArgus()
+  if (w.S.activeInds.orion) updateOrion()
+  if (w.S.activeInds.phoenix) updatePhoenix()
 }
 
 export function renderActBar(): void {
@@ -2670,7 +2780,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600' }
   return map[id] || '#888'
 }
 

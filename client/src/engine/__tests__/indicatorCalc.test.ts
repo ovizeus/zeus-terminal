@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus, orion, phoenix } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -912,6 +912,30 @@ describe('argus', () => {
     const r = argus(s.o, s.h, s.l, s.c, s.v, [1, 2, 4, 8, 16, 32])
     expect(r.trend).toBe('DOWN')
     expect(r.pctUp).toBeLessThan(50)
+  })
+})
+
+describe('orion', () => {
+  it('computes fast/slow EMAs, swing arrows, and buy-dominant power on a rising market', () => {
+    const c = [10, 11, 12, 11, 13, 14, 13, 15, 16, 15, 17, 18, 17, 19, 20]
+    const r = orion(c, c, c, c.map(() => 100), 5, 10, 1, 10)
+    expect(r.fast[14]).not.toBeNull(); expect(r.slow[14]).not.toBeNull()
+    expect(r.signals.some((s) => s.dir === 'buy')).toBe(true)
+    expect(r.signals.some((s) => s.dir === 'sell')).toBe(true)
+    expect(r.buyPct).toBeGreaterThan(50)
+    expect(Math.round(r.buyPct + r.sellPct)).toBe(100)
+  })
+})
+
+describe('phoenix', () => {
+  it('marks L at swing lows / S at swing highs and reads high strength on a one-sided trend', () => {
+    const up = Array.from({ length: 60 }, (_, i) => 100 + i)
+    const r = phoenix(up.map((c) => c + 1), up.map((c) => c - 1), up, 20, 4, 14)
+    expect(r.strength).toBeGreaterThan(60)          // strongly one-sided (above MA)
+    const zig = [10, 12, 11, 14, 13, 16, 12, 9, 11, 8]
+    const z = phoenix(zig, zig, zig, 5, 1, 5)
+    expect(z.signals.some((s) => s.dir === 'L')).toBe(true)
+    expect(z.signals.some((s) => s.dir === 'S')).toBe(true)
   })
 })
 

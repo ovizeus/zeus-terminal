@@ -1874,6 +1874,9 @@ export let okCenterS: any = null, okOutUpS: any = null, okOutLoS: any = null, ok
 export let _auroraSeries: any = null, auroraMarkS: any = null
 // [2026-06-16] ARGUS multi-timeframe matrix HUD (DOM overlay on the chart)
 export let _argusHud: any = null
+// [2026-06-16] ORION Trade-Hunter (fill/MAs/arrows + power HUD) + PHOENIX (candle recolor + MA + S/L + strength HUD)
+export let orFastS: any = null, orSlowS: any = null, orMarkS: any = null, orFill: any[] = [], _orAll: any[] = [], _orionHud: any = null
+export let phMaS: any = null, phMarkS: any = null, _phoenixHud: any = null, _phoenixPrev: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1994,6 +1997,10 @@ export const IND_SETTINGS: any = {
   aurora: { period: 20 },
   // [2026-06-16] ARGUS — multi-timeframe × multi-indicator matrix HUD (iPanel-style)
   argus: {},
+  // [2026-06-16] ORION — Trade-Hunter: MA-filling cloud + arrows + buy/sell power
+  orion: { fast: 10, slow: 30, swing: 3, powerLen: 20 },
+  // [2026-06-16] PHOENIX — recolours candles yellow/red + MA + S/L + strength
+  phoenix: { smoothLen: 20, swing: 4, strengthLen: 14 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

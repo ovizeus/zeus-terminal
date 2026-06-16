@@ -5228,6 +5228,9 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .argus-c { display: inline-block; width: 30px; text-align: center; font-weight: 700 }
 .argus-h { color: #7a9ab8; font-weight: 600; font-size: 9px }
 .argus-foot { font-size: 10px; text-align: center }
+/* [2026-06-16] ORION buy/sell-power HUD (bottom-right) + PHOENIX strength HUD (bottom-left) */
+.orion-hud { position: absolute; bottom: 12px; right: 12px; z-index: 30; padding: 6px 10px; border-radius: 7px; background: rgba(10, 15, 22, 0.88); border: 1px solid #f0c04044; font: 11px/1.4 ui-monospace, Menlo, monospace; color: #cfe; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
+.phoenix-hud { position: absolute; bottom: 12px; left: 12px; z-index: 30; padding: 6px 10px; border-radius: 7px; background: rgba(10, 15, 22, 0.88); border: 1px solid #ffd60044; font: 11px/1.4 ui-monospace, Menlo, monospace; color: #cfe; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
 .ind-row-name { font-size: 10px; color: var(--whi); font-weight: 600 }
 .ind-row-desc { font-size: 11px; color: var(--dim); margin-top: 1px }
 .ind-toggle { width: 36px; height: 20px; background: var(--brd); border-radius: 20px; position: relative; transition: .3s; border: 1px solid #333; flex-shrink: 0; cursor: pointer }

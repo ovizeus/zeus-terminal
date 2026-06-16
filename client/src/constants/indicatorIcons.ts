@@ -95,6 +95,8 @@ export const IND_ICONS: Record<string, string> = {
   okeanos: g(p('M2 6c2-2 4 2 6 0s4-2 6 0') + p('M2 9c2-2 4 2 6 0s4-2 6 0') + p('M2 12c2-2 4 2 6 0s4-2 6 0')), // stacked ribbon waves
   aurora: g('<path d="M2 13c2-6 4-8 6-8s4 2 6 8z" fill="currentColor" stroke="none" opacity="0.8"/>'), // glowing cloud
   argus: g(p('M8 4C4 4 2 8 2 8s2 4 6 4 6-4 6-4-2-4-6-4z') + dot(8, 8, 1.8)), // all-seeing eye (matrix watcher)
+  orion: g(p('M13 3l-9 9') + p('M13 3l-4 1 3 3z') + p('M4 12l-1.5 1.5') + dot(4, 12, 0.8)), // hunter's arrow
+  phoenix: g(p('M8 2c2 3-1 4 0 6 1-1 2-1 2-3 2 2 1 5-1 7 1 0 2-1 2-3 1 4-2 6-5 6s-5-3-5-6c0-4 4-5 7-7z') ), // rising phoenix / flame
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop
