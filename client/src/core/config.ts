@@ -151,6 +151,7 @@ export const INDICATORS: any[] = [
   { id: 'eos', ico: _ZI.wave, name: 'EOS', desc: 'Divergence detector — price vs momentum 🌅', cat: 'momentum', def: false },
   { id: 'pantheon', ico: _ZI.scope, name: 'PANTHEON', desc: 'Max-confluence meter — fuses the arsenal 🏛️', cat: 'momentum', def: false },
   { id: 'aegis', ico: _ZI.dia, name: 'AEGIS', desc: 'Confluence-gated entry trigger (brain-backed) 🛡️', cat: 'trend', def: false },
+  { id: 'selene', ico: _ZI.wave, name: 'SELENE', desc: 'Dominant-cycle oscillator — market rhythm 🌙', cat: 'momentum', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

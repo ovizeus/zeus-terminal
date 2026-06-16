@@ -68,6 +68,7 @@ export const IND_ICONS: Record<string, string> = {
   eos: g(p('M2 4l5 4 7-5') + p('M2 9l5 3 7-2')), // diverging lines (price up / momentum flat)
   pantheon: g(p('M2 5l6-3 6 3') + p('M3 5v7M6 5v7M10 5v7M13 5v7') + p('M2 13h12')), // temple columns (council)
   aegis: g(p('M8 1l5 2v5c0 4-3 6-5 7-2-1-5-3-5-7V3z') + p('M6 8l1.5 1.5L10 6')), // shield + check
+  selene: g(p('M10 2a5 5 0 100 12A6 6 0 0110 2z') + p('M2 13c1.5-3 3-3 4.5 0')), // crescent moon over a tide wave
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

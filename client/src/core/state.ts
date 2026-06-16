@@ -1832,6 +1832,8 @@ export let _atlasChart: any = null, _atlasSeries: any = null, _atlasInited = fal
 export let eosS: any = null
 export let _pantheonChart: any = null, _pantheonSeries: any = null, _pantheonInited = false
 export let aegisMarkS: any = null, aegisStopS: any = null
+// [2026-06-16] SELENE dominant-cycle oscillator pane
+export let _seleneChart: any = null, _seleneSeries: any = null, _seleneMidS: any = null, _seleneInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1898,6 +1900,8 @@ export const IND_SETTINGS: any = {
   pantheon: {},
   // [2026-06-16] AEGIS — confluence-gated entry trigger
   aegis: { thr: 0.4, atrMult: 1.5 },
+  // [2026-06-16] SELENE — dominant-cycle oscillator
+  selene: { detrendLen: 20, minP: 8, maxP: 60 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

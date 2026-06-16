@@ -626,6 +626,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'eos',      ico: '🌅', name: 'EOS',              desc: 'Divergence detector — price vs momentum (Zeus original)', hasGenericSettings: true },
   { id: 'pantheon', ico: '🏛️', name: 'PANTHEON',         desc: 'Max-confluence meter — fuses the whole arsenal (Zeus original)', hasGenericSettings: true },
   { id: 'aegis',    ico: '🛡️', name: 'AEGIS',            desc: 'Confluence-gated entry trigger, brain-backed (Zeus original)', hasGenericSettings: true },
+  { id: 'selene',   ico: '🌙', name: 'SELENE',           desc: 'Dominant-cycle oscillator — market rhythm (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

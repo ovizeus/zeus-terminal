@@ -838,6 +838,50 @@ export function aegis(highs: number[], lows: number[], closes: number[], volumes
   return out
 }
 
+export interface Selene { wave: (number | null)[]; period: number }
+
+/**
+ * SELENE — the moon that moves the tides (invented for Zeus). A dominant-cycle
+ * oscillator: it detrends price (price − SMA) to isolate the rhythmic component, then
+ * finds the DOMINANT CYCLE length via autocorrelation (the lag in [minP, maxP] whose
+ * detrended series best repeats). The `wave` is that detrended component normalised by
+ * its rolling volatility — a clean oscillator around 0: near its trough = cycle low
+ * (buy zone), near its peak = cycle high (sell zone). `period` is the measured cycle
+ * length in bars, so you know the market's current rhythm.
+ */
+export function selene(closes: number[], detrendLen = 20, minP = 8, maxP = 60): Selene {
+  const n = closes.length
+  const wave: (number | null)[] = new Array(n).fill(null)
+  const base = sma(closes, detrendLen)
+  const detr = new Array(n).fill(NaN)
+  for (let i = 0; i < n; i++) if (base[i] != null) detr[i] = closes[i] - (base[i] as number)
+  // dominant cycle: autocorrelation peak over candidate lags
+  const idx: number[] = []
+  for (let i = 0; i < n; i++) if (!isNaN(detr[i])) idx.push(i)
+  let period = 0, bestAc = -Infinity
+  let denom = 0
+  for (const i of idx) denom += detr[i] * detr[i]
+  if (idx.length > minP + 2 && denom > 0) {
+    for (let lag = Math.round(minP); lag <= Math.round(maxP); lag++) {
+      let num = 0, cnt = 0
+      for (const i of idx) { if (i - lag >= 0 && !isNaN(detr[i - lag])) { num += detr[i] * detr[i - lag]; cnt++ } }
+      if (cnt <= 10) continue
+      const ac = num / denom
+      if (ac > bestAc) { bestAc = ac; period = lag }
+    }
+  }
+  // normalise detrended price by its rolling volatility → unit oscillator
+  const L = Math.max(2, Math.round(detrendLen))
+  for (let i = 0; i < n; i++) {
+    if (isNaN(detr[i])) continue
+    let s = 0, c = 0
+    for (let j = Math.max(0, i - L + 1); j <= i; j++) { if (!isNaN(detr[j])) { s += detr[j] * detr[j]; c++ } }
+    const sd = c ? Math.sqrt(s / c) : 0
+    wave[i] = sd > 0 ? Math.max(-3, Math.min(3, detr[i] / sd)) : 0
+  }
+  return { wave, period }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

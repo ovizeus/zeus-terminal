@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -461,6 +461,26 @@ describe('aegis', () => {
     const closes = Array.from({ length: 60 }, (_, i) => 100 + (i % 2 ? 0.2 : -0.2))
     const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
     expect(aegis(highs, lows, closes, vol, 0.4, 1.5)).toEqual([])
+  })
+})
+
+describe('selene', () => {
+  it('recovers the dominant cycle length of a clean sine wave', () => {
+    const closes = Array.from({ length: 200 }, (_, i) => 100 + 10 * Math.sin((2 * Math.PI * i) / 20))
+    const r = selene(closes, 20, 8, 60)
+    expect(r.period).toBeGreaterThanOrEqual(16)
+    expect(r.period).toBeLessThanOrEqual(24) // ≈ 20-bar cycle
+  })
+  it('produces an oscillator that swings both sides of zero', () => {
+    const closes = Array.from({ length: 200 }, (_, i) => 100 + 10 * Math.sin((2 * Math.PI * i) / 20))
+    const w = selene(closes, 20, 8, 60).wave.filter((v) => v != null) as number[]
+    expect(Math.max(...w)).toBeGreaterThan(0.8)
+    expect(Math.min(...w)).toBeLessThan(-0.8)
+  })
+  it('stays near zero on a flat market', () => {
+    const closes = Array.from({ length: 100 }, () => 100)
+    const w = selene(closes, 20).wave
+    expect(Math.abs(w[w.length - 1] as number)).toBeLessThan(0.01)
   })
 })
 
