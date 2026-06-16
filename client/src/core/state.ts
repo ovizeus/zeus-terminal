@@ -1857,6 +1857,9 @@ export let hadesMarkS: any = null, hadesBullTopS: any = null, hadesBullBotS: any
 // [2026-06-16] ATHENA Kalman line + ECHO spectral fit/projection (main-chart overlays)
 export let athenaS: any = null, athenaProjS: any = null
 export let echoFitS: any = null, echoProjS: any = null
+// [2026-06-16] KAIROS Hilbert phase pane + TYCHE Monte-Carlo fan (main-chart overlay)
+export let _kairosChart: any = null, _kairosSeries: any = null, _kairosZeroS: any = null, _kairosInited = false
+export let tycheP50S: any = null, tycheP10S: any = null, tycheP90S: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1955,6 +1958,10 @@ export const IND_SETTINGS: any = {
   athena: { alpha: 0.2, horizon: 8 },
   // [2026-06-16] ECHO — spectral (DFT) harmonic forecast (main-chart overlay)
   echo: { window: 128, harmonics: 3, horizon: 10 },
+  // [2026-06-16] KAIROS — Hilbert-transform cycle-phase clock
+  kairos: { smoothLen: 40 },
+  // [2026-06-16] TYCHE — Monte-Carlo probability fan (main-chart overlay)
+  tyche: { lookback: 100, horizon: 12, sims: 200 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

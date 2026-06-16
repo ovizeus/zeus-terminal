@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -724,6 +724,39 @@ describe('echo', () => {
   })
   it('returns empty when there is not enough data', () => {
     expect(echo(Array.from({ length: 10 }, (_, i) => i), 128).fit).toEqual([])
+  })
+})
+
+describe('kairos', () => {
+  it('sweeps the full phase circle and reads a longer period for a slower cycle', () => {
+    const sine = (P: number) => Array.from({ length: 240 }, (_, i) => 100 + 10 * Math.sin((2 * Math.PI * i) / P))
+    const r = kairos(sine(24), 40)
+    const ph = r.phase.filter((v) => v != null) as number[]
+    expect(Math.max(...ph)).toBeGreaterThan(90)   // sweeps high
+    expect(Math.min(...ph)).toBeLessThan(-90)      // and low → full circle
+    const avgPer = (arr: number[]) => { const v = arr.filter((x) => x != null) as number[]; return v.reduce((a, b) => a + b, 0) / v.length }
+    const per24 = avgPer(r.period as number[]), per12 = avgPer(kairos(sine(12), 40).period as number[])
+    expect(Number.isFinite(per24)).toBe(true); expect(per24).toBeGreaterThan(0)
+    expect(per24).toBeGreaterThan(per12)          // slower cycle → longer measured period
+  })
+})
+
+describe('tyche', () => {
+  it('produces an ordered, widening fan anchored at the last price, and is deterministic', () => {
+    const closes = Array.from({ length: 140 }, (_, i) => 100 + i + (i % 4))
+    const f = tyche(closes, 100, 12, 200, 777)
+    const H = 12
+    expect(f.p10.length).toBe(13); expect(f.p50.length).toBe(13); expect(f.p90.length).toBe(13)
+    expect(f.p10[0]).toBeCloseTo(closes[139], 6) // step 0 = now
+    expect(f.p50[0]).toBeCloseTo(closes[139], 6)
+    // ordering at the horizon
+    expect(f.p90[H]).toBeGreaterThanOrEqual(f.p50[H])
+    expect(f.p50[H]).toBeGreaterThanOrEqual(f.p10[H])
+    // fan widens with time
+    expect(f.p90[H] - f.p10[H]).toBeGreaterThan(f.p90[1] - f.p10[1])
+    // deterministic for the same seed
+    const g = tyche(closes, 100, 12, 200, 777)
+    expect(g.p50).toEqual(f.p50)
   })
 })
 

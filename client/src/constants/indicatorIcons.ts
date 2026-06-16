@@ -84,6 +84,8 @@ export const IND_ICONS: Record<string, string> = {
   hades: g(p('M3 9h4v3H3zM9 4h4v3H9z') + p('M5 9V7h6') + p('M11 7V5')), // stacked demand/supply order-block zones
   athena: g(p('M2 11c3 0 3-5 6-5s3 3 6 1') + dot(4, 11, 0.9) + dot(8, 6, 0.9) + dot(12, 7, 0.9)), // smooth filtered estimate through noisy points
   echo: g(p('M2 8h2M12 8h2') + p('M4 8c0-3 1.5-3 1.5 0s1.5 3 1.5 0 1.5-3 1.5 0 1.5 3 1.5 0')), // resonant harmonic wave
+  kairos: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + p('M8 8l3-2') + p('M8 8V5')), // phase clock dial with hand
+  tyche: g(p('M3 8h2') + p('M5 8l9-4M5 8l9 0M5 8l9 4')), // probability fan opening into the future
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

@@ -1349,6 +1349,76 @@ export function echo(closes: number[], window = 128, harmonics = 3, horizon = 10
   return { fitStart: start, fit, projection }
 }
 
+export interface Kairos { phase: (number | null)[]; period: (number | null)[] }
+
+/**
+ * KAIROS — the opportune moment (invented for Zeus, built on Ehlers' Hilbert transform).
+ * Removes the DC/trend (price − SMA), then applies a Hilbert FIR to get the quadrature
+ * component; the instantaneous PHASE = atan2(Q, I) tells you exactly where in the
+ * dominant cycle price is RIGHT NOW (−180°=trough … 0°=mid-up … +90°=peak), and the
+ * rate of phase rotation gives the instantaneous PERIOD. It's a real-time cycle clock —
+ * distinct from SELENE (autocorrelation period) and ECHO (Fourier spectrum).
+ */
+export function kairos(closes: number[], smoothLen = 40): Kairos {
+  const n = closes.length
+  const base = sma(closes, smoothLen)
+  const detr = new Array(n).fill(NaN)
+  for (let i = 0; i < n; i++) if (base[i] != null) detr[i] = closes[i] - (base[i] as number)
+  const phase: (number | null)[] = new Array(n).fill(null)
+  const period: (number | null)[] = new Array(n).fill(null)
+  let prev: number | null = null
+  for (let i = 6; i < n; i++) {
+    let ok = true
+    for (let d = 0; d <= 6; d++) if (isNaN(detr[i - d])) ok = false
+    if (!ok) { prev = null; continue }
+    const I = detr[i - 3]
+    const Q = 0.0962 * detr[i] + 0.5769 * detr[i - 2] - 0.5769 * detr[i - 4] - 0.0962 * detr[i - 6]
+    const ph = Math.atan2(Q, I) * 180 / Math.PI    // −180..180
+    phase[i] = ph
+    if (prev != null) {
+      let d = ((ph - prev + 540) % 360) - 180        // shortest signed arc
+      const adv = Math.abs(d)
+      if (adv > 0.5) period[i] = Math.max(6, Math.min(80, 360 / adv))
+    }
+    prev = ph
+  }
+  return { phase, period }
+}
+
+export interface Fan { p10: number[]; p50: number[]; p90: number[] }
+
+/**
+ * TYCHE — fortune & chance (invented for Zeus). A MONTE-CARLO probability fan: it
+ * bootstrap-resamples the last `lookback` log-returns to simulate `sims` future price
+ * paths `horizon` bars ahead, then reports the 10th / 50th / 90th percentile envelope at
+ * each step. Because it samples the EMPIRICAL return distribution it captures the
+ * asset's real skew and fat tails — unlike PROMETHEUS's Gaussian √t cone. Seeded PRNG
+ * → deterministic (stable across renders). Arrays length horizon+1 (index 0 = now).
+ */
+export function tyche(closes: number[], lookback = 100, horizon = 12, sims = 200, seed = 12345): Fan {
+  const n = closes.length
+  const last = n ? closes[n - 1] : 0
+  const H = Math.max(1, Math.round(horizon))
+  const start = Math.max(1, n - Math.max(5, Math.round(lookback)))
+  const rets: number[] = []
+  for (let i = start; i < n; i++) { const a = closes[i - 1], b = closes[i]; if (a > 0 && b > 0) rets.push(Math.log(b / a)) }
+  const mkFlat = () => new Array(H + 1).fill(last)
+  if (rets.length < 2) return { p10: mkFlat(), p50: mkFlat(), p90: mkFlat() }
+  let s = (seed >>> 0) || 1
+  const rand = () => { s = (1664525 * s + 1013904223) >>> 0; return s / 4294967296 }
+  const M = Math.max(20, Math.round(sims))
+  const stepVals: number[][] = Array.from({ length: H + 1 }, () => [])
+  for (let m = 0; m < M; m++) {
+    let p = last
+    stepVals[0].push(p)
+    for (let k = 1; k <= H; k++) { p *= Math.exp(rets[Math.floor(rand() * rets.length)]); stepVals[k].push(p) }
+  }
+  const q = (arr: number[], pct: number) => { const a = [...arr].sort((x, y) => x - y); return a[Math.max(0, Math.min(a.length - 1, Math.floor(pct * (a.length - 1))))] }
+  const p10: number[] = [], p50: number[] = [], p90: number[] = []
+  for (let k = 0; k <= H; k++) { p10.push(q(stepVals[k], 0.1)); p50.push(q(stepVals[k], 0.5)); p90.push(q(stepVals[k], 0.9)) }
+  return { p10, p50, p90 }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length
