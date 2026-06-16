@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -544,6 +544,37 @@ describe('mnemosyne', () => {
   })
   it('returns an empty projection when there is not enough history', () => {
     expect(mnemosyne(Array.from({ length: 20 }, (_, i) => i), 20, 12, 5).projection).toEqual([])
+  })
+})
+
+describe('themis', () => {
+  it('keeps |z| small on a clean linear trend (price sits on the regression line)', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i * 0.7)
+    const z = themis(closes, 50).z
+    expect(Math.abs(z[z.length - 1] as number)).toBeLessThan(1)
+  })
+  it('flags a large positive z when the last bar spikes off the equilibrium', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i * 0.7)
+    closes[closes.length - 1] += 12 // sudden over-extension above fair value
+    const r = themis(closes, 50)
+    expect(r.z[r.z.length - 1] as number).toBeGreaterThan(2)
+    expect(r.equilibrium[r.equilibrium.length - 1] as number).toBeLessThan(closes[closes.length - 1])
+  })
+})
+
+describe('erebus', () => {
+  it('is ~0 on a perfectly ordered monotonic series', () => {
+    const closes = Array.from({ length: 80 }, (_, i) => 100 + i)
+    const e = erebus(closes, 60, 3)
+    expect(e[e.length - 1] as number).toBeLessThan(0.05)
+  })
+  it('is higher on a disordered series than on an ordered one', () => {
+    const ordered = Array.from({ length: 80 }, (_, i) => 100 + i)
+    const noisy = Array.from({ length: 80 }, (_, i) => 100 + ((i * 7) % 11) - 5 + ((i * 13) % 5))
+    const eo = erebus(ordered, 60, 3)[79] as number
+    const en = erebus(noisy, 60, 3)[79] as number
+    expect(en).toBeGreaterThan(eo)
+    expect(en).toBeGreaterThan(0.3)
   })
 })
 

@@ -1839,6 +1839,9 @@ export let kratosMarkS: any = null, kratosEntryS: any = null, kratosTpS: any = n
 // [2026-06-16] PROMETHEUS future cone (5 bands) + MNEMOSYNE analog projection line
 export let promCenterS: any = null, promUp1S: any = null, promLo1S: any = null, promUp2S: any = null, promLo2S: any = null
 export let mnemoS: any = null
+// [2026-06-16] THEMIS z-score pane + EREBUS entropy pane
+export let _themisChart: any = null, _themisSeries: any = null, _themisZeroS: any = null, _themisHiS: any = null, _themisLoS: any = null, _themisInited = false
+export let _erebusChart: any = null, _erebusSeries: any = null, _erebusMidS: any = null, _erebusInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1913,6 +1916,10 @@ export const IND_SETTINGS: any = {
   prometheus: { atrP: 14, horizon: 12, drift: 1 },
   // [2026-06-16] MNEMOSYNE — analog forecast (historical pattern continuation)
   mnemosyne: { queryLen: 20, horizon: 12 },
+  // [2026-06-16] THEMIS — regression-equilibrium stretch (z-score)
+  themis: { period: 50 },
+  // [2026-06-16] EREBUS — permutation-entropy market-disorder meter
+  erebus: { period: 60, dim: 3 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

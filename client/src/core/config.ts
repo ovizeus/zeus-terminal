@@ -155,6 +155,8 @@ export const INDICATORS: any[] = [
   { id: 'kratos', ico: _ZI.dia, name: 'KRATOS', desc: 'All-in-one trade commander — entry/exit/SL/TP + live HUD ⚔️', cat: 'trend', def: false },
   { id: 'prometheus', ico: _ZI.tgt, name: 'PROMETHEUS', desc: 'Volatility forecast cone — projects future range 🔥', cat: 'vol', def: false },
   { id: 'mnemosyne', ico: _ZI.wave, name: 'MNEMOSYNE', desc: 'Analog forecast — projects best historical match 🧠', cat: 'trend', def: false },
+  { id: 'themis', ico: _ZI.ruler, name: 'THEMIS', desc: 'Equilibrium stretch — regression z-score ⚖️', cat: 'momentum', def: false },
+  { id: 'erebus', ico: _ZI.scope, name: 'EREBUS', desc: 'Market entropy — order vs chaos 🌑', cat: 'momentum', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

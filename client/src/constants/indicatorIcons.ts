@@ -72,6 +72,8 @@ export const IND_ICONS: Record<string, string> = {
   kratos: g(p('M3 3l4 4M13 3l-4 4M3 13l4-4M13 13l-4-4') + p('M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z') + dot(8, 8, 0.8)), // command reticle / crosshair on target
   prometheus: g(p('M3 8h3') + p('M6 8l8-5M6 8l8 5') + p('M6 8l7-1M6 8l7 1')), // forward-opening forecast cone
   mnemosyne: g(p('M2 9c2 0 2-4 4-4s2 4 4 4') + p('M10 9c1.5 0 2-3 3.5-3') + dot(13.5, 6, 0.9)), // past wave continuing into a projected dot
+  themis: g(p('M8 2v12M3 14h10') + p('M3 5h10') + p('M3 5L1.5 8.5h3zM13 5l-1.5 3.5h3z')), // scales of balance (equilibrium)
+  erebus: g(p('M2 8h2l1-3 2 6 2-8 2 8 1-3h2')), // erratic/chaotic disordered signal
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

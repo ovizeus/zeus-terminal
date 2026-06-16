@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -350,6 +350,12 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (w.mnemoS) { w.mnemoS.applyOptions({ visible: show }); if (!show) try { w.mnemoS.setData([]) } catch (_) { } }
       if (show) updateMnemo()
       break
+    case 'themis':
+      { const thx = document.getElementById('themisChart'); if (thx) thx.style.display = show ? '' : 'none'; if (show) initThemisChart() }
+      break
+    case 'erebus':
+      { const erx = document.getElementById('erebusChart'); if (erx) erx.style.display = show ? '' : 'none'; if (show) initErebusChart() }
+      break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
       else {
@@ -478,7 +484,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -743,7 +749,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -1748,6 +1754,65 @@ export function updateMnemo(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// THEMIS — invented regression-equilibrium stretch (z-score) oscillator. Pane.
+// ═══════════════════════════════════════════════════════════════
+
+export function initThemisChart(): void {
+  if (w._themisInited && w._themisChart) { updateThemis(); return }
+  w._themisChart = _createSubChart('themisChart', 60)
+  if (!w._themisChart) return
+  w._themisSeries = w._themisChart.addLineSeries({ color: '#f0c040', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'THEMIS z' })
+  const ref = (c: string) => w._themisChart.addLineSeries({ color: c, lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._themisZeroS = ref('rgba(255,255,255,0.2)'); w._themisHiS = ref('rgba(255,82,119,0.5)'); w._themisLoS = ref('rgba(38,255,154,0.5)')
+  w._themisInited = true
+  updateThemis()
+}
+export function updateThemis(): void {
+  if (!w._themisInited || !w._themisSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.themis?.period) || 50
+  const r = _calcTHEMIS(k.map((b: any) => b.close), p)
+  const data: any[] = [], z0: any[] = [], zhi: any[] = [], zlo: any[] = []
+  for (let i = 0; i < r.z.length; i++) {
+    if (r.z[i] == null || !k[i]) continue
+    const v = r.z[i] as number, a = Math.abs(v)
+    const col = a >= 2 ? (v > 0 ? '#ff1744' : '#00e676') : a >= 1 ? '#ffab40' : '#90a4ae'
+    data.push({ time: k[i].time, value: v, color: col })
+    z0.push({ time: k[i].time, value: 0 }); zhi.push({ time: k[i].time, value: 2 }); zlo.push({ time: k[i].time, value: -2 })
+  }
+  try { w._themisSeries.setData(data); w._themisZeroS.setData(z0); w._themisHiS.setData(zhi); w._themisLoS.setData(zlo); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EREBUS — invented permutation-entropy (market disorder) meter. Pane.
+// green low = ordered/tradeable · red high = chaotic/noise.
+// ═══════════════════════════════════════════════════════════════
+
+export function initErebusChart(): void {
+  if (w._erebusInited && w._erebusChart) { updateErebus(); return }
+  w._erebusChart = _createSubChart('erebusChart', 60)
+  if (!w._erebusChart) return
+  w._erebusSeries = w._erebusChart.addLineSeries({ color: '#b388ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'EREBUS H' })
+  w._erebusMidS = w._erebusChart.addLineSeries({ color: 'rgba(255,255,255,0.2)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._erebusInited = true
+  updateErebus()
+}
+export function updateErebus(): void {
+  if (!w._erebusInited || !w._erebusSeries || !w.S.klines.length) return
+  const k = w.S.klines, s = w.IND_SETTINGS.erebus || {}
+  const h = _calcEREBUS(k.map((b: any) => b.close), Math.round(s.period) || 60, Math.round(s.dim) || 3)
+  const data: any[] = [], mid: any[] = []
+  for (let i = 0; i < h.length; i++) {
+    if (h[i] == null || !k[i]) continue
+    const v = h[i] as number
+    // green ordered (low) → amber → red chaotic (high)
+    const col = v <= 0.45 ? '#00e676' : v <= 0.7 ? '#ffab40' : '#ff1744'
+    data.push({ time: k[i].time, value: v, color: col })
+    mid.push({ time: k[i].time, value: 0.5 })
+  }
+  try { w._erebusSeries.setData(data); w._erebusMidS.setData(mid); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1799,6 +1864,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.kratos) updateKratos()
   if (w.S.activeInds.prometheus) updatePrometheus()
   if (w.S.activeInds.mnemosyne) updateMnemo()
+  if (w.S.activeInds.themis && w._themisInited) updateThemis()
+  if (w.S.activeInds.erebus && w._erebusInited) updateErebus()
 }
 
 export function renderActBar(): void {
@@ -1823,7 +1890,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff' }
   return map[id] || '#888'
 }
 

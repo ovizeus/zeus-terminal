@@ -999,6 +999,72 @@ export function mnemosyne(closes: number[], queryLen = 20, horizon = 12, minGap 
   return { matchIndex, similarity, projection }
 }
 
+export interface Themis { z: (number | null)[]; equilibrium: (number | null)[] }
+
+/**
+ * THEMIS — equilibrium & balance (invented for Zeus). Fits a least-squares LINEAR
+ * REGRESSION over the last `period` bars (the market's "fair value" line) and measures
+ * how far the current price is stretched from it, in standard deviations of the
+ * residual (a z-score). |z| ≈ 0 → price sits on fair value; |z| ≥ 2 → a stretched
+ * rubber band, statistically prone to snap back toward equilibrium. Unlike Bollinger
+ * (flat SMA basis) the basis here is the sloped regression, so it stays centred in a
+ * trend and only flags genuine over-extension. Returns the z oscillator + the
+ * equilibrium price line.
+ */
+export function themis(closes: number[], period = 50): Themis {
+  const n = closes.length, p = Math.max(4, Math.round(period))
+  const z: (number | null)[] = new Array(n).fill(null)
+  const equilibrium: (number | null)[] = new Array(n).fill(null)
+  for (let i = p - 1; i < n; i++) {
+    // regress y=close on x=0..p-1 over the window ending at i
+    let sx = 0, sy = 0, sxx = 0, sxy = 0
+    for (let t = 0; t < p; t++) { const y = closes[i - p + 1 + t]; sx += t; sy += y; sxx += t * t; sxy += t * y }
+    const denom = p * sxx - sx * sx
+    const slope = denom === 0 ? 0 : (p * sxy - sx * sy) / denom
+    const intercept = (sy - slope * sx) / p
+    // residual stdev over the window
+    let ss = 0
+    for (let t = 0; t < p; t++) { const fit = intercept + slope * t; const r = closes[i - p + 1 + t] - fit; ss += r * r }
+    const sd = Math.sqrt(ss / p) || 1e-9
+    const eqEnd = intercept + slope * (p - 1)  // regression value at the latest bar
+    equilibrium[i] = eqEnd
+    z[i] = (closes[i] - eqEnd) / sd
+  }
+  return { z, equilibrium }
+}
+
+/**
+ * EREBUS — primordial chaos (invented for Zeus). A market-COMPLEXITY meter via
+ * PERMUTATION ENTROPY (Bandt–Pompe): it looks at the ordinal SHAPE of every length-`dim`
+ * run of bars (which of the values is smallest/largest), counts how varied those shapes
+ * are over the window, and returns Shannon entropy normalised to 0..1. Near 0 = highly
+ * ordered / predictable (a clean directional move → trade it); near 1 = maximally
+ * disordered / random (noise → stand aside). It measures unpredictability itself —
+ * orthogonal to HELIOS (which measures trend persistence).
+ */
+export function erebus(closes: number[], period = 60, dim = 3): (number | null)[] {
+  const n = closes.length
+  const m = Math.max(2, Math.min(5, Math.round(dim)))
+  const win = Math.max(m + 2, Math.round(period))
+  let fact = 1; for (let f = 2; f <= m; f++) fact *= f
+  const out: (number | null)[] = new Array(n).fill(null)
+  const patternKey = (start: number) => {
+    const idx = Array.from({ length: m }, (_, t) => t)
+    idx.sort((a, b) => (closes[start + a] - closes[start + b]) || (a - b)) // stable for ties
+    return idx.join(',')
+  }
+  for (let i = win - 1; i < n; i++) {
+    const counts: Record<string, number> = {}
+    let total = 0
+    for (let j = i - win + 1; j <= i - m + 1; j++) { const key = patternKey(j); counts[key] = (counts[key] || 0) + 1; total++ }
+    if (total <= 0) continue
+    let H = 0
+    for (const key in counts) { const pr = counts[key] / total; H -= pr * Math.log(pr) }
+    out[i] = Math.max(0, Math.min(1, H / Math.log(fact)))
+  }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

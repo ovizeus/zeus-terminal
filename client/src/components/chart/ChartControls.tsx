@@ -630,6 +630,8 @@ const IND_LIST: IndMeta[] = [
   { id: 'kratos',   ico: '⚔️', name: 'KRATOS',           desc: 'All-in-one trade commander — entry/exit/SL/TP + live HUD (Zeus original)', hasGenericSettings: true },
   { id: 'prometheus', ico: '🔥', name: 'PROMETHEUS',      desc: 'Volatility forecast cone — projects future range (Zeus original)', hasGenericSettings: true },
   { id: 'mnemosyne', ico: '🧠', name: 'MNEMOSYNE',        desc: 'Analog forecast — projects the best historical match (Zeus original)', hasGenericSettings: true },
+  { id: 'themis',   ico: '⚖️', name: 'THEMIS',            desc: 'Equilibrium stretch — regression z-score, snap-back (Zeus original)', hasGenericSettings: true },
+  { id: 'erebus',   ico: '🌑', name: 'EREBUS',            desc: 'Market entropy — order vs chaos meter (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
