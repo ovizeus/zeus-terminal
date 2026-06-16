@@ -1869,6 +1869,9 @@ export let anMidS: any = null, anUpS: any = null, anLoS: any = null
 // [2026-06-16] PSYCHE emotion-spectrum pane + HUBRIS psychology-extreme markers
 export let _psycheChart: any = null, _psycheSeries: any = null, _psycheInited = false
 export let hubrisS: any = null
+// [2026-06-16] OKEANOS Forex-Lines ribbon (fan/centre/rails/signals) + AURORA glow cloud
+export let okCenterS: any = null, okOutUpS: any = null, okOutLoS: any = null, okMarkS: any = null, okFanUp: any[] = [], okFanLo: any[] = [], _okAll: any[] = []
+export let _auroraSeries: any = null, auroraMarkS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1983,6 +1986,10 @@ export const IND_SETTINGS: any = {
   psyche: { period: 20 },
   // [2026-06-16] HUBRIS — contrarian euphoria/capitulation extremes
   hubris: { rsiPeriod: 14, meanPeriod: 20, zThr: 1.8, rsiHi: 72, rsiLo: 28 },
+  // [2026-06-16] OKEANOS — Forex-Lines ribbon system (fan + centre + rails + signals)
+  okeanos: { period: 20, atrLen: 14, bandMult: 3.5, spacing: 0.6 },
+  // [2026-06-16] AURORA — glowing momentum cloud (vivid per-bar glow + flips)
+  aurora: { period: 20 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

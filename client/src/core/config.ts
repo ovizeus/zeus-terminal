@@ -175,6 +175,8 @@ export const INDICATORS: any[] = [
   { id: 'ananke', ico: _ZI.tgt, name: 'ANANKE', desc: 'Confluence channel — width=vol, colour=confluence ⛓️', cat: 'trend', def: false },
   { id: 'psyche', ico: _ZI.wave, name: 'PSYCHE', desc: 'Market emotion spectrum — fear↔greed heatmap 🧬', cat: 'momentum', def: false },
   { id: 'hubris', ico: _ZI.siren, name: 'HUBRIS', desc: 'Euphoria & capitulation extremes (contrarian) 👑', cat: 'momentum', def: false },
+  { id: 'okeanos', ico: _ZI.wave, name: 'OKEANOS', desc: 'Forex-Lines ribbon — fan + centre + rails + signals 🌊', cat: 'trend', def: false },
+  { id: 'aurora', ico: _ZI.tgt, name: 'AURORA', desc: 'Glowing momentum cloud behind price 🌌', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

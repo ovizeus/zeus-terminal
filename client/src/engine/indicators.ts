@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -428,6 +428,16 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (w.hubrisS) { w.hubrisS.applyOptions({ visible: show }); if (!show) try { w.hubrisS.setMarkers([]); w.hubrisS.setData([]) } catch (_) { } }
       if (show) updateHubris()
       break
+    case 'okeanos':
+      if (show) initOkeanosSeries()
+      ;(w._okAll || []).forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
+      if (show) updateOkeanos()
+      break
+    case 'aurora':
+      if (show) initAuroraSeries()
+      ;[w._auroraSeries, w.auroraMarkS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
+      if (show) updateAurora()
+      break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
       else {
@@ -556,7 +566,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %', meanPeriod: 'Mean Period', zThr: 'Z Threshold', rsiHi: 'RSI High', rsiLo: 'RSI Low'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %', meanPeriod: 'Mean Period', zThr: 'Z Threshold', rsiHi: 'RSI High', rsiLo: 'RSI Low', atrLen: 'ATR Length', bandMult: 'Band ×ATR', spacing: 'Fan Spacing'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -2428,6 +2438,79 @@ export function updateHubris(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// OKEANOS — invented "Forex-Lines"-style ribbon system (main-chart overlay):
+// dotted red/blue fan + green centre + solid outer rails + yellow signal dots.
+// ═══════════════════════════════════════════════════════════════
+
+const _OK_LINES = 5
+
+export function initOkeanosSeries(): void {
+  if (w.okCenterS || !w.mainChart) return
+  const mk = (color: string, lineWidth: number, lineStyle: number) => w.mainChart.addLineSeries({ color, lineWidth, lineStyle, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.okFanUp = []; w.okFanLo = []
+  for (let i = 0; i < _OK_LINES; i++) { w.okFanUp.push(mk('rgba(255,64,64,0.7)', 1, 1)); w.okFanLo.push(mk('rgba(64,140,255,0.7)', 1, 1)) } // dotted fan
+  w.okOutUpS = mk('#ff3030', 2, 0); w.okOutLoS = mk('#2b7bff', 2, 0)   // solid outer rails
+  w.okCenterS = mk('#00e676', 2, 0)                                     // green centre
+  w.okMarkS = mk('rgba(0,0,0,0)', 1, 0)                                 // signal-dot carrier
+  w._okAll = [...w.okFanUp, ...w.okFanLo, w.okOutUpS, w.okOutLoS, w.okCenterS, w.okMarkS]
+}
+export function updateOkeanos(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initOkeanosSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.okeanos || {}
+  const period = Math.round(s.period) || 20, atrLen = Math.round(s.atrLen) || 14, bandMult = s.bandMult ?? 3.5, spacing = s.spacing ?? 0.6
+  const r = _calcOKEANOS(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), period, atrLen, bandMult)
+  const cen: any[] = [], outU: any[] = [], outL: any[] = []
+  const fanU: any[][] = Array.from({ length: _OK_LINES }, () => []), fanL: any[][] = Array.from({ length: _OK_LINES }, () => [])
+  for (let i = 0; i < r.center.length; i++) {
+    if (r.center[i] == null || r.atr[i] == null || !k[i]) continue
+    const c = r.center[i] as number, a = r.atr[i] as number, t = k[i].time
+    cen.push({ time: t, value: c })
+    outU.push({ time: t, value: c + bandMult * a }); outL.push({ time: t, value: c - bandMult * a })
+    for (let j = 0; j < _OK_LINES; j++) { const off = (j + 1) * spacing * a; fanU[j].push({ time: t, value: c + off }); fanL[j].push({ time: t, value: c - off }) }
+  }
+  const marks = r.signals.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time, position: g.dir === 'sell' ? 'aboveBar' : 'belowBar', shape: 'circle',
+    color: '#ffd600', text: g.dir === 'sell' ? '●' : '●',
+  }))
+  try {
+    w.okCenterS.setData(cen); w.okOutUpS.setData(outU); w.okOutLoS.setData(outL)
+    for (let j = 0; j < _OK_LINES; j++) { w.okFanUp[j].setData(fanU[j]); w.okFanLo[j].setData(fanL[j]) }
+    w.okMarkS.setData(cen); w.okMarkS.setMarkers(marks)
+  } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AURORA — invented glowing momentum CLOUD (main-chart, vivid per-bar glow):
+// green-teal up / red-magenta down behind price + flip arrows.
+// ═══════════════════════════════════════════════════════════════
+
+export function initAuroraSeries(): void {
+  if (w._auroraSeries || !w.mainChart) return
+  w._auroraSeries = w.mainChart.addHistogramSeries({ priceScaleId: 'aurora', base: 0, priceLineVisible: false, lastValueVisible: false })
+  try { w._auroraSeries.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 } }) } catch (_) { }
+  w.auroraMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateAurora(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initAuroraSeries()
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.aurora?.period) || 20
+  const r = _calcAURORA(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), p)
+  const cloud: any[] = []
+  for (let i = 0; i < r.score.length; i++) {
+    if (r.score[i] == null || !k[i]) continue
+    const sc = r.score[i] as number, a = Math.abs(sc)
+    const col = sc >= 0 ? `rgba(0,230,140,${(0.1 + 0.45 * a).toFixed(3)})` : `rgba(255,45,149,${(0.1 + 0.45 * a).toFixed(3)})`
+    cloud.push({ time: k[i].time, value: 1, color: col })
+  }
+  const marks = r.flips.filter((f: any) => k[f.index]).map((f: any) => ({
+    time: k[f.index].time, position: f.dir === 'up' ? 'belowBar' : 'aboveBar', shape: f.dir === 'up' ? 'arrowUp' : 'arrowDown',
+    color: f.dir === 'up' ? '#00e68c' : '#ffd600', text: f.dir === 'up' ? '▲' : '▼',
+  }))
+  try { w._auroraSeries.setData(cloud); w.auroraMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.auroraMarkS.setMarkers(marks) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2499,6 +2582,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.ananke) updateAnanke()
   if (w.S.activeInds.psyche && w._psycheInited) updatePsyche()
   if (w.S.activeInds.hubris) updateHubris()
+  if (w.S.activeInds.okeanos) updateOkeanos()
+  if (w.S.activeInds.aurora) updateAurora()
 }
 
 export function renderActBar(): void {
@@ -2523,7 +2608,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c' }
   return map[id] || '#888'
 }
 

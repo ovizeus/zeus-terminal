@@ -1614,6 +1614,63 @@ export function hubris(_highs: number[], _lows: number[], closes: number[], volu
   return out
 }
 
+export interface Okeanos { center: (number | null)[]; atr: (number | null)[]; bull: boolean[]; signals: { index: number; dir: 'buy' | 'sell' }[] }
+
+/**
+ * OKEANOS — the world-encircling river (invented for Zeus, modelled on the "Forex Lines"
+ * MT4 system from the reference). A central EMA equilibrium with a fanned multi-band
+ * envelope (drawn ±i·spacing·ATR in the engine), a trend read (`bull` = price above the
+ * centre), and reversal `signals` when price stretches beyond the outer ±bandMult·ATR
+ * band (overbought → sell dot, oversold → buy dot). The pure layer exposes the centre,
+ * ATR, trend and signals; the engine renders the dotted red/blue fan + green centre +
+ * solid outer rails + yellow signal dots.
+ */
+export function okeanos(highs: number[], lows: number[], closes: number[], period = 20, atrLen = 14, bandMult = 3.5): Okeanos {
+  const n = closes.length
+  const center = ema(closes, period), a = atr(highs, lows, closes, atrLen)
+  const bull: boolean[] = new Array(n).fill(false)
+  const signals: { index: number; dir: 'buy' | 'sell' }[] = []
+  for (let i = 0; i < n; i++) {
+    if (center[i] == null) continue
+    bull[i] = closes[i] > (center[i] as number)
+    if (a[i] != null) {
+      const c = center[i] as number, band = bandMult * (a[i] as number)
+      if (closes[i] > c + band) signals.push({ index: i, dir: 'sell' })
+      else if (closes[i] < c - band) signals.push({ index: i, dir: 'buy' })
+    }
+  }
+  return { center, atr: a, bull, signals }
+}
+
+export interface Aurora { score: (number | null)[]; flips: { index: number; dir: 'up' | 'down' }[] }
+
+/**
+ * AURORA — the dawn glow (invented for Zeus, modelled on the glowing "AO cloud" from the
+ * reference). A normalised momentum-cloud score (−1..+1): a MACD-like fast/slow EMA
+ * spread plus price position, both scaled by ATR. The engine paints it as a vivid glow
+ * behind price — green-teal when positive, red-magenta when negative, brightness scaling
+ * with strength — and drops a signal arrow at each sign `flip` (regime change).
+ */
+export function aurora(highs: number[], lows: number[], closes: number[], _volumes: number[], period = 20): Aurora {
+  const n = closes.length
+  const ef = ema(closes, Math.max(2, Math.round(period / 2))), es = ema(closes, period), a = atr(highs, lows, closes, 14)
+  const score: (number | null)[] = new Array(n).fill(null)
+  const flips: { index: number; dir: 'up' | 'down' }[] = []
+  let prevSign = 0
+  for (let i = 0; i < n; i++) {
+    if (ef[i] == null || es[i] == null || a[i] == null) continue
+    const atrI = (a[i] as number) || 1e-9
+    const macdN = Math.max(-1, Math.min(1, ((ef[i] as number) - (es[i] as number)) / atrI))
+    const posN = Math.max(-1, Math.min(1, (closes[i] - (es[i] as number)) / (2 * atrI)))
+    const s = Math.max(-1, Math.min(1, 0.6 * macdN + 0.4 * posN))
+    score[i] = s
+    const sign = s > 0.05 ? 1 : s < -0.05 ? -1 : 0
+    if (sign !== 0 && prevSign !== 0 && sign !== prevSign) flips.push({ index: i, dir: sign > 0 ? 'up' : 'down' })
+    if (sign !== 0) prevSign = sign
+  }
+  return { score, flips }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

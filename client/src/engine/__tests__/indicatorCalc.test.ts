@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -867,6 +867,30 @@ describe('hubris', () => {
   it('stays silent on a calm market', () => {
     const c = Array.from({ length: 50 }, (_, i) => 100 + (i % 2 ? 0.3 : -0.3))
     expect(hubris(c.map((x) => x + 1), c.map((x) => x - 1), c, c.map(() => 100), 5, 10, 1.5, 70, 30)).toEqual([])
+  })
+})
+
+describe('okeanos', () => {
+  it('is bullish with a rising centre on an uptrend and prints a sell dot on a blow-off spike', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i)
+    closes[59] += 40 // far above the centre → beyond the outer band
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const r = okeanos(highs, lows, closes, 20, 14, 3.5)
+    expect(r.bull[58]).toBe(true)
+    expect((r.center[59] as number)).toBeGreaterThan(r.center[30] as number)
+    expect(r.signals.some((s) => s.dir === 'sell')).toBe(true)
+  })
+})
+
+describe('aurora', () => {
+  it('glows positive on an uptrend, negative on a downtrend, and flips on a reversal', () => {
+    const up = Array.from({ length: 60 }, (_, i) => 100 + i)
+    const dn = Array.from({ length: 60 }, (_, i) => 160 - i)
+    const h = (c: number[]) => c.map((x) => x + 1), l = (c: number[]) => c.map((x) => x - 1), v = (c: number[]) => c.map(() => 100)
+    expect(aurora(h(up), l(up), up, v(up), 20).score[59] as number).toBeGreaterThan(0)
+    expect(aurora(h(dn), l(dn), dn, v(dn), 20).score[59] as number).toBeLessThan(0)
+    const turn = [...Array.from({ length: 40 }, (_, i) => 100 + i), ...Array.from({ length: 40 }, (_, i) => 139 - i * 2)]
+    expect(aurora(h(turn), l(turn), turn, v(turn), 20).flips.some((f) => f.dir === 'down')).toBe(true)
   })
 })
 
