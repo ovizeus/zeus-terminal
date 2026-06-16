@@ -134,6 +134,8 @@ export const INDICATORS: any[] = [
   { id: 'chop', ico: _ZI.spider, name: 'Choppiness Index', desc: 'Trending vs ranging', cat: 'vol', def: false },
   // [2026-06-16] KERAUNOS — Zeus original adaptive conviction ribbon
   { id: 'kera', ico: _ZI.bolt, name: 'KERAUNOS', desc: 'Adaptive conviction ribbon ⚡', cat: 'trend', def: false },
+  // [2026-06-16] AETHER — Zeus original volatility squeeze / breakout field
+  { id: 'aether', ico: _ZI.tgt, name: 'AETHER', desc: 'Volatility squeeze → breakout 🌪️', cat: 'vol', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

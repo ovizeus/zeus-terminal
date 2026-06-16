@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -171,6 +171,28 @@ describe('choppiness', () => {
     const ci = choppiness(highs, lows, closes, 14)
     expect(ci[0]).toBeNull()
     expect(ci[ci.length - 1] as number).toBeLessThan(50) // trending → low CI
+  })
+})
+
+describe('aether', () => {
+  it('detects a squeeze in a tight low-volatility range and tightens the band', () => {
+    // tiny oscillation around 100, but with wider intrabar wicks → BB(stdev) inside KC(ATR)
+    const closes = Array.from({ length: 30 }, (_, i) => 100 + (i % 2 === 0 ? 0.1 : -0.1))
+    const highs = closes.map((c) => c + 0.6), lows = closes.map((c) => c - 0.6)
+    const r = aether(highs, lows, closes, 20)
+    const last = r.squeeze.length - 1
+    expect(r.squeeze[last]).toBe(true)
+    expect(r.upper[last] as number).toBeGreaterThan(r.mid[last] as number)
+    expect(r.lower[last] as number).toBeLessThan(r.mid[last] as number)
+  })
+  it('no squeeze on a wide-ranging trend, and momentum is positive going up', () => {
+    const closes = Array.from({ length: 30 }, (_, i) => 100 + i * 3)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const r = aether(highs, lows, closes, 20)
+    const last = r.squeeze.length - 1
+    expect(r.squeeze[last]).toBe(false)              // big directional range → BB wider than KC
+    expect(r.momentum[last] as number).toBeGreaterThan(0)
+    expect(r.mid[0]).toBeNull()
   })
 })
 

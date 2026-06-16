@@ -116,6 +116,54 @@ export function donchian(highs: number[], lows: number[], period: number): Bands
   return { upper, middle, lower }
 }
 
+export interface Aether {
+  mid: (number | null)[]       // basis (SMA) midline
+  upper: (number | null)[]     // active envelope (tight BB during squeeze, wide KC otherwise)
+  lower: (number | null)[]
+  squeeze: boolean[]           // true = volatility compressed → breakout charging
+  momentum: (number | null)[]  // −1..1 likely breakout direction
+}
+
+/**
+ * AETHER — the calm before the storm (invented for Zeus). A volatility-regime
+ * overlay that catches the "squeeze": when Bollinger Bands contract INSIDE the
+ * Keltner Channel, volatility is compressed and energy is building for a breakout.
+ * During a squeeze the envelope drawn is the (tighter) Bollinger band — so the
+ * band visibly TIGHTENS and is tinted gold ("charging"); otherwise it shows the
+ * wider Keltner channel. A TTM-style momentum (close vs the mid of the Donchian
+ * midpoint and the SMA, normalised by ATR) hints at the likely break direction.
+ */
+export function aether(highs: number[], lows: number[], closes: number[], period = 20, bbMult = 2, kcMult = 1.5): Aether {
+  const p = Math.max(2, Math.round(period))
+  const n = closes.length
+  const mid: (number | null)[] = new Array(n).fill(null)
+  const upper: (number | null)[] = new Array(n).fill(null)
+  const lower: (number | null)[] = new Array(n).fill(null)
+  const squeeze: boolean[] = new Array(n).fill(false)
+  const momentum: (number | null)[] = new Array(n).fill(null)
+  const basis = sma(closes, p)
+  const a = atr(highs, lows, closes, p)
+  for (let i = p - 1; i < n; i++) {
+    const b = basis[i] as number
+    let s = 0
+    for (let j = i - p + 1; j <= i; j++) { const d = closes[j] - b; s += d * d }
+    const sd = Math.sqrt(s / p)
+    const bbU = b + bbMult * sd, bbL = b - bbMult * sd
+    const atrI = (a[i] as number) || 0
+    const kcU = b + kcMult * atrI, kcL = b - kcMult * atrI
+    const sq = bbU < kcU && bbL > kcL
+    squeeze[i] = sq
+    mid[i] = b
+    upper[i] = sq ? bbU : kcU
+    lower[i] = sq ? bbL : kcL
+    let hh = -Infinity, ll = Infinity
+    for (let j = i - p + 1; j <= i; j++) { if (highs[j] > hh) hh = highs[j]; if (lows[j] < ll) ll = lows[j] }
+    const ref = ((hh + ll) / 2 + b) / 2
+    momentum[i] = atrI === 0 ? 0 : Math.max(-1, Math.min(1, (closes[i] - ref) / (atrI * 2)))
+  }
+  return { mid, upper, lower, squeeze, momentum }
+}
+
 export interface Keraunos {
   baseline: (number | null)[]   // adaptive (KAMA-style) trend line
   conviction: (number | null)[] // −1..1 blended market conviction

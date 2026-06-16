@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -276,6 +276,11 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       ;[w.keraS, w.keraUpS, w.keraLowS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
       if (show) updateKera()
       break
+    case 'aether':
+      if (show) initAetherSeries()
+      ;[w.aetMidS, w.aetUpS, w.aetLowS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
+      if (show) updateAether()
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -397,7 +402,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1054,6 +1059,38 @@ export function updateKera(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// AETHER — invented volatility-squeeze / breakout field (main-chart overlay)
+// ═══════════════════════════════════════════════════════════════
+
+export function initAetherSeries(): void {
+  if (w.aetMidS || !w.mainChart) return
+  w.aetUpS = w.mainChart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  w.aetLowS = w.mainChart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  w.aetMidS = w.mainChart.addLineSeries({ lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: false })
+}
+export function updateAether(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initAetherSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.aether || {}
+  const r = _calcAETHER(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close),
+    Math.round(s.period) || 20, s.bbMult || 2, s.kcMult || 1.5
+  )
+  const GOLD = '#f0c040', BLUE = 'rgba(66,165,245,0.55)'
+  const mom = (m: number) => (m > 0.5 ? '#00e676' : m > 0.1 ? '#66bb6a' : m < -0.5 ? '#ff1744' : m < -0.1 ? '#ef5350' : '#78909c')
+  const up: any[] = [], low: any[] = [], midA: any[] = []
+  for (let i = 0; i < r.mid.length; i++) {
+    if (r.mid[i] == null || !k[i]) continue
+    const sq = r.squeeze[i]
+    const bandColor = sq ? GOLD : BLUE
+    up.push({ time: k[i].time, value: r.upper[i], color: bandColor })
+    low.push({ time: k[i].time, value: r.lower[i], color: bandColor })
+    midA.push({ time: k[i].time, value: r.mid[i], color: sq ? GOLD : mom((r.momentum[i] as number) || 0) })
+  }
+  try { w.aetUpS.setData(up); w.aetLowS.setData(low); w.aetMidS.setData(midA) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1088,6 +1125,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.uo && w._uoInited) updateUO()
   if (w.S.activeInds.chop && w._chopInited) updateChop()
   if (w.S.activeInds.kera) updateKera()
+  if (w.S.activeInds.aether) updateAether()
 }
 
 export function renderActBar(): void {
@@ -1112,7 +1150,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040' }
   return map[id] || '#888'
 }
 

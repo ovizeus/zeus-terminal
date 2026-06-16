@@ -613,6 +613,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'chop',     ico: '🪚', name: 'Choppiness Index', desc: 'Trending vs ranging',         hasGenericSettings: true },
   // [2026-06-16] KERAUNOS — Zeus original adaptive conviction ribbon (main chart)
   { id: 'kera',     ico: '⚡', name: 'KERAUNOS',         desc: 'Adaptive conviction ribbon (Zeus original)', hasGenericSettings: true },
+  { id: 'aether',   ico: '🌪️', name: 'AETHER',           desc: 'Volatility squeeze → breakout (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
