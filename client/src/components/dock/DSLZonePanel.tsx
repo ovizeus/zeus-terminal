@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useDslStore } from '../../stores'
-import { toggleDSL, toggleAssistArm } from '../../trading/dsl'
+import { toggleDSL, toggleAssistArm, startDSLIntervals } from '../../trading/dsl'
 import { ATStatusIcon } from '../ATStatusIcon'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
@@ -14,6 +14,20 @@ function seededRandom(seed: number) {
 export function DSLZonePanel() {
   const dslOn = useDslStore((s) => s.enabled)
   const ui = useDslStore((s) => s.ui)
+
+  // [2026-06-16] Ensure the DSL render loop is running, independent of the boot
+  // sequence. startDSLIntervals (which runs runDSLBrain → renders positions) is
+  // normally kicked from _startExtras, gated behind the up-to-30s market-feed wait
+  // (_waitForFeedThenStartExtras). With the Binance feed blocked at the datacenter,
+  // that gate left the loop dead → the panel stuck on "WAITING DYNAMIC SL..." until
+  // the user toggled DSL. This panel mounts regardless of boot state (the toggle
+  // worked), so kicking startDSLIntervals here — idempotent (no-op if already
+  // running) — guarantees positions render without a manual off/on. Also nudge one
+  // immediate render via the window-exposed runDSLBrain.
+  useEffect(() => {
+    try { startDSLIntervals() } catch (_) { /* never break mount */ }
+    try { (window as any).runDSLBrain?.() } catch (_) {}
+  }, [])
 
   // Generate 12 floating bubbles (same logic as dsl.js initDSLBubbles)
   const bubbles = useMemo(() => {
