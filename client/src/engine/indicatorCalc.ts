@@ -934,6 +934,71 @@ export function kratos(highs: number[], lows: number[], closes: number[], volume
   return out
 }
 
+export interface Cone { steps: number; center: number[]; up1: number[]; lo1: number[]; up2: number[]; lo2: number[] }
+
+/**
+ * PROMETHEUS — foresight (invented for Zeus). A forward VOLATILITY CONE: from the last
+ * price it projects the probable price envelope `horizon` bars into the future, the
+ * band widening with √time like a diffusion process (σ_k = ATR·√k). The ±1σ band is
+ * the likely range, ±2σ the outer bound; the cone centre drifts along the current
+ * trend (recent per-bar slope) when `useDrift`. It answers "where is price likely to
+ * be, and how wide is the uncertainty?" — a statistical forecast, not a signal.
+ * Returns arrays of length horizon+1; index 0 = now (the last close).
+ */
+export function prometheus(highs: number[], lows: number[], closes: number[], atrLen = 14, horizon = 12, useDrift = true): Cone {
+  const n = closes.length
+  const center: number[] = [], up1: number[] = [], lo1: number[] = [], up2: number[] = [], lo2: number[] = []
+  if (!n) return { steps: 0, center, up1, lo1, up2, lo2 }
+  const last = closes[n - 1]
+  const a = atr(highs, lows, closes, atrLen)
+  const atrV = (a[n - 1] != null ? (a[n - 1] as number) : last * 0.01) || last * 0.01
+  const drift = useDrift ? (closes[n - 1] - closes[Math.max(0, n - 1 - atrLen)]) / atrLen : 0
+  for (let k = 0; k <= Math.round(horizon); k++) {
+    const c = last + drift * k, w = atrV * Math.sqrt(k)
+    center.push(c); up1.push(c + w); lo1.push(c - w); up2.push(c + 2 * w); lo2.push(c - 2 * w)
+  }
+  return { steps: Math.round(horizon), center, up1, lo1, up2, lo2 }
+}
+
+export interface Analog { matchIndex: number; similarity: number; projection: number[] }
+
+/**
+ * MNEMOSYNE — memory (invented for Zeus). Analog / nearest-neighbour forecasting: it
+ * z-normalises the last `queryLen` bars into a shape, scans ALL prior history for the
+ * window whose shape is closest (smallest squared distance), then projects what
+ * happened AFTER that historical match — rebased onto the current price via relative
+ * returns — as a "if history rhymes, here's the path" forecast for the next `horizon`
+ * bars. `similarity` (0..1) grades how good the analog is. Returns projection of length
+ * horizon+1 (index 0 = now); matchIndex = −1 / empty projection if no usable analog.
+ */
+export function mnemosyne(closes: number[], queryLen = 20, horizon = 12, minGap = 5): Analog {
+  const n = closes.length
+  const Q = Math.max(4, Math.round(queryLen)), H = Math.max(1, Math.round(horizon))
+  if (n < Q + H + Q) return { matchIndex: -1, similarity: 0, projection: [] }
+  const znorm = (arr: number[]) => {
+    let m = 0; for (const v of arr) m += v; m /= arr.length
+    let s = 0; for (const v of arr) s += (v - m) * (v - m); s = Math.sqrt(s / arr.length) || 1
+    return arr.map((v) => (v - m) / s)
+  }
+  const query = znorm(closes.slice(n - Q))
+  let best = Infinity, matchIndex = -1
+  // candidate window END index e; needs H bars of continuation after e, and must not
+  // overlap the query region (e < n - Q - minGap).
+  for (let e = Q - 1; e <= n - 1 - H; e++) {
+    if (e >= n - Q - Math.max(0, Math.round(minGap))) break
+    const win = znorm(closes.slice(e - Q + 1, e + 1))
+    let dist = 0
+    for (let j = 0; j < Q; j++) { const d = query[j] - win[j]; dist += d * d }
+    if (dist < best) { best = dist; matchIndex = e }
+  }
+  if (matchIndex < 0) return { matchIndex: -1, similarity: 0, projection: [] }
+  const last = closes[n - 1], anchor = closes[matchIndex]
+  const projection: number[] = [last]
+  for (let k = 1; k <= H; k++) projection.push(anchor > 0 ? last * (closes[matchIndex + k] / anchor) : last)
+  const similarity = 1 / (1 + best / Q)   // 0..1, 1 = identical shape
+  return { matchIndex, similarity, projection }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

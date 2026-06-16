@@ -1836,6 +1836,9 @@ export let aegisMarkS: any = null, aegisStopS: any = null
 export let _seleneChart: any = null, _seleneSeries: any = null, _seleneMidS: any = null, _seleneInited = false
 // [2026-06-16] KRATOS all-in-one trade overlay (markers + entry/TP/SL lines) + live HUD
 export let kratosMarkS: any = null, kratosEntryS: any = null, kratosTpS: any = null, kratosSlS: any = null, _kratosHud: any = null
+// [2026-06-16] PROMETHEUS future cone (5 bands) + MNEMOSYNE analog projection line
+export let promCenterS: any = null, promUp1S: any = null, promLo1S: any = null, promUp2S: any = null, promLo2S: any = null
+export let mnemoS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1906,6 +1909,10 @@ export const IND_SETTINGS: any = {
   selene: { detrendLen: 20, minP: 8, maxP: 60 },
   // [2026-06-16] KRATOS — all-in-one trade commander (entry/exit/SL/TP + live HUD)
   kratos: { thr: 0.35, atrMult: 1.5, rr: 2 },
+  // [2026-06-16] PROMETHEUS — forward volatility cone (future projection)
+  prometheus: { atrP: 14, horizon: 12, drift: 1 },
+  // [2026-06-16] MNEMOSYNE — analog forecast (historical pattern continuation)
+  mnemosyne: { queryLen: 20, horizon: 12 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

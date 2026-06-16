@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2 } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -340,6 +340,16 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'selene':
       { const slx = document.getElementById('seleneChart'); if (slx) slx.style.display = show ? '' : 'none'; if (show) initSeleneChart() }
       break
+    case 'prometheus':
+      if (show) initPrometheusSeries()
+      ;[w.promCenterS, w.promUp1S, w.promLo1S, w.promUp2S, w.promLo2S].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { sx.setData([]) } catch (_) { } } })
+      if (show) updatePrometheus()
+      break
+    case 'mnemosyne':
+      if (show) initMnemoSeries()
+      if (w.mnemoS) { w.mnemoS.applyOptions({ visible: show }); if (!show) try { w.mnemoS.setData([]) } catch (_) { } }
+      if (show) updateMnemo()
+      break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
       else {
@@ -468,7 +478,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1682,6 +1692,62 @@ function _kratosHudHtml(trades: any[], active: any, k: any[]): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PROMETHEUS — invented forward volatility CONE (projects into the future).
+// MNEMOSYNE — invented analog forecast (historical-pattern continuation).
+// Both plot beyond the last candle using extrapolated future bar times.
+// ═══════════════════════════════════════════════════════════════
+
+/** Future bar times extrapolated from the kline interval: [t_last, t_last+iv, …]. */
+function _futureTimes(k: any[], steps: number): number[] {
+  const n = k.length
+  const t1 = k[n - 1].time
+  const iv = n >= 2 ? (t1 - k[n - 2].time) : 60
+  const out: number[] = []
+  for (let i = 0; i <= steps; i++) out.push(t1 + iv * i)
+  return out
+}
+
+export function initPrometheusSeries(): void {
+  if (w.promCenterS || !w.mainChart) return
+  const band = (c: string, lw = 1, ls = 0) => w.mainChart.addLineSeries({ color: c, lineWidth: lw, lineStyle: ls, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.promUp2S = band('rgba(255,138,0,0.30)')
+  w.promLo2S = band('rgba(255,138,0,0.30)')
+  w.promUp1S = band('rgba(255,171,64,0.55)')
+  w.promLo1S = band('rgba(255,171,64,0.55)')
+  w.promCenterS = band('#ff8f00', 2, 2)
+}
+export function updatePrometheus(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initPrometheusSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.prometheus || {}
+  const r = _calcPROM(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.atrP) || 14, Math.round(s.horizon) || 12, (s.drift ?? 1) != 0)
+  const ft = _futureTimes(k, r.steps)
+  const mk = (arr: number[]) => arr.map((v, i) => ({ time: ft[i], value: v }))
+  try {
+    w.promCenterS.setData(mk(r.center)); w.promUp1S.setData(mk(r.up1)); w.promLo1S.setData(mk(r.lo1))
+    w.promUp2S.setData(mk(r.up2)); w.promLo2S.setData(mk(r.lo2))
+  } catch (_) { }
+}
+
+export function initMnemoSeries(): void {
+  if (w.mnemoS || !w.mainChart) return
+  w.mnemoS = w.mainChart.addLineSeries({ color: '#b388ff', lineWidth: 2, lineStyle: 1, priceLineVisible: false, lastValueVisible: true, title: 'MNEMOSYNE', crosshairMarkerVisible: false })
+}
+export function updateMnemo(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initMnemoSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.mnemosyne || {}
+  const r = _calcMNEMO(k.map((b: any) => b.close), Math.round(s.queryLen) || 20, Math.round(s.horizon) || 12, 5)
+  try {
+    if (r.projection.length) {
+      const ft = _futureTimes(k, r.projection.length - 1)
+      w.mnemoS.applyOptions({ title: `MNEMO ${Math.round(r.similarity * 100)}%` })
+      w.mnemoS.setData(r.projection.map((v: number, i: number) => ({ time: ft[i], value: v })))
+    } else { w.mnemoS.setData([]) }
+  } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1731,6 +1797,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.aegis) updateAegis()
   if (w.S.activeInds.selene && w._seleneInited) updateSelene()
   if (w.S.activeInds.kratos) updateKratos()
+  if (w.S.activeInds.prometheus) updatePrometheus()
+  if (w.S.activeInds.mnemosyne) updateMnemo()
 }
 
 export function renderActBar(): void {
@@ -1755,7 +1823,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff' }
   return map[id] || '#888'
 }
 

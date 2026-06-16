@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -501,6 +501,49 @@ describe('kratos', () => {
     const closes = Array.from({ length: 90 }, (_, i) => 100 + (i % 2 ? 0.2 : -0.2))
     const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
     expect(kratos(highs, lows, closes, vol, 0.35, 1.5, 2)).toEqual([])
+  })
+})
+
+describe('prometheus', () => {
+  it('projects a cone that widens with horizon and is ordered up2>up1>center>lo1>lo2', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i + (i % 3 ? 0.5 : -0.5))
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const c = prometheus(highs, lows, closes, 14, 12, true)
+    expect(c.center.length).toBe(13) // horizon+1
+    const h = 12
+    expect(c.up2[h]).toBeGreaterThan(c.up1[h])
+    expect(c.up1[h]).toBeGreaterThan(c.center[h])
+    expect(c.center[h]).toBeGreaterThan(c.lo1[h])
+    expect(c.lo1[h]).toBeGreaterThan(c.lo2[h])
+    // band widens with time
+    expect(c.up1[12] - c.center[12]).toBeGreaterThan(c.up1[3] - c.center[3])
+  })
+  it('is symmetric (flat centre) when drift is disabled', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const c = prometheus(highs, lows, closes, 14, 10, false)
+    expect(c.center[0]).toBeCloseTo(c.center[10], 6) // no drift → flat centre
+    expect(c.up1[5] - c.center[5]).toBeCloseTo(c.center[5] - c.lo1[5], 6)
+  })
+})
+
+describe('mnemosyne', () => {
+  it('finds the repeating analog and projects its continuation direction', () => {
+    // a periodic sine: the last window should match an earlier identical-phase window,
+    // and the projection should continue the sine in the same direction as the real future.
+    const closes = Array.from({ length: 240 }, (_, i) => 100 + 10 * Math.sin((2 * Math.PI * i) / 24))
+    const r = mnemosyne(closes, 24, 12, 5)
+    expect(r.matchIndex).toBeGreaterThanOrEqual(0)
+    expect(r.similarity).toBeGreaterThan(0.5)
+    expect(r.projection.length).toBe(13) // horizon+1
+    expect(r.projection[0]).toBeCloseTo(closes[closes.length - 1], 6) // anchored at now
+    // projection[1] should move the same way the sine is actually moving next (slope continuity)
+    const lastSlope = closes[closes.length - 1] - closes[closes.length - 2]
+    const projSlope = r.projection[1] - r.projection[0]
+    expect(Math.sign(projSlope)).toBe(Math.sign(lastSlope))
+  })
+  it('returns an empty projection when there is not enough history', () => {
+    expect(mnemosyne(Array.from({ length: 20 }, (_, i) => i), 20, 12, 5).projection).toEqual([])
   })
 })
 

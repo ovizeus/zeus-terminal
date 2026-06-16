@@ -70,6 +70,8 @@ export const IND_ICONS: Record<string, string> = {
   aegis: g(p('M8 1l5 2v5c0 4-3 6-5 7-2-1-5-3-5-7V3z') + p('M6 8l1.5 1.5L10 6')), // shield + check
   selene: g(p('M10 2a5 5 0 100 12A6 6 0 0110 2z') + p('M2 13c1.5-3 3-3 4.5 0')), // crescent moon over a tide wave
   kratos: g(p('M3 3l4 4M13 3l-4 4M3 13l4-4M13 13l-4-4') + p('M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z') + dot(8, 8, 0.8)), // command reticle / crosshair on target
+  prometheus: g(p('M3 8h3') + p('M6 8l8-5M6 8l8 5') + p('M6 8l7-1M6 8l7 1')), // forward-opening forecast cone
+  mnemosyne: g(p('M2 9c2 0 2-4 4-4s2 4 4 4') + p('M10 9c1.5 0 2-3 3.5-3') + dot(13.5, 6, 0.9)), // past wave continuing into a projected dot
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop
