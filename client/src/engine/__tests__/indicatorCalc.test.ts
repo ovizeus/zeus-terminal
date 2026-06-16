@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -656,6 +656,42 @@ describe('geras', () => {
     const g = geras(closes, 20)
     // after the down-leg begins, age must turn negative (was strongly positive before)
     expect(g[79] as number).toBeLessThan(0)
+  })
+})
+
+describe('ouranos', () => {
+  it('fits a rising channel on an uptrend with rails ordered upper>mid>lower', () => {
+    const closes = Array.from({ length: 80 }, (_, i) => 100 + i * 0.8 + (i % 4 ? 0.4 : -0.4))
+    const c = ouranos(closes, 60, 2)
+    expect(c.startIndex).toBe(20) // n-period
+    expect(c.mid.length).toBe(60)
+    expect(c.mid[59]).toBeGreaterThan(c.mid[0])       // rising slope
+    expect(c.upper[30]).toBeGreaterThan(c.mid[30])
+    expect(c.lower[30]).toBeLessThan(c.mid[30])
+  })
+  it('returns empty when there is not enough data', () => {
+    expect(ouranos([1, 2, 3], 60).mid).toEqual([])
+  })
+})
+
+describe('hades', () => {
+  it('marks a bullish order block at the last down-candle before an up-impulse', () => {
+    // 16 calm bars to warm ATR, then a down candle, then a strong up impulse
+    const opens: number[] = [], highs: number[] = [], lows: number[] = [], closes: number[] = []
+    for (let i = 0; i < 16; i++) { const b = 100 + (i % 2 ? 0.3 : -0.3); opens.push(b); closes.push(b + 0.1); highs.push(b + 0.5); lows.push(b - 0.5) }
+    // down candle @16
+    opens.push(101); closes.push(99); highs.push(101.5); lows.push(98.5)
+    // strong up impulse @17
+    opens.push(99); closes.push(112); highs.push(112.5); lows.push(98.8)
+    const obs = hades(opens, highs, lows, closes, 5, 1.2, 5)
+    const bull = obs.find((o) => o.dir === 'bull')
+    expect(bull).toBeTruthy()
+    expect(bull!.index).toBe(16)
+    expect(bull!.top).toBe(101.5); expect(bull!.bottom).toBe(98.5)
+  })
+  it('stays silent on flat data (no impulse)', () => {
+    const f = Array.from({ length: 30 }, (_, i) => 100 + (i % 2 ? 0.2 : -0.2))
+    expect(hades(f, f.map((x) => x + 0.5), f.map((x) => x - 0.5), f, 5, 1.2, 5)).toEqual([])
   })
 })
 

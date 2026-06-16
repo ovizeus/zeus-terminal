@@ -163,6 +163,8 @@ export const INDICATORS: any[] = [
   { id: 'typhon', ico: _ZI.ruler, name: 'TYPHON', desc: 'Volatility regime — percentile of ATR 🌀', cat: 'vol', def: false },
   { id: 'styx', ico: _ZI.ruler, name: 'STYX', desc: 'Drawdown / underwater risk meter 🩸', cat: 'momentum', def: false },
   { id: 'geras', ico: _ZI.tup, name: 'GERAS', desc: 'Trend age — maturity of the current move ⏳', cat: 'trend', def: false },
+  { id: 'ouranos', ico: _ZI.tgt, name: 'OURANOS', desc: 'Auto regression channel — trend rails 🌌', cat: 'trend', def: false },
+  { id: 'hades', ico: _ZI.dia, name: 'HADES', desc: 'Order blocks — institutional demand/supply zones 🔱', cat: 'volume', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

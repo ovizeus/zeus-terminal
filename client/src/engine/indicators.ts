@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -374,6 +374,16 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'geras':
       { const gex = document.getElementById('gerasChart'); if (gex) gex.style.display = show ? '' : 'none'; if (show) initGerasChart() }
       break
+    case 'ouranos':
+      if (show) initOuranosSeries()
+      ;[w.ouMidS, w.ouUpS, w.ouLoS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { sx.setData([]) } catch (_) { } } })
+      if (show) updateOuranos()
+      break
+    case 'hades':
+      if (show) initHadesSeries()
+      ;[w.hadesMarkS, w.hadesBullTopS, w.hadesBullBotS, w.hadesBearTopS, w.hadesBearBotS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
+      if (show) updateHades()
+      break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
       else {
@@ -502,7 +512,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -2001,6 +2011,73 @@ export function updateGeras(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// OURANOS — invented auto linear-regression CHANNEL (main-chart overlay).
+// ═══════════════════════════════════════════════════════════════
+
+export function initOuranosSeries(): void {
+  if (w.ouMidS || !w.mainChart) return
+  w.ouUpS = w.mainChart.addLineSeries({ color: 'rgba(120,170,255,0.55)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.ouLoS = w.mainChart.addLineSeries({ color: 'rgba(120,170,255,0.55)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.ouMidS = w.mainChart.addLineSeries({ color: '#5b8def', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateOuranos(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initOuranosSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.ouranos || {}
+  const r = _calcOURANOS(k.map((b: any) => b.close), Math.round(s.period) || 100, s.mult ?? 2)
+  if (r.startIndex < 0) { try { w.ouMidS.setData([]); w.ouUpS.setData([]); w.ouLoS.setData([]) } catch (_) { } return }
+  const mid: any[] = [], up: any[] = [], lo: any[] = []
+  for (let t = 0; t < r.mid.length; t++) {
+    const kb = k[r.startIndex + t]; if (!kb) continue
+    mid.push({ time: kb.time, value: r.mid[t] }); up.push({ time: kb.time, value: r.upper[t] }); lo.push({ time: kb.time, value: r.lower[t] })
+  }
+  try { w.ouMidS.setData(mid); w.ouUpS.setData(up); w.ouLoS.setData(lo) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HADES — invented ORDER-BLOCK zones (main-chart overlay). Markers tag each
+// block; the nearest unmitigated demand (bull) + supply (bear) zones are drawn
+// as bands extending to now.
+// ═══════════════════════════════════════════════════════════════
+
+export function initHadesSeries(): void {
+  if (w.hadesMarkS || !w.mainChart) return
+  w.hadesMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  const band = (c: string) => w.mainChart.addLineSeries({ color: c, lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.hadesBullTopS = band('rgba(0,230,118,0.6)'); w.hadesBullBotS = band('rgba(0,230,118,0.6)')
+  w.hadesBearTopS = band('rgba(255,23,68,0.6)'); w.hadesBearBotS = band('rgba(255,23,68,0.6)')
+}
+export function updateHades(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initHadesSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.hades || {}
+  const obs = _calcHADES(
+    k.map((b: any) => b.open), k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close),
+    Math.round(s.atrP) || 14, s.impulse ?? 1.2, Math.round(s.lookback) || 5
+  )
+  const marks = obs.filter((o: any) => k[o.index]).map((o: any) => ({
+    time: k[o.index].time,
+    position: o.dir === 'bull' ? 'belowBar' : 'aboveBar',
+    shape: 'square',
+    color: o.dir === 'bull' ? (o.mitigated ? '#2e7d5288' : '#00e676') : (o.mitigated ? '#b71c1c88' : '#ff1744'),
+    text: o.mitigated ? '' : 'OB',
+  }))
+  try { w.hadesMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.hadesMarkS.setMarkers(marks) } catch (_) { }
+  // nearest unmitigated bull (demand) + bear (supply) zones → bands to now
+  const bull = [...obs].reverse().find((o: any) => o.dir === 'bull' && !o.mitigated && k[o.index])
+  const bear = [...obs].reverse().find((o: any) => o.dir === 'bear' && !o.mitigated && k[o.index])
+  const t1 = k[k.length - 1].time
+  const drawBand = (topS: any, botS: any, ob: any) => {
+    try {
+      if (ob) { const t0 = k[ob.index].time; topS.setData([{ time: t0, value: ob.top }, { time: t1, value: ob.top }]); botS.setData([{ time: t0, value: ob.bottom }, { time: t1, value: ob.bottom }]) }
+      else { topS.setData([]); botS.setData([]) }
+    } catch (_) { }
+  }
+  drawBand(w.hadesBullTopS, w.hadesBullBotS, bull)
+  drawBand(w.hadesBearTopS, w.hadesBearBotS, bear)
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2060,6 +2137,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.typhon && w._typhonInited) updateTyphon()
   if (w.S.activeInds.styx && w._styxInited) updateStyx()
   if (w.S.activeInds.geras && w._gerasInited) updateGeras()
+  if (w.S.activeInds.ouranos) updateOuranos()
+  if (w.S.activeInds.hades) updateHades()
 }
 
 export function renderActBar(): void {
@@ -2084,7 +2163,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676' }
   return map[id] || '#888'
 }
 

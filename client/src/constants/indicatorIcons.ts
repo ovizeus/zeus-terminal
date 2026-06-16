@@ -80,6 +80,8 @@ export const IND_ICONS: Record<string, string> = {
   typhon: g(p('M8 8m-1 0a1 1 0 102 0 1 1 0 10-2 0') + p('M8 8c3-3 5-1 4 2s-5 3-7 1-2-6 2-8 8-2 8 4')), // spiral storm
   styx: g(p('M2 6c2 0 2 2 4 2s2-2 4-2 2 2 4 2') + p('M8 8v5') + p('M6 13h4')), // waterline with price submerged below
   geras: g(p('M4 2h8M4 14h8') + p('M4 2c0 4 8 4 8 0M4 14c0-4 8-4 8 0') + p('M8 7v2')), // hourglass (time/age)
+  ouranos: g(p('M2 4l12 3M2 8l12 3M2 12l12 3')), // three parallel sloped channel rails
+  hades: g(p('M3 9h4v3H3zM9 4h4v3H9z') + p('M5 9V7h6') + p('M11 7V5')), // stacked demand/supply order-block zones
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

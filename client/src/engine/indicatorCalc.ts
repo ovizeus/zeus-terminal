@@ -1207,6 +1207,74 @@ export function geras(closes: number[], period = 20): (number | null)[] {
   return out
 }
 
+export interface Channel { startIndex: number; mid: number[]; upper: number[]; lower: number[] }
+
+/**
+ * OURANOS — the encompassing sky (invented for Zeus). An auto LINEAR-REGRESSION
+ * CHANNEL drawn on the main chart: it least-squares fits the last `period` closes into
+ * a sloped midline, then offsets parallel rails at ±`mult`·(residual stdev). Price
+ * rides between the rails — a tag of the upper rail = over-extended within the trend,
+ * the lower rail = trend support. The whole channel re-fits every bar, so it tilts to
+ * follow the prevailing trend. Returns the per-bar line values over the fitted window.
+ */
+export function ouranos(closes: number[], period = 100, mult = 2): Channel {
+  const n = closes.length, p = Math.max(4, Math.round(period))
+  if (n < p) return { startIndex: -1, mid: [], upper: [], lower: [] }
+  const start = n - p
+  let sx = 0, sy = 0, sxx = 0, sxy = 0
+  for (let t = 0; t < p; t++) { const y = closes[start + t]; sx += t; sy += y; sxx += t * t; sxy += t * y }
+  const denom = p * sxx - sx * sx
+  const slope = denom === 0 ? 0 : (p * sxy - sx * sy) / denom
+  const intercept = (sy - slope * sx) / p
+  let ss = 0
+  for (let t = 0; t < p; t++) { const r = closes[start + t] - (intercept + slope * t); ss += r * r }
+  const sd = Math.sqrt(ss / p)
+  const mid: number[] = [], upper: number[] = [], lower: number[] = []
+  for (let t = 0; t < p; t++) { const m = intercept + slope * t; mid.push(m); upper.push(m + mult * sd); lower.push(m - mult * sd) }
+  return { startIndex: start, mid, upper, lower }
+}
+
+export interface OrderBlock { index: number; dir: 'bull' | 'bear'; top: number; bottom: number; mitigated: boolean; mitIndex: number }
+
+/**
+ * HADES — lord of the depths (invented for Zeus). Detects ORDER BLOCKS: the last
+ * opposite-colour candle right before a strong impulse move (body > `impulse`·ATR) is
+ * the institutional "origin" of that move. A bullish OB (the last down-candle before
+ * an up-impulse) is a demand zone price tends to revisit from above; a bearish OB (last
+ * up-candle before a down-impulse) is a supply zone. Each block's [low, high] range is
+ * tracked as `top`/`bottom` and flagged `mitigated` once price trades back into it.
+ * Distinct from HERMES (fair-value gaps) and CHARON (resting liquidity).
+ */
+export function hades(opens: number[], highs: number[], lows: number[], closes: number[], atrLen = 14, impulse = 1.2, lookback = 5): OrderBlock[] {
+  const n = closes.length
+  const a = atr(highs, lows, closes, atrLen)
+  const out: OrderBlock[] = []
+  const seen = new Set<string>()
+  const L = Math.max(1, Math.round(lookback))
+  for (let i = 1; i < n; i++) {
+    if (a[i] == null) continue
+    const body = closes[i] - opens[i], thr = impulse * (a[i] as number)
+    let ob: { j: number; dir: 'bull' | 'bear' } | null = null
+    if (body > thr) {
+      for (let j = i - 1; j >= Math.max(0, i - L); j--) if (closes[j] < opens[j]) { ob = { j, dir: 'bull' }; break }
+    } else if (-body > thr) {
+      for (let j = i - 1; j >= Math.max(0, i - L); j--) if (closes[j] > opens[j]) { ob = { j, dir: 'bear' }; break }
+    }
+    if (!ob) continue
+    const key = ob.dir + ':' + ob.j
+    if (seen.has(key)) continue
+    seen.add(key)
+    const top = highs[ob.j], bottom = lows[ob.j]
+    let mitIndex = -1
+    for (let m = i + 1; m < n; m++) {
+      if (ob.dir === 'bull' ? lows[m] <= top : highs[m] >= bottom) { mitIndex = m; break }
+    }
+    out.push({ index: ob.j, dir: ob.dir, top, bottom, mitigated: mitIndex !== -1, mitIndex })
+  }
+  out.sort((x, y) => x.index - y.index)
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

@@ -1851,6 +1851,9 @@ export let _typhonChart: any = null, _typhonSeries: any = null, _typhonHiS: any 
 // [2026-06-16] STYX drawdown pane + GERAS trend-age pane
 export let _styxChart: any = null, _styxSeries: any = null, _styxInited = false
 export let _gerasChart: any = null, _gerasSeries: any = null, _gerasInited = false
+// [2026-06-16] OURANOS regression channel + HADES order-block zones (main-chart overlays)
+export let ouMidS: any = null, ouUpS: any = null, ouLoS: any = null
+export let hadesMarkS: any = null, hadesBullTopS: any = null, hadesBullBotS: any = null, hadesBearTopS: any = null, hadesBearBotS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1941,6 +1944,10 @@ export const IND_SETTINGS: any = {
   styx: { period: 100 },
   // [2026-06-16] GERAS — trend-age (maturity) meter
   geras: { period: 20 },
+  // [2026-06-16] OURANOS — auto linear-regression channel (main-chart overlay)
+  ouranos: { period: 100, mult: 2 },
+  // [2026-06-16] HADES — order-block (institutional) zones (main-chart overlay)
+  hades: { atrP: 14, impulse: 1.2, lookback: 5 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
