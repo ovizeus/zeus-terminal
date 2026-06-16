@@ -10,6 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR } from './indicatorCalc'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
 import { renderVWAP, getVwapSeries, resetVwapSeries } from '../ui/panels'
@@ -235,7 +236,112 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'cci':
       { const cc = document.getElementById('cciChart'); if (cc) cc.style.display = show ? '' : 'none'; if (show) initCCIChart() }
       break
+    // [2026-06-16] New overlays (batch 1)
+    case 'sma':
+      if (show) initSMASeries()
+      if (w.smaS) w.smaS.applyOptions({ visible: show })
+      if (show) updateSMA()
+      break
+    case 'hma':
+      if (show) initHMASeries()
+      if (w.hmaS) w.hmaS.applyOptions({ visible: show })
+      if (show) updateHMA()
+      break
+    case 'psar':
+      if (show) initPSARSeries()
+      if (w.psarS) w.psarS.applyOptions({ visible: show })
+      if (show) updatePSAR()
+      break
+    case 'kc':
+      if (show) initKCSeries()
+      ;[w.kcUpperS, w.kcMiddleS, w.kcLowerS].forEach((s: any) => { if (s) s.applyOptions({ visible: show }) })
+      if (show) updateKC()
+      break
+    case 'dc':
+      if (show) initDCSeries()
+      ;[w.dcUpperS, w.dcMiddleS, w.dcLowerS].forEach((s: any) => { if (s) s.applyOptions({ visible: show }) })
+      if (show) updateDC()
+      break
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// [2026-06-16] NEW OVERLAY INDICATORS — batch 1
+// SMA, Hull MA, Parabolic SAR, Keltner Channels, Donchian Channels.
+// Pure math in ./indicatorCalc (unit-tested); these map to chart series.
+// Source bars: w.S.klines [{time,open,high,low,close,volume}]. Lazy-init series.
+// ═══════════════════════════════════════════════════════════════
+function _klTime(i: number): any { return w.S.klines[i].time }
+
+export function initSMASeries(): void {
+  if (w.smaS || !w.mainChart) return
+  w.smaS = w.mainChart.addLineSeries({ color: '#26c6da', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+}
+export function updateSMA(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initSMASeries()
+  const vals = _calcSMA(w.S.klines.map((k: any) => k.close), Math.round(w.IND_SETTINGS.sma.period) || 20)
+  const data: any[] = []
+  for (let i = 0; i < vals.length; i++) if (vals[i] != null) data.push({ time: _klTime(i), value: vals[i] })
+  try { w.smaS.setData(data) } catch (_) { }
+}
+
+export function initHMASeries(): void {
+  if (w.hmaS || !w.mainChart) return
+  w.hmaS = w.mainChart.addLineSeries({ color: '#ffca28', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
+}
+export function updateHMA(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initHMASeries()
+  const vals = _calcHMA(w.S.klines.map((k: any) => k.close), Math.round(w.IND_SETTINGS.hma.period) || 21)
+  const data: any[] = []
+  for (let i = 0; i < vals.length; i++) if (vals[i] != null) data.push({ time: _klTime(i), value: vals[i] })
+  try { w.hmaS.setData(data) } catch (_) { }
+}
+
+export function initPSARSeries(): void {
+  if (w.psarS || !w.mainChart) return
+  // Dotted line + per-point color (green=uptrend SAR below price, red=downtrend above).
+  w.psarS = w.mainChart.addLineSeries({ color: '#00e5ff', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false })
+}
+export function updatePSAR(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initPSARSeries()
+  const highs = w.S.klines.map((k: any) => k.high), lows = w.S.klines.map((k: any) => k.low)
+  const { sar, isUp } = _calcPSAR(highs, lows, w.IND_SETTINGS.psar.step || 0.02, w.IND_SETTINGS.psar.maxAf || 0.2)
+  const data: any[] = []
+  for (let i = 0; i < sar.length; i++) if (sar[i] != null) data.push({ time: _klTime(i), value: sar[i], color: isUp[i] ? '#26ff9a' : '#ff5277' })
+  try { w.psarS.setData(data) } catch (_) { }
+}
+
+export function initKCSeries(): void {
+  if (w.kcUpperS || !w.mainChart) return
+  w.kcUpperS = w.mainChart.addLineSeries({ color: '#ab47bc66', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+  w.kcMiddleS = w.mainChart.addLineSeries({ color: '#ab47bc', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  w.kcLowerS = w.mainChart.addLineSeries({ color: '#ab47bc66', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+}
+export function updateKC(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initKCSeries()
+  const b = _calcKC(w.S.klines.map((k: any) => k.high), w.S.klines.map((k: any) => k.low), w.S.klines.map((k: any) => k.close), Math.round(w.IND_SETTINGS.kc.period) || 20, w.IND_SETTINGS.kc.mult || 2)
+  const U: any[] = [], M: any[] = [], L: any[] = []
+  for (let i = 0; i < b.middle.length; i++) { const t = _klTime(i); if (b.upper[i] != null) U.push({ time: t, value: b.upper[i] }); if (b.middle[i] != null) M.push({ time: t, value: b.middle[i] }); if (b.lower[i] != null) L.push({ time: t, value: b.lower[i] }) }
+  try { w.kcUpperS.setData(U); w.kcMiddleS.setData(M); w.kcLowerS.setData(L) } catch (_) { }
+}
+
+export function initDCSeries(): void {
+  if (w.dcUpperS || !w.mainChart) return
+  w.dcUpperS = w.mainChart.addLineSeries({ color: '#42a5f5', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  w.dcMiddleS = w.mainChart.addLineSeries({ color: '#42a5f566', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+  w.dcLowerS = w.mainChart.addLineSeries({ color: '#42a5f5', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+}
+export function updateDC(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initDCSeries()
+  const b = _calcDC(w.S.klines.map((k: any) => k.high), w.S.klines.map((k: any) => k.low), Math.round(w.IND_SETTINGS.dc.period) || 20)
+  const U: any[] = [], M: any[] = [], L: any[] = []
+  for (let i = 0; i < b.middle.length; i++) { const t = _klTime(i); if (b.upper[i] != null) U.push({ time: t, value: b.upper[i] }); if (b.middle[i] != null) M.push({ time: t, value: b.middle[i] }); if (b.lower[i] != null) L.push({ time: t, value: b.lower[i] }) }
+  try { w.dcUpperS.setData(U); w.dcMiddleS.setData(M); w.dcLowerS.setData(L) } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -251,7 +357,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -709,6 +815,12 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.obv && w._obvInited) updateOBV()
   if (w.S.activeInds.mfi && w._mfiInited) updateMFI()
   if (w.S.activeInds.cci && w._cciInited) updateCCI()
+  // [2026-06-16] batch-1 overlays
+  if (w.S.activeInds.sma) updateSMA()
+  if (w.S.activeInds.hma) updateHMA()
+  if (w.S.activeInds.psar) updatePSAR()
+  if (w.S.activeInds.kc) updateKC()
+  if (w.S.activeInds.dc) updateDC()
 }
 
 export function renderActBar(): void {
@@ -733,7 +845,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5' }
   return map[id] || '#888'
 }
 

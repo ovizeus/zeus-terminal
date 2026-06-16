@@ -114,6 +114,12 @@ export const INDICATORS: any[] = [
   { id: 'rsi14', ico: _ZI.bolt, name: 'RSI 14', desc: 'Relative Strength Index', cat: 'momentum', def: false },
   { id: 'mfi', ico: _ZI.money, name: 'Money Flow Index', desc: 'Volume-based RSI', cat: 'volume', def: false },
   { id: 'cci', ico: _ZI.ruler, name: 'CCI', desc: 'Commodity Channel Index', cat: 'momentum', def: false },
+  // [2026-06-16] New overlays — batch 1
+  { id: 'sma', ico: _ZI.wave, name: 'SMA', desc: 'Simple Moving Average', cat: 'trend', def: false },
+  { id: 'hma', ico: _ZI.tup, name: 'Hull MA', desc: 'Hull Moving Average (low lag)', cat: 'trend', def: false },
+  { id: 'psar', ico: _ZI.dia, name: 'Parabolic SAR', desc: 'Trend + trailing stop dots', cat: 'trend', def: false },
+  { id: 'kc', ico: _ZI.tgt, name: 'Keltner Channels', desc: 'ATR volatility bands', cat: 'vol', def: false },
+  { id: 'dc', ico: _ZI.tgt, name: 'Donchian Channels', desc: 'Breakout high/low bands', cat: 'vol', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

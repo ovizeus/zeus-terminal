@@ -1789,6 +1789,10 @@ export const S: any = {
 // Chart series refs
 export let mainChart: any, cSeries: any, ema50S: any, ema200S: any, wma20S: any, wma50S: any, stS: any, cvdChart: any, cvdS: any, volChart: any, volS: any
 export let bbUpperS: any = null, bbMiddleS: any = null, bbLowerS: any = null
+// [2026-06-16] batch-1 overlay series refs (window-global, lazy-init in indicators.ts)
+export let smaS: any = null, hmaS: any = null, psarS: any = null
+export let kcUpperS: any = null, kcMiddleS: any = null, kcLowerS: any = null
+export let dcUpperS: any = null, dcMiddleS: any = null, dcLowerS: any = null
 export let ichimokuSeries: any[] = []
 export let fibSeries: any[] = []
 export let pivotSeries: any[] = []
@@ -1819,6 +1823,12 @@ export const IND_SETTINGS: any = {
   vwap: { stdDev: 1, stdDev2: 2 },
   vp: { rows: 70 },
   cvd: { smoothing: 0 },
+  // [2026-06-16] batch-1 overlays
+  sma: { period: 20 },
+  hma: { period: 21 },
+  psar: { step: 0.02, maxAf: 0.2 },
+  kc: { period: 20, mult: 2 },
+  dc: { period: 20 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

@@ -591,6 +591,12 @@ const IND_LIST: IndMeta[] = [
   { id: 'rsi14',    ico: '⚡', name: 'RSI 14',          desc: 'Relative Strength Index',      hasGenericSettings: true },
   { id: 'mfi',      ico: '💰', name: 'Money Flow Index',desc: 'Volume-weighted RSI',          hasGenericSettings: true },
   { id: 'cci',      ico: '📏', name: 'CCI',             desc: 'Commodity Channel Index',      hasGenericSettings: true },
+  // [2026-06-16] New overlays — batch 1
+  { id: 'sma',      ico: '〰', name: 'SMA',             desc: 'Simple Moving Average',        hasGenericSettings: true },
+  { id: 'hma',      ico: '📈', name: 'Hull MA',         desc: 'Hull Moving Average (low lag)', hasGenericSettings: true },
+  { id: 'psar',     ico: '◆', name: 'Parabolic SAR',   desc: 'Trend + trailing stop dots',   hasGenericSettings: true },
+  { id: 'kc',       ico: '◎', name: 'Keltner Channels',desc: 'ATR volatility bands',         hasGenericSettings: true },
+  { id: 'dc',       ico: '▭', name: 'Donchian Channels',desc: 'Breakout high/low bands',     hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
@@ -1085,7 +1091,12 @@ export function ChartControls() {
           <span style={{ cursor: 'pointer', color: 'var(--dim)', fontSize: '14px' }} onClick={() => setIndPanelOpen(false)}>✕</span>
         </div>
         <div className="ind-panel-body" id="indPanelBody">
-          {IND_LIST.map((ind) => {
+          {/* [2026-06-16] Active indicators float to the top so the operator sees what's
+              on at a glance. Stable sort (V8) keeps the original order within each group. */}
+          {[...IND_LIST].sort((a, b) => {
+            const on = (m: IndMeta) => (m.modalOnly ? 0 : ((m.isOverlay ? ((overlays as unknown as Record<string, boolean>)[m.id] ?? false) : (activeInds[m.id] ?? (indicators as unknown as Record<string, boolean>)[m.id] ?? false)) ? 1 : 0))
+            return on(b) - on(a)
+          }).map((ind) => {
             // [batch3-A] Route on/off state + toggle through the correct store:
             //   isOverlay → overlays[id]   (togOvr)
             //   modalOnly → no toggle, just a gear/OPEN button (OVI pattern)
