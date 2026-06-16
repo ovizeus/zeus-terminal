@@ -25,8 +25,23 @@ export function DSLZonePanel() {
   // running) — guarantees positions render without a manual off/on. Also nudge one
   // immediate render via the window-exposed runDSLBrain.
   useEffect(() => {
-    try { startDSLIntervals() } catch (_) { /* never break mount */ }
-    try { (window as any).runDSLBrain?.() } catch (_) {}
+    const kick = () => {
+      try { startDSLIntervals() } catch (_) { /* idempotent; never break */ }
+      try { (window as any).runDSLBrain?.() } catch (_) {}
+    }
+    kick()
+    // [2026-06-16] On mobile, pagehide → Intervals.clearAll() kills the DSL loop
+    // every time the app is backgrounded/switched, and nothing restarts it on
+    // return → the panel goes empty until a manual toggle. Re-kick when the page
+    // returns to foreground (visibilitychange / pageshow). startDSLIntervals is a
+    // no-op if the interval is still alive, so this is safe to call repeatedly.
+    const onVis = () => { if (!document.hidden) kick() }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('pageshow', onVis)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('pageshow', onVis)
+    }
   }, [])
 
   // Generate 12 floating bubbles (same logic as dsl.js initDSLBubbles)
