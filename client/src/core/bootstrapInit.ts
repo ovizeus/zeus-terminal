@@ -76,6 +76,15 @@ export function initZeusGroups(): void {
 
 // ===== FEED-GATED EXTRAS =====
 export function _waitForFeedThenStartExtras(): void {
+  // [DSL-NO-FEED-GATE 2026-06-16] Start the DSL interval IMMEDIATELY — it only
+  // DISPLAYS positions (server-authoritative, not from the market feed), so it must
+  // not wait up to 30s for feed confirmation. When the Binance feed is blocked
+  // (datacenter), the feed-wait left the DSL panel stuck on "WAITING DYNAMIC SL..."
+  // until the user toggled DSL (operator-reported "positions don't show in DSL
+  // unless off/on; disappear on refresh"). Diagnostic proved intervalAlive=false /
+  // brainRuns=0 at boot. startDSLIntervals is idempotent (no-op if already running),
+  // so the _startExtras call below stays harmless. Scanner extras remain feed-gated.
+  try { startDSLIntervals() } catch (_) { /* never block boot */ }
   w.Intervals.clear('feedWait')
   const MAX_WAIT_MS = 30000, CHECK_MS = 500
   let waited = 0

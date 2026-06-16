@@ -154,7 +154,6 @@ export function _computeDslMagnetSnap(basePrice: any, _pos: any, side: any, kind
 // DSL toggle + assist
 export function toggleDSL(): void {
   try {
-    _dslDiag('toggle')
     const _mode = (w.S?.mode || 'assist').toLowerCase()
     if (_mode === 'auto') {
       toast('AUTO: DSL is controlled by AI', 0, _ZI?.robot)
@@ -377,25 +376,7 @@ export function _collectDslPositions(): any[] {
   return order.map((k) => _reclassifyLimboAT(byKey.get(k))).filter(Boolean)
 }
 
-// [DSL DIAG 2026-06-15 — TEMPORARY] Fire once per `tag` (no setTimeout — robust
-// against mobile background throttling). Captures the live DSL loop state to the
-// server log so the "DSL empty until toggle" cause is ground-truth, not guessed.
-// Remove after diagnosis.
-function _dslDiag(tag: string): void {
-  try {
-    const key = '_dslDiagSent_' + tag
-    if ((w as any)[key]) return
-    ;(w as any)[key] = true
-    const _ps = usePositionsStore.getState()
-    const cardEl = document.getElementById('dslPositionCards')
-    const reason = `DSL_DIAG[${tag}] brainRuns=${(w as any)._dslBrainRuns || 0} intervalAlive=${!!DSL.checkInterval} cards=${cardEl ? cardEl.querySelectorAll('.dsl-pos-card').length : -1} waiting=${cardEl ? !!cardEl.querySelector('.dsl-radar-txt') : 'na'} storeLive=${(_ps.livePositions || []).length} storeDemo=${(_ps.demoPositions || []).length} tpLive=${((w.TP && w.TP.livePositions) || []).length} tpDemo=${((w.TP && w.TP.demoPositions) || []).length} collect=${_collectDslPositions().length} atMode=${getATMode()} dslEn=${DSL.enabled} srvAT=${w._serverATEnabled}`.slice(0, 300)
-    fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' }, body: JSON.stringify({ kind: 'dsl-diag-' + tag, reason, ts: Date.now() }) }).catch(() => {})
-  } catch (_) { /* never break */ }
-}
-
 export function runDSLBrain(): void {
-  ;(w as any)._dslBrainRuns = ((w as any)._dslBrainRuns || 0) + 1
-  if ((w as any)._dslBrainRuns === 5) _dslDiag('brain') // ~15s in — past the [start] diag's 5s server throttle
   const allOpenPosns = _collectDslPositions()
   // Server-owned positions carry server DSL state (field `_dsl` on the mapped
   // path, `dsl` on the positions.changed snapshot path).
@@ -1083,19 +1064,6 @@ export function renderDSLWidget(positions: any[]): void {
   _dslUI({ activeCountText: activeCount + ' active' })
 
   if (!allDisplayPosns.length) {
-    // [DSL-EMPTY DIAG 2026-06-15 — TEMPORARY] Panel renders empty. If positions
-    // actually exist (store/TP) this is the "AT positions don't show in DSL until
-    // off/on" bug — capture WHY (input vs mode-filter vs source) once, server log.
-    try {
-      const _ps = usePositionsStore.getState()
-      const _storeLive = (_ps.livePositions || []).length, _storeDemo = (_ps.demoPositions || []).length
-      const _tpLive = ((w.TP && w.TP.livePositions) || []).length, _tpDemo = ((w.TP && w.TP.demoPositions) || []).length
-      if ((_storeLive + _storeDemo + _tpLive + _tpDemo) > 0 && !(w as any)._dslEmptyDiagSent) {
-        ;(w as any)._dslEmptyDiagSent = true
-        const reason = `DSL_EMPTY_DIAG inputLen=${Array.isArray(positions) ? positions.length : 'na'} modeFiltered=${modeFiltered.length} atMode=${_activeMode} storeLive=${_storeLive} storeDemo=${_storeDemo} tpLive=${_tpLive} tpDemo=${_tpDemo} collect=${_collectDslPositions().length} dslEn=${DSL.enabled} srvAT=${w._serverATEnabled} flagsLoaded=${(w as any)._srvPosFlagsLoaded} inputModes=${(Array.isArray(positions) ? positions.slice(0, 4).map((p: any) => (p && (p.sym || p.symbol)) + ':' + (p && p.mode)).join(',') : '')}`.slice(0, 300)
-        fetch('/api/client-error', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' }, body: JSON.stringify({ kind: 'dsl-empty-diag', reason, ts: Date.now() }) }).catch(() => {})
-      }
-    } catch (_) { /* diag must never break render */ }
     // [DSL-OFF] Distinct waiting text when engine is off vs. scanning for activation
     const _engineOff = !DSL.enabled
     const _headline = _engineOff ? 'DSL ENGINE OFF' : 'WAITING DYNAMIC SL...'
@@ -1188,32 +1156,6 @@ export function renderDSLWidget(positions: any[]): void {
 }
 
 // ── Render a single DSL position card ──────────────────────────
-// [DSL-PAPER DIAG 2026-06-15 — TEMPORARY] One-shot-per-position diagnostic. When a
-// LIVE position renders as a PAPER card in the DSL panel, POST the full
-// classification context to /api/client-error (logged server-side as
-// [CLIENT_ERR]) so the REAL cause is captured in the operator's session — this
-// path can't be reproduced headless (liveApiSyncState needs a live exchange).
-// If the same-side-dup-guard fix already resolved it, this never fires. Remove
-// after confirmation.
-const _dslPaperDiagReported = new Set<string>()
-function _dslPaperDiag(pos: any, srcLabel: string): void {
-  try {
-    const id = String(pos && pos.id != null ? pos.id : ((pos && (pos._serverSeq || pos.seq)) || ''))
-    if (!id || _dslPaperDiagReported.has(id)) return
-    _dslPaperDiagReported.add(id)
-    const sym = String(pos.sym || pos.symbol || '').toUpperCase()
-    const side = String(pos.side || '')
-    const snap = Array.isArray(w._lastServerPositions) ? w._lastServerPositions : []
-    const lspAT = snap.some((sp: any) => String(sp.symbol || sp.sym || '').toUpperCase() === sym && String(sp.side || '') === side && sp.autoTrade === true)
-    const reason = `DSL_PAPER_DIAG ${sym}/${side} label="${srcLabel}" aT=${pos.autoTrade} mode=${pos.mode} isLive=${pos.isLive} owner=${pos.owner} src=${pos.source} srcMode=${pos.sourceMode} clSrc=${pos._classifySource} env=${w._executionEnv} srvAT=${w._serverATEnabled} dslEn=${DSL.enabled} lspAT=${lspAT} id=${id}`.slice(0, 300)
-    fetch('/api/client-error', {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' },
-      body: JSON.stringify({ kind: 'dsl-paper-diag', reason, ts: Date.now() }),
-    }).catch(() => {})
-  } catch (_) { /* diagnostic must never break render */ }
-}
-
 export function _renderDslCard(pos: any): string {
   const dsl = DSL.positions[String(pos.id)]
   const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
@@ -1253,9 +1195,6 @@ export function _renderDslCard(pos: any): string {
   const _srcLabel = _isAT
     ? ('AT ' + _atEnvLabel)
     : (_isLiveP ? _paperLiveLabel : 'PAPER DEMO')
-  // [DSL-PAPER DIAG — TEMPORARY] a LIVE position rendering as PAPER is the bug —
-  // capture its full classification context once (server log) for ground truth.
-  if (!_isAT && _isLiveP) _dslPaperDiag(pos, _srcLabel)
   const _srcMap: any = {
     'AT DEMO': { color: '#aa44ff', bg: '#aa44ff18', border: '#aa44ff44', icon: '' },
     'AT TESTNET': { color: '#f0c040', bg: '#f0c04018', border: '#f0c04044', icon: '' },
@@ -1515,7 +1454,6 @@ export function startDSLIntervals(): void {
   if (DSL.checkInterval) return
   _emitDSLChanged()
   _pushDslCheckInterval(w.Intervals.set('dsl', runDSLBrain, 3000))
-  _dslDiag('start')
   DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
     const posns = [
