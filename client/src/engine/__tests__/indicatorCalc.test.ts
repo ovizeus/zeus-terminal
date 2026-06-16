@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -68,6 +68,55 @@ describe('donchian', () => {
     expect(d.upper[3]).toBe(9); expect(d.lower[3]).toBe(2)
     expect(d.upper[4]).toBe(9); expect(d.lower[4]).toBe(2)
     expect(d.upper[0]).toBeNull()
+  })
+})
+
+describe('adx', () => {
+  it('on a steady uptrend +DI dominates −DI and ADX is strong', () => {
+    const highs = Array.from({ length: 40 }, (_, i) => 100 + i + 1)
+    const lows = Array.from({ length: 40 }, (_, i) => 100 + i - 1)
+    const closes = Array.from({ length: 40 }, (_, i) => 100 + i)
+    const { adx: a, plusDI, minusDI } = adx(highs, lows, closes, 14)
+    const last = a.length - 1
+    expect(plusDI[last] as number).toBeGreaterThan(minusDI[last] as number)
+    expect(a[last] as number).toBeGreaterThan(40) // trending → high ADX
+    expect(a[0]).toBeNull()
+  })
+})
+
+describe('williamsR', () => {
+  it('is 0 at the period high and −100 at the period low', () => {
+    const highs = [10, 11, 12, 13], lows = [9, 10, 11, 12]
+    // close at the highest high of the window → 0
+    expect(williamsR(highs, lows, [9, 10, 11, 13], 3)[3]).toBeCloseTo(0, 6)
+    // close at the lowest low of the window (min low over bars 1..3 = 10) → −100
+    expect(williamsR(highs, lows, [9, 10, 11, 10], 3)[3]).toBeCloseTo(-100, 6)
+  })
+})
+
+describe('roc', () => {
+  it('percent change over the lookback', () => {
+    const r = roc([10, 10, 11], 2) // (11-10)/10*100
+    expect(r[0]).toBeNull(); expect(r[1]).toBeNull()
+    expect(r[2]).toBeCloseTo(10, 6)
+  })
+})
+
+describe('cmf', () => {
+  it('≈ +1 when every close prints at the high, −1 at the low', () => {
+    const highs = [10, 11, 12], lows = [8, 9, 10], vol = [100, 100, 100]
+    expect(cmf(highs, lows, [10, 11, 12], vol, 3)[2] as number).toBeCloseTo(1, 6)
+    expect(cmf(highs, lows, [8, 9, 10], vol, 3)[2] as number).toBeCloseTo(-1, 6)
+  })
+})
+
+describe('awesomeOscillator', () => {
+  it('positive on a sustained uptrend, null during warm-up', () => {
+    const highs = Array.from({ length: 40 }, (_, i) => 100 + i + 1)
+    const lows = Array.from({ length: 40 }, (_, i) => 100 + i - 1)
+    const ao = awesomeOscillator(highs, lows)
+    expect(ao[10]).toBeNull() // slow SMA(34) not warmed
+    expect(ao[ao.length - 1] as number).toBeGreaterThan(0)
   })
 })
 

@@ -116,6 +116,94 @@ export function donchian(highs: number[], lows: number[], period: number): Bands
   return { upper, middle, lower }
 }
 
+export interface DMI { adx: (number | null)[]; plusDI: (number | null)[]; minusDI: (number | null)[] }
+
+/** Wilder ADX with +DI/−DI. Trend-strength oscillator (0–100). */
+export function adx(highs: number[], lows: number[], closes: number[], period: number): DMI {
+  const p = Math.max(1, Math.round(period))
+  const n = closes.length
+  const plusDI: (number | null)[] = new Array(n).fill(null)
+  const minusDI: (number | null)[] = new Array(n).fill(null)
+  const adxArr: (number | null)[] = new Array(n).fill(null)
+  if (n < 2) return { adx: adxArr, plusDI, minusDI }
+  const tr: number[] = [], pDM: number[] = [], mDM: number[] = [] // index j ↔ bar j+1
+  for (let i = 1; i < n; i++) {
+    const up = highs[i] - highs[i - 1]
+    const dn = lows[i - 1] - lows[i]
+    pDM.push(up > dn && up > 0 ? up : 0)
+    mDM.push(dn > up && dn > 0 ? dn : 0)
+    tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])))
+  }
+  let sTR = 0, sP = 0, sM = 0
+  const dx: number[] = [], dxBar: number[] = []
+  for (let j = 0; j < tr.length; j++) {
+    const bar = j + 1
+    if (j < p - 1) { sTR += tr[j]; sP += pDM[j]; sM += mDM[j]; continue }
+    if (j === p - 1) { sTR += tr[j]; sP += pDM[j]; sM += mDM[j] }
+    else { sTR = sTR - sTR / p + tr[j]; sP = sP - sP / p + pDM[j]; sM = sM - sM / p + mDM[j] }
+    const pdi = sTR === 0 ? 0 : 100 * sP / sTR
+    const mdi = sTR === 0 ? 0 : 100 * sM / sTR
+    plusDI[bar] = pdi; minusDI[bar] = mdi
+    const sum = pdi + mdi
+    dx.push(sum === 0 ? 0 : 100 * Math.abs(pdi - mdi) / sum); dxBar.push(bar)
+  }
+  let av = 0
+  for (let i = 0; i < dx.length; i++) {
+    if (i < p - 1) { av += dx[i]; continue }
+    if (i === p - 1) { av += dx[i]; av /= p; adxArr[dxBar[i]] = av }
+    else { av = (av * (p - 1) + dx[i]) / p; adxArr[dxBar[i]] = av }
+  }
+  return { adx: adxArr, plusDI, minusDI }
+}
+
+/** Williams %R: −100 × (highestHigh − close) / (highestHigh − lowestLow). Range −100..0. */
+export function williamsR(highs: number[], lows: number[], closes: number[], period: number): (number | null)[] {
+  const p = Math.max(1, Math.round(period))
+  const n = closes.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  for (let i = p - 1; i < n; i++) {
+    let hh = -Infinity, ll = Infinity
+    for (let j = i - p + 1; j <= i; j++) { if (highs[j] > hh) hh = highs[j]; if (lows[j] < ll) ll = lows[j] }
+    out[i] = hh === ll ? -50 : -100 * (hh - closes[i]) / (hh - ll)
+  }
+  return out
+}
+
+/** Rate of Change: 100 × (value − value[period bars ago]) / value[period bars ago]. */
+export function roc(values: number[], period: number): (number | null)[] {
+  const p = Math.max(1, Math.round(period))
+  const n = values.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  for (let i = p; i < n; i++) { const prev = values[i - p]; out[i] = prev === 0 ? 0 : 100 * (values[i] - prev) / prev }
+  return out
+}
+
+/** Chaikin Money Flow: Σ MoneyFlowVolume / Σ volume over period. Range ≈ −1..1. */
+export function cmf(highs: number[], lows: number[], closes: number[], volumes: number[], period: number): (number | null)[] {
+  const p = Math.max(1, Math.round(period))
+  const n = closes.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  const mfv: number[] = []
+  for (let i = 0; i < n; i++) {
+    const range = highs[i] - lows[i]
+    const mult = range === 0 ? 0 : ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range
+    mfv.push(mult * volumes[i])
+  }
+  for (let i = p - 1; i < n; i++) {
+    let fv = 0, v = 0
+    for (let j = i - p + 1; j <= i; j++) { fv += mfv[j]; v += volumes[j] }
+    out[i] = v === 0 ? 0 : fv / v
+  }
+  return out
+}
+
+/** Awesome Oscillator: SMA(medianPrice, fast) − SMA(medianPrice, slow), median = (H+L)/2. */
+export function awesomeOscillator(highs: number[], lows: number[], fast = 5, slow = 34): (number | null)[] {
+  const med = highs.map((h, i) => (h + lows[i]) / 2)
+  const f = sma(med, fast), s = sma(med, slow)
+  return med.map((_, i) => (f[i] == null || s[i] == null) ? null : (f[i] as number) - (s[i] as number))
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

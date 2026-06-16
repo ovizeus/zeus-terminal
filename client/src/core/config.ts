@@ -120,6 +120,12 @@ export const INDICATORS: any[] = [
   { id: 'psar', ico: _ZI.dia, name: 'Parabolic SAR', desc: 'Trend + trailing stop dots', cat: 'trend', def: false },
   { id: 'kc', ico: _ZI.tgt, name: 'Keltner Channels', desc: 'ATR volatility bands', cat: 'vol', def: false },
   { id: 'dc', ico: _ZI.tgt, name: 'Donchian Channels', desc: 'Breakout high/low bands', cat: 'vol', def: false },
+  // [2026-06-16] New oscillators — batch 2 (separate panes)
+  { id: 'adx', ico: _ZI.tup, name: 'ADX', desc: 'Trend strength (+DI / -DI)', cat: 'trend', def: false },
+  { id: 'willr', ico: _ZI.wave, name: 'Williams %R', desc: 'Overbought / oversold momentum', cat: 'mom', def: false },
+  { id: 'roc', ico: _ZI.wave, name: 'ROC', desc: 'Rate of Change momentum', cat: 'mom', def: false },
+  { id: 'cmf', ico: _ZI.dia, name: 'CMF', desc: 'Chaikin Money Flow (volume)', cat: 'vol', def: false },
+  { id: 'ao', ico: _ZI.tup, name: 'Awesome Oscillator', desc: 'Momentum histogram (5/34)', cat: 'mom', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

@@ -597,6 +597,12 @@ const IND_LIST: IndMeta[] = [
   { id: 'psar',     ico: '◆', name: 'Parabolic SAR',   desc: 'Trend + trailing stop dots',   hasGenericSettings: true },
   { id: 'kc',       ico: '◎', name: 'Keltner Channels',desc: 'ATR volatility bands',         hasGenericSettings: true },
   { id: 'dc',       ico: '▭', name: 'Donchian Channels',desc: 'Breakout high/low bands',     hasGenericSettings: true },
+  // [2026-06-16] New oscillators — batch 2 (separate panes)
+  { id: 'adx',      ico: '📊', name: 'ADX',             desc: 'Trend strength (+DI / -DI)',   hasGenericSettings: true },
+  { id: 'willr',    ico: '⚡', name: 'Williams %R',      desc: 'Overbought / oversold',        hasGenericSettings: true },
+  { id: 'roc',      ico: '🚀', name: 'ROC',             desc: 'Rate of Change momentum',      hasGenericSettings: true },
+  { id: 'cmf',      ico: '💵', name: 'CMF',             desc: 'Chaikin Money Flow (volume)',  hasGenericSettings: true },
+  { id: 'ao',       ico: '📶', name: 'Awesome Oscillator',desc: 'Momentum histogram (5/34)',  hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

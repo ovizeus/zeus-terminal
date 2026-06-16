@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO } from './indicatorCalc'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
 import { renderVWAP, getVwapSeries, resetVwapSeries } from '../ui/panels'
@@ -235,6 +235,22 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'cci':
       { const cc = document.getElementById('cciChart'); if (cc) cc.style.display = show ? '' : 'none'; if (show) initCCIChart() }
+      break
+    // [2026-06-16] New oscillators (batch 2)
+    case 'adx':
+      { const ax = document.getElementById('adxChart'); if (ax) ax.style.display = show ? '' : 'none'; if (show) initADXChart() }
+      break
+    case 'willr':
+      { const wx = document.getElementById('willrChart'); if (wx) wx.style.display = show ? '' : 'none'; if (show) initWILLRChart() }
+      break
+    case 'roc':
+      { const rx = document.getElementById('rocChart'); if (rx) rx.style.display = show ? '' : 'none'; if (show) initROCChart() }
+      break
+    case 'cmf':
+      { const cx = document.getElementById('cmfChart'); if (cx) cx.style.display = show ? '' : 'none'; if (show) initCMFChart() }
+      break
+    case 'ao':
+      { const aox = document.getElementById('aoChart'); if (aox) aox.style.display = show ? '' : 'none'; if (show) initAOChart() }
       break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
@@ -622,7 +638,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -800,6 +816,104 @@ export function updateCCI(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// OSCILLATORS — batch 2: ADX (+DI/−DI), Williams %R, ROC, CMF, Awesome Oscillator
+// Pure math in ./indicatorCalc (unit-tested); these map outputs to pane series.
+// ═══════════════════════════════════════════════════════════════
+
+function _osc(series: any, vals: (number | null)[]): any[] {
+  const k = w.S.klines
+  const out: any[] = []
+  for (let i = 0; i < vals.length; i++) { if (vals[i] != null && k[i]) out.push({ time: k[i].time, value: vals[i] }) }
+  try { series.setData(out) } catch (_) { }
+  return out
+}
+
+export function initADXChart(): void {
+  if (w._adxInited && w._adxChart) { updateADX(); return }
+  w._adxChart = _createSubChart('adxChart', 60)
+  if (!w._adxChart) return
+  w._adxSeries = w._adxChart.addLineSeries({ color: '#f0c040', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'ADX' })
+  w._adxPlusSeries = w._adxChart.addLineSeries({ color: '#26ff9a', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, title: '+DI' })
+  w._adxMinusSeries = w._adxChart.addLineSeries({ color: '#ff5277', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, title: '-DI' })
+  w._adxInited = true
+  updateADX()
+}
+export function updateADX(): void {
+  if (!w._adxInited || !w._adxSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.adx.period) || 14
+  const r = _calcADX(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), p)
+  _osc(w._adxSeries, r.adx); _osc(w._adxPlusSeries, r.plusDI); _osc(w._adxMinusSeries, r.minusDI)
+  _syncSubChartsToMain()
+}
+
+export function initWILLRChart(): void {
+  if (w._willrInited && w._willrChart) { updateWILLR(); return }
+  w._willrChart = _createSubChart('willrChart', 60)
+  if (!w._willrChart) return
+  w._willrSeries = w._willrChart.addLineSeries({ color: '#26c6da', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: '%R' })
+  w._willrInited = true
+  updateWILLR()
+}
+export function updateWILLR(): void {
+  if (!w._willrInited || !w._willrSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.willr.period) || 14
+  _osc(w._willrSeries, _calcWILLR(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), p))
+  _syncSubChartsToMain()
+}
+
+export function initROCChart(): void {
+  if (w._rocInited && w._rocChart) { updateROC(); return }
+  w._rocChart = _createSubChart('rocChart', 60)
+  if (!w._rocChart) return
+  w._rocSeries = w._rocChart.addLineSeries({ color: '#ffca28', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'ROC' })
+  w._rocInited = true
+  updateROC()
+}
+export function updateROC(): void {
+  if (!w._rocInited || !w._rocSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.roc.period) || 12
+  _osc(w._rocSeries, _calcROC(k.map((b: any) => b.close), p))
+  _syncSubChartsToMain()
+}
+
+export function initCMFChart(): void {
+  if (w._cmfInited && w._cmfChart) { updateCMF(); return }
+  w._cmfChart = _createSubChart('cmfChart', 60)
+  if (!w._cmfChart) return
+  w._cmfSeries = w._cmfChart.addLineSeries({ color: '#ab47bc', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'CMF' })
+  w._cmfInited = true
+  updateCMF()
+}
+export function updateCMF(): void {
+  if (!w._cmfInited || !w._cmfSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.cmf.period) || 20
+  _osc(w._cmfSeries, _calcCMF(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), p))
+  _syncSubChartsToMain()
+}
+
+export function initAOChart(): void {
+  if (w._aoInited && w._aoChart) { updateAO(); return }
+  w._aoChart = _createSubChart('aoChart', 60)
+  if (!w._aoChart) return
+  w._aoSeries = w._aoChart.addHistogramSeries({ color: '#26ff9a', priceLineVisible: false, lastValueVisible: true, title: 'AO' })
+  w._aoInited = true
+  updateAO()
+}
+export function updateAO(): void {
+  if (!w._aoInited || !w._aoSeries || !w.S.klines.length) return
+  const k = w.S.klines
+  const fast = Math.round(w.IND_SETTINGS.ao.fast) || 5, slow = Math.round(w.IND_SETTINGS.ao.slow) || 34
+  const vals = _calcAO(k.map((b: any) => b.high), k.map((b: any) => b.low), fast, slow)
+  const out: any[] = []
+  for (let i = 0; i < vals.length; i++) {
+    if (vals[i] == null || !k[i]) continue
+    const up = i === 0 ? true : (vals[i] as number) >= (vals[i - 1] as number)
+    out.push({ time: k[i].time, value: vals[i], color: up ? '#26ff9a' : '#ff5277' })
+  }
+  try { w._aoSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -821,6 +935,12 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.psar) updatePSAR()
   if (w.S.activeInds.kc) updateKC()
   if (w.S.activeInds.dc) updateDC()
+  // [2026-06-16] batch-2 oscillators
+  if (w.S.activeInds.adx && w._adxInited) updateADX()
+  if (w.S.activeInds.willr && w._willrInited) updateWILLR()
+  if (w.S.activeInds.roc && w._rocInited) updateROC()
+  if (w.S.activeInds.cmf && w._cmfInited) updateCMF()
+  if (w.S.activeInds.ao && w._aoInited) updateAO()
 }
 
 export function renderActBar(): void {
@@ -845,7 +965,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a' }
   return map[id] || '#888'
 }
 

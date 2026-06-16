@@ -1803,6 +1803,12 @@ export let _atrChart: any = null, _atrSeries: any = null, _atrInited = false
 export let _obvChart: any = null, _obvSeries: any = null, _obvInited = false
 export let _mfiChart: any = null, _mfiSeries: any = null, _mfiInited = false
 export let _cciChart: any = null, _cciSeries: any = null, _cciInited = false
+// [2026-06-16] batch-2 oscillator panes
+export let _adxChart: any = null, _adxSeries: any = null, _adxPlusSeries: any = null, _adxMinusSeries: any = null, _adxInited = false
+export let _willrChart: any = null, _willrSeries: any = null, _willrInited = false
+export let _rocChart: any = null, _rocSeries: any = null, _rocInited = false
+export let _cmfChart: any = null, _cmfSeries: any = null, _cmfInited = false
+export let _aoChart: any = null, _aoSeries: any = null, _aoInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1829,6 +1835,12 @@ export const IND_SETTINGS: any = {
   psar: { step: 0.02, maxAf: 0.2 },
   kc: { period: 20, mult: 2 },
   dc: { period: 20 },
+  // [2026-06-16] batch-2 oscillators
+  adx: { period: 14 },
+  willr: { period: 14 },
+  roc: { period: 12 },
+  cmf: { period: 20 },
+  ao: { fast: 5, slow: 34 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
