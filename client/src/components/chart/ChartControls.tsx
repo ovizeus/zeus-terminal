@@ -646,6 +646,8 @@ const IND_LIST: IndMeta[] = [
   { id: 'tyche',    ico: '🎲', name: 'TYCHE',             desc: 'Monte-Carlo probability fan — future path odds (Zeus original)', hasGenericSettings: true },
   { id: 'nyx',      ico: '🌌', name: 'NYX',               desc: 'Smart-money flow — accumulation/distribution colour area (Zeus original)', hasGenericSettings: true },
   { id: 'olympus',  ico: '🏔️', name: 'OLYMPUS',           desc: 'SMC suite — BOS · CHoCH · FVG · bias all-in-one (Zeus original)', hasGenericSettings: true },
+  { id: 'gaia',     ico: '🌍', name: 'GAIA',              desc: 'Regime tape — trend+momentum+flow colour stripe (Zeus original)', hasGenericSettings: true },
+  { id: 'ananke',   ico: '⛓️', name: 'ANANKE',            desc: 'Confluence channel — width=vol, colour=confluence (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

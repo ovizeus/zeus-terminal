@@ -1503,6 +1503,62 @@ export function olympus(_opens: number[], highs: number[], lows: number[], close
   return { events, fvgs, bias }
 }
 
+export interface Gaia { score: (number | null)[] }
+
+/**
+ * GAIA — the bedrock (invented for Zeus). A composite REGIME score (−1..+1) painted as
+ * a colour tape under price: it fuses trend (close vs EMA, ATR-normalised), momentum
+ * (rate-of-change) and volume flow (money-flow multiplier × volume, EMA-smoothed) into
+ * one number per bar. Strong positive = bullish regime (bright green), strong negative
+ * = bearish (red), near zero = no-edge chop (grey). One glance gives the market's
+ * underlying state, reading several dimensions at once.
+ */
+export function gaia(highs: number[], lows: number[], closes: number[], volumes: number[], period = 50): Gaia {
+  const n = closes.length
+  const e = ema(closes, period), a = atr(highs, lows, closes, 14), rc = roc(closes, 10)
+  const mfv: number[] = new Array(n).fill(0)
+  for (let i = 0; i < n; i++) { const r = highs[i] - lows[i]; const mfm = r > 0 ? ((closes[i] - lows[i]) - (highs[i] - closes[i])) / r : 0; mfv[i] = mfm * volumes[i] }
+  const mfvE = ema(mfv, 20), volE = ema(volumes, 20)
+  const score: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    if (e[i] == null || a[i] == null) continue
+    const atrI = (a[i] as number) || 1e-9
+    const trendN = Math.max(-1, Math.min(1, (closes[i] - (e[i] as number)) / (2 * atrI)))
+    const momN = rc[i] == null ? 0 : Math.max(-1, Math.min(1, (rc[i] as number) / 5))
+    const flow = (volE[i] != null && (volE[i] as number) > 0) ? Math.max(-1, Math.min(1, (mfvE[i] as number) / (volE[i] as number))) : 0
+    score[i] = Math.max(-1, Math.min(1, 0.4 * trendN + 0.3 * momN + 0.3 * flow))
+  }
+  return { score }
+}
+
+export interface Ananke { mid: (number | null)[]; upper: (number | null)[]; lower: (number | null)[]; conf: (number | null)[] }
+
+/**
+ * ANANKE — necessity / inevitability (invented for Zeus). A confluence CHANNEL around a
+ * low-lag Hull-MA equilibrium: band WIDTH encodes volatility (±mult·ATR), the midline
+ * SLOPE encodes trend, and the `conf` score (−1..+1, from the HMA slope and price's
+ * position inside the band) encodes how strongly the move is confirmed — used to colour
+ * the channel. One overlay that simultaneously shows trend, volatility and confluence.
+ */
+export function ananke(highs: number[], lows: number[], closes: number[], period = 20, mult = 2): Ananke {
+  const n = closes.length
+  const m = hma(closes, period), a = atr(highs, lows, closes, 14)
+  const mid: (number | null)[] = new Array(n).fill(null)
+  const upper: (number | null)[] = new Array(n).fill(null)
+  const lower: (number | null)[] = new Array(n).fill(null)
+  const conf: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    if (m[i] == null || a[i] == null) continue
+    const atrI = (a[i] as number) || 1e-9
+    mid[i] = m[i]; upper[i] = (m[i] as number) + mult * atrI; lower[i] = (m[i] as number) - mult * atrI
+    let slopeN = 0
+    if (i > 0 && m[i - 1] != null) slopeN = Math.max(-1, Math.min(1, ((m[i] as number) - (m[i - 1] as number)) / atrI))
+    const posN = Math.max(-1, Math.min(1, (closes[i] - (m[i] as number)) / (2 * atrI)))
+    conf[i] = Math.max(-1, Math.min(1, 0.6 * slopeN + 0.4 * posN))
+  }
+  return { mid, upper, lower, conf }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

@@ -88,6 +88,8 @@ export const IND_ICONS: Record<string, string> = {
   tyche: g(p('M3 8h2') + p('M5 8l9-4M5 8l9 0M5 8l9 4')), // probability fan opening into the future
   nyx: g('<path d="M2 8h3l2-4 2 8 2-5 3 1v5H2z" fill="currentColor" stroke="none" opacity="0.85"/>'), // filled flow area (accum/dist)
   olympus: g(p('M2 13l4-8 3 4 2-6 3 10z') + p('M2 13h12')), // mountain peaks (structure)
+  gaia: g('<rect x="2" y="11" width="12" height="3" rx="1" fill="currentColor" stroke="none"/>' + p('M2 7c2-2 4 1 6-1s4 1 6-1')), // colour regime stripe under a price line
+  ananke: g(p('M2 5c3 1 9 1 12 0M2 11c3 1 9 1 12 0') + p('M2 8c3 1 9 1 12 0')), // confluence channel rails
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -409,6 +409,16 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (show) initOlympusSeries()
       ;[w.olyMarkS, w.olyBullTopS, w.olyBullBotS, w.olyBearTopS, w.olyBearBotS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
       if (show) updateOlympus()
+      break
+    case 'gaia':
+      if (show) initGaiaSeries()
+      if (w.gaiaTapeS) { w.gaiaTapeS.applyOptions({ visible: show }); if (!show) try { w.gaiaTapeS.setData([]) } catch (_) { } }
+      if (show) updateGaia()
+      break
+    case 'ananke':
+      if (show) initAnankeSeries()
+      ;[w.anMidS, w.anUpS, w.anLoS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { sx.setData([]) } catch (_) { } } })
+      if (show) updateAnanke()
       break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
@@ -2280,6 +2290,68 @@ export function updateOlympus(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// GAIA — invented composite REGIME tape (main-chart colour stripe under price).
+// ═══════════════════════════════════════════════════════════════
+
+function _gaiaColor(s: number): string {
+  if (s >= 0.5) return '#00e676'
+  if (s >= 0.15) return '#66bb6a'
+  if (s > -0.15) return '#78909c'
+  if (s > -0.5) return '#ef5350'
+  return '#ff1744'
+}
+
+export function initGaiaSeries(): void {
+  if (w.gaiaTapeS || !w.mainChart) return
+  w.gaiaTapeS = w.mainChart.addLineSeries({ lineWidth: 6, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateGaia(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initGaiaSeries()
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.gaia?.period) || 50
+  const r = _calcGAIA(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), p)
+  const W = 20
+  const data: any[] = []
+  for (let i = 0; i < r.score.length; i++) {
+    if (r.score[i] == null || !k[i]) continue
+    let lo = Infinity, hi = -Infinity
+    for (let j = Math.max(0, i - W + 1); j <= i; j++) { if (k[j].low < lo) lo = k[j].low; if (k[j].high > hi) hi = k[j].high }
+    const anchor = lo - 0.15 * Math.max(1e-9, hi - lo)   // tape sits just under the price floor
+    data.push({ time: k[i].time, value: anchor, color: _gaiaColor(r.score[i] as number) })
+  }
+  try { w.gaiaTapeS.setData(data) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANANKE — invented confluence CHANNEL (main-chart): width=volatility,
+// slope=trend, colour=confluence.
+// ═══════════════════════════════════════════════════════════════
+
+export function initAnankeSeries(): void {
+  if (w.anMidS || !w.mainChart) return
+  w.anUpS = w.mainChart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.anLoS = w.mainChart.addLineSeries({ lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.anMidS = w.mainChart.addLineSeries({ lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateAnanke(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initAnankeSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.ananke || {}
+  const r = _calcANANKE(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.period) || 20, s.mult ?? 2)
+  const mid: any[] = [], up: any[] = [], lo: any[] = []
+  for (let i = 0; i < r.mid.length; i++) {
+    if (r.mid[i] == null || !k[i]) continue
+    const c = (r.conf[i] as number) || 0
+    const solid = _gaiaColor(c)
+    const band = c >= 0 ? 'rgba(0,230,118,0.4)' : 'rgba(255,82,119,0.4)'
+    mid.push({ time: k[i].time, value: r.mid[i], color: solid })
+    up.push({ time: k[i].time, value: r.upper[i], color: band })
+    lo.push({ time: k[i].time, value: r.lower[i], color: band })
+  }
+  try { w.anMidS.setData(mid); w.anUpS.setData(up); w.anLoS.setData(lo) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2347,6 +2419,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.tyche) updateTyche()
   if (w.S.activeInds.nyx && w._nyxInited) updateNyx()
   if (w.S.activeInds.olympus) updateOlympus()
+  if (w.S.activeInds.gaia) updateGaia()
+  if (w.S.activeInds.ananke) updateAnanke()
 }
 
 export function renderActBar(): void {
@@ -2371,7 +2445,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040' }
   return map[id] || '#888'
 }
 

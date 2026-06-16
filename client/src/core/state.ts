@@ -1863,6 +1863,9 @@ export let tycheP50S: any = null, tycheP10S: any = null, tycheP90S: any = null
 // [2026-06-16] NYX smart-money-flow baseline pane + OLYMPUS SMC structure overlay
 export let _nyxChart: any = null, _nyxSeries: any = null, _nyxInited = false
 export let olyMarkS: any = null, olyBullTopS: any = null, olyBullBotS: any = null, olyBearTopS: any = null, olyBearBotS: any = null
+// [2026-06-16] GAIA regime tape + ANANKE confluence channel (main-chart overlays)
+export let gaiaTapeS: any = null
+export let anMidS: any = null, anUpS: any = null, anLoS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1969,6 +1972,10 @@ export const IND_SETTINGS: any = {
   nyx: { period: 20 },
   // [2026-06-16] OLYMPUS — SMC structure engine (BOS/CHoCH/FVG/bias)
   olympus: { swing: 5, fvgMinPct: 0.03 },
+  // [2026-06-16] GAIA — composite regime tape (main-chart colour stripe)
+  gaia: { period: 50 },
+  // [2026-06-16] ANANKE — confluence channel (width=vol, slope=trend, colour=confluence)
+  ananke: { period: 20, mult: 2 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

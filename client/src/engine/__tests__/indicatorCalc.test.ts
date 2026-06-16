@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -801,6 +801,36 @@ describe('olympus', () => {
     const highs = [10, 12, 15], lows = [8, 11, 13], closes = [9, 11.5, 14]
     const o = olympus(closes, highs, lows, closes, 1, 0.01)
     expect(o.fvgs.some((g) => g.dir === 'bull')).toBe(true)
+  })
+})
+
+describe('gaia', () => {
+  const mk = (rising: boolean, frac: number) => {
+    const highs: number[] = [], lows: number[] = [], closes: number[] = [], vol: number[] = []
+    for (let i = 0; i < 80; i++) { const base = rising ? 100 + i : 200 - i; lows.push(base); highs.push(base + 2); closes.push(base + 2 * frac); vol.push(100) }
+    return { highs, lows, closes, vol }
+  }
+  it('scores strongly positive in a bullish regime and negative in a bearish one', () => {
+    const u = mk(true, 0.9), d = mk(false, 0.1)
+    expect(gaia(u.highs, u.lows, u.closes, u.vol, 50).score[79] as number).toBeGreaterThan(0.3)
+    expect(gaia(d.highs, d.lows, d.closes, d.vol, 50).score[79] as number).toBeLessThan(-0.3)
+  })
+})
+
+describe('ananke', () => {
+  it('builds a channel (upper>mid>lower) with positive confluence on an uptrend', () => {
+    const closes = Array.from({ length: 80 }, (_, i) => 100 + i)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const r = ananke(highs, lows, closes, 20, 2)
+    const i = 79
+    expect(r.upper[i] as number).toBeGreaterThan(r.mid[i] as number)
+    expect(r.mid[i] as number).toBeGreaterThan(r.lower[i] as number)
+    expect(r.conf[i] as number).toBeGreaterThan(0)
+  })
+  it('has negative confluence on a downtrend', () => {
+    const closes = Array.from({ length: 80 }, (_, i) => 200 - i)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    expect(ananke(highs, lows, closes, 20, 2).conf[79] as number).toBeLessThan(0)
   })
 })
 
