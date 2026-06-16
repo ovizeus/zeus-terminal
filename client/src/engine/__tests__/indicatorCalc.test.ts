@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -171,6 +171,32 @@ describe('choppiness', () => {
     const ci = choppiness(highs, lows, closes, 14)
     expect(ci[0]).toBeNull()
     expect(ci[ci.length - 1] as number).toBeLessThan(50) // trending → low CI
+  })
+})
+
+describe('pythia', () => {
+  it('marks a long entry on a fast-over-slow cross with target above and stop below entry', () => {
+    // decline then rally → fast EMA crosses above slow during the rally → long
+    const down = Array.from({ length: 40 }, (_, i) => 80 - i)       // 80 → 41
+    const up = Array.from({ length: 40 }, (_, i) => 41 + i * 2)     // 41 → 119
+    const closes = [...down, ...up]
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const e = pythia(highs, lows, closes, 9, 21, 14, 2.5, 1.2)
+    const long = e.find((x) => x.dir === 'long')
+    expect(long).toBeTruthy()
+    expect(long!.target).toBeGreaterThan(long!.entry)
+    expect(long!.stop).toBeLessThan(long!.entry)
+  })
+  it('marks a short entry on a rally-then-decline (fast under slow)', () => {
+    const up = Array.from({ length: 40 }, (_, i) => 40 + i * 2)
+    const down = Array.from({ length: 40 }, (_, i) => 118 - i * 2)
+    const closes = [...up, ...down]
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const e = pythia(highs, lows, closes, 9, 21, 14, 2.5, 1.2)
+    const short = e.find((x) => x.dir === 'short')
+    expect(short).toBeTruthy()
+    expect(short!.target).toBeLessThan(short!.entry)
+    expect(short!.stop).toBeGreaterThan(short!.entry)
   })
 })
 

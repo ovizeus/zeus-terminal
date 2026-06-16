@@ -140,6 +140,9 @@ export const INDICATORS: any[] = [
   { id: 'ms', ico: _ZI.scope, name: 'MOIRA', desc: 'Market structure (HH/HL · BOS)', cat: 'trend', def: false },
   // [2026-06-16] NEMESIS — Zeus original exhaustion / reversal signals
   { id: 'nem', ico: _ZI.siren, name: 'NEMESIS', desc: 'Exhaustion & reversal ⚠️', cat: 'mom', def: false },
+  // [2026-06-16] IRIS + PYTHIA — Zeus originals (rainbow ribbon + backend entry oracle)
+  { id: 'iris', ico: _ZI.wave, name: 'IRIS', desc: 'Rainbow EMA ribbon (trend strength)', cat: 'trend', def: false },
+  { id: 'pythia', ico: _ZI.scope, name: 'PYTHIA', desc: 'Entry oracle + targets (brain-backed) 🔮', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

@@ -58,6 +58,8 @@ export const IND_ICONS: Record<string, string> = {
   aether: g(p('M2 3l4 5-4 5') + p('M14 3l-4 5 4 5') + p('M8 5v6')),
   ms: g(p('M2 12l3-7 3 5 3-8 3 6')),                                       // market-structure zigzag
   nem: g(p('M4 7V3m0 0L2 5m2-2l2 2') + p('M12 9v4m0 0l2-2m-2 2l-2-2')),      // reversal: up + down arrows
+  iris: g(p('M2 13a6 6 0 0112 0') + p('M4 13a4 4 0 018 0') + p('M6 13a2 2 0 014 0')), // rainbow arcs
+  pythia: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + dot(8, 8, 1.6)),            // oracle eye / crystal ball
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

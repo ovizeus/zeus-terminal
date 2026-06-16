@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -291,6 +291,17 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (w.nemS) { w.nemS.applyOptions({ visible: show }); if (!show) try { w.nemS.setMarkers([]); w.nemS.setData([]) } catch (_) { } }
       if (show) updateNem()
       break
+    case 'iris':
+      if (show) initIrisSeries()
+      if (Array.isArray(w.irisSeries)) w.irisSeries.forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
+      if (show) updateIris()
+      break
+    case 'pythia':
+      if (show) initPythiaSeries()
+      ;[w.pythiaMarkS, w.pythiaTpS, w.pythiaSlS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
+      if (w.pythiaMarkS && !show) try { w.pythiaMarkS.setMarkers([]) } catch (_) { }
+      if (show) updatePythia()
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -412,7 +423,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1153,6 +1164,78 @@ export function updateNem(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// IRIS — invented rainbow EMA ribbon (main-chart overlay)
+// ═══════════════════════════════════════════════════════════════
+
+const _IRIS_COLORS = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#32ade6', '#af52de']
+const _IRIS_MULT = [1, 1.6, 2.6, 4.2, 6.8, 11]
+
+export function initIrisSeries(): void {
+  if ((w.irisSeries && w.irisSeries.length) || !w.mainChart) return
+  w.irisSeries = _IRIS_COLORS.map((c) => w.mainChart.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }))
+}
+export function updateIris(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initIrisSeries()
+  const k = w.S.klines, base = Math.max(2, Math.round(w.IND_SETTINGS.iris?.base) || 8)
+  const closes = k.map((b: any) => b.close)
+  _IRIS_MULT.forEach((m, idx) => {
+    const period = Math.max(2, Math.round(base * m))
+    const vals = _calcEMA(closes, period)
+    const data: any[] = []
+    for (let i = 0; i < vals.length; i++) if (vals[i] != null) data.push({ time: k[i].time, value: vals[i] })
+    try { w.irisSeries[idx]?.setData(data) } catch (_) { }
+  })
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PYTHIA — invented entry oracle: marks entries + projects targets,
+// confirmed by the live server brain (BM) and crowd sentiment (S.ls)
+// ═══════════════════════════════════════════════════════════════
+
+export function initPythiaSeries(): void {
+  if (w.pythiaMarkS || !w.mainChart) return
+  w.pythiaMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.pythiaTpS = w.mainChart.addLineSeries({ color: '#26ff9a', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'PYTHIA TP' })
+  w.pythiaSlS = w.mainChart.addLineSeries({ color: '#ff5277', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'PYTHIA SL' })
+}
+export function updatePythia(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initPythiaSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.pythia || {}
+  const entries = _calcPYTHIA(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close),
+    Math.round(s.fast) || 21, Math.round(s.slow) || 50, Math.round(s.atrLen) || 14, s.tpMult || 2.5, s.slMult || 1.2
+  )
+  // Backend confirmation for the most-recent entry: live server brain + crowd sentiment.
+  const bm = (w.BM || {}) as any
+  const score = Number(bm.entryScore) || 0
+  const ready = !!bm.entryReady
+  const latest = entries.length ? entries[entries.length - 1] : null
+  const latestConfirmed = !!latest && ((latest.dir === 'long' ? score : -score) > 10 || (ready && score !== 0 && ((score > 0) === (latest.dir === 'long'))))
+  const marks = entries.filter((g: any) => k[g.index]).map((g: any, i: number) => {
+    const isLatest = i === entries.length - 1
+    const strong = isLatest && latestConfirmed
+    return {
+      time: k[g.index].time,
+      position: g.dir === 'long' ? 'belowBar' : 'aboveBar',
+      shape: g.dir === 'long' ? 'arrowUp' : 'arrowDown',
+      color: g.dir === 'long' ? (strong ? '#00e676' : '#66bb6a') : (strong ? '#ff1744' : '#ef5350'),
+      text: strong ? '★' : (isLatest ? 'PYTHIA' : ''),
+    }
+  })
+  try {
+    w.pythiaMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close })))
+    w.pythiaMarkS.setMarkers(marks)
+    if (latest && k[latest.index]) {
+      const t0 = k[latest.index].time, t1 = k[k.length - 1].time
+      w.pythiaTpS.setData([{ time: t0, value: latest.target }, { time: t1, value: latest.target }])
+      w.pythiaSlS.setData([{ time: t0, value: latest.stop }, { time: t1, value: latest.stop }])
+    } else { w.pythiaTpS.setData([]); w.pythiaSlS.setData([]) }
+  } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1190,6 +1273,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.aether) updateAether()
   if (w.S.activeInds.ms) updateMS()
   if (w.S.activeInds.nem) updateNem()
+  if (w.S.activeInds.iris) updateIris()
+  if (w.S.activeInds.pythia) updatePythia()
 }
 
 export function renderActBar(): void {
@@ -1214,7 +1299,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676' }
   return map[id] || '#888'
 }
 

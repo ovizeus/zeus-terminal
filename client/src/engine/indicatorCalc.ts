@@ -116,6 +116,31 @@ export function donchian(highs: number[], lows: number[], period: number): Bands
   return { upper, middle, lower }
 }
 
+export interface PythiaEntry { index: number; dir: 'long' | 'short'; entry: number; target: number; stop: number }
+
+/**
+ * PYTHIA — the oracle (invented for Zeus). Marks trend-aligned ENTRIES and projects
+ * how far price should travel. Trigger: a fast/slow EMA cross (fast over slow = long,
+ * under = short). Target & stop are projected from volatility — entry ± ATR×multiplier
+ * — so each entry carries an objective "how far the market goes" projection. Pure +
+ * per-bar so historical entries render across the chart; the engine layers the LIVE
+ * server brain (BM.entryScore / entryReady) and crowd sentiment on top to confirm the
+ * most-recent signal.
+ */
+export function pythia(highs: number[], lows: number[], closes: number[], fast = 21, slow = 50, atrLen = 14, tpMult = 2.5, slMult = 1.2): PythiaEntry[] {
+  const n = closes.length
+  const out: PythiaEntry[] = []
+  const ef = ema(closes, fast), es = ema(closes, slow), a = atr(highs, lows, closes, atrLen)
+  for (let i = 1; i < n; i++) {
+    if (ef[i] == null || es[i] == null || ef[i - 1] == null || es[i - 1] == null || a[i] == null) continue
+    const fNow = ef[i] as number, sNow = es[i] as number, fPrev = ef[i - 1] as number, sPrev = es[i - 1] as number
+    const atrI = a[i] as number, px = closes[i]
+    if (fNow > sNow && fPrev <= sPrev) out.push({ index: i, dir: 'long', entry: px, target: px + atrI * tpMult, stop: px - atrI * slMult })
+    else if (fNow < sNow && fPrev >= sPrev) out.push({ index: i, dir: 'short', entry: px, target: px - atrI * tpMult, stop: px + atrI * slMult })
+  }
+  return out
+}
+
 export interface NemesisSignal { index: number; dir: 'top' | 'bottom'; strength: number; reasons: string[] }
 
 /**

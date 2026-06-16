@@ -1795,6 +1795,8 @@ export let keraS: any = null, keraUpS: any = null, keraLowS: any = null // KERAU
 export let aetMidS: any = null, aetUpS: any = null, aetLowS: any = null // AETHER overlay
 export let msZigS: any = null // MOIRA market-structure zigzag overlay
 export let nemS: any = null // NEMESIS exhaustion-marker carrier series
+export let irisSeries: any[] = [] // IRIS rainbow EMA ribbon
+export let pythiaMarkS: any = null, pythiaTpS: any = null, pythiaSlS: any = null // PYTHIA entries + target/stop
 export let kcUpperS: any = null, kcMiddleS: any = null, kcLowerS: any = null
 export let dcUpperS: any = null, dcMiddleS: any = null, dcLowerS: any = null
 export let ichimokuSeries: any[] = []
@@ -1864,6 +1866,10 @@ export const IND_SETTINGS: any = {
   ms: { lookback: 5 },
   // [2026-06-16] NEMESIS — exhaustion / reversal signals
   nem: { setupLen: 9, climaxMult: 2 },
+  // [2026-06-16] IRIS — rainbow EMA ribbon
+  iris: { base: 8, step: 13 },
+  // [2026-06-16] PYTHIA — backend-confirmed entries + ATR targets
+  pythia: { fast: 21, slow: 50, atrLen: 14, tpMult: 2.5, slMult: 1.2 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
