@@ -725,6 +725,119 @@ export function atlas(closes: number[], rocLen = 10, smooth = 5): Atlas {
   return { momentum, accel }
 }
 
+export interface Divergence { index: number; prevIndex: number; dir: 'bull' | 'bear' }
+
+/** Internal Wilder RSI (shared by EOS). Aligned array; warm-up = NaN. */
+function _rsi(closes: number[], period: number): number[] {
+  const n = closes.length, rp = Math.max(2, Math.round(period))
+  const rsi = new Array(n).fill(NaN)
+  let ag = 0, al = 0
+  for (let i = 1; i < n; i++) {
+    const ch = closes[i] - closes[i - 1], g = Math.max(ch, 0), l = Math.max(-ch, 0)
+    if (i <= rp) { ag += g; al += l; if (i === rp) { ag /= rp; al /= rp; rsi[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al) } }
+    else { ag = (ag * (rp - 1) + g) / rp; al = (al * (rp - 1) + l) / rp; rsi[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al) }
+  }
+  return rsi
+}
+
+/**
+ * EOS — first light of the turn (invented for Zeus). A regular-divergence detector:
+ * when price prints a higher swing HIGH but momentum (RSI) prints a LOWER high, the
+ * rally is hollow → BEARISH divergence; when price prints a lower swing LOW but RSI
+ * prints a HIGHER low, selling is exhausted → BULLISH divergence. It compares the two
+ * most-recent same-type swing pivots (extreme over ±lookback). Catches reversals
+ * before price confirms — the earliest actionable warning.
+ */
+export function eos(highs: number[], lows: number[], closes: number[], lookback = 5, rsiPeriod = 14): Divergence[] {
+  const L = Math.max(1, Math.round(lookback))
+  const n = closes.length
+  const rsi = _rsi(closes, rsiPeriod)
+  const out: Divergence[] = []
+  let lastHigh = -1, lastLow = -1
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) {
+      if (j === i) continue
+      if (highs[j] > highs[i]) isH = false
+      if (lows[j] < lows[i]) isL = false
+    }
+    if (isH) {
+      if (lastHigh >= 0 && !isNaN(rsi[i]) && !isNaN(rsi[lastHigh]) &&
+          highs[i] > highs[lastHigh] && rsi[i] < rsi[lastHigh]) {
+        out.push({ index: i, prevIndex: lastHigh, dir: 'bear' })
+      }
+      lastHigh = i
+    }
+    if (isL) {
+      if (lastLow >= 0 && !isNaN(rsi[i]) && !isNaN(rsi[lastLow]) &&
+          lows[i] < lows[lastLow] && rsi[i] > rsi[lastLow]) {
+        out.push({ index: i, prevIndex: lastLow, dir: 'bull' })
+      }
+      lastLow = i
+    }
+  }
+  return out
+}
+
+export interface Pantheon { score: (number | null)[] }
+
+/**
+ * PANTHEON — the council of gods (invented for Zeus). A maximum-confluence meter that
+ * FUSES the Zeus arsenal into one −1..+1 "house view": KERAUNOS conviction (adaptive
+ * trend + pressure), ATLAS momentum (speed), and the ATR-normalised slope of a 20-EMA
+ * (raw direction). When the gods agree the score pins toward ±1 (high-conviction
+ * trend); when they disagree it hovers near 0 (no edge). One number that summarises
+ * everything the other overlays are saying.
+ */
+export function pantheon(highs: number[], lows: number[], closes: number[], volumes: number[]): Pantheon {
+  const n = closes.length
+  const score: (number | null)[] = new Array(n).fill(null)
+  const kera = keraunos(highs, lows, closes, volumes).conviction
+  const mom = atlas(closes).momentum
+  const e = ema(closes, 20)
+  const a = atr(highs, lows, closes, 14)
+  for (let i = 0; i < n; i++) {
+    if (kera[i] == null && mom[i] == null) continue
+    const c1 = (kera[i] as number) || 0                                              // conviction −1..1
+    const c2 = Math.max(-1, Math.min(1, ((mom[i] as number) || 0) / 5))              // momentum % scaled
+    let c3 = 0
+    if (i > 0 && e[i] != null && e[i - 1] != null && a[i] != null && (a[i] as number) > 0) {
+      c3 = Math.max(-1, Math.min(1, ((e[i] as number) - (e[i - 1] as number)) / (a[i] as number)))
+    }
+    score[i] = Math.max(-1, Math.min(1, 0.45 * c1 + 0.35 * c2 + 0.20 * c3))
+  }
+  return { score }
+}
+
+export interface AegisEntry { index: number; dir: 'long' | 'short'; entry: number; stop: number; score: number }
+
+/**
+ * AEGIS — Zeus's shield (invented for Zeus). The apex, maximum-confluence ENTRY
+ * trigger: it fires only when the PANTHEON score crosses a strong threshold AND the
+ * HELIOS regime confirms a trending (persistent) market — i.e. confluence and regime
+ * agree. Each signal carries an ATR-based protective stop. Counter-regime or weak-
+ * confluence moves are filtered out, so AEGIS marks far fewer — but far higher-quality
+ * — entries than any single tool. The engine layers the live server brain on the most
+ * recent one for final confirmation.
+ */
+export function aegis(highs: number[], lows: number[], closes: number[], volumes: number[], thr = 0.4, atrMult = 1.5): AegisEntry[] {
+  const n = closes.length
+  const out: AegisEntry[] = []
+  const sc = pantheon(highs, lows, closes, volumes).score
+  const H = helios(closes, 30)
+  const a = atr(highs, lows, closes, 14)
+  for (let i = 1; i < n; i++) {
+    if (sc[i] == null) continue
+    const s = sc[i] as number, sp = sc[i - 1] == null ? 0 : (sc[i - 1] as number) // null prev ⇒ treat as below threshold (first strong bar = a cross)
+    const trending = H[i] == null || (H[i] as number) >= 0.5   // regime gate (allow if not yet warmed)
+    const px = closes[i]
+    const atrI = a[i] != null ? (a[i] as number) : px * 0.01    // fallback during ATR warm-up
+    if (trending && s >= thr && sp < thr) out.push({ index: i, dir: 'long', entry: px, stop: px - atrMult * atrI, score: s })
+    else if (trending && s <= -thr && sp > -thr) out.push({ index: i, dir: 'short', entry: px, stop: px + atrMult * atrI, score: s })
+  }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -323,6 +323,20 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'atlas':
       { const atx = document.getElementById('atlasChart'); if (atx) atx.style.display = show ? '' : 'none'; if (show) initAtlasChart() }
       break
+    case 'eos':
+      if (show) initEosSeries()
+      if (w.eosS) { w.eosS.applyOptions({ visible: show }); if (!show) try { w.eosS.setMarkers([]); w.eosS.setData([]) } catch (_) { } }
+      if (show) updateEos()
+      break
+    case 'pantheon':
+      { const ptx = document.getElementById('pantheonChart'); if (ptx) ptx.style.display = show ? '' : 'none'; if (show) initPantheonChart() }
+      break
+    case 'aegis':
+      if (show) initAegisSeries()
+      ;[w.aegisMarkS, w.aegisStopS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
+      if (w.aegisMarkS && !show) try { w.aegisMarkS.setMarkers([]) } catch (_) { }
+      if (show) updateAegis()
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -444,7 +458,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -709,7 +723,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -1422,6 +1436,98 @@ export function updateAtlas(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// EOS — invented divergence detector (price vs RSI). Main-chart markers.
+// ═══════════════════════════════════════════════════════════════
+
+export function initEosSeries(): void {
+  if (w.eosS || !w.mainChart) return
+  w.eosS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateEos(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initEosSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.eos || {}
+  const divs = _calcEOS(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.lookback) || 5, Math.round(s.rsiPeriod) || 14)
+  const marks = divs.filter((d: any) => k[d.index]).map((d: any) => ({
+    time: k[d.index].time,
+    position: d.dir === 'bear' ? 'aboveBar' : 'belowBar',
+    shape: d.dir === 'bear' ? 'arrowDown' : 'arrowUp',
+    color: d.dir === 'bear' ? '#ff8f00' : '#00bcd4',
+    text: d.dir === 'bear' ? 'DIV↓' : 'DIV↑',
+  }))
+  try { w.eosS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.eosS.setMarkers(marks) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PANTHEON — invented MAX-CONFLUENCE meter (fuses the Zeus arsenal). Sub-pane
+// histogram, −1..1, green/red by sign, dim when weak (gods disagree).
+// ═══════════════════════════════════════════════════════════════
+
+export function initPantheonChart(): void {
+  if (w._pantheonInited && w._pantheonChart) { updatePantheon(); return }
+  w._pantheonChart = _createSubChart('pantheonChart', 60)
+  if (!w._pantheonChart) return
+  w._pantheonSeries = w._pantheonChart.addHistogramSeries({ color: '#f0c040', priceLineVisible: false, lastValueVisible: true, title: 'PANTHEON' })
+  w._pantheonInited = true
+  updatePantheon()
+}
+export function updatePantheon(): void {
+  if (!w._pantheonInited || !w._pantheonSeries || !w.S.klines.length) return
+  const k = w.S.klines
+  const r = _calcPANTHEON(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume))
+  const out: any[] = []
+  for (let i = 0; i < r.score.length; i++) {
+    if (r.score[i] == null || !k[i]) continue
+    const v = r.score[i] as number
+    const strong = Math.abs(v) >= 0.4
+    const col = v >= 0 ? (strong ? '#00e676' : '#2e7d5288') : (strong ? '#ff1744' : '#b71c1c88')
+    out.push({ time: k[i].time, value: v, color: col })
+  }
+  try { w._pantheonSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AEGIS — invented apex confluence-gated ENTRY trigger (PANTHEON × HELIOS),
+// brain-confirmed. Main-chart markers + ATR stop line for the latest.
+// ═══════════════════════════════════════════════════════════════
+
+export function initAegisSeries(): void {
+  if (w.aegisMarkS || !w.mainChart) return
+  w.aegisMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.aegisStopS = w.mainChart.addLineSeries({ color: '#ff5277', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'AEGIS STOP' })
+}
+export function updateAegis(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initAegisSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.aegis || {}
+  const entries = _calcAEGIS(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), s.thr ?? 0.4, s.atrMult ?? 1.5)
+  // brain confirmation for the most-recent signal
+  const bm = (w.BM || {}) as any
+  const score = Number(bm.entryScore) || 0, ready = !!bm.entryReady
+  const latest = entries.length ? entries[entries.length - 1] : null
+  const latestConfirmed = !!latest && ((latest.dir === 'long' ? score : -score) > 10 || (ready && score !== 0 && ((score > 0) === (latest.dir === 'long'))))
+  const marks = entries.filter((g: any) => k[g.index]).map((g: any, i: number) => {
+    const isLatest = i === entries.length - 1
+    const strong = isLatest && latestConfirmed
+    return {
+      time: k[g.index].time,
+      position: g.dir === 'long' ? 'belowBar' : 'aboveBar',
+      shape: g.dir === 'long' ? 'arrowUp' : 'arrowDown',
+      color: g.dir === 'long' ? (strong ? '#00e676' : '#66bb6a') : (strong ? '#ff1744' : '#ef5350'),
+      text: strong ? '🛡★' : (isLatest ? 'AEGIS' : ''),
+    }
+  })
+  try {
+    w.aegisMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close })))
+    w.aegisMarkS.setMarkers(marks)
+    if (latest && k[latest.index]) {
+      const t0 = k[latest.index].time, t1 = k[k.length - 1].time
+      w.aegisStopS.setData([{ time: t0, value: latest.stop }, { time: t1, value: latest.stop }])
+    } else { w.aegisStopS.setData([]) }
+  } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1466,6 +1572,9 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.hermes) updateHermes()
   if (w.S.activeInds.charon) updateCharon()
   if (w.S.activeInds.atlas && w._atlasInited) updateAtlas()
+  if (w.S.activeInds.eos) updateEos()
+  if (w.S.activeInds.pantheon && w._pantheonInited) updatePantheon()
+  if (w.S.activeInds.aegis) updateAegis()
 }
 
 export function renderActBar(): void {
@@ -1490,7 +1599,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676' }
   return map[id] || '#888'
 }
 

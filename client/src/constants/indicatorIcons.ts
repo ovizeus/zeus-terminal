@@ -65,6 +65,9 @@ export const IND_ICONS: Record<string, string> = {
   hermes: g(p('M3 3v3M3 13v-3M13 3v3M13 13v-3') + p('M2 6h3M2 10h3M11 6h3M11 10h3') + p('M6 8h4') + dot(8, 8, 0.8)), // imbalance gap between two candles
   charon: g(p('M2 5h12M2 11h12') + p('M9 5l2-2 2 2M5 11l-2 2-2-2')), // resting-liquidity levels swept up/down
   atlas: g(p('M8 14V5M8 5l-3 3M8 5l3 3') + p('M4 13l1.5-1.5M12 13l-1.5-1.5')), // acceleration / launch
+  eos: g(p('M2 4l5 4 7-5') + p('M2 9l5 3 7-2')), // diverging lines (price up / momentum flat)
+  pantheon: g(p('M2 5l6-3 6 3') + p('M3 5v7M6 5v7M10 5v7M13 5v7') + p('M2 13h12')), // temple columns (council)
+  aegis: g(p('M8 1l5 2v5c0 4-3 6-5 7-2-1-5-3-5-7V3z') + p('M6 8l1.5 1.5L10 6')), // shield + check
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

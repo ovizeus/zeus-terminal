@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -408,6 +408,59 @@ describe('atlas', () => {
     const last = a.accel.length - 1
     expect(Math.abs(a.momentum[last] as number)).toBeLessThan(0.01)
     expect(Math.abs(a.accel[last] as number)).toBeLessThan(0.01)
+  })
+})
+
+describe('eos', () => {
+  it('flags a bearish divergence: higher price high but lower RSI high', () => {
+    // strong fast rally to a first peak, deep pullback, then a slow grind to a HIGHER
+    // peak (weaker momentum → lower RSI). lookback 2.
+    const seg = (from: number, to: number, steps: number) =>
+      Array.from({ length: steps }, (_, i) => from + (to - from) * (i + 1) / steps)
+    // trailing decline so the 2nd (higher) peak is an interior pivot, not the last bar
+    const closes = [100, ...seg(100, 130, 6), ...seg(130, 112, 5), ...seg(112, 134, 14), ...seg(134, 126, 4)]
+    const highs = closes.map((c) => c + 0.5), lows = closes.map((c) => c - 0.5)
+    const d = eos(highs, lows, closes, 2, 5)
+    expect(d.some((x) => x.dir === 'bear')).toBe(true)
+  })
+  it('finds no divergence on a clean monotonic uptrend', () => {
+    const closes = Array.from({ length: 50 }, (_, i) => 100 + i)
+    const highs = closes.map((c) => c + 0.5), lows = closes.map((c) => c - 0.5)
+    expect(eos(highs, lows, closes, 3, 14)).toEqual([])
+  })
+})
+
+describe('pantheon', () => {
+  const mk = (closes: number[]) => ({ highs: closes.map((c) => c + 1), lows: closes.map((c) => c - 1), closes, vol: closes.map(() => 100) })
+  it('score is strongly positive on a clean uptrend, negative on a downtrend', () => {
+    const up = mk(Array.from({ length: 50 }, (_, i) => 100 + i))
+    const dn = mk(Array.from({ length: 50 }, (_, i) => 150 - i))
+    const su = pantheon(up.highs, up.lows, up.closes, up.vol).score
+    const sd = pantheon(dn.highs, dn.lows, dn.closes, dn.vol).score
+    expect(su[su.length - 1] as number).toBeGreaterThan(0.3)
+    expect(sd[sd.length - 1] as number).toBeLessThan(-0.3)
+  })
+  it('score hovers near zero in a flat chop', () => {
+    const f = mk(Array.from({ length: 50 }, (_, i) => 100 + (i % 2 ? 0.3 : -0.3)))
+    const s = pantheon(f.highs, f.lows, f.closes, f.vol).score
+    expect(Math.abs(s[s.length - 1] as number)).toBeLessThan(0.35)
+  })
+})
+
+describe('aegis', () => {
+  it('fires a LONG entry on a strong trending rally, with stop below entry', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i * 1.5)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    const e = aegis(highs, lows, closes, vol, 0.4, 1.5)
+    const long = e.find((x) => x.dir === 'long')
+    expect(long).toBeTruthy()
+    expect(long!.stop).toBeLessThan(long!.entry)
+    expect(long!.score).toBeGreaterThanOrEqual(0.4)
+  })
+  it('stays silent in a flat market (no confluence)', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + (i % 2 ? 0.2 : -0.2))
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    expect(aegis(highs, lows, closes, vol, 0.4, 1.5)).toEqual([])
   })
 })
 

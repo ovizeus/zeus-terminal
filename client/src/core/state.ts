@@ -1828,6 +1828,10 @@ export let hermesMarkS: any = null, hermesTopS: any = null, hermesBotS: any = nu
 // [2026-06-16] CHARON liquidity-pool price lines (carrier + line refs) + ATLAS accel pane
 export let charonS: any = null, _charonLines: any[] = []
 export let _atlasChart: any = null, _atlasSeries: any = null, _atlasInited = false
+// [2026-06-16] EOS divergence markers + PANTHEON confluence pane + AEGIS entry markers
+export let eosS: any = null
+export let _pantheonChart: any = null, _pantheonSeries: any = null, _pantheonInited = false
+export let aegisMarkS: any = null, aegisStopS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1888,6 +1892,12 @@ export const IND_SETTINGS: any = {
   charon: { lookback: 5, tolPct: 0.15, minHits: 2 },
   // [2026-06-16] ATLAS — momentum acceleration oscillator
   atlas: { rocLen: 10, smooth: 5 },
+  // [2026-06-16] EOS — price/RSI divergence detector
+  eos: { lookback: 5, rsiPeriod: 14 },
+  // [2026-06-16] PANTHEON — max-confluence meter (no tunable params)
+  pantheon: {},
+  // [2026-06-16] AEGIS — confluence-gated entry trigger
+  aegis: { thr: 0.4, atrMult: 1.5 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

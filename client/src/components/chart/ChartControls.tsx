@@ -623,6 +623,9 @@ const IND_LIST: IndMeta[] = [
   { id: 'hermes',   ico: '☄️', name: 'HERMES',           desc: 'Fair-value gaps — imbalance magnet zones (Zeus original)', hasGenericSettings: true },
   { id: 'charon',   ico: '🪙', name: 'CHARON',           desc: 'Liquidity pools — stop-hunt magnet levels (Zeus original)', hasGenericSettings: true },
   { id: 'atlas',    ico: '🚀', name: 'ATLAS',            desc: 'Momentum acceleration — trend gaining vs tiring (Zeus original)', hasGenericSettings: true },
+  { id: 'eos',      ico: '🌅', name: 'EOS',              desc: 'Divergence detector — price vs momentum (Zeus original)', hasGenericSettings: true },
+  { id: 'pantheon', ico: '🏛️', name: 'PANTHEON',         desc: 'Max-confluence meter — fuses the whole arsenal (Zeus original)', hasGenericSettings: true },
+  { id: 'aegis',    ico: '🛡️', name: 'AEGIS',            desc: 'Confluence-gated entry trigger, brain-backed (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

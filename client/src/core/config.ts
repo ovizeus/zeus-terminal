@@ -148,6 +148,9 @@ export const INDICATORS: any[] = [
   { id: 'hermes', ico: _ZI.tgt, name: 'HERMES', desc: 'Fair-value gaps — imbalance magnet zones ☄️', cat: 'vol', def: false },
   { id: 'charon', ico: _ZI.ruler, name: 'CHARON', desc: 'Liquidity pools — stop-hunt magnets 🪙', cat: 'volume', def: false },
   { id: 'atlas', ico: _ZI.bolt, name: 'ATLAS', desc: 'Momentum acceleration — trend gaining/tiring 🚀', cat: 'momentum', def: false },
+  { id: 'eos', ico: _ZI.wave, name: 'EOS', desc: 'Divergence detector — price vs momentum 🌅', cat: 'momentum', def: false },
+  { id: 'pantheon', ico: _ZI.scope, name: 'PANTHEON', desc: 'Max-confluence meter — fuses the arsenal 🏛️', cat: 'momentum', def: false },
+  { id: 'aegis', ico: _ZI.dia, name: 'AEGIS', desc: 'Confluence-gated entry trigger (brain-backed) 🛡️', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false
