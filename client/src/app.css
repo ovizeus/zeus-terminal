@@ -5204,8 +5204,11 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .z-dot--pur { background: #bb86fc; box-shadow: 0 0 4px #bb86fc66 }
 
 /* ── Indicator Panel (bottom sheet) ── */
-.ind-panel { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%); width: min(480px,100vw); max-height: 65vh; background: var(--bg2); border-top: 2px solid #00e5ff55; border-radius: 16px 16px 0 0; z-index: 8000; transition: transform .3s cubic-bezier(.4,0,.2,1); overflow: hidden; display: flex; flex-direction: column }
-.ind-panel.open { transform: translateX(-50%) translateY(0) }
+/* [2026-06-16] Compact top-centered box matching the coin selector (.sym-dropdown)
+ * — was a full-width 480px bottom sheet (max-height 65vh). Operator: "caseta de
+ * indicatori prea mare, fă-o ca aia de la monede". */
+.ind-panel { position: fixed; z-index: 8000; top: calc(54px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%) translateY(-8px); opacity: 0; visibility: hidden; width: calc(100vw - 16px); max-width: 360px; max-height: min(64dvh, 540px); background: var(--bg2); border: 1px solid #00e5ff55; border-radius: 12px; transition: opacity .16s ease, transform .16s ease, visibility .16s ease; overflow: hidden; display: flex; flex-direction: column }
+.ind-panel.open { transform: translateX(-50%) translateY(0); opacity: 1; visibility: visible }
 .ind-panel-hdr { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px 8px; border-bottom: 1px solid var(--brd); flex-shrink: 0 }
 .ind-panel-title { font-size: 11px; color: #00e5ff; letter-spacing: 2px; font-weight: 700 }
 .ind-panel-body { overflow-y: auto; padding: 6px 0; flex: 1; -webkit-overflow-scrolling: touch }
@@ -7577,14 +7580,13 @@ select option {
   -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
 }
 #indPanel.ind-panel {
-  background: radial-gradient(130% 70% at 50% 0%, #1c1430 0%, #0e0a18 58%, #0b0712 100%);
-  border-top: 2px solid #b07cff99;
-  /* [2026-06-13] Glow ONLY when open — the sheet is fixed bottom:0 translateY(100%)
-   * when closed, and an always-on upward box-shadow bled a violet haze into the
-   * bottom of the whole app. Scoped to .open below. */
+  background: radial-gradient(130% 60% at 50% 0%, #1c1430 0%, #0e0a18 60%, #0b0712 100%);
+  /* [2026-06-16] Compact box (matches .sym-dropdown): full border + radius instead
+   * of the old bottom-sheet border-top. Glow scoped to .open below. */
+  border: 1px solid #b07cff55; border-radius: 12px;
   box-shadow: inset 0 1px 0 #ffffff12;
 }
-#indPanel.ind-panel.open { box-shadow: 0 -22px 64px -22px #b07cffb0, inset 0 1px 0 #ffffff12; }
+#indPanel.ind-panel.open { box-shadow: 0 24px 70px -18px #000000e6, 0 0 60px -18px #b07cffaa, inset 0 1px 0 #ffffff12; }
 #indPanel .ind-panel-hdr { border-bottom: 1px solid #b07cff2e; }
 #indPanel .ind-panel-title { color: #e4d6ff; text-shadow: 0 0 18px #b07cff77; }
 #indPanel .ind-row { border-bottom: 1px solid #ffffff0a; }
