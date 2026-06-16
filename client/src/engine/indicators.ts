@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -316,6 +316,13 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (w.hermesMarkS && !show) try { w.hermesMarkS.setMarkers([]) } catch (_) { }
       if (show) updateHermes()
       break
+    case 'charon':
+      if (show) { initCharonSeries(); updateCharon() }
+      else if (w.charonS && w._charonLines) { try { w._charonLines.forEach((pl: any) => w.charonS.removePriceLine(pl)) } catch (_) { } w._charonLines = [] }
+      break
+    case 'atlas':
+      { const atx = document.getElementById('atlasChart'); if (atx) atx.style.display = show ? '' : 'none'; if (show) initAtlasChart() }
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -437,7 +444,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -702,7 +709,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -1349,6 +1356,72 @@ export function updateHermes(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CHARON — invented liquidity-pool (stop-hunt) detector. Horizontal price
+// lines at resting-liquidity levels; dimmed once swept. (main-chart overlay)
+// ═══════════════════════════════════════════════════════════════
+
+export function initCharonSeries(): void {
+  if (w.charonS || !w.mainChart) return
+  // carrier series just to host createPriceLine() levels
+  w.charonS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._charonLines = []
+}
+export function updateCharon(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initCharonSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.charon || {}
+  // keep the carrier anchored to the time range
+  try { w.charonS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))) } catch (_) { }
+  try { (w._charonLines || []).forEach((pl: any) => w.charonS.removePriceLine(pl)) } catch (_) { }
+  w._charonLines = []
+  const pools = _calcCHARON(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close),
+    Math.round(s.lookback) || 5, s.tolPct ?? 0.15, Math.round(s.minHits) || 2
+  )
+  // draw the strongest few unswept pools (live magnets) brightly + recent swept ones dim
+  const ordered = [...pools].sort((a: any, b: any) => (Number(a.swept) - Number(b.swept)) || (b.hits - a.hits))
+  for (const p of ordered.slice(0, 8)) {
+    const buy = p.side === 'buy'
+    const col = p.swept ? (buy ? '#7e9cae66' : '#7e9cae66') : (buy ? '#ffca28' : '#26c6da')
+    try {
+      const pl = w.charonS.createPriceLine({
+        price: p.level, color: col, lineWidth: 1, lineStyle: p.swept ? 1 : 2,
+        axisLabelVisible: !p.swept, title: `${buy ? 'BSL' : 'SSL'}×${p.hits}${p.swept ? ' swept' : ''}`,
+      })
+      w._charonLines.push(pl)
+    } catch (_) { }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ATLAS — invented momentum-ACCELERATION oscillator (sub-pane histogram)
+// bright = accelerating · dim = decelerating (trend tiring)
+// ═══════════════════════════════════════════════════════════════
+
+export function initAtlasChart(): void {
+  if (w._atlasInited && w._atlasChart) { updateAtlas(); return }
+  w._atlasChart = _createSubChart('atlasChart', 60)
+  if (!w._atlasChart) return
+  w._atlasSeries = w._atlasChart.addHistogramSeries({ color: '#26ff9a', priceLineVisible: false, lastValueVisible: true, title: 'ATLAS' })
+  w._atlasInited = true
+  updateAtlas()
+}
+export function updateAtlas(): void {
+  if (!w._atlasInited || !w._atlasSeries || !w.S.klines.length) return
+  const k = w.S.klines, s = w.IND_SETTINGS.atlas || {}
+  const r = _calcATLAS(k.map((b: any) => b.close), Math.round(s.rocLen) || 10, Math.round(s.smooth) || 5)
+  const out: any[] = []
+  for (let i = 0; i < r.accel.length; i++) {
+    if (r.accel[i] == null || r.momentum[i] == null || !k[i]) continue
+    const m = r.momentum[i] as number, a = r.accel[i] as number
+    // 4 regimes: up+gaining / up+tiring / down+gaining / down+tiring
+    const col = m >= 0 ? (a >= 0 ? '#00e676' : '#2e7d5288') : (a <= 0 ? '#ff1744' : '#b71c1c88')
+    out.push({ time: k[i].time, value: a, color: col })
+  }
+  try { w._atlasSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1391,6 +1464,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.plutus) updatePlutus()
   if (w.S.activeInds.helios && w._heliosInited) updateHelios()
   if (w.S.activeInds.hermes) updateHermes()
+  if (w.S.activeInds.charon) updateCharon()
+  if (w.S.activeInds.atlas && w._atlasInited) updateAtlas()
 }
 
 export function renderActBar(): void {
@@ -1415,7 +1490,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676' }
   return map[id] || '#888'
 }
 

@@ -645,6 +645,86 @@ export function hermes(highs: number[], lows: number[], closes: number[], minPct
   return out
 }
 
+export interface LiquidityPool { level: number; side: 'buy' | 'sell'; index: number; hits: number; swept: boolean; sweepIndex: number }
+
+/**
+ * CHARON — the ferryman of liquidity (invented for Zeus). Stops cluster where price
+ * has repeatedly turned: equal/near-equal swing HIGHS hold buy-side liquidity (BSL,
+ * stops resting above), equal/near-equal swing LOWS hold sell-side liquidity (SSL,
+ * stops below). Price is magnetically drawn to "sweep" these pools before reversing.
+ * CHARON finds swing pivots (extreme over ±lookback), clusters those within `tolPct`,
+ * keeps clusters with ≥ `minHits` touches, and marks each pool's level — flagging it
+ * SWEPT once a later bar trades beyond it (the stop-hunt). The unswept pools are the
+ * live magnets.
+ */
+export function charon(highs: number[], lows: number[], closes: number[], lookback = 5, tolPct = 0.15, minHits = 2): LiquidityPool[] {
+  const L = Math.max(1, Math.round(lookback))
+  const n = closes.length
+  const pivH: { index: number; level: number }[] = []
+  const pivL: { index: number; level: number }[] = []
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) {
+      if (j === i) continue
+      if (highs[j] > highs[i]) isH = false
+      if (lows[j] < lows[i]) isL = false
+    }
+    if (isH) pivH.push({ index: i, level: highs[i] })
+    if (isL) pivL.push({ index: i, level: lows[i] })
+  }
+  const cluster = (pivs: { index: number; level: number }[]) => {
+    const groups: { anchor: number; items: { index: number; level: number }[] }[] = []
+    for (const pv of pivs) {
+      let g = groups.find((gr) => Math.abs(pv.level - gr.anchor) / (gr.anchor || 1) * 100 <= tolPct)
+      if (!g) { g = { anchor: pv.level, items: [] }; groups.push(g) }
+      g.items.push(pv)
+    }
+    return groups.filter((g) => g.items.length >= Math.max(2, Math.round(minHits)))
+  }
+  const out: LiquidityPool[] = []
+  for (const g of cluster(pivH)) {
+    const level = Math.max(...g.items.map((p) => p.level))
+    const idx = Math.max(...g.items.map((p) => p.index))
+    let sweepIndex = -1
+    for (let j = idx + 1; j < n; j++) if (highs[j] > level) { sweepIndex = j; break }
+    out.push({ level, side: 'buy', index: idx, hits: g.items.length, swept: sweepIndex !== -1, sweepIndex })
+  }
+  for (const g of cluster(pivL)) {
+    const level = Math.min(...g.items.map((p) => p.level))
+    const idx = Math.max(...g.items.map((p) => p.index))
+    let sweepIndex = -1
+    for (let j = idx + 1; j < n; j++) if (lows[j] < level) { sweepIndex = j; break }
+    out.push({ level, side: 'sell', index: idx, hits: g.items.length, swept: sweepIndex !== -1, sweepIndex })
+  }
+  return out
+}
+
+export interface Atlas { momentum: (number | null)[]; accel: (number | null)[] }
+
+/**
+ * ATLAS — the engine of the move (invented for Zeus). Most momentum tools read the
+ * SPEED of price; ATLAS reads its ACCELERATION (the second derivative). momentum =
+ * smoothed rate-of-change; accel = the bar-to-bar change in that momentum. The four
+ * regimes it exposes: momentum>0 & accel>0 = uptrend GAINING power; momentum>0 &
+ * accel<0 = uptrend TIRING (early-warning the rally is running out of fuel even while
+ * price still rises); the mirror two for downtrends. It catches exhaustion before the
+ * turn shows up in price.
+ */
+export function atlas(closes: number[], rocLen = 10, smooth = 5): Atlas {
+  const n = closes.length
+  const mom = roc(closes, rocLen)                          // raw % momentum
+  const finite = mom.map((v) => (v == null ? 0 : v))
+  const sm = ema(finite, smooth)                           // smoothed momentum
+  const momentum: (number | null)[] = new Array(n).fill(null)
+  const accel: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    if (mom[i] == null || sm[i] == null) continue           // respect ROC warm-up
+    momentum[i] = sm[i]
+    if (i > 0 && sm[i - 1] != null && mom[i - 1] != null) accel[i] = (sm[i] as number) - (sm[i - 1] as number)
+  }
+  return { momentum, accel }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

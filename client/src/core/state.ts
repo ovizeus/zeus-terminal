@@ -1825,6 +1825,9 @@ export let plutusS: any = null
 export let _heliosChart: any = null, _heliosSeries: any = null, _heliosMidS: any = null, _heliosInited = false
 // [2026-06-16] HERMES fair-value-gap markers + magnet band (main-chart overlay)
 export let hermesMarkS: any = null, hermesTopS: any = null, hermesBotS: any = null
+// [2026-06-16] CHARON liquidity-pool price lines (carrier + line refs) + ATLAS accel pane
+export let charonS: any = null, _charonLines: any[] = []
+export let _atlasChart: any = null, _atlasSeries: any = null, _atlasInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1881,6 +1884,10 @@ export const IND_SETTINGS: any = {
   helios: { period: 30 },
   // [2026-06-16] HERMES — fair-value-gap (imbalance) magnet zones
   hermes: { minPct: 0.05 },
+  // [2026-06-16] CHARON — liquidity pools (stop-hunt levels)
+  charon: { lookback: 5, tolPct: 0.15, minHits: 2 },
+  // [2026-06-16] ATLAS — momentum acceleration oscillator
+  atlas: { rocLen: 10, smooth: 5 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

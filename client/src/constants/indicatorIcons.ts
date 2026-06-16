@@ -63,6 +63,8 @@ export const IND_ICONS: Record<string, string> = {
   plutus: g(p('M8 2v12M8 4h-2a2 2 0 000 4h4a2 2 0 010 4H6') ),               // money flow ($ effort/result)
   helios: g(p('M8 5a3 3 0 100 6 3 3 0 000-6z') + p('M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13')), // sun / regime
   hermes: g(p('M3 3v3M3 13v-3M13 3v3M13 13v-3') + p('M2 6h3M2 10h3M11 6h3M11 10h3') + p('M6 8h4') + dot(8, 8, 0.8)), // imbalance gap between two candles
+  charon: g(p('M2 5h12M2 11h12') + p('M9 5l2-2 2 2M5 11l-2 2-2-2')), // resting-liquidity levels swept up/down
+  atlas: g(p('M8 14V5M8 5l-3 3M8 5l3 3') + p('M4 13l1.5-1.5M12 13l-1.5-1.5')), // acceleration / launch
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -366,6 +366,48 @@ describe('hermes', () => {
     const closes = Array.from({ length: 20 }, (_, i) => 100 + i)
     const highs = closes.map((c) => c + 2), lows = closes.map((c) => c - 2)
     expect(hermes(highs, lows, closes, 0.05)).toEqual([])
+  })
+})
+
+describe('charon', () => {
+  // two equal highs at 110 (pivots @ i=4, i=9) → one buy-side liquidity pool
+  const highs = [100, 101, 102, 103, 110, 103, 102, 103, 104, 110, 103, 102, 101]
+  const lows = highs.map((h) => h - 5)
+  const closes = highs.map((h) => h - 1)
+  it('clusters equal swing highs into a buy-side pool, unswept while price stays below', () => {
+    const pools = charon(highs, lows, closes, 2, 0.2, 2)
+    const buy = pools.find((p) => p.side === 'buy')
+    expect(buy).toBeTruthy()
+    expect(buy!.level).toBe(110)
+    expect(buy!.hits).toBe(2)
+    expect(buy!.swept).toBe(false)
+  })
+  it('flags the pool SWEPT once a later bar trades above the level', () => {
+    const h2 = [...highs, 112], l2 = [...lows, 107], c2 = [...closes, 111]
+    const buy = charon(h2, l2, c2, 2, 0.2, 2).find((p) => p.side === 'buy')
+    expect(buy!.swept).toBe(true)
+    expect(buy!.sweepIndex).toBe(13)
+  })
+  it('finds no pool when every swing is distinct (no resting liquidity)', () => {
+    const h = Array.from({ length: 20 }, (_, i) => 100 + i * 3) // strictly rising, no equal highs
+    expect(charon(h, h.map((x) => x - 5), h.map((x) => x - 1), 2, 0.1, 2)).toEqual([])
+  })
+})
+
+describe('atlas', () => {
+  it('reports positive momentum AND positive acceleration on a convex (speeding-up) rally', () => {
+    const closes = Array.from({ length: 40 }, (_, i) => 100 + i * i * 0.1) // accelerating up
+    const a = atlas(closes, 10, 5)
+    const last = a.momentum.length - 1
+    expect(a.momentum[last] as number).toBeGreaterThan(0)
+    expect(a.accel[last] as number).toBeGreaterThan(0) // gaining power
+  })
+  it('keeps momentum and acceleration near zero on a flat market', () => {
+    const closes = Array.from({ length: 40 }, () => 100)
+    const a = atlas(closes, 10, 5)
+    const last = a.accel.length - 1
+    expect(Math.abs(a.momentum[last] as number)).toBeLessThan(0.01)
+    expect(Math.abs(a.accel[last] as number)).toBeLessThan(0.01)
   })
 })
 
