@@ -5225,8 +5225,8 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .argus-row { display: flex; align-items: center; gap: 1px }
 .argus-hrow { color: #7a9ab8; margin-bottom: 2px }
 .argus-lab { display: inline-block; width: 44px; text-align: left; color: #9fb6cc }
-.argus-c { display: inline-block; width: 20px; text-align: center; font-weight: 700 }
-.argus-h { color: #7a9ab8; font-weight: 600 }
+.argus-c { display: inline-block; width: 30px; text-align: center; font-weight: 700 }
+.argus-h { color: #7a9ab8; font-weight: 600; font-size: 9px }
 .argus-foot { font-size: 10px; text-align: center }
 .ind-row-name { font-size: 10px; color: var(--whi); font-weight: 600 }
 .ind-row-desc { font-size: 11px; color: var(--dim); margin-top: 1px }

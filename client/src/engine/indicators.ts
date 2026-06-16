@@ -2519,6 +2519,21 @@ export function updateAurora(): void {
 // a green-▲ / red-▼ grid + aggregate trend % overlaid on the chart.
 // ═══════════════════════════════════════════════════════════════
 
+/** Parse a Binance-style timeframe ('5m','1h','1d') to minutes; 0 if unknown. */
+function _tfToMin(tf: any): number {
+  const m = String(tf).match(/^(\d+)\s*([mhdwM])$/)
+  if (!m) return 0
+  const n = +m[1], u = m[2]
+  return n * (u === 'm' ? 1 : u === 'h' ? 60 : u === 'd' ? 1440 : u === 'w' ? 10080 : 43200)
+}
+/** Minutes → compact timeframe label (90 → '1.5h', 240 → '4h'). */
+function _minToTf(min: number): string {
+  if (min < 60) return Math.round(min) + 'm'
+  if (min < 1440) { const h = min / 60; return (Number.isInteger(h) ? h : +h.toFixed(1)) + 'h' }
+  if (min < 10080) { const d = min / 1440; return (Number.isInteger(d) ? d : +d.toFixed(1)) + 'd' }
+  return +(min / 10080).toFixed(1) + 'w'
+}
+
 export function initArgusHud(): void {
   const mc = document.getElementById('mc')
   if (!mc) return
@@ -2541,7 +2556,10 @@ export function updateArgus(): void {
     if (!c || !c.valid) return `<span class="argus-c" style="color:#37414d">–</span>`
     return `<span class="argus-c" style="color:${c.bull ? '#00e676' : '#ff3b30'}">${c.bull ? '▲' : '▼'}</span>`
   }
-  const header = `<span class="argus-lab"></span>` + tfs.map((t) => `<span class="argus-c argus-h">×${t}</span>`).join('')
+  // real timeframe labels from the chart's current TF (fallback to ×N if unknown)
+  const baseMin = _tfToMin(w.S.chartTf)
+  const tfLabel = (t: number) => baseMin > 0 ? _minToTf(baseMin * t) : '×' + t
+  const header = `<span class="argus-lab"></span>` + tfs.map((t) => `<span class="argus-c argus-h">${tfLabel(t)}</span>`).join('')
   const rows = r.indicators.map((ind: string) =>
     `<div class="argus-row"><span class="argus-lab">${ind}</span>${tfs.map((t) => cell(ind, t)).join('')}</div>`
   ).join('')
