@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -629,6 +629,33 @@ describe('typhon', () => {
     for (let i = 0; i < 80; i++) { const r = i < 50 ? 6 : 0.3; closes.push(100); highs.push(100 + r); lows.push(100 - r) }
     const t = typhon(highs, lows, closes, 14, 60)
     expect(t[79] as number).toBeLessThan(30)
+  })
+})
+
+describe('styx', () => {
+  it('is 0 at fresh highs and negative after a decline from the peak', () => {
+    const rising = Array.from({ length: 60 }, (_, i) => 100 + i)
+    expect(styx(rising, 50)[59] as number).toBeCloseTo(0, 6) // every bar a new high
+    const updown = [...Array.from({ length: 40 }, (_, i) => 100 + i), ...Array.from({ length: 20 }, (_, i) => 139 - i)]
+    // peak 139 at index 39, last close = 139 - 19 = 120 → dd = (120-139)/139*100 ≈ -13.7
+    const s = styx(updown, 100)
+    expect(s[s.length - 1] as number).toBeLessThan(-10)
+    expect(s[s.length - 1] as number).toBeCloseTo((120 - 139) / 139 * 100, 4)
+  })
+})
+
+describe('geras', () => {
+  it('ages positively on a sustained uptrend and negatively on a downtrend', () => {
+    const up = Array.from({ length: 60 }, (_, i) => 100 + i)
+    const dn = Array.from({ length: 60 }, (_, i) => 200 - i)
+    expect(geras(up, 20)[59] as number).toBeGreaterThan(10)
+    expect(geras(dn, 20)[59] as number).toBeLessThan(-10)
+  })
+  it('resets toward ±1 when the trend flips', () => {
+    const closes = [...Array.from({ length: 40 }, (_, i) => 100 + i), ...Array.from({ length: 40 }, (_, i) => 139 - i * 2)]
+    const g = geras(closes, 20)
+    // after the down-leg begins, age must turn negative (was strongly positive before)
+    expect(g[79] as number).toBeLessThan(0)
   })
 })
 

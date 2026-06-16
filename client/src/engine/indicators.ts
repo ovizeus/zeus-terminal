@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -367,6 +367,12 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'typhon':
       { const tyx = document.getElementById('typhonChart'); if (tyx) tyx.style.display = show ? '' : 'none'; if (show) initTyphonChart() }
+      break
+    case 'styx':
+      { const sxx = document.getElementById('styxChart'); if (sxx) sxx.style.display = show ? '' : 'none'; if (show) initStyxChart() }
+      break
+    case 'geras':
+      { const gex = document.getElementById('gerasChart'); if (gex) gex.style.display = show ? '' : 'none'; if (show) initGerasChart() }
       break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
@@ -761,7 +767,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -1942,6 +1948,59 @@ export function updateTyphon(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// STYX — invented drawdown / underwater risk meter (≤0). Sub-pane histogram.
+// ═══════════════════════════════════════════════════════════════
+
+export function initStyxChart(): void {
+  if (w._styxInited && w._styxChart) { updateStyx(); return }
+  w._styxChart = _createSubChart('styxChart', 60)
+  if (!w._styxChart) return
+  w._styxSeries = w._styxChart.addHistogramSeries({ color: '#ff5277', priceLineVisible: false, lastValueVisible: true, title: 'STYX %' })
+  w._styxInited = true
+  updateStyx()
+}
+export function updateStyx(): void {
+  if (!w._styxInited || !w._styxSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.styx?.period) || 100
+  const d = _calcSTYX(k.map((b: any) => b.close), p)
+  const out: any[] = []
+  for (let i = 0; i < d.length; i++) {
+    if (d[i] == null || !k[i]) continue
+    const v = d[i] as number
+    const col = v <= -20 ? '#b71c1c' : v <= -8 ? '#ff5277' : '#ffab40'
+    out.push({ time: k[i].time, value: v, color: col })
+  }
+  try { w._styxSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GERAS — invented trend-age meter (signed: +up / −down). Sub-pane histogram.
+// ═══════════════════════════════════════════════════════════════
+
+export function initGerasChart(): void {
+  if (w._gerasInited && w._gerasChart) { updateGeras(); return }
+  w._gerasChart = _createSubChart('gerasChart', 60)
+  if (!w._gerasChart) return
+  w._gerasSeries = w._gerasChart.addHistogramSeries({ color: '#26ff9a', priceLineVisible: false, lastValueVisible: true, title: 'GERAS age' })
+  w._gerasInited = true
+  updateGeras()
+}
+export function updateGeras(): void {
+  if (!w._gerasInited || !w._gerasSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.geras?.period) || 20
+  const g = _calcGERAS(k.map((b: any) => b.close), p)
+  const out: any[] = []
+  for (let i = 0; i < g.length; i++) {
+    if (g[i] == null || !k[i]) continue
+    const v = g[i] as number, a = Math.abs(v)
+    // young = bright, old (stretched) = dim/warning
+    const col = v >= 0 ? (a >= 30 ? '#2e7d5288' : '#26ff9a') : (a >= 30 ? '#b71c1c88' : '#ff5277')
+    out.push({ time: k[i].time, value: v, color: col })
+  }
+  try { w._gerasSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1999,6 +2058,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.cerberus && w._cerberusInited) updateCerberus()
   if (w.S.activeInds.proteus && w._proteusInited) updateProteus()
   if (w.S.activeInds.typhon && w._typhonInited) updateTyphon()
+  if (w.S.activeInds.styx && w._styxInited) updateStyx()
+  if (w.S.activeInds.geras && w._gerasInited) updateGeras()
 }
 
 export function renderActBar(): void {
@@ -2023,7 +2084,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a' }
   return map[id] || '#888'
 }
 

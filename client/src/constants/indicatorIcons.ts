@@ -78,6 +78,8 @@ export const IND_ICONS: Record<string, string> = {
   cerberus: g(p('M3 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M6 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M9 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M5 6l1-2 2 1 2-1 1 2')), // three guardian heads
   proteus: g(p('M2 8h3l1-5 2 10 2-9 1 4h3')), // sharp Fisher spikes
   typhon: g(p('M8 8m-1 0a1 1 0 102 0 1 1 0 10-2 0') + p('M8 8c3-3 5-1 4 2s-5 3-7 1-2-6 2-8 8-2 8 4')), // spiral storm
+  styx: g(p('M2 6c2 0 2 2 4 2s2-2 4-2 2 2 4 2') + p('M8 8v5') + p('M6 13h4')), // waterline with price submerged below
+  geras: g(p('M4 2h8M4 14h8') + p('M4 2c0 4 8 4 8 0M4 14c0-4 8-4 8 0') + p('M8 7v2')), // hourglass (time/age)
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

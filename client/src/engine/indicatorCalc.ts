@@ -1166,6 +1166,47 @@ export function typhon(highs: number[], lows: number[], closes: number[], atrLen
   return out
 }
 
+/**
+ * STYX — the underworld river (invented for Zeus). A pure RISK / drawdown meter: how
+ * far price has sunk below its running peak over the last `period` bars, in percent
+ * (≤ 0). 0 = at a fresh high (no pain); deeply negative = price is "underwater", a
+ * sign of capitulation that often precedes a mean-reversion bounce. The arsenal had no
+ * risk-from-peak lens — STYX is the underwater curve.
+ */
+export function styx(closes: number[], period = 100): (number | null)[] {
+  const n = closes.length, p = Math.max(2, Math.round(period))
+  const out: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    let mx = -Infinity
+    for (let j = Math.max(0, i - p + 1); j <= i; j++) if (closes[j] > mx) mx = closes[j]
+    out[i] = mx > 0 ? Math.min(0, (closes[i] - mx) / mx * 100) : 0
+  }
+  return out
+}
+
+/**
+ * GERAS — old age (invented for Zeus). Measures the AGE of the current trend: the
+ * number of consecutive bars price has stayed on one side of its EMA(`period`),
+ * signed (+ for above / up-trend, − for below / down-trend). A young trend (small
+ * magnitude) has room to run; an old, stretched trend (large magnitude) is prone to
+ * exhaustion. It resets to ±1 the bar the trend flips. No other tool reads the
+ * temporal maturity of a move.
+ */
+export function geras(closes: number[], period = 20): (number | null)[] {
+  const n = closes.length
+  const e = ema(closes, period)
+  const out: (number | null)[] = new Array(n).fill(null)
+  let dir = 0, age = 0
+  for (let i = 0; i < n; i++) {
+    if (e[i] == null) continue
+    const s = closes[i] > (e[i] as number) ? 1 : closes[i] < (e[i] as number) ? -1 : 0
+    if (s !== 0 && s === dir) age += 1
+    else if (s !== 0) { dir = s; age = 1 }
+    out[i] = dir * age
+  }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

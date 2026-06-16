@@ -1848,6 +1848,9 @@ export let _cerberusChart: any = null, _cerberusFastS: any = null, _cerberusMidS
 // [2026-06-16] PROTEUS Fisher-Transform pane + TYPHON volatility-percentile pane
 export let _proteusChart: any = null, _proteusSeries: any = null, _proteusTrigS: any = null, _proteusZeroS: any = null, _proteusInited = false
 export let _typhonChart: any = null, _typhonSeries: any = null, _typhonHiS: any = null, _typhonLoS: any = null, _typhonInited = false
+// [2026-06-16] STYX drawdown pane + GERAS trend-age pane
+export let _styxChart: any = null, _styxSeries: any = null, _styxInited = false
+export let _gerasChart: any = null, _gerasSeries: any = null, _gerasInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1934,6 +1937,10 @@ export const IND_SETTINGS: any = {
   proteus: { period: 10 },
   // [2026-06-16] TYPHON — volatility-regime percentile
   typhon: { atrP: 14, period: 100 },
+  // [2026-06-16] STYX — drawdown / underwater risk meter
+  styx: { period: 100 },
+  // [2026-06-16] GERAS — trend-age (maturity) meter
+  geras: { period: 20 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
