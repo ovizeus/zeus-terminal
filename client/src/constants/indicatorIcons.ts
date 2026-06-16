@@ -90,6 +90,8 @@ export const IND_ICONS: Record<string, string> = {
   olympus: g(p('M2 13l4-8 3 4 2-6 3 10z') + p('M2 13h12')), // mountain peaks (structure)
   gaia: g('<rect x="2" y="11" width="12" height="3" rx="1" fill="currentColor" stroke="none"/>' + p('M2 7c2-2 4 1 6-1s4 1 6-1')), // colour regime stripe under a price line
   ananke: g(p('M2 5c3 1 9 1 12 0M2 11c3 1 9 1 12 0') + p('M2 8c3 1 9 1 12 0')), // confluence channel rails
+  psyche: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + p('M8 2v12') + dot(5, 6, 0.9) + dot(11, 10, 0.9)), // mind split into emotion halves
+  hubris: g(p('M3 11l1.5-5 2.5 3L8 4l1 5 2.5-3L13 11z') + p('M3 13h10')), // crown (peak of greed/pride)
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

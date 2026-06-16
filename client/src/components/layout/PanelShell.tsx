@@ -513,6 +513,7 @@ export function PanelShell() {
           <div id="gerasChart" style={{ display: 'none', width: '100%', height: '60px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="kairosChart" style={{ display: 'none', width: '100%', height: '60px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="nyxChart" style={{ display: 'none', width: '100%', height: '64px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
+          <div id="psycheChart" style={{ display: 'none', width: '100%', height: '60px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           {/* ── Time & Sales tape ── */}
           <div id="ts-wrap" style={{ display: 'none' }}></div>
         </section>

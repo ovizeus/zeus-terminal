@@ -1559,6 +1559,61 @@ export function ananke(highs: number[], lows: number[], closes: number[], period
   return { mid, upper, lower, conf }
 }
 
+export interface Psyche { emotion: (number | null)[] }
+
+/**
+ * PSYCHE — the mind of the crowd (invented for Zeus). A market-EMOTION score (−1..+1,
+ * fear↔greed) that fuses three psychological proxies: RSI bias (greed when overbought),
+ * momentum (greed when accelerating up), and stretch from the mean (mania when far
+ * above, despair when far below). The engine maps it to a vivid 7-colour emotional
+ * spectrum — euphoria / greed / optimism / calm / anxiety / fear / panic — so you read
+ * the crowd's state at a glance. Nothing else in the suite measures sentiment directly.
+ */
+export function psyche(_highs: number[], _lows: number[], closes: number[], _volumes: number[], period = 20): Psyche {
+  const n = closes.length, p = Math.max(2, Math.round(period))
+  const rsi = _rsi(closes, 14), rc = roc(closes, 10), base = sma(closes, p)
+  const emotion: (number | null)[] = new Array(n).fill(null)
+  for (let i = p - 1; i < n; i++) {
+    if (base[i] == null) continue
+    const m = base[i] as number
+    let ss = 0; for (let j = i - p + 1; j <= i; j++) { const d = closes[j] - m; ss += d * d }
+    const sd = Math.sqrt(ss / p) || 1e-9
+    const z = (closes[i] - m) / sd
+    const rsiBias = isNaN(rsi[i]) ? 0 : (rsi[i] - 50) / 50
+    const mom = rc[i] == null ? 0 : Math.max(-1, Math.min(1, (rc[i] as number) / 5))
+    const stretch = Math.max(-1, Math.min(1, z / 3))
+    emotion[i] = Math.max(-1, Math.min(1, 0.35 * rsiBias + 0.3 * mom + 0.35 * stretch))
+  }
+  return { emotion }
+}
+
+export interface PsychExtreme { index: number; kind: 'euphoria' | 'capitulation'; intensity: number }
+
+/**
+ * HUBRIS — the pride before the fall (invented for Zeus). A contrarian PSYCHOLOGY
+ * extreme detector: a EUPHORIA top prints when the crowd is maximally greedy — RSI above
+ * `rsiHi`, price stretched > `zThr` standard deviations above its mean (often on a
+ * volume climax) — a greed peak prone to reverse. A CAPITULATION bottom prints at the
+ * mirror fear extreme (RSI < `rsiLo`, z < −zThr, panic volume). `intensity` grades how
+ * extreme. The timeless edge: buy capitulation, fade euphoria.
+ */
+export function hubris(_highs: number[], _lows: number[], closes: number[], volumes: number[], rsiPeriod = 14, meanPeriod = 20, zThr = 1.8, rsiHi = 72, rsiLo = 28): PsychExtreme[] {
+  const n = closes.length, p = Math.max(2, Math.round(meanPeriod))
+  const rsi = _rsi(closes, rsiPeriod), base = sma(closes, p), volAvg = sma(volumes, p)
+  const out: PsychExtreme[] = []
+  for (let i = p - 1; i < n; i++) {
+    if (base[i] == null || isNaN(rsi[i])) continue
+    const m = base[i] as number
+    let ss = 0; for (let j = i - p + 1; j <= i; j++) { const d = closes[j] - m; ss += d * d }
+    const sd = Math.sqrt(ss / p) || 1e-9
+    const z = (closes[i] - m) / sd
+    const volSpike = volAvg[i] != null && (volAvg[i] as number) > 0 ? volumes[i] / (volAvg[i] as number) : 1
+    if (rsi[i] > rsiHi && z > zThr) out.push({ index: i, kind: 'euphoria', intensity: Math.abs(z) + (rsi[i] - 50) / 50 + Math.max(0, volSpike - 1) })
+    else if (rsi[i] < rsiLo && z < -zThr) out.push({ index: i, kind: 'capitulation', intensity: Math.abs(z) + (50 - rsi[i]) / 50 + Math.max(0, volSpike - 1) })
+  }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

@@ -1866,6 +1866,9 @@ export let olyMarkS: any = null, olyBullTopS: any = null, olyBullBotS: any = nul
 // [2026-06-16] GAIA regime tape + ANANKE confluence channel (main-chart overlays)
 export let gaiaTapeS: any = null
 export let anMidS: any = null, anUpS: any = null, anLoS: any = null
+// [2026-06-16] PSYCHE emotion-spectrum pane + HUBRIS psychology-extreme markers
+export let _psycheChart: any = null, _psycheSeries: any = null, _psycheInited = false
+export let hubrisS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1976,6 +1979,10 @@ export const IND_SETTINGS: any = {
   gaia: { period: 50 },
   // [2026-06-16] ANANKE — confluence channel (width=vol, slope=trend, colour=confluence)
   ananke: { period: 20, mult: 2 },
+  // [2026-06-16] PSYCHE — market-emotion spectrum (fear↔greed)
+  psyche: { period: 20 },
+  // [2026-06-16] HUBRIS — contrarian euphoria/capitulation extremes
+  hubris: { rsiPeriod: 14, meanPeriod: 20, zThr: 1.8, rsiHi: 72, rsiLo: 28 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

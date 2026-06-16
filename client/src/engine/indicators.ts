@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -420,6 +420,14 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       ;[w.anMidS, w.anUpS, w.anLoS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { sx.setData([]) } catch (_) { } } })
       if (show) updateAnanke()
       break
+    case 'psyche':
+      { const psx = document.getElementById('psycheChart'); if (psx) psx.style.display = show ? '' : 'none'; if (show) initPsycheChart() }
+      break
+    case 'hubris':
+      if (show) initHubrisSeries()
+      if (w.hubrisS) { w.hubrisS.applyOptions({ visible: show }); if (!show) try { w.hubrisS.setMarkers([]); w.hubrisS.setData([]) } catch (_) { } }
+      if (show) updateHubris()
+      break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
       else {
@@ -548,7 +556,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %', meanPeriod: 'Mean Period', zThr: 'Z Threshold', rsiHi: 'RSI High', rsiLo: 'RSI Low'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -813,7 +821,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -2352,6 +2360,74 @@ export function updateAnanke(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PSYCHE — invented market-EMOTION spectrum (sub-pane, vivid 7-colour heatmap).
+// ═══════════════════════════════════════════════════════════════
+
+function _psycheColor(e: number): string {
+  if (e >= 0.7) return '#ff2d95'   // euphoria
+  if (e >= 0.4) return '#00e676'   // greed
+  if (e >= 0.1) return '#aeea00'   // optimism
+  if (e > -0.1) return '#00bcd4'   // calm
+  if (e > -0.4) return '#ff9100'   // anxiety
+  if (e > -0.7) return '#ff1744'   // fear
+  return '#7c4dff'                 // panic / capitulation
+}
+function _psycheLabel(e: number): string {
+  if (e >= 0.7) return 'EUPHORIA'; if (e >= 0.4) return 'GREED'; if (e >= 0.1) return 'OPTIMISM'
+  if (e > -0.1) return 'CALM'; if (e > -0.4) return 'ANXIETY'; if (e > -0.7) return 'FEAR'; return 'PANIC'
+}
+
+export function initPsycheChart(): void {
+  if (w._psycheInited && w._psycheChart) { updatePsyche(); return }
+  w._psycheChart = _createSubChart('psycheChart', 60)
+  if (!w._psycheChart) return
+  w._psycheSeries = w._psycheChart.addHistogramSeries({ color: '#00bcd4', priceLineVisible: false, lastValueVisible: true, title: 'PSYCHE' })
+  w._psycheInited = true
+  updatePsyche()
+}
+export function updatePsyche(): void {
+  if (!w._psycheInited || !w._psycheSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.psyche?.period) || 20
+  const r = _calcPSYCHE(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), p)
+  const out: any[] = []
+  let lastE = 0
+  for (let i = 0; i < r.emotion.length; i++) {
+    if (r.emotion[i] == null || !k[i]) continue
+    const e = r.emotion[i] as number
+    out.push({ time: k[i].time, value: e, color: _psycheColor(e) })
+    lastE = e
+  }
+  try { w._psycheSeries.applyOptions({ title: `PSYCHE · ${_psycheLabel(lastE)}` }); w._psycheSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HUBRIS — invented contrarian psychology extremes (main-chart markers).
+// 👑 euphoria tops (fade) · 🔥 capitulation bottoms (buy).
+// ═══════════════════════════════════════════════════════════════
+
+export function initHubrisSeries(): void {
+  if (w.hubrisS || !w.mainChart) return
+  w.hubrisS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateHubris(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initHubrisSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.hubris || {}
+  const sigs = _calcHUBRIS(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume),
+    Math.round(s.rsiPeriod) || 14, Math.round(s.meanPeriod) || 20, s.zThr ?? 1.8, s.rsiHi ?? 72, s.rsiLo ?? 28
+  )
+  const marks = sigs.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time,
+    position: g.kind === 'euphoria' ? 'aboveBar' : 'belowBar',
+    shape: g.kind === 'euphoria' ? 'arrowDown' : 'arrowUp',
+    color: g.kind === 'euphoria' ? '#ff2d95' : '#7c4dff',
+    text: g.kind === 'euphoria' ? (g.intensity >= 3 ? '👑!' : '👑') : (g.intensity >= 3 ? '🔥!' : '🔥'),
+  }))
+  try { w.hubrisS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.hubrisS.setMarkers(marks) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2421,6 +2497,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.olympus) updateOlympus()
   if (w.S.activeInds.gaia) updateGaia()
   if (w.S.activeInds.ananke) updateAnanke()
+  if (w.S.activeInds.psyche && w._psycheInited) updatePsyche()
+  if (w.S.activeInds.hubris) updateHubris()
 }
 
 export function renderActBar(): void {
@@ -2445,7 +2523,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff' }
   return map[id] || '#888'
 }
 

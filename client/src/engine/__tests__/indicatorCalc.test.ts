@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -831,6 +831,42 @@ describe('ananke', () => {
     const closes = Array.from({ length: 80 }, (_, i) => 200 - i)
     const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
     expect(ananke(highs, lows, closes, 20, 2).conf[79] as number).toBeLessThan(0)
+  })
+})
+
+describe('psyche', () => {
+  const mk = (dir: number, frac: number) => {
+    const highs: number[] = [], lows: number[] = [], closes: number[] = [], vol: number[] = []
+    for (let i = 0; i < 60; i++) { const base = 150 + dir * i; lows.push(base); highs.push(base + 2); closes.push(base + 2 * frac); vol.push(100) }
+    return { highs, lows, closes, vol }
+  }
+  it('reads greed on an overbought rally and fear on a crash', () => {
+    const up = mk(1, 0.95), dn = mk(-1, 0.05)
+    expect(psyche(up.highs, up.lows, up.closes, up.vol, 20).emotion[59] as number).toBeGreaterThan(0.4)
+    expect(psyche(dn.highs, dn.lows, dn.closes, dn.vol, 20).emotion[59] as number).toBeLessThan(-0.4)
+  })
+})
+
+describe('hubris', () => {
+  it('flags a euphoria extreme on a parabolic overbought spike', () => {
+    const closes: number[] = []
+    for (let i = 0; i < 30; i++) closes.push(100 + i * 0.2)      // calm base
+    for (let i = 0; i < 12; i++) closes.push(106 + i * i * 0.4)   // parabolic blow-off
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    const e = hubris(highs, lows, closes, vol, 5, 10, 1.5, 70, 30)
+    expect(e.some((x) => x.kind === 'euphoria')).toBe(true)
+  })
+  it('flags a capitulation extreme on a panic crash', () => {
+    const closes: number[] = []
+    for (let i = 0; i < 30; i++) closes.push(200 - i * 0.2)
+    for (let i = 0; i < 12; i++) closes.push(194 - i * i * 0.4)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    const e = hubris(highs, lows, closes, vol, 5, 10, 1.5, 70, 30)
+    expect(e.some((x) => x.kind === 'capitulation')).toBe(true)
+  })
+  it('stays silent on a calm market', () => {
+    const c = Array.from({ length: 50 }, (_, i) => 100 + (i % 2 ? 0.3 : -0.3))
+    expect(hubris(c.map((x) => x + 1), c.map((x) => x - 1), c, c.map(() => 100), 5, 10, 1.5, 70, 30)).toEqual([])
   })
 })
 

@@ -173,6 +173,8 @@ export const INDICATORS: any[] = [
   { id: 'olympus', ico: _ZI.scope, name: 'OLYMPUS', desc: 'SMC suite — BOS · CHoCH · FVG · bias 🏔️', cat: 'trend', def: false },
   { id: 'gaia', ico: _ZI.chart, name: 'GAIA', desc: 'Regime tape — trend+momentum+flow colour stripe 🌍', cat: 'trend', def: false },
   { id: 'ananke', ico: _ZI.tgt, name: 'ANANKE', desc: 'Confluence channel — width=vol, colour=confluence ⛓️', cat: 'trend', def: false },
+  { id: 'psyche', ico: _ZI.wave, name: 'PSYCHE', desc: 'Market emotion spectrum — fear↔greed heatmap 🧬', cat: 'momentum', def: false },
+  { id: 'hubris', ico: _ZI.siren, name: 'HUBRIS', desc: 'Euphoria & capitulation extremes (contrarian) 👑', cat: 'momentum', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false
