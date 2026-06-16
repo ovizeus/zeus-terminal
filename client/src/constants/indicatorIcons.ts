@@ -74,6 +74,8 @@ export const IND_ICONS: Record<string, string> = {
   mnemosyne: g(p('M2 9c2 0 2-4 4-4s2 4 4 4') + p('M10 9c1.5 0 2-3 3.5-3') + dot(13.5, 6, 0.9)), // past wave continuing into a projected dot
   themis: g(p('M8 2v12M3 14h10') + p('M3 5h10') + p('M3 5L1.5 8.5h3zM13 5l-1.5 3.5h3z')), // scales of balance (equilibrium)
   erebus: g(p('M2 8h2l1-3 2 6 2-8 2 8 1-3h2')), // erratic/chaotic disordered signal
+  anemoi: g(p('M3 13v-3M6 13v-6M9 13V3M12 13v-5') + p('M9 3l-1.5 1.5M9 3l1.5 1.5')), // volume bars with a spike gust
+  cerberus: g(p('M3 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M6 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M9 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M5 6l1-2 2 1 2-1 1 2')), // three guardian heads
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

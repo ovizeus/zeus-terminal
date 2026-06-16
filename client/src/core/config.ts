@@ -157,6 +157,8 @@ export const INDICATORS: any[] = [
   { id: 'mnemosyne', ico: _ZI.wave, name: 'MNEMOSYNE', desc: 'Analog forecast — projects best historical match 🧠', cat: 'trend', def: false },
   { id: 'themis', ico: _ZI.ruler, name: 'THEMIS', desc: 'Equilibrium stretch — regression z-score ⚖️', cat: 'momentum', def: false },
   { id: 'erebus', ico: _ZI.scope, name: 'EREBUS', desc: 'Market entropy — order vs chaos 🌑', cat: 'momentum', def: false },
+  { id: 'anemoi', ico: _ZI.chart, name: 'ANEMOI', desc: 'Volume anomaly — surge & dead-air detector 🌬️', cat: 'volume', def: false },
+  { id: 'cerberus', ico: _ZI.tup, name: 'CERBERUS', desc: 'Multi-timeframe trend alignment (3 heads) 🐺', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

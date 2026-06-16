@@ -1842,6 +1842,9 @@ export let mnemoS: any = null
 // [2026-06-16] THEMIS z-score pane + EREBUS entropy pane
 export let _themisChart: any = null, _themisSeries: any = null, _themisZeroS: any = null, _themisHiS: any = null, _themisLoS: any = null, _themisInited = false
 export let _erebusChart: any = null, _erebusSeries: any = null, _erebusMidS: any = null, _erebusInited = false
+// [2026-06-16] ANEMOI volume-anomaly pane + CERBERUS 3-head MTF pane
+export let _anemoiChart: any = null, _anemoiSeries: any = null, _anemoiInited = false
+export let _cerberusChart: any = null, _cerberusFastS: any = null, _cerberusMidS: any = null, _cerberusSlowS: any = null, _cerberusInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1920,6 +1923,10 @@ export const IND_SETTINGS: any = {
   themis: { period: 50 },
   // [2026-06-16] EREBUS — permutation-entropy market-disorder meter
   erebus: { period: 60, dim: 3 },
+  // [2026-06-16] ANEMOI — volume-anomaly (z-score) detector
+  anemoi: { period: 20 },
+  // [2026-06-16] CERBERUS — multi-timeframe trend alignment (3 heads)
+  cerberus: { baseLen: 20, mult2: 4, mult3: 12 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

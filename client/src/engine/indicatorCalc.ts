@@ -1065,6 +1065,52 @@ export function erebus(closes: number[], period = 60, dim = 3): (number | null)[
   return out
 }
 
+/**
+ * ANEMOI — the winds (invented for Zeus). A pure VOLUME-ANOMALY detector: the z-score
+ * of each bar's volume versus its rolling mean/stdev over `period`. z ≈ 0 is normal
+ * flow; z ≥ 2 is a climactic "gust" (a surge of interest that often precedes or marks
+ * a move); z ≤ −1 is "dead air" (apathy). Distinct from OBV/CMF/MFI, which read flow
+ * DIRECTION — ANEMOI reads how ABNORMAL the participation is, regardless of direction.
+ */
+export function anemoi(volumes: number[], period = 20): (number | null)[] {
+  const n = volumes.length, p = Math.max(2, Math.round(period))
+  const out: (number | null)[] = new Array(n).fill(null)
+  for (let i = p - 1; i < n; i++) {
+    let m = 0; for (let j = i - p + 1; j <= i; j++) m += volumes[j]; m /= p
+    let s = 0; for (let j = i - p + 1; j <= i; j++) { const d = volumes[j] - m; s += d * d }
+    const sd = Math.sqrt(s / p)
+    out[i] = sd <= 0 ? 0 : (volumes[i] - m) / sd
+  }
+  return out
+}
+
+export interface Cerberus { fast: (number | null)[]; mid: (number | null)[]; slow: (number | null)[]; align: (number | null)[] }
+
+/**
+ * CERBERUS — the three-headed guardian (invented for Zeus). MULTI-TIMEFRAME trend
+ * alignment: each "head" reports the trend (+1 up / −1 down / 0 flat) on a different
+ * horizon — fast = SMA(baseLen), mid = SMA(baseLen·mult2), slow = SMA(baseLen·mult3) —
+ * the longer averages standing in for higher timeframes. `align` sums the heads (−3..+3):
+ * +3 / −3 = all three agree (a strong aligned trend, trade with it); near 0 = the heads
+ * disagree (conflicting timeframes → chop, stand aside). The single-TF arsenal had no
+ * cross-horizon agreement read; this is it.
+ */
+export function cerberus(closes: number[], baseLen = 20, mult2 = 4, mult3 = 12): Cerberus {
+  const n = closes.length
+  const L = Math.max(2, Math.round(baseLen))
+  const s1 = sma(closes, L), s2 = sma(closes, L * Math.max(2, Math.round(mult2))), s3 = sma(closes, L * Math.max(3, Math.round(mult3)))
+  const fast: (number | null)[] = new Array(n).fill(null)
+  const mid: (number | null)[] = new Array(n).fill(null)
+  const slow: (number | null)[] = new Array(n).fill(null)
+  const align: (number | null)[] = new Array(n).fill(null)
+  const sgn = (c: number, b: number | null) => (b == null ? null : (c > b ? 1 : c < b ? -1 : 0))
+  for (let i = 0; i < n; i++) {
+    fast[i] = sgn(closes[i], s1[i]); mid[i] = sgn(closes[i], s2[i]); slow[i] = sgn(closes[i], s3[i])
+    if (fast[i] != null && mid[i] != null && slow[i] != null) align[i] = (fast[i] as number) + (mid[i] as number) + (slow[i] as number)
+  }
+  return { fast, mid, slow, align }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

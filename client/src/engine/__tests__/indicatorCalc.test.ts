@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -575,6 +575,30 @@ describe('erebus', () => {
     const en = erebus(noisy, 60, 3)[79] as number
     expect(en).toBeGreaterThan(eo)
     expect(en).toBeGreaterThan(0.3)
+  })
+})
+
+describe('anemoi', () => {
+  it('is ~0 on steady volume and spikes high on a volume surge', () => {
+    const vol = Array.from({ length: 25 }, () => 100)
+    expect(Math.abs(anemoi(vol, 20)[24] as number)).toBeLessThan(1e-6)
+    const surge = [...Array.from({ length: 24 }, () => 100), 500]
+    expect(anemoi(surge, 20)[24] as number).toBeGreaterThan(1.5)
+  })
+})
+
+describe('cerberus', () => {
+  it('all three heads agree (+1) on a clean uptrend and (−1) on a downtrend', () => {
+    const up = Array.from({ length: 300 }, (_, i) => 100 + i)
+    const dn = Array.from({ length: 300 }, (_, i) => 400 - i)
+    const cu = cerberus(up, 20, 4, 12), cd = cerberus(dn, 20, 4, 12)
+    const i = 299
+    expect(cu.fast[i]).toBe(1); expect(cu.mid[i]).toBe(1); expect(cu.slow[i]).toBe(1); expect(cu.align[i]).toBe(3)
+    expect(cd.fast[i]).toBe(-1); expect(cd.mid[i]).toBe(-1); expect(cd.slow[i]).toBe(-1); expect(cd.align[i]).toBe(-3)
+  })
+  it('warm-up is null until the slow SMA is ready', () => {
+    const c = cerberus(Array.from({ length: 300 }, (_, i) => 100 + i), 20, 4, 12)
+    expect(c.slow[100]).toBeNull() // SMA(240) not warmed at bar 100
   })
 })
 
