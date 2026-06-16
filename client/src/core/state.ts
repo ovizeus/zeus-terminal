@@ -1872,6 +1872,8 @@ export let hubrisS: any = null
 // [2026-06-16] OKEANOS Forex-Lines ribbon (fan/centre/rails/signals) + AURORA glow cloud
 export let okCenterS: any = null, okOutUpS: any = null, okOutLoS: any = null, okMarkS: any = null, okFanUp: any[] = [], okFanLo: any[] = [], _okAll: any[] = []
 export let _auroraSeries: any = null, auroraMarkS: any = null
+// [2026-06-16] ARGUS multi-timeframe matrix HUD (DOM overlay on the chart)
+export let _argusHud: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1990,6 +1992,8 @@ export const IND_SETTINGS: any = {
   okeanos: { period: 20, atrLen: 14, bandMult: 3.5, spacing: 0.6 },
   // [2026-06-16] AURORA — glowing momentum cloud (vivid per-bar glow + flips)
   aurora: { period: 20 },
+  // [2026-06-16] ARGUS — multi-timeframe × multi-indicator matrix HUD (iPanel-style)
+  argus: {},
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

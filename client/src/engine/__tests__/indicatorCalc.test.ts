@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -891,6 +891,27 @@ describe('aurora', () => {
     expect(aurora(h(dn), l(dn), dn, v(dn), 20).score[59] as number).toBeLessThan(0)
     const turn = [...Array.from({ length: 40 }, (_, i) => 100 + i), ...Array.from({ length: 40 }, (_, i) => 139 - i * 2)]
     expect(aurora(h(turn), l(turn), turn, v(turn), 20).flips.some((f) => f.dir === 'down')).toBe(true)
+  })
+})
+
+describe('argus', () => {
+  const mk = (dir: number) => {
+    const o: number[] = [], h: number[] = [], l: number[] = [], c: number[] = [], v: number[] = []
+    for (let i = 0; i < 400; i++) { const base = 100 + dir * i * 0.5; o.push(base); c.push(base + dir * 0.2); h.push(base + 1); l.push(base - 1); v.push(100) }
+    return { o, h, l, c, v }
+  }
+  it('reads UP / mostly-bullish across timeframes on an uptrend', () => {
+    const s = mk(1)
+    const r = argus(s.o, s.h, s.l, s.c, s.v, [1, 2, 4, 8, 16, 32])
+    expect(r.cells.length).toBe(6 * 6)        // 6 indicators × 6 tfs
+    expect(r.trend).toBe('UP')
+    expect(r.pctUp).toBeGreaterThan(50)
+  })
+  it('reads DOWN on a downtrend', () => {
+    const s = mk(-1)
+    const r = argus(s.o, s.h, s.l, s.c, s.v, [1, 2, 4, 8, 16, 32])
+    expect(r.trend).toBe('DOWN')
+    expect(r.pctUp).toBeLessThan(50)
   })
 })
 

@@ -177,6 +177,7 @@ export const INDICATORS: any[] = [
   { id: 'hubris', ico: _ZI.siren, name: 'HUBRIS', desc: 'Euphoria & capitulation extremes (contrarian) 👑', cat: 'momentum', def: false },
   { id: 'okeanos', ico: _ZI.wave, name: 'OKEANOS', desc: 'Forex-Lines ribbon — fan + centre + rails + signals 🌊', cat: 'trend', def: false },
   { id: 'aurora', ico: _ZI.tgt, name: 'AURORA', desc: 'Glowing momentum cloud behind price 🌌', cat: 'trend', def: false },
+  { id: 'argus', ico: _ZI.scope, name: 'ARGUS', desc: 'Multi-timeframe × multi-indicator matrix HUD 👁️', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

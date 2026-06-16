@@ -94,6 +94,7 @@ export const IND_ICONS: Record<string, string> = {
   hubris: g(p('M3 11l1.5-5 2.5 3L8 4l1 5 2.5-3L13 11z') + p('M3 13h10')), // crown (peak of greed/pride)
   okeanos: g(p('M2 6c2-2 4 2 6 0s4-2 6 0') + p('M2 9c2-2 4 2 6 0s4-2 6 0') + p('M2 12c2-2 4 2 6 0s4-2 6 0')), // stacked ribbon waves
   aurora: g('<path d="M2 13c2-6 4-8 6-8s4 2 6 8z" fill="currentColor" stroke="none" opacity="0.8"/>'), // glowing cloud
+  argus: g(p('M8 4C4 4 2 8 2 8s2 4 6 4 6-4 6-4-2-4-6-4z') + dot(8, 8, 1.8)), // all-seeing eye (matrix watcher)
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

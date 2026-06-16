@@ -5220,6 +5220,14 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .ind-row-ico svg.z-i { width: 15px; height: 15px; vertical-align: -2px; margin: 0 }
 /* [2026-06-16] KRATOS all-in-one trade HUD ("cadran") overlaid on the main chart */
 .kratos-hud { position: absolute; top: 10px; left: 10px; z-index: 30; min-width: 152px; padding: 8px 11px; border-radius: 8px; background: rgba(10, 15, 22, 0.88); border: 1px solid #f0c04055; font: 11px/1.45 ui-monospace, Menlo, monospace; color: #cfe; backdrop-filter: blur(4px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
+/* [2026-06-16] ARGUS multi-timeframe matrix HUD (iPanel-style grid) */
+.argus-hud { position: absolute; top: 10px; right: 10px; z-index: 30; padding: 7px 9px; border-radius: 8px; background: rgba(10, 15, 22, 0.9); border: 1px solid #f0c04055; font: 10px/1.4 ui-monospace, Menlo, monospace; color: #cfe; backdrop-filter: blur(4px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
+.argus-row { display: flex; align-items: center; gap: 1px }
+.argus-hrow { color: #7a9ab8; margin-bottom: 2px }
+.argus-lab { display: inline-block; width: 44px; text-align: left; color: #9fb6cc }
+.argus-c { display: inline-block; width: 20px; text-align: center; font-weight: 700 }
+.argus-h { color: #7a9ab8; font-weight: 600 }
+.argus-foot { font-size: 10px; text-align: center }
 .ind-row-name { font-size: 10px; color: var(--whi); font-weight: 600 }
 .ind-row-desc { font-size: 11px; color: var(--dim); margin-top: 1px }
 .ind-toggle { width: 36px; height: 20px; background: var(--brd); border-radius: 20px; position: relative; transition: .3s; border: 1px solid #333; flex-shrink: 0; cursor: pointer }

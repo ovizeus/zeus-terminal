@@ -1671,6 +1671,77 @@ export function aurora(highs: number[], lows: number[], closes: number[], _volum
   return { score, flips }
 }
 
+export interface ArgusCell { indicator: string; tf: number; bull: boolean; valid: boolean }
+export interface Argus { indicators: string[]; tfs: number[]; cells: ArgusCell[]; pctUp: number; trend: 'UP' | 'DOWN'; strength: 'STRONG' | 'WEAK' }
+
+/** Aggregate base OHLCV into G-bar buckets (higher timeframe). G≤1 returns the input. */
+function _aggOHLC(h: number[], l: number[], c: number[], G: number) {
+  if (G <= 1) return { h, l, c }
+  const H: number[] = [], L: number[] = [], C: number[] = []
+  for (let i = 0; i < c.length; i += G) {
+    let hi = -Infinity, lo = Infinity
+    const end = Math.min(i + G, c.length)
+    for (let j = i; j < end; j++) { if (h[j] > hi) hi = h[j]; if (l[j] < lo) lo = l[j] }
+    H.push(hi); L.push(lo); C.push(c[end - 1])
+  }
+  return { h: H, l: L, c: C }
+}
+
+/**
+ * ARGUS — the hundred-eyed all-seer (invented for Zeus, modelled on the "iPanel" MTF
+ * dashboard reference). It aggregates the base series into several higher timeframes
+ * (the `tfs` bucket multipliers) and, on each, reads six indicators — EMA-fast, EMA-slow,
+ * RSI, Stochastic, MACD and CCI — as bull/bear. The result is a multi-timeframe ×
+ * multi-indicator signal MATRIX, plus an aggregate `pctUp`, overall `trend` and
+ * `strength`. The engine renders it as a green-▲ / red-▼ grid HUD on the chart.
+ */
+export function argus(_opens: number[], highs: number[], lows: number[], closes: number[], _volumes: number[], tfs = [1, 2, 4, 8, 16, 32]): Argus {
+  const indicators = ['EMA8', 'EMA21', 'RSI', 'STOCH', 'MACD', 'CCI']
+  const cells: ArgusCell[] = []
+  let up = 0, validCount = 0
+  const lastFinite = (arr: (number | null)[]): number | null => { for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return arr[i] as number; return null }
+  for (const G of tfs) {
+    const a = _aggOHLC(highs, lows, closes, G)
+    const c = a.c, h = a.h, l = a.l, n = c.length
+    const push = (indicator: string, bull: boolean | null) => {
+      const valid = bull !== null
+      cells.push({ indicator, tf: G, bull: !!bull, valid })
+      if (valid) { validCount++; if (bull) up++ }
+    }
+    // EMA fast / slow: price above the EMA = bull
+    const e8 = lastFinite(ema(c, 8)), e21 = lastFinite(ema(c, 21)), px = c[n - 1]
+    push('EMA8', e8 == null ? null : px > e8)
+    push('EMA21', e21 == null ? null : px > e21)
+    // RSI > 50
+    const rsiArr = _rsi(c, 14), rsiLast = rsiArr.length ? rsiArr[rsiArr.length - 1] : NaN
+    push('RSI', isNaN(rsiLast) ? null : rsiLast > 50)
+    // Stochastic %K > 50
+    let stoch: boolean | null = null
+    if (n >= 14) { let hi = -Infinity, lo = Infinity; for (let j = n - 14; j < n; j++) { if (h[j] > hi) hi = h[j]; if (l[j] < lo) lo = l[j] } stoch = hi > lo ? ((px - lo) / (hi - lo) * 100) > 50 : null }
+    push('STOCH', stoch)
+    // MACD line > signal
+    const macdArr: (number | null)[] = []
+    const e12 = ema(c, 12), e26 = ema(c, 26)
+    for (let i = 0; i < n; i++) macdArr.push(e12[i] != null && e26[i] != null ? (e12[i] as number) - (e26[i] as number) : null)
+    const macdVals = macdArr.filter((x) => x != null) as number[]
+    const sig = lastFinite(ema(macdVals, 9)), macdLast = lastFinite(macdArr)
+    push('MACD', sig == null || macdLast == null ? null : macdLast > sig)
+    // CCI > 0
+    let cci: boolean | null = null
+    if (n >= 20) {
+      const tp = c.map((x, i) => (h[i] + l[i] + x) / 3)
+      let m = 0; for (let j = n - 20; j < n; j++) m += tp[j]; m /= 20
+      let md = 0; for (let j = n - 20; j < n; j++) md += Math.abs(tp[j] - m); md /= 20
+      cci = md > 0 ? ((tp[n - 1] - m) / (0.015 * md)) > 0 : null
+    }
+    push('CCI', cci)
+  }
+  const pctUp = validCount ? Math.round(100 * up / validCount) : 50
+  const trend: 'UP' | 'DOWN' = pctUp >= 50 ? 'UP' : 'DOWN'
+  const strength: 'STRONG' | 'WEAK' = (pctUp >= 70 || pctUp <= 30) ? 'STRONG' : 'WEAK'
+  return { indicators, tfs, cells, pctUp, trend, strength }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length
