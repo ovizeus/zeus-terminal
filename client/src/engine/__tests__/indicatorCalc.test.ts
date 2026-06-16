@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -171,6 +171,33 @@ describe('choppiness', () => {
     const ci = choppiness(highs, lows, closes, 14)
     expect(ci[0]).toBeNull()
     expect(ci[ci.length - 1] as number).toBeLessThan(50) // trending → low CI
+  })
+})
+
+describe('keraunos', () => {
+  const mk = (closes: number[]) => {
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    return { highs, lows, closes, vol }
+  }
+  it('baseline tracks price and conviction is strongly positive on a clean uptrend', () => {
+    const { highs, lows, closes, vol } = mk(Array.from({ length: 40 }, (_, i) => 100 + i))
+    const k = keraunos(highs, lows, closes, vol)
+    const last = k.conviction.length - 1
+    expect(k.baseline[last] as number).toBeGreaterThan(120)
+    expect(k.conviction[last] as number).toBeGreaterThan(0.3)
+    // band ordering
+    expect(k.upper[last] as number).toBeGreaterThan(k.baseline[last] as number)
+    expect(k.lower[last] as number).toBeLessThan(k.baseline[last] as number)
+  })
+  it('conviction is negative on a downtrend', () => {
+    const { highs, lows, closes, vol } = mk(Array.from({ length: 40 }, (_, i) => 140 - i))
+    const k = keraunos(highs, lows, closes, vol)
+    expect(k.conviction[k.conviction.length - 1] as number).toBeLessThan(-0.3)
+  })
+  it('conviction stays near zero (no edge) in a flat chop', () => {
+    const { highs, lows, closes, vol } = mk(Array.from({ length: 40 }, (_, i) => 100 + (i % 2 === 0 ? 0.3 : -0.3)))
+    const k = keraunos(highs, lows, closes, vol)
+    expect(Math.abs(k.conviction[k.conviction.length - 1] as number)).toBeLessThan(0.35)
   })
 })
 

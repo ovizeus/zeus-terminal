@@ -1791,6 +1791,7 @@ export let mainChart: any, cSeries: any, ema50S: any, ema200S: any, wma20S: any,
 export let bbUpperS: any = null, bbMiddleS: any = null, bbLowerS: any = null
 // [2026-06-16] batch-1 overlay series refs (window-global, lazy-init in indicators.ts)
 export let smaS: any = null, hmaS: any = null, psarS: any = null, vwmaS: any = null
+export let keraS: any = null, keraUpS: any = null, keraLowS: any = null // KERAUNOS overlay
 export let kcUpperS: any = null, kcMiddleS: any = null, kcLowerS: any = null
 export let dcUpperS: any = null, dcMiddleS: any = null, dcLowerS: any = null
 export let ichimokuSeries: any[] = []
@@ -1852,6 +1853,8 @@ export const IND_SETTINGS: any = {
   trix: { period: 15 },
   uo: { p1: 7, p2: 14, p3: 28 },
   chop: { period: 14 },
+  // [2026-06-16] KERAUNOS — invented composite overlay
+  kera: { er: 10, atrP: 14, mult: 1.6 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

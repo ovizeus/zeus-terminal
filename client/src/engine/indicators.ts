@@ -10,7 +10,8 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA } from './indicatorCalc'
+import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
 import { renderVWAP, getVwapSeries, resetVwapSeries } from '../ui/panels'
@@ -270,6 +271,11 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'chop':
       { const chx = document.getElementById('chopChart'); if (chx) chx.style.display = show ? '' : 'none'; if (show) initChopChart() }
       break
+    case 'kera':
+      if (show) initKeraSeries()
+      ;[w.keraS, w.keraUpS, w.keraLowS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
+      if (show) updateKera()
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -391,7 +397,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1012,6 +1018,42 @@ export function updateChop(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// KERAUNOS — invented adaptive conviction ribbon (main-chart overlay)
+// ═══════════════════════════════════════════════════════════════
+
+function _keraColor(c: number): string {
+  if (c > 0.5) return '#00e676'   // strong bullish conviction
+  if (c > 0.15) return '#66bb6a'  // bullish
+  if (c >= -0.15) return '#78909c' // chop / no edge — stay out
+  if (c > -0.5) return '#ef5350'  // bearish
+  return '#ff1744'                // strong bearish conviction
+}
+
+export function initKeraSeries(): void {
+  if (w.keraS || !w.mainChart) return
+  w.keraS = w.mainChart.addLineSeries({ lineWidth: 3, priceLineVisible: false, lastValueVisible: false })
+  w.keraUpS = w.mainChart.addLineSeries({ color: 'rgba(126,87,194,0.35)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+  w.keraLowS = w.mainChart.addLineSeries({ color: 'rgba(126,87,194,0.35)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false })
+}
+export function updateKera(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initKeraSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.kera || {}
+  const r = _calcKERA(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume),
+    Math.round(s.er) || 10, Math.round(s.atrP) || 14, s.mult || 1.6
+  )
+  const base: any[] = [], up: any[] = [], low: any[] = []
+  for (let i = 0; i < r.baseline.length; i++) {
+    if (r.baseline[i] == null || !k[i]) continue
+    base.push({ time: k[i].time, value: r.baseline[i], color: _keraColor((r.conviction[i] as number) || 0) })
+    if (r.upper[i] != null) up.push({ time: k[i].time, value: r.upper[i] })
+    if (r.lower[i] != null) low.push({ time: k[i].time, value: r.lower[i] })
+  }
+  try { w.keraS.setData(base); w.keraUpS.setData(up); w.keraLowS.setData(low) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1045,6 +1087,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.trix && w._trixInited) updateTrix()
   if (w.S.activeInds.uo && w._uoInited) updateUO()
   if (w.S.activeInds.chop && w._chopInited) updateChop()
+  if (w.S.activeInds.kera) updateKera()
 }
 
 export function renderActBar(): void {
@@ -1056,7 +1099,7 @@ export function renderActBar(): void {
   bar.innerHTML = active.map((i: any) => `
     <span class="act-pill" style="color:${getIndColor(i.id)};border-color:${getIndColor(i.id)}44;background:${getIndColor(i.id)}11"
       data-action="deactivateInd" data-id="${i.id}">
-      ${i.ico} ${i.id.toUpperCase()} <span class="kill">\u2715</span>
+      ${IND_ICONS[i.id] || i.ico} ${i.id.toUpperCase()} <span class="kill">\u2715</span>
     </span>`).join('')
   // Event delegation for active indicator pills
   if (!bar.dataset.delegated) {
@@ -1069,7 +1112,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676' }
   return map[id] || '#888'
 }
 

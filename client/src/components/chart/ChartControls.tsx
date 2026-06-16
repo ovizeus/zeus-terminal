@@ -10,6 +10,7 @@ import { setSymbol } from '../../data/marketDataWS'
 import { openIndSettings } from '../../engine/indicators'
 import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
 import { USER_SETTINGS } from '../../core/config'
+import { IND_ICONS } from '../../constants/indicatorIcons'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -610,6 +611,8 @@ const IND_LIST: IndMeta[] = [
   { id: 'trix',     ico: '➿', name: 'TRIX',            desc: 'Triple-smoothed momentum',     hasGenericSettings: true },
   { id: 'uo',       ico: '🏆', name: 'Ultimate Oscillator',desc: 'Multi-timeframe momentum',  hasGenericSettings: true },
   { id: 'chop',     ico: '🪚', name: 'Choppiness Index', desc: 'Trending vs ranging',         hasGenericSettings: true },
+  // [2026-06-16] KERAUNOS — Zeus original adaptive conviction ribbon (main chart)
+  { id: 'kera',     ico: '⚡', name: 'KERAUNOS',         desc: 'Adaptive conviction ribbon (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
@@ -1122,7 +1125,9 @@ export function ChartControls() {
             return (
               <div key={ind.id} className="ind-row">
                 <div className="ind-row-l">
-                  <span className="ind-row-ico">{ind.ico}</span>
+                  {IND_ICONS[ind.id]
+                    ? <span className="ind-row-ico" dangerouslySetInnerHTML={{ __html: IND_ICONS[ind.id] }} />
+                    : <span className="ind-row-ico">{ind.ico}</span>}
                   <div>
                     <div className="ind-row-name">{ind.name}</div>
                     <div className="ind-row-desc">{ind.desc}</div>

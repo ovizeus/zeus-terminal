@@ -116,6 +116,68 @@ export function donchian(highs: number[], lows: number[], period: number): Bands
   return { upper, middle, lower }
 }
 
+export interface Keraunos {
+  baseline: (number | null)[]   // adaptive (KAMA-style) trend line
+  conviction: (number | null)[] // −1..1 blended market conviction
+  upper: (number | null)[]      // baseline + mult×ATR (stretch band)
+  lower: (number | null)[]
+}
+
+/**
+ * KERAUNOS — Zeus's thunderbolt. An original composite overlay (invented for Zeus).
+ * Reads the market in one line: an ADAPTIVE baseline that speeds up in trends and
+ * slows in chop (Kaufman efficiency), tinted by a CONVICTION score that blends
+ * trend-slope, intrabar buy/sell pressure and short momentum (all normalised by
+ * volatility) and amplified by volume. Gray ≈ no edge (chop) → stay out; bright
+ * green/red ≈ high-conviction trend. The ATR band shows when price is stretched.
+ *
+ * conviction = clamp( 0.5·slopeN + 0.3·pressure + 0.2·momN , −1, 1 ) · volAmp
+ *   slopeN   = (baseline_i − baseline_{i-1}) / ATR_i           (trend direction & pace)
+ *   pressure = (close − mid) / (high − low)                    (who won the bar; −1..1)
+ *   momN     = (close_i − close_{i-3}) / (3·ATR_i)             (short momentum)
+ *   volAmp   = clamp(volume_i / SMA(volume), 0.6, 1.4)         (conviction needs fuel)
+ */
+export function keraunos(highs: number[], lows: number[], closes: number[], volumes: number[], erPeriod = 10, atrPeriod = 14, bandMult = 1.6): Keraunos {
+  const n = closes.length
+  const baseline: (number | null)[] = new Array(n).fill(null)
+  const conviction: (number | null)[] = new Array(n).fill(null)
+  const upper: (number | null)[] = new Array(n).fill(null)
+  const lower: (number | null)[] = new Array(n).fill(null)
+  if (!n) return { baseline, conviction, upper, lower }
+  const er = Math.max(2, Math.round(erPeriod))
+  const a = atr(highs, lows, closes, atrPeriod)
+  const volAvg = sma(volumes, Math.max(2, Math.round(erPeriod)))
+  const fast = 2 / (2 + 1), slow = 2 / (30 + 1)
+  let kama = closes[0]
+  let seeded = false
+  for (let i = 0; i < n; i++) {
+    if (i < er) { kama = closes[i]; continue } // warm-up: track price
+    // Kaufman efficiency ratio over the last `er` bars
+    const change = Math.abs(closes[i] - closes[i - er])
+    let vol = 0
+    for (let j = i - er + 1; j <= i; j++) vol += Math.abs(closes[j] - closes[j - 1])
+    const ratio = vol === 0 ? 0 : change / vol
+    const sc = Math.pow(ratio * (fast - slow) + slow, 2)
+    if (!seeded) { kama = closes[i - 1]; seeded = true }
+    const prev = kama
+    kama = prev + sc * (closes[i] - prev)
+    baseline[i] = kama
+    const atrI = (a[i] as number) || 1e-9
+    const slopeN = Math.max(-1, Math.min(1, (kama - prev) / atrI))
+    const range = highs[i] - lows[i]
+    const mid = (highs[i] + lows[i]) / 2
+    const pressure = range === 0 ? 0 : Math.max(-1, Math.min(1, (closes[i] - mid) / (range / 2)))
+    const momN = i >= 3 ? Math.max(-1, Math.min(1, (closes[i] - closes[i - 3]) / (3 * atrI))) : 0
+    let c = 0.5 * slopeN + 0.3 * pressure + 0.2 * momN
+    const va = (volAvg[i] != null && (volAvg[i] as number) > 0) ? Math.max(0.6, Math.min(1.4, volumes[i] / (volAvg[i] as number))) : 1
+    c = Math.max(-1, Math.min(1, c * va))
+    conviction[i] = c
+    upper[i] = kama + bandMult * (a[i] as number ?? 0)
+    lower[i] = kama - bandMult * (a[i] as number ?? 0)
+  }
+  return { baseline, conviction, upper, lower }
+}
+
 /** Volume-Weighted Moving Average: Σ(close×vol) / Σ(vol) over period. */
 export function vwma(closes: number[], volumes: number[], period: number): (number | null)[] {
   const p = Math.max(1, Math.round(period))
