@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -286,6 +286,11 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (w.msZigS) { w.msZigS.applyOptions({ visible: show }); if (!show) try { w.msZigS.setMarkers([]) } catch (_) { } }
       if (show) updateMS()
       break
+    case 'nem':
+      if (show) initNemSeries()
+      if (w.nemS) { w.nemS.applyOptions({ visible: show }); if (!show) try { w.nemS.setMarkers([]); w.nemS.setData([]) } catch (_) { } }
+      if (show) updateNem()
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -407,7 +412,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1123,6 +1128,31 @@ export function updateMS(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// NEMESIS — invented exhaustion / reversal markers (main-chart overlay)
+// ═══════════════════════════════════════════════════════════════
+
+export function initNemSeries(): void {
+  if (w.nemS || !w.mainChart) return
+  // transparent carrier line: gives markers a full time range to anchor to,
+  // without drawing a visible line.
+  w.nemS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateNem(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initNemSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.nem || {}
+  const sigs = _calcNEM(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), Math.round(s.setupLen) || 9, s.climaxMult || 2)
+  const marks = sigs.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time,
+    position: g.dir === 'top' ? 'aboveBar' : 'belowBar',
+    shape: g.dir === 'top' ? 'arrowDown' : 'arrowUp',
+    color: g.dir === 'top' ? (g.strength >= 2 ? '#ff1744' : '#ff8a80') : (g.strength >= 2 ? '#00e676' : '#a5d6a7'),
+    text: g.strength >= 3 ? '★' : (g.strength >= 2 ? '!' : ''),
+  }))
+  try { w.nemS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.nemS.setMarkers(marks) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1159,6 +1189,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.kera) updateKera()
   if (w.S.activeInds.aether) updateAether()
   if (w.S.activeInds.ms) updateMS()
+  if (w.S.activeInds.nem) updateNem()
 }
 
 export function renderActBar(): void {
@@ -1183,7 +1214,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744' }
   return map[id] || '#888'
 }
 

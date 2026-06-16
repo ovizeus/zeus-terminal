@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -171,6 +171,29 @@ describe('choppiness', () => {
     const ci = choppiness(highs, lows, closes, 14)
     expect(ci[0]).toBeNull()
     expect(ci[ci.length - 1] as number).toBeLessThan(50) // trending → low CI
+  })
+})
+
+describe('nemesis', () => {
+  const flat = (v: number, n: number) => Array.from({ length: n }, () => v)
+  it('fires a top exhaustion after 9 up-closes, confirmed by RSI extreme', () => {
+    const closes = Array.from({ length: 40 }, (_, i) => 100 + i)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = flat(100, 40)
+    const sig = nemesis(highs, lows, closes, vol, 9, 2, 5) // rsiPeriod 5 → warm by bar 12
+    const top = sig.find((s) => s.dir === 'top')
+    expect(top).toBeTruthy()
+    expect(top!.index).toBe(12)            // TD-9 print: count 1..9 over bars 4..12
+    expect(top!.strength).toBeGreaterThanOrEqual(2) // +RSI>70 confirmation on a clean uptrend
+  })
+  it('fires a bottom exhaustion on a clean downtrend', () => {
+    const closes = Array.from({ length: 40 }, (_, i) => 140 - i)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = flat(100, 40)
+    const sig = nemesis(highs, lows, closes, vol)
+    expect(sig.some((s) => s.dir === 'bottom')).toBe(true)
+  })
+  it('stays silent in a flat market (no exhaustion)', () => {
+    const c = flat(100, 40)
+    expect(nemesis(c.map((x) => x + 1), c.map((x) => x - 1), c, flat(100, 40))).toEqual([])
   })
 })
 

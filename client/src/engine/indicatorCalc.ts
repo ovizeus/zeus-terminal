@@ -116,6 +116,62 @@ export function donchian(highs: number[], lows: number[], period: number): Bands
   return { upper, middle, lower }
 }
 
+export interface NemesisSignal { index: number; dir: 'top' | 'bottom'; strength: number; reasons: string[] }
+
+/**
+ * NEMESIS — exhaustion & reversal (invented for Zeus). Flags where a move is
+ * "spent" and prone to reverse, by stacking confirmations at a TD-style setup
+ * print: (1) `setupLen` consecutive closes beyond the close 4 bars ago (momentum
+ * exhaustion), confirmed by a fresh local extreme; boosted by (2) a volume climax
+ * (volume > climaxMult × its average) and (3) an RSI extreme (>70 top / <30 bottom).
+ * strength 1–3 = how many confirmations align. A top marker warns of a possible
+ * high; a bottom marker warns of a possible low.
+ */
+export function nemesis(highs: number[], lows: number[], closes: number[], volumes: number[], setupLen = 9, climaxMult = 2, rsiPeriod = 14, swing = 3): NemesisSignal[] {
+  const n = closes.length
+  const out: NemesisSignal[] = []
+  if (n < 5) return out
+  const rp = Math.max(2, Math.round(rsiPeriod))
+  const rsi = new Array(n).fill(NaN)
+  let ag = 0, al = 0
+  for (let i = 1; i < n; i++) {
+    const ch = closes[i] - closes[i - 1], g = Math.max(ch, 0), l = Math.max(-ch, 0)
+    if (i <= rp) { ag += g; al += l; if (i === rp) { ag /= rp; al /= rp; rsi[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al) } }
+    else { ag = (ag * (rp - 1) + g) / rp; al = (al * (rp - 1) + l) / rp; rsi[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al) }
+  }
+  const volAvg = sma(volumes, rp)
+  const sw = Math.max(1, Math.round(swing))
+  let up = 0, down = 0
+  for (let i = 0; i < n; i++) {
+    if (i >= 4) {
+      up = closes[i] > closes[i - 4] ? up + 1 : 0
+      down = closes[i] < closes[i - 4] ? down + 1 : 0
+    }
+    const climax = volAvg[i] != null && volumes[i] > climaxMult * (volAvg[i] as number)
+    if (up === Math.round(setupLen)) {
+      let isHigh = true
+      for (let j = Math.max(0, i - sw); j < i; j++) if (highs[j] > highs[i]) isHigh = false
+      if (isHigh) {
+        const reasons = ['TD' + Math.round(setupLen)]; let st = 1
+        if (climax) { st++; reasons.push('climax') }
+        if (!isNaN(rsi[i]) && rsi[i] > 70) { st++; reasons.push('RSI>70') }
+        out.push({ index: i, dir: 'top', strength: st, reasons })
+      }
+    }
+    if (down === Math.round(setupLen)) {
+      let isLow = true
+      for (let j = Math.max(0, i - sw); j < i; j++) if (lows[j] < lows[i]) isLow = false
+      if (isLow) {
+        const reasons = ['TD' + Math.round(setupLen)]; let st = 1
+        if (climax) { st++; reasons.push('climax') }
+        if (!isNaN(rsi[i]) && rsi[i] < 30) { st++; reasons.push('RSI<30') }
+        out.push({ index: i, dir: 'bottom', strength: st, reasons })
+      }
+    }
+  }
+  return out
+}
+
 export interface MSPivot { index: number; value: number; type: 'H' | 'L'; trend: 'up' | 'down' }
 export interface MSBreak { index: number; dir: 'up' | 'down'; level: number }
 export interface MarketStructure { pivots: MSPivot[]; breaks: MSBreak[] }

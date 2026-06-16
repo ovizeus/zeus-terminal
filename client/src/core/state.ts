@@ -1794,6 +1794,7 @@ export let smaS: any = null, hmaS: any = null, psarS: any = null, vwmaS: any = n
 export let keraS: any = null, keraUpS: any = null, keraLowS: any = null // KERAUNOS overlay
 export let aetMidS: any = null, aetUpS: any = null, aetLowS: any = null // AETHER overlay
 export let msZigS: any = null // MOIRA market-structure zigzag overlay
+export let nemS: any = null // NEMESIS exhaustion-marker carrier series
 export let kcUpperS: any = null, kcMiddleS: any = null, kcLowerS: any = null
 export let dcUpperS: any = null, dcMiddleS: any = null, dcLowerS: any = null
 export let ichimokuSeries: any[] = []
@@ -1861,6 +1862,8 @@ export const IND_SETTINGS: any = {
   aether: { period: 20, bbMult: 2, kcMult: 1.5 },
   // [2026-06-16] MOIRA — market-structure swing skeleton
   ms: { lookback: 5 },
+  // [2026-06-16] NEMESIS — exhaustion / reversal signals
+  nem: { setupLen: 9, climaxMult: 2 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

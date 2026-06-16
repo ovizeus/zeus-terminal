@@ -615,6 +615,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'kera',     ico: '⚡', name: 'KERAUNOS',         desc: 'Adaptive conviction ribbon (Zeus original)', hasGenericSettings: true },
   { id: 'aether',   ico: '🌪️', name: 'AETHER',           desc: 'Volatility squeeze → breakout (Zeus original)', hasGenericSettings: true },
   { id: 'ms',       ico: '📐', name: 'MOIRA',            desc: 'Market structure HH/HL · BOS (Zeus original)', hasGenericSettings: true },
+  { id: 'nem',      ico: '⚠️', name: 'NEMESIS',          desc: 'Exhaustion & reversal signals (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
