@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -171,6 +171,25 @@ describe('choppiness', () => {
     const ci = choppiness(highs, lows, closes, 14)
     expect(ci[0]).toBeNull()
     expect(ci[ci.length - 1] as number).toBeLessThan(50) // trending → low CI
+  })
+})
+
+describe('marketStructure', () => {
+  it('finds swing H/L pivots, labels a Higher-High as up-trend, and fires a BOS up', () => {
+    // peak(5)@2, trough(1)@4, higher peak(8)@6 → HH structure; close 8 breaks the
+    // confirmed swing high (5) → BOS up. lookback 2.
+    const c = [1, 2, 5, 2, 1, 2, 8, 2, 1]
+    const ms = marketStructure(c, c, c, 2)
+    const h = ms.pivots.filter((p) => p.type === 'H')
+    const l = ms.pivots.filter((p) => p.type === 'L')
+    expect(h.map((p) => p.index)).toEqual([2, 6])
+    expect(l.map((p) => p.index)).toEqual([4])
+    expect(h[1].value).toBe(8)
+    expect(h[1].trend).toBe('up')                 // 8 > 5 → Higher High
+    expect(ms.breaks.some((b) => b.dir === 'up' && b.level === 5)).toBe(true)
+  })
+  it('returns no pivots when there is not enough data', () => {
+    expect(marketStructure([1, 2, 3], [1, 2, 3], [1, 2, 3], 5).pivots).toEqual([])
   })
 })
 

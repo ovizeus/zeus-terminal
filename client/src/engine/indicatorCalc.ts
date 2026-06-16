@@ -116,6 +116,57 @@ export function donchian(highs: number[], lows: number[], period: number): Bands
   return { upper, middle, lower }
 }
 
+export interface MSPivot { index: number; value: number; type: 'H' | 'L'; trend: 'up' | 'down' }
+export interface MSBreak { index: number; dir: 'up' | 'down'; level: number }
+export interface MarketStructure { pivots: MSPivot[]; breaks: MSBreak[] }
+
+/**
+ * MOIRA — market structure (invented for Zeus). Reads the SKELETON of price:
+ * detects swing pivots (a bar whose high/low is the extreme over ±lookback bars),
+ * connects them into a zigzag, and labels the regime — Higher-High/Higher-Low =
+ * bullish structure (up), Lower-High/Lower-Low = bearish (down). A Break of
+ * Structure (BOS) fires when a close pierces the last confirmed swing high/low,
+ * the smart-money signal that the prevailing structure just flipped.
+ */
+export function marketStructure(highs: number[], lows: number[], closes: number[], lookback = 5): MarketStructure {
+  const L = Math.max(1, Math.round(lookback))
+  const n = closes.length
+  const raw: { index: number; value: number; type: 'H' | 'L' }[] = []
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) {
+      if (j === i) continue
+      if (highs[j] > highs[i]) isH = false
+      if (lows[j] < lows[i]) isL = false
+    }
+    if (isH) raw.push({ index: i, value: highs[i], type: 'H' })
+    if (isL) raw.push({ index: i, value: lows[i], type: 'L' })
+  }
+  raw.sort((a, b) => a.index - b.index || (a.type === 'H' ? -1 : 1))
+  const pivots: MSPivot[] = []
+  let lastH = NaN, lastL = NaN
+  for (const pv of raw) {
+    let trend: 'up' | 'down'
+    if (pv.type === 'H') { trend = isNaN(lastH) ? 'up' : (pv.value > lastH ? 'up' : 'down'); lastH = pv.value }
+    else { trend = isNaN(lastL) ? 'down' : (pv.value > lastL ? 'up' : 'down'); lastL = pv.value }
+    pivots.push({ index: pv.index, value: pv.value, type: pv.type, trend })
+  }
+  // Break of Structure: a pivot is "confirmed" L bars after it forms.
+  const byConfirm = raw.map((pv) => ({ ...pv, confirm: pv.index + L })).sort((a, b) => a.confirm - b.confirm)
+  const breaks: MSBreak[] = []
+  let confH = NaN, confL = NaN, brokeH = false, brokeL = false, k = 0
+  for (let i = 0; i < n; i++) {
+    while (k < byConfirm.length && byConfirm[k].confirm <= i) {
+      const pv = byConfirm[k]
+      if (pv.type === 'H') { confH = pv.value; brokeH = false } else { confL = pv.value; brokeL = false }
+      k++
+    }
+    if (!isNaN(confH) && !brokeH && closes[i] > confH) { breaks.push({ index: i, dir: 'up', level: confH }); brokeH = true }
+    if (!isNaN(confL) && !brokeL && closes[i] < confL) { breaks.push({ index: i, dir: 'down', level: confL }); brokeL = true }
+  }
+  return { pivots, breaks }
+}
+
 export interface Aether {
   mid: (number | null)[]       // basis (SMA) midline
   upper: (number | null)[]     // active envelope (tight BB during squeeze, wide KC otherwise)

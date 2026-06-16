@@ -136,6 +136,8 @@ export const INDICATORS: any[] = [
   { id: 'kera', ico: _ZI.bolt, name: 'KERAUNOS', desc: 'Adaptive conviction ribbon ⚡', cat: 'trend', def: false },
   // [2026-06-16] AETHER — Zeus original volatility squeeze / breakout field
   { id: 'aether', ico: _ZI.tgt, name: 'AETHER', desc: 'Volatility squeeze → breakout 🌪️', cat: 'vol', def: false },
+  // [2026-06-16] MOIRA — Zeus original market-structure skeleton
+  { id: 'ms', ico: _ZI.scope, name: 'MOIRA', desc: 'Market structure (HH/HL · BOS)', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

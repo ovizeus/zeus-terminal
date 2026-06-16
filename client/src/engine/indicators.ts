@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -281,6 +281,11 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       ;[w.aetMidS, w.aetUpS, w.aetLowS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
       if (show) updateAether()
       break
+    case 'ms':
+      if (show) initMSSeries()
+      if (w.msZigS) { w.msZigS.applyOptions({ visible: show }); if (!show) try { w.msZigS.setMarkers([]) } catch (_) { } }
+      if (show) updateMS()
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -402,7 +407,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1091,6 +1096,33 @@ export function updateAether(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// MOIRA — invented market-structure skeleton (main-chart overlay)
+// ═══════════════════════════════════════════════════════════════
+
+export function initMSSeries(): void {
+  if (w.msZigS || !w.mainChart) return
+  w.msZigS = w.mainChart.addLineSeries({ lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateMS(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initMSSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.ms || {}
+  const r = _calcMS(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.lookback) || 5)
+  // zigzag: each pivot point colored by the structure trend leading into it
+  const zig: any[] = []
+  for (const pv of r.pivots) { if (k[pv.index]) zig.push({ time: k[pv.index].time, value: pv.value, color: pv.trend === 'up' ? '#26ff9a' : '#ff5277' }) }
+  // BOS markers
+  const marks = r.breaks.filter((b: any) => k[b.index]).map((b: any) => ({
+    time: k[b.index].time,
+    position: b.dir === 'up' ? 'belowBar' : 'aboveBar',
+    color: b.dir === 'up' ? '#26ff9a' : '#ff5277',
+    shape: b.dir === 'up' ? 'arrowUp' : 'arrowDown',
+    text: 'BOS',
+  }))
+  try { w.msZigS.setData(zig); w.msZigS.setMarkers(marks) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1126,6 +1158,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.chop && w._chopInited) updateChop()
   if (w.S.activeInds.kera) updateKera()
   if (w.S.activeInds.aether) updateAether()
+  if (w.S.activeInds.ms) updateMS()
 }
 
 export function renderActBar(): void {
@@ -1150,7 +1183,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a' }
   return map[id] || '#888'
 }
 

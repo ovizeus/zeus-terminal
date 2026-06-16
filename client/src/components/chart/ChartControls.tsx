@@ -614,6 +614,7 @@ const IND_LIST: IndMeta[] = [
   // [2026-06-16] KERAUNOS — Zeus original adaptive conviction ribbon (main chart)
   { id: 'kera',     ico: '⚡', name: 'KERAUNOS',         desc: 'Adaptive conviction ribbon (Zeus original)', hasGenericSettings: true },
   { id: 'aether',   ico: '🌪️', name: 'AETHER',           desc: 'Volatility squeeze → breakout (Zeus original)', hasGenericSettings: true },
+  { id: 'ms',       ico: '📐', name: 'MOIRA',            desc: 'Market structure HH/HL · BOS (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
@@ -702,6 +703,18 @@ export function ChartControls() {
   const [drawTool, setDrawTool] = useState<string | null>(null)
   const [drawingsVisible, setDrawingsVisible] = useState(_initDrawingsVisible)
   const [activeInds, setActiveInds] = useState<Record<string, boolean>>({})
+  // [2026-06-16] Favorites: starred indicators pin to the top of the panel, in the
+  // order the operator added them. Persisted in localStorage.
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try { const raw = localStorage.getItem('zeus_ind_favorites'); return raw ? JSON.parse(raw) : [] } catch (_) { return [] }
+  })
+  const toggleFav = (id: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      try { localStorage.setItem('zeus_ind_favorites', JSON.stringify(next)) } catch (_) { }
+      return next
+    })
+  }
   const tfRef = useRef<HTMLDivElement>(null)
 
   // Sync activeInds + overlays from legacy w.S on mount + after bridge loads.
@@ -1108,9 +1121,13 @@ export function ChartControls() {
           <span style={{ cursor: 'pointer', color: 'var(--dim)', fontSize: '14px' }} onClick={() => setIndPanelOpen(false)}>✕</span>
         </div>
         <div className="ind-panel-body" id="indPanelBody">
-          {/* [2026-06-16] Active indicators float to the top so the operator sees what's
-              on at a glance. Stable sort (V8) keeps the original order within each group. */}
+          {/* [2026-06-16] Ordering: (1) favorites pinned top in the order the operator
+              starred them; (2) among the rest, active indicators float up. Stable sort
+              (V8) keeps original order within each group. */}
           {[...IND_LIST].sort((a, b) => {
+            const fav = (id: string) => { const i = favorites.indexOf(id); return i === -1 ? Infinity : i }
+            const fa = fav(a.id), fb = fav(b.id)
+            if (fa !== fb) return fa - fb
             const on = (m: IndMeta) => (m.modalOnly ? 0 : ((m.isOverlay ? ((overlays as unknown as Record<string, boolean>)[m.id] ?? false) : (activeInds[m.id] ?? (indicators as unknown as Record<string, boolean>)[m.id] ?? false)) ? 1 : 0))
             return on(b) - on(a)
           }).map((ind) => {
@@ -1135,6 +1152,14 @@ export function ChartControls() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span
+                    className="ind-fav"
+                    role="button"
+                    aria-label={favorites.includes(ind.id) ? 'Unpin favorite' : 'Pin to top'}
+                    title={favorites.includes(ind.id) ? 'Remove from favorites' : 'Pin to top (favorite)'}
+                    onClick={(e) => { e.stopPropagation(); toggleFav(ind.id) }}
+                    style={{ cursor: 'pointer', fontSize: '14px', lineHeight: 1, color: favorites.includes(ind.id) ? '#f0c040' : 'var(--dim, #5a6b7a)' }}
+                  >{favorites.includes(ind.id) ? '★' : '☆'}</span>
                   {(ind.settingsModal || ind.hasGenericSettings) && (
                     <span
                       className="gear"

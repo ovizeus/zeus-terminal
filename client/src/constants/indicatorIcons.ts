@@ -56,6 +56,7 @@ export const IND_ICONS: Record<string, string> = {
   // ── Invented: KERAUNOS (thunderbolt) + AETHER (squeeze: converging arrows) ──
   kera: g('<path d="M9 1L3 9h4l-1 6 7-9H9l1-5z" fill="currentColor" stroke="none"/>'),
   aether: g(p('M2 3l4 5-4 5') + p('M14 3l-4 5 4 5') + p('M8 5v6')),
+  ms: g(p('M2 12l3-7 3 5 3-8 3 6')),                                       // market-structure zigzag
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop
   liq: g(p('M8 1l1.4 4 4-1-2.4 3.4 4 1.6-4 1 1 4-4-2.4L4 15l1-4-4-1 4-1.6L2.6 4l4 1z')), // burst
