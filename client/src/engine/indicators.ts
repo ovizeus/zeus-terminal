@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, daimon as _calcDAIMON } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -447,6 +447,13 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       else {
         ;(w._orAll || []).forEach((sx: any) => { if (sx) { try { sx.applyOptions({ visible: false }); if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
         if (w._orionHud) w._orionHud.style.display = 'none'
+      }
+      break
+    case 'daimon':
+      if (show) { initDaimon(); updateDaimon() }
+      else {
+        if (w._daimon) w._daimon.style.display = 'none'
+        if (w.daimonMarkS) try { w.daimonMarkS.setMarkers([]); w.daimonMarkS.setData([]) } catch (_) { }
       }
       break
     case 'nephele':
@@ -2793,6 +2800,59 @@ export function updateMorpheus(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// DAIMON — invented chart-WIZARD sprite. A little magician walks the chart, reads
+// the market & talks in a speech bubble; on a signal he hops onto the candle, shouts
+// the entry, drops a ★ mark with his wand, and a 🔒 when he exits.
+// ═══════════════════════════════════════════════════════════════
+
+export function initDaimon(): void {
+  if (!w.mainChart) return
+  if (!w.daimonMarkS) w.daimonMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  const mc = document.getElementById('mc')
+  if (mc && !w._daimon) {
+    try { if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative' } catch (_) { }
+    const el = document.createElement('div')
+    el.id = 'daimon'; el.className = 'daimon-sprite daimon-walk'
+    el.innerHTML = `<div class="daimon-bubble" id="daimonBubble"></div><span class="daimon-body" id="daimonBody">🧙</span>`
+    mc.appendChild(el); w._daimon = el; w._daimonOnBar = false
+  }
+  if (w._daimon) w._daimon.style.display = ''
+}
+export function updateDaimon(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initDaimon()
+  const k = w.S.klines
+  const v = _calcDAIMON(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume))
+  // wand marks: ★ green long / ★ red short at entries, 🔒 at exits
+  const marks = v.markers.filter((m: any) => k[m.index]).map((m: any) => ({
+    time: k[m.index].time,
+    position: m.kind === 'long' ? 'belowBar' : 'aboveBar',
+    shape: 'circle',
+    color: m.kind === 'long' ? '#00e676' : m.kind === 'short' ? '#ff1744' : '#ffd600',
+    text: m.kind === 'exit' ? '🔒' : '★',
+  }))
+  try { w.daimonMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.daimonMarkS.setMarkers(marks) } catch (_) { }
+  if (!w._daimon) return
+  const bubble = document.getElementById('daimonBubble'); const body = document.getElementById('daimonBody')
+  if (bubble) bubble.textContent = v.speech
+  if (body) body.textContent = v.position === 'short' ? '🧙‍♂️' : v.position === 'long' ? '🧙‍♂️' : '🧙'
+  // colour the bubble by mood
+  if (bubble) bubble.style.borderColor = v.position === 'short' ? '#ff174488' : v.position === 'long' ? '#00e67688' : v.mood === 'excited' ? '#26c6da88' : '#f0c04066'
+  // position: hop onto the last candle when in a trade, else walk freely
+  if (v.position !== 'flat') {
+    let y: number | null = null
+    try { y = w.cSeries ? w.cSeries.priceToCoordinate(k[k.length - 1].close) : null } catch (_) { y = null }
+    const mc = document.getElementById('mc'); const mcW = (mc && mc.clientWidth) || 400
+    if (!w._daimonOnBar) { w._daimon.classList.remove('daimon-walk'); w._daimon.classList.add('daimon-onbar'); w._daimonOnBar = true }
+    w._daimon.style.left = (mcW - 70) + 'px'
+    if (y != null) w._daimon.style.top = Math.max(6, y - 42) + 'px'
+  } else if (w._daimonOnBar) {
+    w._daimon.classList.remove('daimon-onbar'); w._daimon.style.left = ''; w._daimon.style.top = ''
+    w._daimon.classList.add('daimon-walk'); w._daimonOnBar = false
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2871,6 +2931,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.phoenix) updatePhoenix()
   if (w.S.activeInds.nephele) updateNephele()
   if (w.S.activeInds.morpheus) updateMorpheus()
+  if (w.S.activeInds.daimon) updateDaimon()
 }
 
 export function renderActBar(): void {
@@ -2895,7 +2956,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676', daimon: '#f0c040' }
   return map[id] || '#888'
 }
 

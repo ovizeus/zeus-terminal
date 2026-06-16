@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus, orion, phoenix, nephele, morpheus } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus, orion, phoenix, nephele, morpheus, daimon } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -965,6 +965,25 @@ describe('morpheus', () => {
     const closes = Array.from({ length: 60 }, (_, i) => 200 - i)
     const r = morpheus(closes.map((c) => c + 1), closes.map((c) => c - 1), closes, 20, 5)
     expect(r.trendUp[59]).toBe(false)
+  })
+})
+
+describe('daimon', () => {
+  it('returns a valid mood/speech/position and is not short on a clean uptrend', () => {
+    const closes = Array.from({ length: 120 }, (_, i) => 100 + i * 1.2)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    const v = daimon(highs, lows, closes, vol)
+    expect(typeof v.speech).toBe('string'); expect(v.speech.length).toBeGreaterThan(0)
+    expect(['long', 'short', 'flat']).toContain(v.position)
+    expect(v.position).not.toBe('short')          // a rally shouldn't put him short
+    expect(Array.isArray(v.markers)).toBe(true)
+  })
+  it('talks an idle line and stays flat in a calm, directionless market', () => {
+    const closes = Array.from({ length: 120 }, (_, i) => 100 + (i % 2 ? 0.2 : -0.2))
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    const v = daimon(highs, lows, closes, vol)
+    expect(v.position).toBe('flat')
+    expect(v.mood).toBe('idle')
   })
 })
 

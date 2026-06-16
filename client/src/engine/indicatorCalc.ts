@@ -1863,6 +1863,45 @@ export function morpheus(highs: number[], lows: number[], closes: number[], maPe
   return { ma, trendUp, signals, levels, bullPrints, bearPrints }
 }
 
+export interface DaimonMark { index: number; kind: 'long' | 'short' | 'exit' }
+export interface DaimonView { mood: string; speech: string; position: 'long' | 'short' | 'flat'; justEntered: boolean; markers: DaimonMark[] }
+
+/**
+ * DAIMON — the guiding spirit (invented for Zeus). The little chart wizard's BRAIN: it
+ * reuses the KRATOS trade engine for its positions (entries → ★ marks, exits → 🔒) and
+ * reads volume anomaly (ANEMOI) + confluence (PANTHEON) for its idle moods. Returns the
+ * current mood + speech-bubble line, whether a position is open (and which side), if it
+ * JUST entered this bar, and the full marker list. The engine animates the sprite from
+ * this: walking & talking when flat, hopping onto the candle and shouting when in a trade.
+ */
+export function daimon(highs: number[], lows: number[], closes: number[], volumes: number[]): DaimonView {
+  const n = closes.length
+  const trades = kratos(highs, lows, closes, volumes)
+  const markers: DaimonMark[] = []
+  for (const t of trades) {
+    markers.push({ index: t.entryIndex, kind: t.dir })
+    if (t.exitReason !== 'open') markers.push({ index: t.exitIndex, kind: 'exit' })
+  }
+  const open = trades.length && trades[trades.length - 1].exitReason === 'open' ? trades[trades.length - 1] : null
+  const position: 'long' | 'short' | 'flat' = open ? open.dir : 'flat'
+  const justEntered = !!open && open.entryIndex === n - 1
+  const volZ = anemoi(volumes, 20)[n - 1]
+  const sc = pantheon(highs, lows, closes, volumes).score[n - 1]
+  const score = sc == null ? 0 : sc
+  let mood: string, speech: string
+  if (position === 'short') { mood = 'short'; speech = justEntered ? 'HERE ENTRY SHORT! 🔻🪄' : 'here short! 🔻' }
+  else if (position === 'long') { mood = 'long'; speech = justEntered ? 'HERE ENTRY LONG! 🚀🪄' : 'here long! 🚀' }
+  else if (volZ != null && (volZ as number) > 2) { mood = 'excited'; speech = 'ooo volume coming! 👀' }
+  else if (score > 0.4) { mood = 'bull'; speech = 'looks bullish… 🤔' }
+  else if (score < -0.4) { mood = 'bear'; speech = 'bearish vibes… 😟' }
+  else {
+    mood = 'idle'
+    const lines = ['im waiting… 😴', 'reading the chart… 🔮', 'hmm, patience… 🧐', 'nothing yet… ☕']
+    speech = lines[n % lines.length]
+  }
+  return { mood, speech, position, justEntered, markers }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

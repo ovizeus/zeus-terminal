@@ -657,6 +657,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'phoenix',  ico: '🔥', name: 'PHOENIX',           desc: 'Recolours candles yellow/red + MA + S/L + strength (Zeus original)', hasGenericSettings: true },
   { id: 'nephele',  ico: '☁️', name: 'NEPHELE',           desc: 'Dual glow swing-structure bands — support/resistance (Zeus original)', hasGenericSettings: true },
   { id: 'morpheus', ico: '🎨', name: 'MORPHEUS',          desc: 'Recolours candles in 4 regime colours + signals + prints (Zeus original)', hasGenericSettings: true },
+  { id: 'daimon',   ico: '🧙', name: 'DAIMON',            desc: 'A chart wizard that walks, reads the market & calls trades (Zeus original)', hasGenericSettings: false },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

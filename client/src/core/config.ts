@@ -182,6 +182,7 @@ export const INDICATORS: any[] = [
   { id: 'phoenix', ico: _ZI.bolt, name: 'PHOENIX', desc: 'Recolours candles yellow/red + MA + S/L + strength 🔥', cat: 'trend', def: false },
   { id: 'nephele', ico: _ZI.wave, name: 'NEPHELE', desc: 'Dual glow swing-structure bands — support/resistance ☁️', cat: 'trend', def: false },
   { id: 'morpheus', ico: _ZI.dia, name: 'MORPHEUS', desc: 'Recolours candles in 4 regime colours + signals + prints 🎨', cat: 'trend', def: false },
+  { id: 'daimon', ico: _ZI.scope, name: 'DAIMON', desc: 'A chart wizard that walks, reads the market & calls trades 🧙', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

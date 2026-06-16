@@ -1880,6 +1880,8 @@ export let phMaS: any = null, phMarkS: any = null, _phoenixHud: any = null, _pho
 // [2026-06-16] NEPHELE dual glow bands + MORPHEUS 4-colour candle painter
 export let nepUpMidS: any = null, nepUpHiS: any = null, nepUpLoS: any = null, nepLoMidS: any = null, nepLoHiS: any = null, nepLoLoS: any = null, nepMarkS: any = null, _nepAll: any[] = []
 export let morphMaS: any = null, morphMarkS: any = null, morphCarrierS: any = null, _morphLines: any[] = [], _morpheusHud: any = null
+// [2026-06-17] DAIMON — the chart-wizard sprite (DOM character + wand-mark carrier)
+export let _daimon: any = null, _daimonOnBar = false, daimonMarkS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
