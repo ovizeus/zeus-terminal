@@ -26,8 +26,17 @@ export function DSLZonePanel() {
   // immediate render via the window-exposed runDSLBrain.
   useEffect(() => {
     const kick = () => {
-      try { startDSLIntervals() } catch (_) { /* idempotent; never break */ }
-      try { (window as any).runDSLBrain?.() } catch (_) {}
+      try {
+        const wg = window as any
+        // clearAll() (mobile pagehide) removes the 'dsl' interval from the manager
+        // but leaves DSL.checkInterval set (stale) → startDSLIntervals would no-op
+        // on `if (DSL.checkInterval) return`. If the manager no longer tracks 'dsl',
+        // clear the stale handle so startDSLIntervals actually restarts the loop.
+        const tracked = !!wg.Intervals?.list?.().includes?.('dsl')
+        if (wg.DSL && !tracked) wg.DSL.checkInterval = null
+        startDSLIntervals()
+        wg.runDSLBrain?.()
+      } catch (_) { /* never break mount */ }
     }
     kick()
     // [2026-06-16] On mobile, pagehide → Intervals.clearAll() kills the DSL loop
