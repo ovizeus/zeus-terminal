@@ -116,6 +116,99 @@ export function donchian(highs: number[], lows: number[], period: number): Bands
   return { upper, middle, lower }
 }
 
+/** Volume-Weighted Moving Average: Σ(close×vol) / Σ(vol) over period. */
+export function vwma(closes: number[], volumes: number[], period: number): (number | null)[] {
+  const p = Math.max(1, Math.round(period))
+  const n = closes.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  for (let i = p - 1; i < n; i++) {
+    let pv = 0, v = 0
+    for (let j = i - p + 1; j <= i; j++) { pv += closes[j] * volumes[j]; v += volumes[j] }
+    out[i] = v === 0 ? null : pv / v
+  }
+  return out
+}
+
+export interface Aroon { up: (number | null)[]; down: (number | null)[] }
+
+/** Aroon Up/Down (0–100): how recently the period high/low occurred. */
+export function aroon(highs: number[], lows: number[], period: number): Aroon {
+  const p = Math.max(1, Math.round(period))
+  const n = highs.length
+  const up: (number | null)[] = new Array(n).fill(null)
+  const down: (number | null)[] = new Array(n).fill(null)
+  for (let i = p; i < n; i++) {
+    let hh = -Infinity, ll = Infinity, hIdx = i, lIdx = i
+    for (let j = i - p; j <= i; j++) { // window of p+1 bars
+      if (highs[j] >= hh) { hh = highs[j]; hIdx = j }
+      if (lows[j] <= ll) { ll = lows[j]; lIdx = j }
+    }
+    up[i] = 100 * (p - (i - hIdx)) / p
+    down[i] = 100 * (p - (i - lIdx)) / p
+  }
+  return { up, down }
+}
+
+function _emaFull(values: number[], period: number): number[] {
+  const k = 2 / (Math.max(1, Math.round(period)) + 1)
+  const out: number[] = []
+  let prev = values.length ? values[0] : 0
+  for (let i = 0; i < values.length; i++) { prev = i === 0 ? values[0] : values[i] * k + prev * (1 - k); out.push(prev) }
+  return out
+}
+
+/** TRIX: 1-bar % rate-of-change of a triple-smoothed EMA. Momentum oscillator. */
+export function trix(closes: number[], period: number): (number | null)[] {
+  const p = Math.max(1, Math.round(period))
+  const n = closes.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  if (!n) return out
+  const e3 = _emaFull(_emaFull(_emaFull(closes, p), p), p)
+  for (let i = 1; i < n; i++) { const prev = e3[i - 1]; out[i] = prev === 0 ? 0 : 100 * (e3[i] - prev) / prev }
+  const warm = Math.min(n, 3 * (p - 1) + 1)
+  for (let i = 0; i < warm; i++) out[i] = null
+  return out
+}
+
+/** Ultimate Oscillator (0–100): weighted buying-pressure over 3 timeframes. */
+export function ultimateOscillator(highs: number[], lows: number[], closes: number[], p1 = 7, p2 = 14, p3 = 28): (number | null)[] {
+  const n = closes.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  const bp: number[] = new Array(n).fill(0), tr: number[] = new Array(n).fill(0)
+  for (let i = 1; i < n; i++) {
+    const minLC = Math.min(lows[i], closes[i - 1]), maxHC = Math.max(highs[i], closes[i - 1])
+    bp[i] = closes[i] - minLC; tr[i] = maxHC - minLC
+  }
+  const sum = (arr: number[], i: number, len: number) => { let s = 0; for (let j = i - len + 1; j <= i; j++) s += arr[j]; return s }
+  for (let i = p3; i < n; i++) {
+    const t1 = sum(tr, i, p1), t2 = sum(tr, i, p2), t3 = sum(tr, i, p3)
+    const a1 = t1 === 0 ? 0 : sum(bp, i, p1) / t1
+    const a2 = t2 === 0 ? 0 : sum(bp, i, p2) / t2
+    const a3 = t3 === 0 ? 0 : sum(bp, i, p3) / t3
+    out[i] = 100 * (4 * a1 + 2 * a2 + a3) / 7
+  }
+  return out
+}
+
+/** Choppiness Index (0–100): >61 ranging/choppy, <38 strong trend. */
+export function choppiness(highs: number[], lows: number[], closes: number[], period = 14): (number | null)[] {
+  const p = Math.max(2, Math.round(period))
+  const n = closes.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  const tr: number[] = new Array(n).fill(0)
+  for (let i = 0; i < n; i++) {
+    tr[i] = i === 0 ? highs[i] - lows[i] : Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]))
+  }
+  const logP = Math.log10(p)
+  for (let i = p - 1; i < n; i++) {
+    let sumTR = 0, hh = -Infinity, ll = Infinity
+    for (let j = i - p + 1; j <= i; j++) { sumTR += tr[j]; if (highs[j] > hh) hh = highs[j]; if (lows[j] < ll) ll = lows[j] }
+    const range = hh - ll
+    out[i] = range <= 0 ? 50 : 100 * Math.log10(sumTR / range) / logP
+  }
+  return out
+}
+
 export interface DMI { adx: (number | null)[]; plusDI: (number | null)[]; minusDI: (number | null)[] }
 
 /** Wilder ADX with +DI/−DI. Trend-strength oscillator (0–100). */

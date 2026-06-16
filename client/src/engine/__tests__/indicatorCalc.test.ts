@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -117,6 +117,60 @@ describe('awesomeOscillator', () => {
     const ao = awesomeOscillator(highs, lows)
     expect(ao[10]).toBeNull() // slow SMA(34) not warmed
     expect(ao[ao.length - 1] as number).toBeGreaterThan(0)
+  })
+})
+
+describe('vwma', () => {
+  it('equals SMA when volumes are equal', () => {
+    const closes = [1, 2, 3, 4], vol = [10, 10, 10, 10]
+    expect(vwma(closes, vol, 2)).toEqual([null, 1.5, 2.5, 3.5])
+  })
+  it('weights toward high-volume bars', () => {
+    // bars [2,4] with vol [1,9] → (2*1+4*9)/10 = 3.8 (closer to 4)
+    const r = vwma([2, 4], [1, 9], 2)
+    expect(r[1] as number).toBeCloseTo(3.8, 6)
+  })
+})
+
+describe('aroon', () => {
+  it('Aroon Up = 100 when the high is the most recent bar; Down = 100 at a fresh low', () => {
+    const highs = [1, 2, 3, 4, 5], lows = [1, 2, 3, 4, 5] // strict uptrend
+    const { up, down } = aroon(highs, lows, 4)
+    expect(up[4]).toBe(100)   // newest bar is the highest high
+    expect(down[4]).toBe(0)   // lowest low is 4 bars ago
+    expect(up[0]).toBeNull()
+  })
+})
+
+describe('trix', () => {
+  it('positive on a sustained uptrend after warm-up', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 100 + i)
+    const t = trix(closes, 9)
+    expect(t[0]).toBeNull()
+    expect(t[t.length - 1] as number).toBeGreaterThan(0)
+  })
+})
+
+describe('ultimateOscillator', () => {
+  it('stays within 0–100 and is high on a strong uptrend', () => {
+    const highs = Array.from({ length: 40 }, (_, i) => 100 + i + 1)
+    const lows = Array.from({ length: 40 }, (_, i) => 100 + i - 1)
+    const closes = Array.from({ length: 40 }, (_, i) => 100 + i + 0.9) // closes near highs
+    const uo = ultimateOscillator(highs, lows, closes)
+    const last = uo[uo.length - 1] as number
+    expect(uo[5]).toBeNull()
+    expect(last).toBeGreaterThan(50); expect(last).toBeLessThanOrEqual(100)
+  })
+})
+
+describe('choppiness', () => {
+  it('is low (trending) on a clean one-way move', () => {
+    const highs = Array.from({ length: 30 }, (_, i) => 100 + i + 1)
+    const lows = Array.from({ length: 30 }, (_, i) => 100 + i - 1)
+    const closes = Array.from({ length: 30 }, (_, i) => 100 + i)
+    const ci = choppiness(highs, lows, closes, 14)
+    expect(ci[0]).toBeNull()
+    expect(ci[ci.length - 1] as number).toBeLessThan(50) // trending → low CI
   })
 })
 

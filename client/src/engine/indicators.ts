@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP } from './indicatorCalc'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
 import { renderVWAP, getVwapSeries, resetVwapSeries } from '../ui/panels'
@@ -251,6 +251,24 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'ao':
       { const aox = document.getElementById('aoChart'); if (aox) aox.style.display = show ? '' : 'none'; if (show) initAOChart() }
+      break
+    // [2026-06-16] New indicators (batch 3): VWMA overlay + 4 oscillator panes
+    case 'vwma':
+      if (show) initVWMASeries()
+      if (w.vwmaS) w.vwmaS.applyOptions({ visible: show })
+      if (show) updateVWMA()
+      break
+    case 'aroon':
+      { const arx = document.getElementById('aroonChart'); if (arx) arx.style.display = show ? '' : 'none'; if (show) initAroonChart() }
+      break
+    case 'trix':
+      { const trx = document.getElementById('trixChart'); if (trx) trx.style.display = show ? '' : 'none'; if (show) initTrixChart() }
+      break
+    case 'uo':
+      { const uox = document.getElementById('uoChart'); if (uox) uox.style.display = show ? '' : 'none'; if (show) initUOChart() }
+      break
+    case 'chop':
+      { const chx = document.getElementById('chopChart'); if (chx) chx.style.display = show ? '' : 'none'; if (show) initChopChart() }
       break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
@@ -638,7 +656,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -914,6 +932,86 @@ export function updateAO(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// batch 3: VWMA (overlay) + Aroon, TRIX, Ultimate Osc, Choppiness (panes)
+// ═══════════════════════════════════════════════════════════════
+
+export function initVWMASeries(): void {
+  if (w.vwmaS || !w.mainChart) return
+  w.vwmaS = w.mainChart.addLineSeries({ color: '#7e57c2', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
+}
+export function updateVWMA(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initVWMASeries()
+  const k = w.S.klines
+  const vals = _calcVWMA(k.map((b: any) => b.close), k.map((b: any) => b.volume), Math.round(w.IND_SETTINGS.vwma.period) || 20)
+  const data: any[] = []
+  for (let i = 0; i < vals.length; i++) if (vals[i] != null) data.push({ time: _klTime(i), value: vals[i] })
+  try { w.vwmaS.setData(data) } catch (_) { }
+}
+
+export function initAroonChart(): void {
+  if (w._aroonInited && w._aroonChart) { updateAroon(); return }
+  w._aroonChart = _createSubChart('aroonChart', 60)
+  if (!w._aroonChart) return
+  w._aroonUpSeries = w._aroonChart.addLineSeries({ color: '#26ff9a', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'Up' })
+  w._aroonDnSeries = w._aroonChart.addLineSeries({ color: '#ff5277', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'Dn' })
+  w._aroonInited = true
+  updateAroon()
+}
+export function updateAroon(): void {
+  if (!w._aroonInited || !w._aroonUpSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.aroon.period) || 14
+  const r = _calcAROON(k.map((b: any) => b.high), k.map((b: any) => b.low), p)
+  _osc(w._aroonUpSeries, r.up); _osc(w._aroonDnSeries, r.down)
+  _syncSubChartsToMain()
+}
+
+export function initTrixChart(): void {
+  if (w._trixInited && w._trixChart) { updateTrix(); return }
+  w._trixChart = _createSubChart('trixChart', 60)
+  if (!w._trixChart) return
+  w._trixSeries = w._trixChart.addLineSeries({ color: '#ffca28', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'TRIX' })
+  w._trixInited = true
+  updateTrix()
+}
+export function updateTrix(): void {
+  if (!w._trixInited || !w._trixSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.trix.period) || 15
+  _osc(w._trixSeries, _calcTRIX(k.map((b: any) => b.close), p))
+  _syncSubChartsToMain()
+}
+
+export function initUOChart(): void {
+  if (w._uoInited && w._uoChart) { updateUO(); return }
+  w._uoChart = _createSubChart('uoChart', 60)
+  if (!w._uoChart) return
+  w._uoSeries = w._uoChart.addLineSeries({ color: '#26c6da', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'UO' })
+  w._uoInited = true
+  updateUO()
+}
+export function updateUO(): void {
+  if (!w._uoInited || !w._uoSeries || !w.S.klines.length) return
+  const k = w.S.klines, s = w.IND_SETTINGS.uo
+  _osc(w._uoSeries, _calcUO(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.p1) || 7, Math.round(s.p2) || 14, Math.round(s.p3) || 28))
+  _syncSubChartsToMain()
+}
+
+export function initChopChart(): void {
+  if (w._chopInited && w._chopChart) { updateChop(); return }
+  w._chopChart = _createSubChart('chopChart', 60)
+  if (!w._chopChart) return
+  w._chopSeries = w._chopChart.addLineSeries({ color: '#ab47bc', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'CHOP' })
+  w._chopInited = true
+  updateChop()
+}
+export function updateChop(): void {
+  if (!w._chopInited || !w._chopSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.chop.period) || 14
+  _osc(w._chopSeries, _calcCHOP(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), p))
+  _syncSubChartsToMain()
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -941,6 +1039,12 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.roc && w._rocInited) updateROC()
   if (w.S.activeInds.cmf && w._cmfInited) updateCMF()
   if (w.S.activeInds.ao && w._aoInited) updateAO()
+  // [2026-06-16] batch-3
+  if (w.S.activeInds.vwma) updateVWMA()
+  if (w.S.activeInds.aroon && w._aroonInited) updateAroon()
+  if (w.S.activeInds.trix && w._trixInited) updateTrix()
+  if (w.S.activeInds.uo && w._uoInited) updateUO()
+  if (w.S.activeInds.chop && w._chopInited) updateChop()
 }
 
 export function renderActBar(): void {
@@ -965,7 +1069,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc' }
   return map[id] || '#888'
 }
 

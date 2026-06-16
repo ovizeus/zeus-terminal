@@ -126,6 +126,12 @@ export const INDICATORS: any[] = [
   { id: 'roc', ico: _ZI.wave, name: 'ROC', desc: 'Rate of Change momentum', cat: 'mom', def: false },
   { id: 'cmf', ico: _ZI.dia, name: 'CMF', desc: 'Chaikin Money Flow (volume)', cat: 'vol', def: false },
   { id: 'ao', ico: _ZI.tup, name: 'Awesome Oscillator', desc: 'Momentum histogram (5/34)', cat: 'mom', def: false },
+  // [2026-06-16] New indicators — batch 3
+  { id: 'vwma', ico: _ZI.vol, name: 'VWMA', desc: 'Volume-Weighted Moving Average', cat: 'trend', def: false },
+  { id: 'aroon', ico: _ZI.scope, name: 'Aroon', desc: 'Trend onset (Up / Down)', cat: 'trend', def: false },
+  { id: 'trix', ico: _ZI.wave, name: 'TRIX', desc: 'Triple-smoothed momentum', cat: 'mom', def: false },
+  { id: 'uo', ico: _ZI.crown, name: 'Ultimate Oscillator', desc: 'Multi-timeframe momentum', cat: 'mom', def: false },
+  { id: 'chop', ico: _ZI.spider, name: 'Choppiness Index', desc: 'Trending vs ranging', cat: 'vol', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

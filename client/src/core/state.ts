@@ -1790,7 +1790,7 @@ export const S: any = {
 export let mainChart: any, cSeries: any, ema50S: any, ema200S: any, wma20S: any, wma50S: any, stS: any, cvdChart: any, cvdS: any, volChart: any, volS: any
 export let bbUpperS: any = null, bbMiddleS: any = null, bbLowerS: any = null
 // [2026-06-16] batch-1 overlay series refs (window-global, lazy-init in indicators.ts)
-export let smaS: any = null, hmaS: any = null, psarS: any = null
+export let smaS: any = null, hmaS: any = null, psarS: any = null, vwmaS: any = null
 export let kcUpperS: any = null, kcMiddleS: any = null, kcLowerS: any = null
 export let dcUpperS: any = null, dcMiddleS: any = null, dcLowerS: any = null
 export let ichimokuSeries: any[] = []
@@ -1809,6 +1809,11 @@ export let _willrChart: any = null, _willrSeries: any = null, _willrInited = fal
 export let _rocChart: any = null, _rocSeries: any = null, _rocInited = false
 export let _cmfChart: any = null, _cmfSeries: any = null, _cmfInited = false
 export let _aoChart: any = null, _aoSeries: any = null, _aoInited = false
+// [2026-06-16] batch-3 oscillator panes
+export let _aroonChart: any = null, _aroonUpSeries: any = null, _aroonDnSeries: any = null, _aroonInited = false
+export let _trixChart: any = null, _trixSeries: any = null, _trixInited = false
+export let _uoChart: any = null, _uoSeries: any = null, _uoInited = false
+export let _chopChart: any = null, _chopSeries: any = null, _chopInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1841,6 +1846,12 @@ export const IND_SETTINGS: any = {
   roc: { period: 12 },
   cmf: { period: 20 },
   ao: { fast: 5, slow: 34 },
+  // [2026-06-16] batch-3
+  vwma: { period: 20 },
+  aroon: { period: 14 },
+  trix: { period: 15 },
+  uo: { p1: 7, p2: 14, p3: 28 },
+  chop: { period: 14 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
