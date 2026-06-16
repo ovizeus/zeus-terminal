@@ -169,6 +169,8 @@ export const INDICATORS: any[] = [
   { id: 'echo', ico: _ZI.wave, name: 'ECHO', desc: 'Spectral (Fourier) forecast — projects the cycle 🔊', cat: 'trend', def: false },
   { id: 'kairos', ico: _ZI.scope, name: 'KAIROS', desc: 'Hilbert cycle-phase clock — where in the cycle ⏱️', cat: 'momentum', def: false },
   { id: 'tyche', ico: _ZI.tgt, name: 'TYCHE', desc: 'Monte-Carlo probability fan — future path odds 🎲', cat: 'trend', def: false },
+  { id: 'nyx', ico: _ZI.chart, name: 'NYX', desc: 'Smart-money flow — accumulation/distribution area 🌌', cat: 'volume', def: false },
+  { id: 'olympus', ico: _ZI.scope, name: 'OLYMPUS', desc: 'SMC suite — BOS · CHoCH · FVG · bias 🏔️', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

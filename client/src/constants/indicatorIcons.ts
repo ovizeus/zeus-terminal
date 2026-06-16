@@ -86,6 +86,8 @@ export const IND_ICONS: Record<string, string> = {
   echo: g(p('M2 8h2M12 8h2') + p('M4 8c0-3 1.5-3 1.5 0s1.5 3 1.5 0 1.5-3 1.5 0 1.5 3 1.5 0')), // resonant harmonic wave
   kairos: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + p('M8 8l3-2') + p('M8 8V5')), // phase clock dial with hand
   tyche: g(p('M3 8h2') + p('M5 8l9-4M5 8l9 0M5 8l9 4')), // probability fan opening into the future
+  nyx: g('<path d="M2 8h3l2-4 2 8 2-5 3 1v5H2z" fill="currentColor" stroke="none" opacity="0.85"/>'), // filled flow area (accum/dist)
+  olympus: g(p('M2 13l4-8 3 4 2-6 3 10z') + p('M2 13h12')), // mountain peaks (structure)
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

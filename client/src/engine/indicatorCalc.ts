@@ -1419,6 +1419,90 @@ export function tyche(closes: number[], lookback = 100, horizon = 12, sims = 200
   return { p10, p50, p90 }
 }
 
+export interface Nyx { flow: (number | null)[]; phase: ('accum' | 'dist' | 'neutral')[] }
+
+/**
+ * NYX — night that sees all (invented for Zeus). An ultra-composite SMART-MONEY FLOW
+ * score (−1..+1) that fuses four reads into one colour-filled area: (1) money-flow
+ * multiplier × volume, EMA-smoothed (where in range bars close — accumulation vs
+ * distribution); (2) signed-volume delta (long vs short pressure); (3) price vs its EMA
+ * (trend bias). Strongly positive = accumulation / long intent (green fill above 0),
+ * strongly negative = distribution / short intent (red fill below 0). `phase` labels
+ * each bar accum / dist / neutral.
+ */
+export function nyx(_opens: number[], highs: number[], lows: number[], closes: number[], volumes: number[], period = 20): Nyx {
+  const n = closes.length
+  const e = ema(closes, period)
+  const mfv: number[] = new Array(n).fill(0), dvol: number[] = new Array(n).fill(0)
+  for (let i = 0; i < n; i++) {
+    const range = highs[i] - lows[i]
+    const mfm = range > 0 ? ((closes[i] - lows[i]) - (highs[i] - closes[i])) / range : 0
+    mfv[i] = mfm * volumes[i]
+    const dir = i > 0 ? (closes[i] > closes[i - 1] ? 1 : closes[i] < closes[i - 1] ? -1 : 0) : 0
+    dvol[i] = dir * volumes[i]
+  }
+  const mfvE = ema(mfv, period), volE = ema(volumes, period), dvolE = ema(dvol, period)
+  const flow: (number | null)[] = new Array(n).fill(null)
+  const phase: ('accum' | 'dist' | 'neutral')[] = new Array(n).fill('neutral')
+  for (let i = 0; i < n; i++) {
+    if (e[i] == null || volE[i] == null || (volE[i] as number) <= 0) continue
+    const ad = Math.max(-1, Math.min(1, (mfvE[i] as number) / (volE[i] as number)))
+    const delta = Math.max(-1, Math.min(1, (dvolE[i] as number) / (volE[i] as number)))
+    const trend = closes[i] > (e[i] as number) ? 1 : closes[i] < (e[i] as number) ? -1 : 0
+    const f = Math.max(-1, Math.min(1, 0.5 * ad + 0.25 * delta + 0.25 * trend))
+    flow[i] = f
+    phase[i] = f > 0.1 ? 'accum' : f < -0.1 ? 'dist' : 'neutral'
+  }
+  return { flow, phase }
+}
+
+export interface SmcEvent { index: number; kind: 'BOS' | 'CHoCH'; dir: 'up' | 'down'; level: number }
+export interface Olympus { events: SmcEvent[]; fvgs: FairValueGap[]; bias: ('long' | 'short' | 'neutral')[] }
+
+/**
+ * OLYMPUS — seat of the gods (invented for Zeus). An ultra-composite SMART-MONEY
+ * CONCEPTS engine that reads market STRUCTURE in one pass: it tracks confirmed swing
+ * pivots, then classifies each break of a prior swing as a BOS (Break of Structure —
+ * a continuation in the prevailing trend) or a CHoCH (Change of Character — the FIRST
+ * break against the trend, i.e. a reversal). It maintains the running `bias`
+ * (long/short/neutral) and also returns fair-value-gap zones. MOIRA gave only BOS;
+ * OLYMPUS adds the CHoCH distinction + live bias + FVG in a single structure map.
+ */
+export function olympus(_opens: number[], highs: number[], lows: number[], closes: number[], swing = 5, fvgMinPct = 0.03): Olympus {
+  const n = closes.length, L = Math.max(1, Math.round(swing))
+  const piv: { confirm: number; type: 'H' | 'L'; value: number }[] = []
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) { if (j === i) continue; if (highs[j] > highs[i]) isH = false; if (lows[j] < lows[i]) isL = false }
+    if (isH) piv.push({ confirm: i + L, type: 'H', value: highs[i] })
+    if (isL) piv.push({ confirm: i + L, type: 'L', value: lows[i] })
+  }
+  piv.sort((a, b) => a.confirm - b.confirm)
+  const events: SmcEvent[] = []
+  const bias: ('long' | 'short' | 'neutral')[] = new Array(n).fill('neutral')
+  let k = 0, lastH = NaN, lastL = NaN, trend: 'long' | 'short' | 'neutral' = 'neutral', brokeH = false, brokeL = false
+  for (let i = 0; i < n; i++) {
+    while (k < piv.length && piv[k].confirm <= i) { const pv = piv[k]; if (pv.type === 'H') { lastH = pv.value; brokeH = false } else { lastL = pv.value; brokeL = false } k++ }
+    if (!isNaN(lastH) && !brokeH && closes[i] > lastH) { events.push({ index: i, kind: trend === 'short' ? 'CHoCH' : 'BOS', dir: 'up', level: lastH }); trend = 'long'; brokeH = true }
+    if (!isNaN(lastL) && !brokeL && closes[i] < lastL) { events.push({ index: i, kind: trend === 'long' ? 'CHoCH' : 'BOS', dir: 'down', level: lastL }); trend = 'short'; brokeL = true }
+    bias[i] = trend
+  }
+  // fair-value gaps (3-candle imbalances)
+  const fvgs: FairValueGap[] = []
+  for (let i = 2; i < n; i++) {
+    let dir: 'bull' | 'bear' | null = null, top = 0, bottom = 0
+    if (highs[i - 2] < lows[i]) { dir = 'bull'; top = lows[i]; bottom = highs[i - 2] }
+    else if (lows[i - 2] > highs[i]) { dir = 'bear'; top = lows[i - 2]; bottom = highs[i] }
+    if (!dir) continue
+    const ref = closes[i] || 1
+    if ((top - bottom) / ref * 100 < fvgMinPct) continue
+    let fill = -1
+    for (let j = i + 1; j < n; j++) { if (dir === 'bull' ? lows[j] <= top : highs[j] >= bottom) { fill = j; break } }
+    fvgs.push({ index: i, dir, top, bottom, filled: fill !== -1, fillIndex: fill })
+  }
+  return { events, fvgs, bias }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

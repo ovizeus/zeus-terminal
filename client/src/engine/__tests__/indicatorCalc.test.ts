@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -757,6 +757,50 @@ describe('tyche', () => {
     // deterministic for the same seed
     const g = tyche(closes, 100, 12, 200, 777)
     expect(g.p50).toEqual(f.p50)
+  })
+})
+
+describe('nyx', () => {
+  const series = (closeFrac: number, rising: boolean) => {
+    const opens: number[] = [], highs: number[] = [], lows: number[] = [], closes: number[] = [], vol: number[] = []
+    for (let i = 0; i < 60; i++) {
+      const base = rising ? 100 + i : 200 - i
+      lows.push(base); highs.push(base + 2); closes.push(base + 2 * closeFrac); opens.push(base + 1); vol.push(100)
+    }
+    return { opens, highs, lows, closes, vol }
+  }
+  it('reads accumulation when bars close near the high on a rising market', () => {
+    const s = series(0.95, true)
+    const r = nyx(s.opens, s.highs, s.lows, s.closes, s.vol, 20)
+    expect(r.flow[59] as number).toBeGreaterThan(0.3)
+    expect(r.phase[59]).toBe('accum')
+  })
+  it('reads distribution when bars close near the low on a falling market', () => {
+    const s = series(0.05, false)
+    const r = nyx(s.opens, s.highs, s.lows, s.closes, s.vol, 20)
+    expect(r.flow[59] as number).toBeLessThan(-0.3)
+    expect(r.phase[59]).toBe('dist')
+  })
+})
+
+describe('olympus', () => {
+  it('labels a BOS-up on a zigzag uptrend (bias long) and no CHoCH', () => {
+    const c = [10, 11, 12, 11, 13, 14, 13, 15, 17, 16, 18]
+    const o = olympus(c, c, c, c, 1, 0.03)
+    expect(o.events.some((e) => e.kind === 'BOS' && e.dir === 'up')).toBe(true)
+    expect(o.events.some((e) => e.kind === 'CHoCH')).toBe(false)
+    expect(o.bias[o.bias.length - 1]).toBe('long')
+  })
+  it('flags a CHoCH-down and flips bias to short when an uptrend breaks its swing low', () => {
+    const c = [10, 11, 12, 11, 13, 14, 13, 15, 16, 14, 12, 10, 9]
+    const o = olympus(c, c, c, c, 1, 0.03)
+    expect(o.events.some((e) => e.kind === 'CHoCH' && e.dir === 'down')).toBe(true)
+    expect(o.bias[o.bias.length - 1]).toBe('short')
+  })
+  it('also returns fair-value-gap zones', () => {
+    const highs = [10, 12, 15], lows = [8, 11, 13], closes = [9, 11.5, 14]
+    const o = olympus(closes, highs, lows, closes, 1, 0.01)
+    expect(o.fvgs.some((g) => g.dir === 'bull')).toBe(true)
   })
 })
 

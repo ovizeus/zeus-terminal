@@ -1860,6 +1860,9 @@ export let echoFitS: any = null, echoProjS: any = null
 // [2026-06-16] KAIROS Hilbert phase pane + TYCHE Monte-Carlo fan (main-chart overlay)
 export let _kairosChart: any = null, _kairosSeries: any = null, _kairosZeroS: any = null, _kairosInited = false
 export let tycheP50S: any = null, tycheP10S: any = null, tycheP90S: any = null
+// [2026-06-16] NYX smart-money-flow baseline pane + OLYMPUS SMC structure overlay
+export let _nyxChart: any = null, _nyxSeries: any = null, _nyxInited = false
+export let olyMarkS: any = null, olyBullTopS: any = null, olyBullBotS: any = null, olyBearTopS: any = null, olyBearBotS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1962,6 +1965,10 @@ export const IND_SETTINGS: any = {
   kairos: { smoothLen: 40 },
   // [2026-06-16] TYCHE — Monte-Carlo probability fan (main-chart overlay)
   tyche: { lookback: 100, horizon: 12, sims: 200 },
+  // [2026-06-16] NYX — smart-money flow composite (accum/dist · long/short)
+  nyx: { period: 20 },
+  // [2026-06-16] OLYMPUS — SMC structure engine (BOS/CHoCH/FVG/bias)
+  olympus: { swing: 5, fvgMinPct: 0.03 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
