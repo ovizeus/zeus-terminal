@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -449,6 +449,22 @@ export function applyIndVisibility(id: string, visible: boolean): void {
         if (w._orionHud) w._orionHud.style.display = 'none'
       }
       break
+    case 'nephele':
+      if (show) initNepheleSeries()
+      ;(w._nepAll || []).forEach((sx: any) => { if (sx) { try { sx.applyOptions({ visible: show }); if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
+      if (show) updateNephele()
+      break
+    case 'morpheus':
+      if (show) { initMorpheusSeries(); updateMorpheus() }
+      else {
+        // revert candle colours: re-set plain OHLC so the series default up/down colours return
+        try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { }
+        try { (w._morphLines || []).forEach((pl: any) => w.morphCarrierS && w.morphCarrierS.removePriceLine(pl)) } catch (_) { } w._morphLines = []
+        if (w.morphMaS) try { w.morphMaS.applyOptions({ visible: false }); w.morphMaS.setData([]) } catch (_) { }
+        if (w.morphMarkS) try { w.morphMarkS.setMarkers([]); w.morphMarkS.setData([]) } catch (_) { }
+        if (w._morpheusHud) w._morpheusHud.style.display = 'none'
+      }
+      break
     case 'phoenix':
       if (show) {
         // recolour the candles fire yellow/red — save the current colours to restore later
@@ -590,7 +606,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %', meanPeriod: 'Mean Period', zThr: 'Z Threshold', rsiHi: 'RSI High', rsiLo: 'RSI Low', atrLen: 'ATR Length', bandMult: 'Band ×ATR', spacing: 'Fan Spacing', powerLen: 'Power Length', strengthLen: 'Strength Length'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics', smoothLen: 'Detrend Len', sims: 'Simulations', swing: 'Swing', fvgMinPct: 'FVG Min %', meanPeriod: 'Mean Period', zThr: 'Z Threshold', rsiHi: 'RSI High', rsiLo: 'RSI Low', atrLen: 'ATR Length', bandMult: 'Band ×ATR', spacing: 'Fan Spacing', powerLen: 'Power Length', strengthLen: 'Strength Length', maPeriod: 'MA Period'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -2680,6 +2696,103 @@ export function updatePhoenix(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// NEPHELE — invented dual glowing swing-structure bands (main-chart): magenta
+// resistance band (above) + green support band (below) + ◆ swing labels.
+// ═══════════════════════════════════════════════════════════════
+
+export function initNepheleSeries(): void {
+  if (w.nepUpMidS || !w.mainChart) return
+  const ln = (color: string, lw: number) => w.mainChart.addLineSeries({ color, lineWidth: lw, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  // upper magenta band: faint rails + bright centre
+  w.nepUpHiS = ln('rgba(224,64,251,0.25)', 1); w.nepUpLoS = ln('rgba(224,64,251,0.25)', 1); w.nepUpMidS = ln('#e040fb', 2)
+  // lower green band
+  w.nepLoHiS = ln('rgba(0,230,118,0.25)', 1); w.nepLoLoS = ln('rgba(0,230,118,0.25)', 1); w.nepLoMidS = ln('#00e676', 2)
+  w.nepMarkS = ln('rgba(0,0,0,0)', 1)
+  w._nepAll = [w.nepUpHiS, w.nepUpLoS, w.nepUpMidS, w.nepLoHiS, w.nepLoLoS, w.nepLoMidS, w.nepMarkS]
+}
+export function updateNephele(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initNepheleSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.nephele || {}
+  const r = _calcNEPHELE(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.period) || 20, Math.round(s.swing) || 5)
+  const upMid: any[] = [], upHi: any[] = [], upLo: any[] = [], loMid: any[] = [], loHi: any[] = [], loLo: any[] = []
+  for (let i = 0; i < r.upMid.length; i++) {
+    if (r.upMid[i] == null || r.loMid[i] == null || r.atr[i] == null || !k[i]) continue
+    const t = k[i].time, a = (r.atr[i] as number) * 0.5, um = r.upMid[i] as number, lm = r.loMid[i] as number
+    upMid.push({ time: t, value: um }); upHi.push({ time: t, value: um + a }); upLo.push({ time: t, value: um - a })
+    loMid.push({ time: t, value: lm }); loHi.push({ time: t, value: lm + a }); loLo.push({ time: t, value: lm - a })
+  }
+  // diamond + label markers at swings; "Swing High/Low" text on the most-recent of each
+  const lastHigh = [...r.swings].reverse().find((x: any) => x.type === 'high')
+  const lastLow = [...r.swings].reverse().find((x: any) => x.type === 'low')
+  const marks = r.swings.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time, position: g.type === 'high' ? 'aboveBar' : 'belowBar', shape: 'circle',
+    color: g.type === 'high' ? '#e040fb' : '#00e676',
+    text: g === lastHigh ? '◆ Swing High' : g === lastLow ? '◆ Swing Low' : '◆',
+  }))
+  try {
+    w.nepUpMidS.setData(upMid); w.nepUpHiS.setData(upHi); w.nepUpLoS.setData(upLo)
+    w.nepLoMidS.setData(loMid); w.nepLoHiS.setData(loHi); w.nepLoLoS.setData(loLo)
+    w.nepMarkS.setData(upMid); w.nepMarkS.setMarkers(marks)
+    ;(w._nepAll || []).forEach((sx: any) => sx && sx.applyOptions({ visible: true }))
+  } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MORPHEUS — invented 4-colour candle painter (RECOLOURS candles): green up-strong /
+// blue up-pullback / red down-strong / yellow down-bounce + MA + arrows + S/R + prints.
+// ═══════════════════════════════════════════════════════════════
+
+export function initMorpheusSeries(): void {
+  if (w.morphMaS || !w.mainChart) return
+  w.morphMaS = w.mainChart.addLineSeries({ color: '#e0e0e0', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.morphMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.morphCarrierS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._morphLines = []
+  const mc = document.getElementById('mc')
+  if (mc && !w._morpheusHud) { try { if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative' } catch (_) { } const h = document.createElement('div'); h.id = 'morpheusHud'; h.className = 'morpheus-hud'; mc.appendChild(h); w._morpheusHud = h }
+}
+export function updateMorpheus(): void {
+  if (!w.mainChart || !w.S.klines.length || !w.cSeries) return
+  initMorpheusSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.morpheus || {}
+  const r = _calcMORPHEUS(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.maPeriod) || 50, Math.round(s.swing) || 8)
+  // 4-colour candle recolour: green up-strong / blue up-pullback / red down-strong / yellow down-bounce
+  const colored = k.map((b: any, i: number) => {
+    const up = r.trendUp[i], barUp = b.close >= b.open
+    const col = up ? (barUp ? '#00e676' : '#29b6f6') : (barUp ? '#ffd600' : '#ff3b30')
+    return { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: col, borderColor: col, wickColor: col }
+  })
+  try { w.cSeries.setData(colored) } catch (_) { }
+  // MA line
+  const ma: any[] = []
+  for (let i = 0; i < r.ma.length; i++) { if (r.ma[i] == null || !k[i]) continue; ma.push({ time: k[i].time, value: r.ma[i] }) }
+  // flip arrows
+  const marks = r.signals.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time, position: g.dir === 'buy' ? 'belowBar' : 'aboveBar', shape: g.dir === 'buy' ? 'arrowUp' : 'arrowDown',
+    color: g.dir === 'buy' ? '#00e676' : '#ff3b30',
+  }))
+  // dashed S/R price lines (nearest few)
+  try { (w._morphLines || []).forEach((pl: any) => w.morphCarrierS.removePriceLine(pl)) } catch (_) { }
+  w._morphLines = []
+  try {
+    w.morphMaS.setData(ma); w.morphMaS.applyOptions({ visible: true })
+    w.morphMarkS.setData(ma.length ? ma : k.map((b: any) => ({ time: b.time, value: b.close }))); w.morphMarkS.setMarkers(marks)
+    w.morphCarrierS.setData(k.map((b: any) => ({ time: b.time, value: b.close })))
+    const recent = r.levels.slice(-6)
+    for (const lv of recent) {
+      const pl = w.morphCarrierS.createPriceLine({ price: lv.price, color: lv.type === 'res' ? '#ff3b30' : '#00e676', lineWidth: 1, lineStyle: 2, axisLabelVisible: false })
+      w._morphLines.push(pl)
+    }
+  } catch (_) { }
+  if (w._morpheusHud) {
+    w._morpheusHud.style.display = ''
+    w._morpheusHud.innerHTML = `<table class="morph-tbl"><tr><td class="morph-h">BULL PRINTS</td><td class="morph-h">BEAR PRINTS</td></tr>` +
+      `<tr><td style="color:#00e676">${r.bullPrints}</td><td style="color:#ff3b30">${r.bearPrints}</td></tr></table>`
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2756,6 +2869,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.argus) updateArgus()
   if (w.S.activeInds.orion) updateOrion()
   if (w.S.activeInds.phoenix) updatePhoenix()
+  if (w.S.activeInds.nephele) updateNephele()
+  if (w.S.activeInds.morpheus) updateMorpheus()
 }
 
 export function renderActBar(): void {
@@ -2780,7 +2895,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676' }
   return map[id] || '#888'
 }
 

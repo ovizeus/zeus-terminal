@@ -5231,6 +5231,11 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* [2026-06-16] ORION buy/sell-power HUD (bottom-right) + PHOENIX strength HUD (bottom-left) */
 .orion-hud { position: absolute; bottom: 12px; right: 12px; z-index: 30; padding: 6px 10px; border-radius: 7px; background: rgba(10, 15, 22, 0.88); border: 1px solid #f0c04044; font: 11px/1.4 ui-monospace, Menlo, monospace; color: #cfe; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
 .phoenix-hud { position: absolute; bottom: 12px; left: 12px; z-index: 30; padding: 6px 10px; border-radius: 7px; background: rgba(10, 15, 22, 0.88); border: 1px solid #ffd60044; font: 11px/1.4 ui-monospace, Menlo, monospace; color: #cfe; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
+/* [2026-06-17] MORPHEUS Bull/Bear Prints HUD (top-right) */
+.morpheus-hud { position: absolute; top: 10px; right: 10px; z-index: 30; padding: 5px 7px; border-radius: 7px; background: rgba(10, 15, 22, 0.88); border: 1px solid #ffffff22; font: 10px/1.3 ui-monospace, Menlo, monospace; color: #cfe; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
+.morph-tbl { border-collapse: collapse; text-align: center }
+.morph-tbl td { padding: 1px 8px; font-weight: 700 }
+.morph-tbl .morph-h { color: #7a9ab8; font-weight: 600; border-bottom: 1px solid #ffffff14 }
 .ind-row-name { font-size: 10px; color: var(--whi); font-weight: 600 }
 .ind-row-desc { font-size: 11px; color: var(--dim); margin-top: 1px }
 .ind-toggle { width: 36px; height: 20px; background: var(--brd); border-radius: 20px; position: relative; transition: .3s; border: 1px solid #333; flex-shrink: 0; cursor: pointer }

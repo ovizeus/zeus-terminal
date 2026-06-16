@@ -1800,6 +1800,69 @@ export function phoenix(highs: number[], lows: number[], closes: number[], smoot
   return { ma, signals, strength }
 }
 
+export interface NepheleSwing { index: number; type: 'high' | 'low' }
+export interface Nephele { upMid: (number | null)[]; loMid: (number | null)[]; atr: (number | null)[]; swings: NepheleSwing[] }
+
+/**
+ * NEPHELE — the cloud nymph (invented for Zeus, modelled on the dual glowing
+ * swing-structure band reference). Two smoothed glow bands: an UPPER magenta band
+ * (EMA of highs) marking the resistance / swing-high structure, and a LOWER green band
+ * (EMA of lows) marking the support / swing-low structure — each drawn by the engine as
+ * a bright centre line plus faint ±ATR glow rails. Confirmed swing pivots get a diamond
+ * + "Swing High" (magenta) / "Swing Low" (green) label, showing where structure shifts.
+ */
+export function nephele(highs: number[], lows: number[], closes: number[], period = 20, swing = 5): Nephele {
+  const n = closes.length, L = Math.max(1, Math.round(swing))
+  const upMid = ema(highs, period), loMid = ema(lows, period), a = atr(highs, lows, closes, 14)
+  const swings: NepheleSwing[] = []
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) { if (j === i) continue; if (highs[j] > highs[i]) isH = false; if (lows[j] < lows[i]) isL = false }
+    if (isH) swings.push({ index: i, type: 'high' })
+    if (isL) swings.push({ index: i, type: 'low' })
+  }
+  return { upMid, loMid, atr: a, swings }
+}
+
+export interface MorphSig { index: number; dir: 'buy' | 'sell' }
+export interface MorphLevel { price: number; type: 'res' | 'sup' }
+export interface Morpheus { ma: (number | null)[]; trendUp: boolean[]; signals: MorphSig[]; levels: MorphLevel[]; bullPrints: number; bearPrints: number }
+
+/**
+ * MORPHEUS — the shaper of forms (invented for Zeus, modelled on the "RT-Main" 4-colour
+ * candle painter). It classifies each bar by TREND (close vs an EMA baseline) × candle
+ * DIRECTION into four states the engine paints onto the candles: green (uptrend + up),
+ * blue (uptrend + pullback), red (downtrend + down), yellow (downtrend + bounce). Trend
+ * flips emit buy ▲ / sell ▼ "prints" (counted as Bull/Bear Prints), and recent swing
+ * highs/lows become dashed resistance (red) / support (green) levels.
+ */
+export function morpheus(highs: number[], lows: number[], closes: number[], maPeriod = 50, swing = 8): Morpheus {
+  const n = closes.length
+  const ma = ema(closes, maPeriod)
+  const trendUp: boolean[] = new Array(n).fill(false)
+  const signals: MorphSig[] = []
+  let prev: boolean | null = null
+  for (let i = 0; i < n; i++) {
+    if (ma[i] == null) continue
+    const up = closes[i] >= (ma[i] as number)
+    trendUp[i] = up
+    if (prev !== null && up !== prev) signals.push({ index: i, dir: up ? 'buy' : 'sell' })
+    prev = up
+  }
+  const bullPrints = signals.filter((s) => s.dir === 'buy').length
+  const bearPrints = signals.length - bullPrints
+  // recent swing highs/lows → dashed levels (keep the last few)
+  const L = Math.max(1, Math.round(swing))
+  const levels: MorphLevel[] = []
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) { if (j === i) continue; if (highs[j] > highs[i]) isH = false; if (lows[j] < lows[i]) isL = false }
+    if (isH) levels.push({ price: highs[i], type: 'res' })
+    if (isL) levels.push({ price: lows[i], type: 'sup' })
+  }
+  return { ma, trendUp, signals, levels, bullPrints, bearPrints }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

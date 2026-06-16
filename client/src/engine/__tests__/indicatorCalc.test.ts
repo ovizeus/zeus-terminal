@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus, orion, phoenix } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus, orion, phoenix, nephele, morpheus } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -936,6 +936,35 @@ describe('phoenix', () => {
     const z = phoenix(zig, zig, zig, 5, 1, 5)
     expect(z.signals.some((s) => s.dir === 'L')).toBe(true)
     expect(z.signals.some((s) => s.dir === 'S')).toBe(true)
+  })
+})
+
+describe('nephele', () => {
+  it('puts the upper (highs) band above the lower (lows) band and finds swing pivots', () => {
+    const closes = [10, 12, 11, 14, 13, 16, 12, 9, 11, 8, 12, 15, 13]
+    const highs = closes.map((c) => c + 2), lows = closes.map((c) => c - 2)
+    const r = nephele(highs, lows, closes, 5, 1)
+    const i = 12
+    expect(r.upMid[i] as number).toBeGreaterThan(r.loMid[i] as number)
+    expect(r.swings.some((s) => s.type === 'high')).toBe(true)
+    expect(r.swings.some((s) => s.type === 'low')).toBe(true)
+  })
+})
+
+describe('morpheus', () => {
+  it('reads trend-up above the MA, emits buy/sell prints on flips, and collects levels', () => {
+    const closes = [...Array.from({ length: 40 }, (_, i) => 100 + i), ...Array.from({ length: 40 }, (_, i) => 139 - i)]
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const r = morpheus(highs, lows, closes, 20, 3)
+    expect(r.trendUp[39]).toBe(true)             // still above MA late in the up-leg
+    expect(r.signals.some((s) => s.dir === 'sell')).toBe(true) // flips down on the reversal
+    expect(r.bullPrints + r.bearPrints).toBe(r.signals.length)
+    expect(r.levels.length).toBeGreaterThan(0)
+  })
+  it('flags trend-down throughout a clean downtrend', () => {
+    const closes = Array.from({ length: 60 }, (_, i) => 200 - i)
+    const r = morpheus(closes.map((c) => c + 1), closes.map((c) => c - 1), closes, 20, 5)
+    expect(r.trendUp[59]).toBe(false)
   })
 })
 

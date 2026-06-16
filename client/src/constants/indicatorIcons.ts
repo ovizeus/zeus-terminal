@@ -97,6 +97,8 @@ export const IND_ICONS: Record<string, string> = {
   argus: g(p('M8 4C4 4 2 8 2 8s2 4 6 4 6-4 6-4-2-4-6-4z') + dot(8, 8, 1.8)), // all-seeing eye (matrix watcher)
   orion: g(p('M13 3l-9 9') + p('M13 3l-4 1 3 3z') + p('M4 12l-1.5 1.5') + dot(4, 12, 0.8)), // hunter's arrow
   phoenix: g(p('M8 2c2 3-1 4 0 6 1-1 2-1 2-3 2 2 1 5-1 7 1 0 2-1 2-3 1 4-2 6-5 6s-5-3-5-6c0-4 4-5 7-7z') ), // rising phoenix / flame
+  nephele: g(p('M3 7c-1 0-1 3 1 3h8c2 0 2-3 0-3 0-2-3-3-4-1-1-1-3 0-3 1z') + p('M2 13c2-1 4 1 6 0s4 1 6 0')), // glowing cloud band over a wave
+  morpheus: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + p('M8 2a6 6 0 010 12z') + dot(5, 6, 0.9) + dot(11, 10, 0.9)), // colour palette / split mask (4 states)
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop
