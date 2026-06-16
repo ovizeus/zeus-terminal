@@ -159,6 +159,8 @@ export const INDICATORS: any[] = [
   { id: 'erebus', ico: _ZI.scope, name: 'EREBUS', desc: 'Market entropy — order vs chaos 🌑', cat: 'momentum', def: false },
   { id: 'anemoi', ico: _ZI.chart, name: 'ANEMOI', desc: 'Volume anomaly — surge & dead-air detector 🌬️', cat: 'volume', def: false },
   { id: 'cerberus', ico: _ZI.tup, name: 'CERBERUS', desc: 'Multi-timeframe trend alignment (3 heads) 🐺', cat: 'trend', def: false },
+  { id: 'proteus', ico: _ZI.wave, name: 'PROTEUS', desc: 'Fisher Transform — sharp reversal oscillator 🌊', cat: 'momentum', def: false },
+  { id: 'typhon', ico: _ZI.ruler, name: 'TYPHON', desc: 'Volatility regime — percentile of ATR 🌀', cat: 'vol', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

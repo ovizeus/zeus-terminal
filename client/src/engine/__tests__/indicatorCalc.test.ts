@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -599,6 +599,36 @@ describe('cerberus', () => {
   it('warm-up is null until the slow SMA is ready', () => {
     const c = cerberus(Array.from({ length: 300 }, (_, i) => 100 + i), 20, 4, 12)
     expect(c.slow[100]).toBeNull() // SMA(240) not warmed at bar 100
+  })
+})
+
+describe('proteus', () => {
+  it('is positive (finite) on an uptrend and negative on a downtrend', () => {
+    const up = Array.from({ length: 40 }, (_, i) => 100 + i)
+    const dn = Array.from({ length: 40 }, (_, i) => 140 - i)
+    const fu = proteus(up.map((c) => c + 1), up.map((c) => c - 1), 10)
+    const fd = proteus(dn.map((c) => c + 1), dn.map((c) => c - 1), 10)
+    const lu = fu.fisher[39] as number, ld = fd.fisher[39] as number
+    expect(Number.isFinite(lu)).toBe(true); expect(Number.isFinite(ld)).toBe(true)
+    expect(lu).toBeGreaterThan(0)
+    expect(ld).toBeLessThan(0)
+    expect(fu.trigger[39]).toBeCloseTo(fu.fisher[38] as number, 9) // trigger = prior bar's fisher
+  })
+})
+
+describe('typhon', () => {
+  it('reads ~100 percentile when volatility is at its highest', () => {
+    // range widens every bar → ATR strictly rising → last is the max → ~100
+    const highs: number[] = [], lows: number[] = [], closes: number[] = []
+    for (let i = 0; i < 80; i++) { const r = 1 + i * 0.5; closes.push(100 + i); highs.push(100 + i + r); lows.push(100 + i - r) }
+    const t = typhon(highs, lows, closes, 14, 60)
+    expect(t[79] as number).toBeGreaterThan(80)
+  })
+  it('reads low percentile when volatility collapses at the end', () => {
+    const highs: number[] = [], lows: number[] = [], closes: number[] = []
+    for (let i = 0; i < 80; i++) { const r = i < 50 ? 6 : 0.3; closes.push(100); highs.push(100 + r); lows.push(100 - r) }
+    const t = typhon(highs, lows, closes, 14, 60)
+    expect(t[79] as number).toBeLessThan(30)
   })
 })
 

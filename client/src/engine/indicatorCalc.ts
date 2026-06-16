@@ -1111,6 +1111,61 @@ export function cerberus(closes: number[], baseLen = 20, mult2 = 4, mult3 = 12):
   return { fast, mid, slow, align }
 }
 
+export interface Fisher { fisher: (number | null)[]; trigger: (number | null)[] }
+
+/**
+ * PROTEUS — the shape-shifter (invented for Zeus, built on Ehlers' Fisher Transform).
+ * Normalises the median price to its `period` range, then applies the Fisher transform
+ * 0.5·ln((1+x)/(1−x)), which Gaussianises the distribution so tops/bottoms become SHARP,
+ * unambiguous spikes instead of the rounded turns of a bounded oscillator. `fisher`
+ * crossing its 1-bar `trigger` flags a fast reversal; extreme spikes mark exhaustion.
+ */
+export function proteus(highs: number[], lows: number[], period = 10): Fisher {
+  const n = highs.length, p = Math.max(2, Math.round(period))
+  const fisher: (number | null)[] = new Array(n).fill(null)
+  const trigger: (number | null)[] = new Array(n).fill(null)
+  const mp = highs.map((h, i) => (h + lows[i]) / 2)
+  let value = 0, fish = 0
+  for (let i = p - 1; i < n; i++) {
+    let minL = Infinity, maxH = -Infinity
+    for (let j = i - p + 1; j <= i; j++) { if (lows[j] < minL) minL = lows[j]; if (highs[j] > maxH) maxH = highs[j] }
+    const range = maxH - minL || 1e-9
+    value = 0.33 * 2 * ((mp[i] - minL) / range - 0.5) + 0.67 * value
+    value = Math.max(-0.999, Math.min(0.999, value))
+    const prevFish = fish
+    fish = 0.5 * Math.log((1 + value) / (1 - value)) + 0.5 * fish
+    fisher[i] = fish
+    trigger[i] = prevFish   // fisher of the previous bar
+  }
+  return { fisher, trigger }
+}
+
+/**
+ * TYPHON — the monstrous storm (invented for Zeus). A VOLATILITY-REGIME meter: the
+ * percentile rank (0..100) of the current ATR within its own trailing `period`
+ * distribution. Low (→0) = volatility is compressed vs its norm — calm, coiled, a
+ * breakout tends to follow; high (→100) = an expansion/climax, moves are unusually
+ * large and often near exhaustion. It measures the SIZE of motion — orthogonal to
+ * HELIOS (trend persistence) and EREBUS (disorder).
+ */
+export function typhon(highs: number[], lows: number[], closes: number[], atrLen = 14, period = 100): (number | null)[] {
+  const n = closes.length
+  const a = atr(highs, lows, closes, atrLen)
+  const win = Math.max(5, Math.round(period))
+  const out: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    if (a[i] == null) continue
+    let cnt = 0, tot = 0
+    for (let j = Math.max(0, i - win + 1); j <= i; j++) {
+      if (a[j] == null) continue
+      tot++
+      if ((a[j] as number) <= (a[i] as number)) cnt++
+    }
+    if (tot >= 5) out[i] = 100 * cnt / tot
+  }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

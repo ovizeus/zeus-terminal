@@ -76,6 +76,8 @@ export const IND_ICONS: Record<string, string> = {
   erebus: g(p('M2 8h2l1-3 2 6 2-8 2 8 1-3h2')), // erratic/chaotic disordered signal
   anemoi: g(p('M3 13v-3M6 13v-6M9 13V3M12 13v-5') + p('M9 3l-1.5 1.5M9 3l1.5 1.5')), // volume bars with a spike gust
   cerberus: g(p('M3 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M6 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M9 11a2 2 0 104 0 2 2 0 00-4 0z') + p('M5 6l1-2 2 1 2-1 1 2')), // three guardian heads
+  proteus: g(p('M2 8h3l1-5 2 10 2-9 1 4h3')), // sharp Fisher spikes
+  typhon: g(p('M8 8m-1 0a1 1 0 102 0 1 1 0 10-2 0') + p('M8 8c3-3 5-1 4 2s-5 3-7 1-2-6 2-8 8-2 8 4')), // spiral storm
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

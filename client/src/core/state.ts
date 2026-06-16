@@ -1845,6 +1845,9 @@ export let _erebusChart: any = null, _erebusSeries: any = null, _erebusMidS: any
 // [2026-06-16] ANEMOI volume-anomaly pane + CERBERUS 3-head MTF pane
 export let _anemoiChart: any = null, _anemoiSeries: any = null, _anemoiInited = false
 export let _cerberusChart: any = null, _cerberusFastS: any = null, _cerberusMidS: any = null, _cerberusSlowS: any = null, _cerberusInited = false
+// [2026-06-16] PROTEUS Fisher-Transform pane + TYPHON volatility-percentile pane
+export let _proteusChart: any = null, _proteusSeries: any = null, _proteusTrigS: any = null, _proteusZeroS: any = null, _proteusInited = false
+export let _typhonChart: any = null, _typhonSeries: any = null, _typhonHiS: any = null, _typhonLoS: any = null, _typhonInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1927,6 +1930,10 @@ export const IND_SETTINGS: any = {
   anemoi: { period: 20 },
   // [2026-06-16] CERBERUS — multi-timeframe trend alignment (3 heads)
   cerberus: { baseLen: 20, mult2: 4, mult3: 12 },
+  // [2026-06-16] PROTEUS — Fisher-Transform reversal oscillator
+  proteus: { period: 10 },
+  // [2026-06-16] TYPHON — volatility-regime percentile
+  typhon: { atrP: 14, period: 100 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
