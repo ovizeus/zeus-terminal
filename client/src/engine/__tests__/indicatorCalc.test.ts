@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -481,6 +481,26 @@ describe('selene', () => {
     const closes = Array.from({ length: 100 }, () => 100)
     const w = selene(closes, 20).wave
     expect(Math.abs(w[w.length - 1] as number)).toBeLessThan(0.01)
+  })
+})
+
+describe('kratos', () => {
+  it('opens a long trade on a trending rally with TP above and SL below entry, and books a TP win', () => {
+    const closes = Array.from({ length: 90 }, (_, i) => 100 + i * 1.5)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    const tr = kratos(highs, lows, closes, vol, 0.35, 1.5, 2)
+    expect(tr.length).toBeGreaterThanOrEqual(1)
+    const long = tr.find((t) => t.dir === 'long')
+    expect(long).toBeTruthy()
+    expect(long!.tp).toBeGreaterThan(long!.entry)
+    expect(long!.sl).toBeLessThan(long!.entry)
+    // a sustained rally must resolve at least one trade at TP with positive P&L
+    expect(tr.some((t) => t.exitReason === 'tp' && t.pnlPct > 0)).toBe(true)
+  })
+  it('leaves no trades in a flat market', () => {
+    const closes = Array.from({ length: 90 }, (_, i) => 100 + (i % 2 ? 0.2 : -0.2))
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1), vol = closes.map(() => 100)
+    expect(kratos(highs, lows, closes, vol, 0.35, 1.5, 2)).toEqual([])
   })
 })
 

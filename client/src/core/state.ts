@@ -1834,6 +1834,8 @@ export let _pantheonChart: any = null, _pantheonSeries: any = null, _pantheonIni
 export let aegisMarkS: any = null, aegisStopS: any = null
 // [2026-06-16] SELENE dominant-cycle oscillator pane
 export let _seleneChart: any = null, _seleneSeries: any = null, _seleneMidS: any = null, _seleneInited = false
+// [2026-06-16] KRATOS all-in-one trade overlay (markers + entry/TP/SL lines) + live HUD
+export let kratosMarkS: any = null, kratosEntryS: any = null, kratosTpS: any = null, kratosSlS: any = null, _kratosHud: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1902,6 +1904,8 @@ export const IND_SETTINGS: any = {
   aegis: { thr: 0.4, atrMult: 1.5 },
   // [2026-06-16] SELENE — dominant-cycle oscillator
   selene: { detrendLen: 20, minP: 8, maxP: 60 },
+  // [2026-06-16] KRATOS — all-in-one trade commander (entry/exit/SL/TP + live HUD)
+  kratos: { thr: 0.35, atrMult: 1.5, rr: 2 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

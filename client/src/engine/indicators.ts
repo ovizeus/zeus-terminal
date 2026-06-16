@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2 } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -340,6 +340,13 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'selene':
       { const slx = document.getElementById('seleneChart'); if (slx) slx.style.display = show ? '' : 'none'; if (show) initSeleneChart() }
       break
+    case 'kratos':
+      if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
+      else {
+        ;[w.kratosMarkS, w.kratosEntryS, w.kratosTpS, w.kratosSlS].forEach((sx: any) => { if (sx) { try { sx.applyOptions({ visible: false }); if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
+        if (w._kratosHud) w._kratosHud.style.display = 'none'
+      }
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -461,7 +468,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1565,6 +1572,110 @@ export function updateSelene(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// KRATOS — invented ALL-IN-ONE trade commander. Marks every trade
+// (entry/exit/SL/TP) on the chart AND drives a live HUD "cadran" ticket.
+// ═══════════════════════════════════════════════════════════════
+
+function _kFmt(p: number): string {
+  const d = Math.abs(p) >= 1000 ? 1 : Math.abs(p) >= 1 ? 2 : 5
+  return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
+}
+
+export function initKratosSeries(): void {
+  if (w.kratosMarkS || !w.mainChart) return
+  w.kratosMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.kratosEntryS = w.mainChart.addLineSeries({ color: '#f0c040', lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: true, title: 'KRATOS ENTRY' })
+  w.kratosTpS = w.mainChart.addLineSeries({ color: '#26ff9a', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'KRATOS TP' })
+  w.kratosSlS = w.mainChart.addLineSeries({ color: '#ff5277', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'KRATOS SL' })
+}
+
+export function initKratosHud(): void {
+  if (w._kratosHud) { w._kratosHud.style.display = ''; return }
+  const mc = document.getElementById('mc')
+  const host = mc && mc.parentElement
+  if (!host) return
+  try { if (getComputedStyle(host).position === 'static') host.style.position = 'relative' } catch (_) { }
+  const hud = document.createElement('div')
+  hud.id = 'kratosHud'
+  hud.className = 'kratos-hud'
+  host.appendChild(hud)
+  w._kratosHud = hud
+}
+
+export function updateKratos(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initKratosSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.kratos || {}
+  const thr = s.thr ?? 0.35, atrMult = s.atrMult ?? 1.5, rr = s.rr ?? 2
+  const trades = _calcKRATOS(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume),
+    thr, atrMult, rr
+  )
+  ;[w.kratosMarkS, w.kratosEntryS, w.kratosTpS, w.kratosSlS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: true }) })
+  // entry + exit markers for every trade
+  const marks: any[] = []
+  for (const t of trades) {
+    if (k[t.entryIndex]) marks.push({
+      time: k[t.entryIndex].time,
+      position: t.dir === 'long' ? 'belowBar' : 'aboveBar',
+      shape: t.dir === 'long' ? 'arrowUp' : 'arrowDown',
+      color: t.dir === 'long' ? '#00e676' : '#ff1744',
+      text: t.dir === 'long' ? 'BUY' : 'SELL',
+    })
+    if (t.exitReason !== 'open' && k[t.exitIndex]) marks.push({
+      time: k[t.exitIndex].time,
+      position: t.dir === 'long' ? 'aboveBar' : 'belowBar',
+      shape: 'circle',
+      color: t.exitReason === 'tp' ? '#26ff9a' : t.exitReason === 'sl' ? '#ff5277' : '#90a4ae',
+      text: t.exitReason === 'tp' ? `TP +${t.pnlPct.toFixed(1)}%` : t.exitReason === 'sl' ? `SL ${t.pnlPct.toFixed(1)}%` : 'FLIP',
+    })
+  }
+  try { w.kratosMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.kratosMarkS.setMarkers(marks) } catch (_) { }
+  // active trade → live entry/TP/SL lines
+  const active = trades.length && trades[trades.length - 1].exitReason === 'open' ? trades[trades.length - 1] : null
+  try {
+    if (active && k[active.entryIndex]) {
+      const t0 = k[active.entryIndex].time, t1 = k[k.length - 1].time
+      w.kratosEntryS.setData([{ time: t0, value: active.entry }, { time: t1, value: active.entry }])
+      w.kratosTpS.setData([{ time: t0, value: active.tp }, { time: t1, value: active.tp }])
+      w.kratosSlS.setData([{ time: t0, value: active.sl }, { time: t1, value: active.sl }])
+    } else { w.kratosEntryS.setData([]); w.kratosTpS.setData([]); w.kratosSlS.setData([]) }
+  } catch (_) { }
+  // ── the cadran: live trade ticket HUD ──
+  initKratosHud()
+  if (w._kratosHud) w._kratosHud.innerHTML = _kratosHudHtml(trades, active, k)
+}
+
+function _kratosHudHtml(trades: any[], active: any, k: any[]): string {
+  const wins = trades.filter((t: any) => t.exitReason === 'tp').length
+  const losses = trades.filter((t: any) => t.exitReason === 'sl').length
+  const closed = trades.filter((t: any) => t.exitReason !== 'open')
+  const wr = closed.length ? Math.round(wins / closed.length * 100) : 0
+  // confluence gauge from the latest PANTHEON score
+  const sc = _calcPANTHEON2(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume)).score
+  let score = 0; for (let i = sc.length - 1; i >= 0; i--) { if (sc[i] != null) { score = sc[i] as number; break } }
+  const filled = Math.round((score + 1) / 2 * 10)
+  const gColor = score >= 0.15 ? '#00e676' : score <= -0.15 ? '#ff1744' : '#90a4ae'
+  const gauge = `<span style="color:${gColor}">${'▰'.repeat(Math.max(0, Math.min(10, filled)))}</span><span style="color:#33414d">${'▱'.repeat(Math.max(0, 10 - filled))}</span>`
+  const head = `<div style="font-weight:700;letter-spacing:1px;color:#f0c040;margin-bottom:4px">⚔ KRATOS</div>`
+  const stats = `<div style="margin-top:5px;border-top:1px solid #ffffff14;padding-top:4px;color:#7fa">W ${wins} · L ${losses} · WR ${wr}%</div><div style="margin-top:3px">Conf ${gauge}</div>`
+  if (active) {
+    const live = k[k.length - 1]?.close ?? active.entry
+    const pnl = active.pnlPct
+    const pnlCol = pnl >= 0 ? '#26ff9a' : '#ff5277'
+    const dirCol = active.dir === 'long' ? '#00e676' : '#ff1744'
+    const dot = active.dir === 'long' ? '🟢' : '🔴'
+    return head +
+      `<div style="color:${dirCol};font-weight:700">${dot} ${active.dir.toUpperCase()} @ ${_kFmt(active.entry)}</div>` +
+      `<div style="color:#26ff9a">TP ${_kFmt(active.tp)}</div>` +
+      `<div style="color:#ff5277">SL ${_kFmt(active.sl)}</div>` +
+      `<div style="margin-top:3px">Now ${_kFmt(live)} · <span style="color:${pnlCol};font-weight:700">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</span></div>` +
+      stats
+  }
+  return head + `<div style="color:#90a4ae">⚪ FLAT — waiting for setup</div>` + stats
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1613,6 +1724,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.pantheon && w._pantheonInited) updatePantheon()
   if (w.S.activeInds.aegis) updateAegis()
   if (w.S.activeInds.selene && w._seleneInited) updateSelene()
+  if (w.S.activeInds.kratos) updateKratos()
 }
 
 export function renderActBar(): void {
@@ -1637,7 +1749,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040' }
   return map[id] || '#888'
 }
 

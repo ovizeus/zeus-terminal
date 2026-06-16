@@ -882,6 +882,58 @@ export function selene(closes: number[], detrendLen = 20, minP = 8, maxP = 60): 
   return { wave, period }
 }
 
+export interface KratosTrade {
+  entryIndex: number; dir: 'long' | 'short'; entry: number; sl: number; tp: number
+  exitIndex: number; exitPrice: number; exitReason: 'tp' | 'sl' | 'flip' | 'open'; pnlPct: number
+}
+
+/**
+ * KRATOS — the all-in-one trade commander (invented for Zeus). A complete signal
+ * SYSTEM, not just an indicator: it opens a position when the PANTHEON max-confluence
+ * score crosses ±thr in a HELIOS-confirmed trending regime, sets an ATR stop and a
+ * risk-reward target (tp = entry ± atrMult·rr·ATR, sl = entry ∓ atrMult·ATR), then
+ * manages the trade bar-by-bar — closing on TP, SL, or a confluence FLIP — recording
+ * the exit and realised P&L. Only one position at a time. The last element may be an
+ * OPEN trade (exitReason 'open'), which the live HUD turns into a real-time trade
+ * ticket (entry / TP / SL / running P&L). The engine confirms the open trade with the
+ * server brain.
+ */
+export function kratos(highs: number[], lows: number[], closes: number[], volumes: number[], thr = 0.35, atrMult = 1.5, rr = 2): KratosTrade[] {
+  const n = closes.length
+  const out: KratosTrade[] = []
+  const sc = pantheon(highs, lows, closes, volumes).score
+  const H = helios(closes, 30)
+  const a = atr(highs, lows, closes, 14)
+  const pnl = (dir: 'long' | 'short', entry: number, exit: number) => (dir === 'long' ? (exit - entry) : (entry - exit)) / entry * 100
+  let open: KratosTrade | null = null
+  for (let i = 1; i < n; i++) {
+    if (sc[i] == null) continue
+    const s = sc[i] as number, sp = sc[i - 1] == null ? 0 : (sc[i - 1] as number)
+    const trending = H[i] == null || (H[i] as number) >= 0.5
+    const px = closes[i]
+    const atrI = a[i] != null ? (a[i] as number) : px * 0.01
+    // ── manage an open position ──
+    if (open) {
+      if (open.dir === 'long') {
+        if (lows[i] <= open.sl) { open.exitIndex = i; open.exitPrice = open.sl; open.exitReason = 'sl'; open.pnlPct = pnl('long', open.entry, open.sl); out.push(open); open = null }
+        else if (highs[i] >= open.tp) { open.exitIndex = i; open.exitPrice = open.tp; open.exitReason = 'tp'; open.pnlPct = pnl('long', open.entry, open.tp); out.push(open); open = null }
+        else if (s <= -thr && sp > -thr) { open.exitIndex = i; open.exitPrice = px; open.exitReason = 'flip'; open.pnlPct = pnl('long', open.entry, px); out.push(open); open = null }
+      } else {
+        if (highs[i] >= open.sl) { open.exitIndex = i; open.exitPrice = open.sl; open.exitReason = 'sl'; open.pnlPct = pnl('short', open.entry, open.sl); out.push(open); open = null }
+        else if (lows[i] <= open.tp) { open.exitIndex = i; open.exitPrice = open.tp; open.exitReason = 'tp'; open.pnlPct = pnl('short', open.entry, open.tp); out.push(open); open = null }
+        else if (s >= thr && sp < thr) { open.exitIndex = i; open.exitPrice = px; open.exitReason = 'flip'; open.pnlPct = pnl('short', open.entry, px); out.push(open); open = null }
+      }
+    }
+    // ── open a new position (fresh confluence cross in a trending regime) ──
+    if (!open && trending) {
+      if (s >= thr && sp < thr) open = { entryIndex: i, dir: 'long', entry: px, sl: px - atrMult * atrI, tp: px + atrMult * rr * atrI, exitIndex: -1, exitPrice: 0, exitReason: 'open', pnlPct: 0 }
+      else if (s <= -thr && sp > -thr) open = { entryIndex: i, dir: 'short', entry: px, sl: px + atrMult * atrI, tp: px - atrMult * rr * atrI, exitIndex: -1, exitPrice: 0, exitReason: 'open', pnlPct: 0 }
+    }
+  }
+  if (open) { const last = n - 1; open.exitIndex = last; open.exitPrice = closes[last]; open.exitReason = 'open'; open.pnlPct = pnl(open.dir, open.entry, closes[last]); out.push(open) }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

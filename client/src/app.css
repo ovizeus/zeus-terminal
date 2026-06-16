@@ -5218,6 +5218,8 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .ind-row-l { display: flex; align-items: center; gap: 8px }
 .ind-row-ico { font-size: 14px; width: 20px; text-align: center; color: var(--gold, #f0c040) }
 .ind-row-ico svg.z-i { width: 15px; height: 15px; vertical-align: -2px; margin: 0 }
+/* [2026-06-16] KRATOS all-in-one trade HUD ("cadran") overlaid on the main chart */
+.kratos-hud { position: absolute; top: 10px; left: 10px; z-index: 30; min-width: 152px; padding: 8px 11px; border-radius: 8px; background: rgba(10, 15, 22, 0.88); border: 1px solid #f0c04055; font: 11px/1.45 ui-monospace, Menlo, monospace; color: #cfe; backdrop-filter: blur(4px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); pointer-events: none; user-select: none }
 .ind-row-name { font-size: 10px; color: var(--whi); font-weight: 600 }
 .ind-row-desc { font-size: 11px; color: var(--dim); margin-top: 1px }
 .ind-toggle { width: 36px; height: 20px; background: var(--brd); border-radius: 20px; position: relative; transition: .3s; border: 1px solid #333; flex-shrink: 0; cursor: pointer }
