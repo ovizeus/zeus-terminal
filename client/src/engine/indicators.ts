@@ -2837,9 +2837,10 @@ export function updateDaimon(): void {
   if (bubble) bubble.textContent = v.speech
   if (body) body.textContent = v.position === 'short' ? '🧙‍♂️' : v.position === 'long' ? '🧙‍♂️' : '🧙'
   // colour the bubble by mood
-  if (bubble) bubble.style.borderColor = v.position === 'short' ? '#ff174488' : v.position === 'long' ? '#00e67688' : v.mood === 'excited' ? '#26c6da88' : '#f0c04066'
-  // position: hop onto the last candle when in a trade, else walk freely
-  if (v.position !== 'flat') {
+  const warm = ['short', 'panic', 'dump', 'bear'], cool = ['long', 'euphoria', 'pump', 'bull']
+  if (bubble) bubble.style.borderColor = warm.includes(v.mood) ? '#ff174488' : cool.includes(v.mood) ? '#00e67688' : (v.mood === 'bigvol' || v.mood === 'excited' || v.mood === 'overbought') ? '#26c6da88' : '#f0c04066'
+  // He FLOATS most of the time; he only HOPS onto the candle at the moment of entry.
+  if (v.justEntered) {
     let y: number | null = null
     try { y = w.cSeries ? w.cSeries.priceToCoordinate(k[k.length - 1].close) : null } catch (_) { y = null }
     const mc = document.getElementById('mc'); const mcW = (mc && mc.clientWidth) || 400
@@ -2847,6 +2848,7 @@ export function updateDaimon(): void {
     w._daimon.style.left = (mcW - 70) + 'px'
     if (y != null) w._daimon.style.top = Math.max(6, y - 42) + 'px'
   } else if (w._daimonOnBar) {
+    // entry moment passed → drift back up and float again
     w._daimon.classList.remove('daimon-onbar'); w._daimon.style.left = ''; w._daimon.style.top = ''
     w._daimon.classList.add('daimon-walk'); w._daimonOnBar = false
   }

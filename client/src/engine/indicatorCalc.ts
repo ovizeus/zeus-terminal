@@ -1886,17 +1886,29 @@ export function daimon(highs: number[], lows: number[], closes: number[], volume
   const position: 'long' | 'short' | 'flat' = open ? open.dir : 'flat'
   const justEntered = !!open && open.entryIndex === n - 1
   const volZ = anemoi(volumes, 20)[n - 1]
+  const vz = volZ == null ? 0 : (volZ as number)
   const sc = pantheon(highs, lows, closes, volumes).score[n - 1]
   const score = sc == null ? 0 : sc
+  const rsiL = _rsi(closes, 14)[n - 1]
+  const rsiV = isNaN(rsiL) ? 50 : rsiL
+  const rc = roc(closes, 10)[n - 1]
+  const rcV = rc == null ? 0 : (rc as number)
   let mood: string, speech: string
-  if (position === 'short') { mood = 'short'; speech = justEntered ? 'HERE ENTRY SHORT! 🔻🪄' : 'here short! 🔻' }
-  else if (position === 'long') { mood = 'long'; speech = justEntered ? 'HERE ENTRY LONG! 🚀🪄' : 'here long! 🚀' }
-  else if (volZ != null && (volZ as number) > 2) { mood = 'excited'; speech = 'ooo volume coming! 👀' }
+  if (position === 'short') { mood = 'short'; speech = justEntered ? 'heeey, short here! 🔻🪄' : 'riding short… 🔻' }
+  else if (position === 'long') { mood = 'long'; speech = justEntered ? 'heeey, long here! 🚀🪄' : 'riding long… 🚀' }
+  else if (vz > 2.5) { mood = 'bigvol'; speech = 'ooo BIG volume! 👀' }
+  else if (score > 0.7) { mood = 'euphoria'; speech = 'to the moon?! 🚀🌙' }
+  else if (score < -0.7) { mood = 'panic'; speech = 'scared money out! 😱' }
+  else if (rcV > 3) { mood = 'pump'; speech = 'this is pumping! 🤑' }
+  else if (rcV < -3) { mood = 'dump'; speech = 'dumping hard! 📉' }
+  else if (rsiV > 72) { mood = 'overbought'; speech = 'overbought… 🥵' }
+  else if (rsiV < 28) { mood = 'oversold'; speech = 'oversold… 🥶' }
+  else if (vz > 1.5) { mood = 'excited'; speech = 'volume waking up… 👀' }
   else if (score > 0.4) { mood = 'bull'; speech = 'looks bullish… 🤔' }
   else if (score < -0.4) { mood = 'bear'; speech = 'bearish vibes… 😟' }
   else {
     mood = 'idle'
-    const lines = ['im waiting… 😴', 'reading the chart… 🔮', 'hmm, patience… 🧐', 'nothing yet… ☕']
+    const lines = ['im waiting… 😴', 'reading the chart… 🔮', 'hmm, patience… 🧐', 'nothing yet… ☕', 'so quiet here… 🥱', 'scanning… 🔍']
     speech = lines[n % lines.length]
   }
   return { mood, speech, position, justEntered, markers }

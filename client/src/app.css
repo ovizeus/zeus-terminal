@@ -5239,10 +5239,11 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* [2026-06-17] DAIMON — the chart-wizard sprite that walks, talks & calls trades */
 .daimon-sprite { position: absolute; z-index: 31; font-size: 26px; line-height: 1; pointer-events: none; will-change: left, top, transform; filter: drop-shadow(0 0 6px rgba(240, 192, 64, 0.55)) }
 .daimon-sprite.daimon-onbar { transition: top 0.5s ease, left 0.5s ease }
-.daimon-body { display: inline-block; animation: daimonBob 0.5s ease-in-out infinite alternate }
-.daimon-walk { top: 56%; animation: daimonWalk 16s ease-in-out infinite }
-@keyframes daimonWalk { 0% { left: 5% } 20% { left: 30% } 40% { left: 62%; top: 48% } 60% { left: 84% } 80% { left: 45%; top: 62% } 100% { left: 5% } }
-@keyframes daimonBob { from { transform: translateY(0) rotate(-3deg) } to { transform: translateY(-7px) rotate(3deg) } }
+.daimon-body { display: inline-block; animation: daimonBob 1.4s ease-in-out infinite alternate }
+.daimon-walk { animation: daimonFloat 13s ease-in-out infinite }
+/* floats along the TOP band, gliding left↔right (stays out of the price action) */
+@keyframes daimonFloat { 0% { left: 4%; top: 9% } 25% { left: 33%; top: 15% } 50% { left: 72%; top: 7% } 75% { left: 42%; top: 16% } 100% { left: 4%; top: 9% } }
+@keyframes daimonBob { from { transform: translateY(0) rotate(-5deg) } to { transform: translateY(-8px) rotate(5deg) } }
 .daimon-bubble { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); white-space: nowrap; background: rgba(15, 20, 28, 0.96); border: 1px solid #f0c04066; border-radius: 9px; padding: 2px 9px; margin-bottom: 6px; font: 11px/1.3 ui-monospace, Menlo, monospace; color: #ffe; box-shadow: 0 2px 9px rgba(0, 0, 0, 0.45) }
 .daimon-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 5px solid transparent; border-top-color: rgba(15, 20, 28, 0.96) }
 .daimon-bubble:empty { display: none }
