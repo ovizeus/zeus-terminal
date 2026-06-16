@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -692,6 +692,38 @@ describe('hades', () => {
   it('stays silent on flat data (no impulse)', () => {
     const f = Array.from({ length: 30 }, (_, i) => 100 + (i % 2 ? 0.2 : -0.2))
     expect(hades(f, f.map((x) => x + 0.5), f.map((x) => x - 0.5), f, 5, 1.2, 5)).toEqual([])
+  })
+})
+
+describe('athena', () => {
+  it('converges to the true level and velocity on a constant-velocity trend', () => {
+    const closes = Array.from({ length: 120 }, (_, i) => 100 + 2 * i)
+    const r = athena(closes, 0.3)
+    const i = 119
+    expect(r.velocity[i] as number).toBeCloseTo(2, 1)               // tracks slope ≈ 2/bar
+    expect(Math.abs((r.line[i] as number) - closes[i])).toBeLessThan(1) // line tracks price
+  })
+  it('velocity is negative on a downtrend and the line is smoother than raw noise', () => {
+    const dn = Array.from({ length: 120 }, (_, i) => 300 - 1.5 * i)
+    expect(athena(dn, 0.3).velocity[119] as number).toBeLessThan(0)
+  })
+})
+
+describe('echo', () => {
+  it('reconstructs a clean sine (period divides window) and projects it forward', () => {
+    const closes = Array.from({ length: 160 }, (_, i) => 100 + 10 * Math.sin((2 * Math.PI * i) / 16))
+    const e = echo(closes, 128, 3, 10)
+    expect(e.fitStart).toBe(32)              // n - window
+    expect(e.fit.length).toBe(128)
+    // fit closely matches the actual closes over the window
+    let maxErr = 0
+    for (let t = 0; t < 128; t++) maxErr = Math.max(maxErr, Math.abs(e.fit[t] - closes[32 + t]))
+    expect(maxErr).toBeLessThan(1.5)
+    expect(e.projection.length).toBe(11)     // horizon+1
+    expect(Math.abs(e.projection[0] - closes[159])).toBeLessThan(2) // anchored near the last close (= fit endpoint)
+  })
+  it('returns empty when there is not enough data', () => {
+    expect(echo(Array.from({ length: 10 }, (_, i) => i), 128).fit).toEqual([])
   })
 })
 

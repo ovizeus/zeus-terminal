@@ -82,6 +82,8 @@ export const IND_ICONS: Record<string, string> = {
   geras: g(p('M4 2h8M4 14h8') + p('M4 2c0 4 8 4 8 0M4 14c0-4 8-4 8 0') + p('M8 7v2')), // hourglass (time/age)
   ouranos: g(p('M2 4l12 3M2 8l12 3M2 12l12 3')), // three parallel sloped channel rails
   hades: g(p('M3 9h4v3H3zM9 4h4v3H9z') + p('M5 9V7h6') + p('M11 7V5')), // stacked demand/supply order-block zones
+  athena: g(p('M2 11c3 0 3-5 6-5s3 3 6 1') + dot(4, 11, 0.9) + dot(8, 6, 0.9) + dot(12, 7, 0.9)), // smooth filtered estimate through noisy points
+  echo: g(p('M2 8h2M12 8h2') + p('M4 8c0-3 1.5-3 1.5 0s1.5 3 1.5 0 1.5-3 1.5 0 1.5 3 1.5 0')), // resonant harmonic wave
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

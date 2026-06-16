@@ -1275,6 +1275,80 @@ export function hades(opens: number[], highs: number[], lows: number[], closes: 
   return out
 }
 
+export interface Athena { line: (number | null)[]; velocity: (number | null)[] }
+
+/**
+ * ATHENA — strategic wisdom (invented for Zeus). A KALMAN-style g-h (alpha-beta) filter
+ * with a constant-velocity state model: it recursively estimates the "true" price level
+ * AND its velocity (slope) from noisy observations — the steady-state optimal estimator,
+ * not a window average, so it has far less lag than an MA of comparable smoothness.
+ * `alpha` sets responsiveness; beta is derived for critical damping (β = α²/(2−α)). The
+ * `line` is the filtered price, `velocity` its per-bar slope (use the sign/size to read
+ * trend direction and strength, and to project forward).
+ */
+export function athena(closes: number[], alpha = 0.2): Athena {
+  const n = closes.length
+  const line: (number | null)[] = new Array(n).fill(null)
+  const velocity: (number | null)[] = new Array(n).fill(null)
+  if (!n) return { line, velocity }
+  const a = Math.max(0.02, Math.min(0.95, alpha))
+  const b = (a * a) / (2 - a)
+  let x = closes[0], v = 0
+  for (let i = 0; i < n; i++) {
+    const xpred = x + v, resid = closes[i] - xpred
+    x = xpred + a * resid
+    v = v + b * resid
+    line[i] = x; velocity[i] = v
+  }
+  return { line, velocity }
+}
+
+export interface Echo { fitStart: number; fit: number[]; projection: number[] }
+
+/**
+ * ECHO — the resonant memory (invented for Zeus). SPECTRAL forecasting via the discrete
+ * Fourier transform: it linearly detrends the last `window` closes, decomposes the
+ * residual into frequency components, keeps the `harmonics` strongest, reconstructs the
+ * signal from them, and EXTENDS that harmonic sum (plus the trend) `horizon` bars into
+ * the future — projecting the market's dominant rhythm forward. Distinct from MNEMOSYNE
+ * (analog matching) and SELENE (single autocorrelation lag): ECHO is true multi-harmonic
+ * Fourier synthesis. Returns the in-window fit and the forward projection (index 0 = now).
+ */
+export function echo(closes: number[], window = 128, harmonics = 3, horizon = 10): Echo {
+  const n = closes.length
+  const N = Math.min(Math.max(16, Math.round(window)), n)
+  if (n < 16 || N < 16) return { fitStart: -1, fit: [], projection: [] }
+  const start = n - N
+  // linear detrend
+  let sx = 0, sy = 0, sxx = 0, sxy = 0
+  for (let t = 0; t < N; t++) { const y = closes[start + t]; sx += t; sy += y; sxx += t * t; sxy += t * y }
+  const denom = N * sxx - sx * sx
+  const slope = denom === 0 ? 0 : (N * sxy - sx * sy) / denom
+  const intercept = (sy - slope * sx) / N
+  const resid: number[] = []
+  for (let t = 0; t < N; t++) resid.push(closes[start + t] - (intercept + slope * t))
+  // DFT magnitudes for k = 1..N/2
+  const maxK = Math.floor(N / 2)
+  const comp: { k: number; re: number; im: number; amp: number }[] = []
+  for (let k = 1; k <= maxK; k++) {
+    let re = 0, im = 0
+    for (let t = 0; t < N; t++) { const w = 2 * Math.PI * k * t / N; re += resid[t] * Math.cos(w); im += resid[t] * Math.sin(w) }
+    comp.push({ k, re, im, amp: re * re + im * im })
+  }
+  comp.sort((p, q) => q.amp - p.amp)
+  const top = comp.slice(0, Math.max(1, Math.round(harmonics)))
+  const recon = (x: number) => {
+    let s = intercept + slope * x
+    for (const c of top) { const w = 2 * Math.PI * c.k * x / N; s += (2 / N) * (c.re * Math.cos(w) + c.im * Math.sin(w)) }
+    return s
+  }
+  const fit: number[] = []
+  for (let t = 0; t < N; t++) fit.push(recon(t))
+  const projection: number[] = []
+  for (let j = 0; j <= Math.max(1, Math.round(horizon)); j++) projection.push(recon(N - 1 + j))
+  return { fitStart: start, fit, projection }
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

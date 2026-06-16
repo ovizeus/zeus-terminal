@@ -165,6 +165,8 @@ export const INDICATORS: any[] = [
   { id: 'geras', ico: _ZI.tup, name: 'GERAS', desc: 'Trend age — maturity of the current move ⏳', cat: 'trend', def: false },
   { id: 'ouranos', ico: _ZI.tgt, name: 'OURANOS', desc: 'Auto regression channel — trend rails 🌌', cat: 'trend', def: false },
   { id: 'hades', ico: _ZI.dia, name: 'HADES', desc: 'Order blocks — institutional demand/supply zones 🔱', cat: 'volume', def: false },
+  { id: 'athena', ico: _ZI.tup, name: 'ATHENA', desc: 'Kalman-filtered trend + velocity (low-lag) 🦉', cat: 'trend', def: false },
+  { id: 'echo', ico: _ZI.wave, name: 'ECHO', desc: 'Spectral (Fourier) forecast — projects the cycle 🔊', cat: 'trend', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

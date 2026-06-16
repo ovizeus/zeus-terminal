@@ -640,6 +640,8 @@ const IND_LIST: IndMeta[] = [
   { id: 'geras',    ico: '⏳', name: 'GERAS',             desc: 'Trend age — maturity of the current move (Zeus original)', hasGenericSettings: true },
   { id: 'ouranos',  ico: '🌌', name: 'OURANOS',           desc: 'Auto regression channel — trend rails (Zeus original)', hasGenericSettings: true },
   { id: 'hades',    ico: '🔱', name: 'HADES',             desc: 'Order blocks — institutional demand/supply zones (Zeus original)', hasGenericSettings: true },
+  { id: 'athena',   ico: '🦉', name: 'ATHENA',            desc: 'Kalman-filtered trend + velocity, low-lag (Zeus original)', hasGenericSettings: true },
+  { id: 'echo',     ico: '🔊', name: 'ECHO',              desc: 'Spectral Fourier forecast — projects the cycle (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

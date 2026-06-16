@@ -1854,6 +1854,9 @@ export let _gerasChart: any = null, _gerasSeries: any = null, _gerasInited = fal
 // [2026-06-16] OURANOS regression channel + HADES order-block zones (main-chart overlays)
 export let ouMidS: any = null, ouUpS: any = null, ouLoS: any = null
 export let hadesMarkS: any = null, hadesBullTopS: any = null, hadesBullBotS: any = null, hadesBearTopS: any = null, hadesBearBotS: any = null
+// [2026-06-16] ATHENA Kalman line + ECHO spectral fit/projection (main-chart overlays)
+export let athenaS: any = null, athenaProjS: any = null
+export let echoFitS: any = null, echoProjS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1948,6 +1951,10 @@ export const IND_SETTINGS: any = {
   ouranos: { period: 100, mult: 2 },
   // [2026-06-16] HADES — order-block (institutional) zones (main-chart overlay)
   hades: { atrP: 14, impulse: 1.2, lookback: 5 },
+  // [2026-06-16] ATHENA — Kalman g-h filtered trend + velocity (main-chart overlay)
+  athena: { alpha: 0.2, horizon: 8 },
+  // [2026-06-16] ECHO — spectral (DFT) harmonic forecast (main-chart overlay)
+  echo: { window: 128, harmonics: 3, horizon: 10 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

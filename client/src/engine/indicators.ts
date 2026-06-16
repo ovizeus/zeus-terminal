@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -384,6 +384,16 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       ;[w.hadesMarkS, w.hadesBullTopS, w.hadesBullBotS, w.hadesBearTopS, w.hadesBearBotS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
       if (show) updateHades()
       break
+    case 'athena':
+      if (show) initAthenaSeries()
+      ;[w.athenaS, w.athenaProjS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { sx.setData([]) } catch (_) { } } })
+      if (show) updateAthena()
+      break
+    case 'echo':
+      if (show) initEchoSeries()
+      ;[w.echoFitS, w.echoProjS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { sx.setData([]) } catch (_) { } } })
+      if (show) updateEcho()
+      break
     case 'kratos':
       if (show) { initKratosSeries(); initKratosHud(); updateKratos() }
       else {
@@ -512,7 +522,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %', tolPct: 'Cluster Tol %', minHits: 'Min Touches', rocLen: 'ROC Length', rsiPeriod: 'RSI Length', thr: 'Confluence Thr', atrMult: 'Stop ×ATR', detrendLen: 'Detrend Len', minP: 'Min Cycle', maxP: 'Max Cycle', rr: 'Risk:Reward', horizon: 'Horizon (bars)', drift: 'Drift (1/0)', queryLen: 'Pattern Len', dim: 'Embed Dim', baseLen: 'Base TF Len', mult2: 'Mid ×', mult3: 'Slow ×', impulse: 'Impulse ×ATR', alpha: 'Responsiveness', window: 'Window', harmonics: 'Harmonics'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -2078,6 +2088,62 @@ export function updateHades(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ATHENA — invented Kalman g-h filtered trend + velocity (main-chart overlay).
+// Filtered line coloured by velocity, plus a short forward projection.
+// ═══════════════════════════════════════════════════════════════
+
+export function initAthenaSeries(): void {
+  if (w.athenaS || !w.mainChart) return
+  w.athenaS = w.mainChart.addLineSeries({ lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.athenaProjS = w.mainChart.addLineSeries({ color: '#b388ff', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateAthena(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initAthenaSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.athena || {}
+  const r = _calcATHENA(k.map((b: any) => b.close), s.alpha ?? 0.2)
+  const data: any[] = []
+  for (let i = 0; i < r.line.length; i++) {
+    if (r.line[i] == null || !k[i]) continue
+    const vv = (r.velocity[i] as number) || 0
+    data.push({ time: k[i].time, value: r.line[i], color: vv >= 0 ? '#26ff9a' : '#ff5277' })
+  }
+  // short forward projection from the last filtered level + velocity
+  const last = r.line.length - 1
+  const horizon = Math.round(s.horizon) || 8
+  const proj: any[] = []
+  if (r.line[last] != null) {
+    const ft = _futureTimes(k, horizon)
+    const x0 = r.line[last] as number, v0 = (r.velocity[last] as number) || 0
+    for (let j = 0; j <= horizon; j++) proj.push({ time: ft[j], value: x0 + v0 * j })
+  }
+  try { w.athenaS.setData(data); w.athenaProjS.setData(proj) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ECHO — invented spectral (DFT) forecast (main-chart overlay): in-window
+// harmonic fit + forward projection of the dominant cycle.
+// ═══════════════════════════════════════════════════════════════
+
+export function initEchoSeries(): void {
+  if (w.echoFitS || !w.mainChart) return
+  w.echoFitS = w.mainChart.addLineSeries({ color: 'rgba(179,136,255,0.7)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.echoProjS = w.mainChart.addLineSeries({ color: '#b388ff', lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'ECHO', crosshairMarkerVisible: false })
+}
+export function updateEcho(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initEchoSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.echo || {}
+  const r = _calcECHO(k.map((b: any) => b.close), Math.round(s.window) || 128, Math.round(s.harmonics) || 3, Math.round(s.horizon) || 10)
+  if (r.fitStart < 0) { try { w.echoFitS.setData([]); w.echoProjS.setData([]) } catch (_) { } return }
+  const fit: any[] = []
+  for (let t = 0; t < r.fit.length; t++) { const kb = k[r.fitStart + t]; if (kb) fit.push({ time: kb.time, value: r.fit[t] }) }
+  const ft = _futureTimes(k, r.projection.length - 1)
+  const proj = r.projection.map((v: number, j: number) => ({ time: ft[j], value: v }))
+  try { w.echoFitS.setData(fit); w.echoProjS.setData(proj) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -2139,6 +2205,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.geras && w._gerasInited) updateGeras()
   if (w.S.activeInds.ouranos) updateOuranos()
   if (w.S.activeInds.hades) updateHades()
+  if (w.S.activeInds.athena) updateAthena()
+  if (w.S.activeInds.echo) updateEcho()
 }
 
 export function renderActBar(): void {
@@ -2163,7 +2231,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff' }
   return map[id] || '#888'
 }
 
