@@ -1590,15 +1590,21 @@ export function initKratosSeries(): void {
 }
 
 export function initKratosHud(): void {
-  if (w._kratosHud) { w._kratosHud.style.display = ''; return }
+  // Anchor the HUD INSIDE the chart container (#mc) — NOT its parent, which also
+  // holds the Zeus toolbar/header and made the cadran overlap the UI. As a child of
+  // #mc it's clipped to the chart plot area (standard lightweight-charts legend pattern).
   const mc = document.getElementById('mc')
-  const host = mc && mc.parentElement
-  if (!host) return
-  try { if (getComputedStyle(host).position === 'static') host.style.position = 'relative' } catch (_) { }
+  if (!mc) return
+  if (w._kratosHud) {
+    if (w._kratosHud.parentElement !== mc) { try { mc.appendChild(w._kratosHud) } catch (_) { } } // re-home if it landed on the old parent
+    w._kratosHud.style.display = ''
+    return
+  }
+  try { if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative' } catch (_) { }
   const hud = document.createElement('div')
   hud.id = 'kratosHud'
   hud.className = 'kratos-hud'
-  host.appendChild(hud)
+  mc.appendChild(hud)
   w._kratosHud = hud
 }
 
