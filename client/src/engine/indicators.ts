@@ -452,6 +452,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'daimon':
       if (show) { initDaimon(); updateDaimon() }
       else {
+        if (w._daimonTimer) { clearInterval(w._daimonTimer); w._daimonTimer = null }
         if (w._daimon) w._daimon.style.display = 'none'
         if (w.daimonMarkS) try { w.daimonMarkS.setMarkers([]); w.daimonMarkS.setData([]) } catch (_) { }
       }
@@ -2805,6 +2806,29 @@ export function updateMorpheus(): void {
 // the entry, drops a ★ mark with his wand, and a 🔒 when he exits.
 // ═══════════════════════════════════════════════════════════════
 
+/** Smoothly float the sprite left↔right near the top, keeping its bubble fully on-screen. */
+function _daimonStep(): void {
+  const el = w._daimon; if (!el || w._daimonOnBar) return
+  const mc = document.getElementById('mc'); if (!mc) return
+  const W = mc.clientWidth, H = mc.clientHeight
+  if (!W || !H) return
+  w._daimonPhase = (w._daimonPhase || 0) + 0.01
+  const t = (Math.sin(w._daimonPhase) + 1) / 2
+  const sw = el.offsetWidth || 30
+  const x = 12 + t * Math.max(0, W - 24 - sw)
+  const y = H * 0.07 + Math.sin(w._daimonPhase * 2.3) * 9       // glide near the top with a float bob
+  el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px'
+  _daimonPlaceBubble(el, x, sw, W)
+}
+/** Position the bubble above the wizard but clamp it inside the chart so text never clips. */
+function _daimonPlaceBubble(el: any, x: number, sw: number, W: number): void {
+  const bub = el.querySelector('.daimon-bubble'); if (!bub) return
+  const bw = bub.offsetWidth || 130
+  let bx = x + sw / 2 - bw / 2
+  bx = Math.max(4, Math.min(W - bw - 4, bx))
+  bub.style.left = Math.round(bx - x) + 'px'
+}
+
 export function initDaimon(): void {
   if (!w.mainChart) return
   if (!w.daimonMarkS) w.daimonMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
@@ -2812,11 +2836,14 @@ export function initDaimon(): void {
   if (mc && !w._daimon) {
     try { if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative' } catch (_) { }
     const el = document.createElement('div')
-    el.id = 'daimon'; el.className = 'daimon-sprite daimon-walk'
+    el.id = 'daimon'; el.className = 'daimon-sprite'
     el.innerHTML = `<div class="daimon-bubble" id="daimonBubble"></div><span class="daimon-body" id="daimonBody">🧙</span>`
-    mc.appendChild(el); w._daimon = el; w._daimonOnBar = false
+    el.style.top = '7%'; el.style.left = '12px'
+    mc.appendChild(el); w._daimon = el; w._daimonOnBar = false; w._daimonPhase = 0
   }
   if (w._daimon) w._daimon.style.display = ''
+  // JS-driven float (CSS keyframe % animation proved unreliable in-app)
+  if (!w._daimonTimer) w._daimonTimer = setInterval(_daimonStep, 60)
 }
 export function updateDaimon(): void {
   if (!w.mainChart || !w.S.klines.length) return
@@ -2839,18 +2866,21 @@ export function updateDaimon(): void {
   // colour the bubble by mood
   const warm = ['short', 'panic', 'dump', 'bear'], cool = ['long', 'euphoria', 'pump', 'bull']
   if (bubble) bubble.style.borderColor = warm.includes(v.mood) ? '#ff174488' : cool.includes(v.mood) ? '#00e67688' : (v.mood === 'bigvol' || v.mood === 'excited' || v.mood === 'overbought') ? '#26c6da88' : '#f0c04066'
-  // He FLOATS most of the time; he only HOPS onto the candle at the moment of entry.
+  // The JS timer floats him near the top; he only HOPS onto the candle at the entry moment.
+  const mc = document.getElementById('mc'); const W = (mc && mc.clientWidth) || 400
+  const sw = w._daimon.offsetWidth || 30
   if (v.justEntered) {
     let y: number | null = null
     try { y = w.cSeries ? w.cSeries.priceToCoordinate(k[k.length - 1].close) : null } catch (_) { y = null }
-    const mc = document.getElementById('mc'); const mcW = (mc && mc.clientWidth) || 400
-    if (!w._daimonOnBar) { w._daimon.classList.remove('daimon-walk'); w._daimon.classList.add('daimon-onbar'); w._daimonOnBar = true }
-    w._daimon.style.left = (mcW - 70) + 'px'
-    if (y != null) w._daimon.style.top = Math.max(6, y - 42) + 'px'
+    w._daimonOnBar = true
+    w._daimon.classList.add('daimon-onbar')
+    const x = Math.max(12, W - 24 - sw)        // near the right edge (latest candle)
+    w._daimon.style.left = x + 'px'
+    if (y != null) w._daimon.style.top = Math.max(6, y - 44) + 'px'
+    _daimonPlaceBubble(w._daimon, x, sw, W)
   } else if (w._daimonOnBar) {
-    // entry moment passed → drift back up and float again
-    w._daimon.classList.remove('daimon-onbar'); w._daimon.style.left = ''; w._daimon.style.top = ''
-    w._daimon.classList.add('daimon-walk'); w._daimonOnBar = false
+    w._daimonOnBar = false
+    w._daimon.classList.remove('daimon-onbar')   // timer resumes the float
   }
 }
 
