@@ -614,6 +614,37 @@ export function helios(closes: number[], period = 30): (number | null)[] {
   return out
 }
 
+export interface FairValueGap { index: number; dir: 'bull' | 'bear'; top: number; bottom: number; filled: boolean; fillIndex: number }
+
+/**
+ * HERMES — the messenger (invented for Zeus). Detects FAIR VALUE GAPS (3-candle
+ * imbalances): when price moves so fast it leaves an untraded gap, the market tends
+ * to return and "fill" it — a price magnet. A BULL gap forms when candle[i-2]'s high
+ * is below candle[i]'s low (zone = [high_{i-2}, low_i]); a BEAR gap when candle[i-2]'s
+ * low is above candle[i]'s high (zone = [high_i, low_{i-2}]). Tiny gaps below `minPct`
+ * of price are ignored as noise. Each gap is tracked as filled once a later bar trades
+ * back into the zone, with the bar index where that happened (fillIndex, −1 if open).
+ */
+export function hermes(highs: number[], lows: number[], closes: number[], minPct = 0.05): FairValueGap[] {
+  const n = closes.length
+  const out: FairValueGap[] = []
+  for (let i = 2; i < n; i++) {
+    let dir: 'bull' | 'bear' | null = null, top = 0, bottom = 0
+    if (highs[i - 2] < lows[i]) { dir = 'bull'; top = lows[i]; bottom = highs[i - 2] }
+    else if (lows[i - 2] > highs[i]) { dir = 'bear'; top = lows[i - 2]; bottom = highs[i] }
+    if (!dir) continue
+    const ref = closes[i] || 1
+    if ((top - bottom) / ref * 100 < minPct) continue   // ignore noise-sized gaps
+    let fillIndex = -1
+    for (let j = i + 1; j < n; j++) {
+      // gap "filled" once price trades back into the zone
+      if (dir === 'bull' ? lows[j] <= top : highs[j] >= bottom) { fillIndex = j; break }
+    }
+    out.push({ index: i, dir, top, bottom, filled: fillIndex !== -1, fillIndex })
+  }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

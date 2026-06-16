@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -310,6 +310,12 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'helios':
       { const hex = document.getElementById('heliosChart'); if (hex) hex.style.display = show ? '' : 'none'; if (show) initHeliosChart() }
       break
+    case 'hermes':
+      if (show) initHermesSeries()
+      ;[w.hermesMarkS, w.hermesTopS, w.hermesBotS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
+      if (w.hermesMarkS && !show) try { w.hermesMarkS.setMarkers([]) } catch (_) { }
+      if (show) updateHermes()
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -431,7 +437,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×', minPct: 'Min Gap %'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -1305,6 +1311,44 @@ export function updateHelios(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// HERMES — invented fair-value-gap (imbalance) detector. Main-chart markers
+// tag each gap; the most-recent UNFILLED gap is drawn as a magnet band.
+// ═══════════════════════════════════════════════════════════════
+
+export function initHermesSeries(): void {
+  if (w.hermesMarkS || !w.mainChart) return
+  w.hermesMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.hermesTopS = w.mainChart.addLineSeries({ lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.hermesBotS = w.mainChart.addLineSeries({ lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updateHermes(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initHermesSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.hermes || {}
+  const gaps = _calcHERMES(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), s.minPct ?? 0.05)
+  // markers: small tag at each gap bar (dimmer if already filled)
+  const marks = gaps.filter((g: any) => k[g.index]).map((g: any) => ({
+    time: k[g.index].time,
+    position: g.dir === 'bull' ? 'belowBar' : 'aboveBar',
+    shape: 'square',
+    color: g.dir === 'bull' ? (g.filled ? '#2e7d5288' : '#00e676') : (g.filled ? '#b71c1c88' : '#ff1744'),
+    text: g.filled ? '' : '▮',
+  }))
+  try { w.hermesMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))) ; w.hermesMarkS.setMarkers(marks) } catch (_) { }
+  // band: most-recent still-open gap → price magnet zone, drawn from formation to now
+  const open = [...gaps].reverse().find((g: any) => !g.filled && k[g.index])
+  try {
+    if (open) {
+      const col = open.dir === 'bull' ? 'rgba(0,230,118,0.6)' : 'rgba(255,23,68,0.6)'
+      w.hermesTopS.applyOptions({ color: col }); w.hermesBotS.applyOptions({ color: col })
+      const t0 = k[open.index].time, t1 = k[k.length - 1].time
+      w.hermesTopS.setData([{ time: t0, value: open.top }, { time: t1, value: open.top }])
+      w.hermesBotS.setData([{ time: t0, value: open.bottom }, { time: t1, value: open.bottom }])
+    } else { w.hermesTopS.setData([]); w.hermesBotS.setData([]) }
+  } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1346,6 +1390,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.pythia) updatePythia()
   if (w.S.activeInds.plutus) updatePlutus()
   if (w.S.activeInds.helios && w._heliosInited) updateHelios()
+  if (w.S.activeInds.hermes) updateHermes()
 }
 
 export function renderActBar(): void {
@@ -1370,7 +1415,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da' }
   return map[id] || '#888'
 }
 

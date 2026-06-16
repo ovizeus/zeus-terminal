@@ -620,6 +620,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'pythia',   ico: '🔮', name: 'PYTHIA',           desc: 'Entry oracle + targets, brain-backed (Zeus original)', hasGenericSettings: true },
   { id: 'plutus',   ico: '💰', name: 'PLUTUS',           desc: 'Smart-money footprint — effort vs result (Zeus original)', hasGenericSettings: true },
   { id: 'helios',   ico: '☀️', name: 'HELIOS',           desc: 'Regime oracle — Hurst trending vs mean-revert (Zeus original)', hasGenericSettings: true },
+  { id: 'hermes',   ico: '☄️', name: 'HERMES',           desc: 'Fair-value gaps — imbalance magnet zones (Zeus original)', hasGenericSettings: true },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },

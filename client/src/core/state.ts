@@ -1823,6 +1823,8 @@ export let _chopChart: any = null, _chopSeries: any = null, _chopInited = false
 // [2026-06-16] PLUTUS markers (main-chart carrier) + HELIOS regime pane
 export let plutusS: any = null
 export let _heliosChart: any = null, _heliosSeries: any = null, _heliosMidS: any = null, _heliosInited = false
+// [2026-06-16] HERMES fair-value-gap markers + magnet band (main-chart overlay)
+export let hermesMarkS: any = null, hermesTopS: any = null, hermesBotS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1877,6 +1879,8 @@ export const IND_SETTINGS: any = {
   plutus: { lookback: 20, volMult: 1.5 },
   // [2026-06-16] HELIOS — regime oracle (rolling Hurst exponent)
   helios: { period: 30 },
+  // [2026-06-16] HERMES — fair-value-gap (imbalance) magnet zones
+  hermes: { minPct: 0.05 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

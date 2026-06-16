@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -338,6 +338,34 @@ describe('helios', () => {
     const cH = helios(chop, 20)
     expect(cH[cH.length - 1] as number).toBeLessThan(0.5)
     expect(cH[cH.length - 1] as number).toBeLessThan(tH[last] as number)
+  })
+})
+
+describe('hermes', () => {
+  it('detects a bull fair-value gap (high[i-2] < low[i]) with the right zone', () => {
+    // bar0 high=10, bar2 low=13 → gap [10,13]; no later bar re-enters → open
+    const highs = [10, 12, 15], lows = [8, 11, 13], closes = [9, 11.5, 14]
+    const g = hermes(highs, lows, closes, 0.01)
+    expect(g.length).toBe(1)
+    expect(g[0].dir).toBe('bull')
+    expect(g[0].top).toBe(13); expect(g[0].bottom).toBe(10)
+    expect(g[0].filled).toBe(false); expect(g[0].fillIndex).toBe(-1)
+  })
+  it('marks a gap filled when a later bar trades back into the zone', () => {
+    const highs = [10, 12, 15, 14], lows = [8, 11, 13, 9], closes = [9, 11.5, 14, 10]
+    const g = hermes(highs, lows, closes, 0.01)
+    expect(g[0].filled).toBe(true); expect(g[0].fillIndex).toBe(3) // low 9 <= top 13
+  })
+  it('detects a bear fair-value gap (low[i-2] > high[i])', () => {
+    const highs = [19, 17, 15], lows = [20, 18, 14], closes = [19.5, 17.5, 14.5]
+    const g = hermes(highs, lows, closes, 0.01)
+    expect(g[0].dir).toBe('bear')
+    expect(g[0].top).toBe(20); expect(g[0].bottom).toBe(15)
+  })
+  it('stays silent when candles overlap (no imbalance)', () => {
+    const closes = Array.from({ length: 20 }, (_, i) => 100 + i)
+    const highs = closes.map((c) => c + 2), lows = closes.map((c) => c - 2)
+    expect(hermes(highs, lows, closes, 0.05)).toEqual([])
   })
 })
 
