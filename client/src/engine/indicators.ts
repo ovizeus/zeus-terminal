@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -302,6 +302,14 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (w.pythiaMarkS && !show) try { w.pythiaMarkS.setMarkers([]) } catch (_) { }
       if (show) updatePythia()
       break
+    case 'plutus':
+      if (show) initPlutusSeries()
+      if (w.plutusS) { w.plutusS.applyOptions({ visible: show }); if (!show) try { w.plutusS.setMarkers([]); w.plutusS.setData([]) } catch (_) { } }
+      if (show) updatePlutus()
+      break
+    case 'helios':
+      { const hex = document.getElementById('heliosChart'); if (hex) hex.style.display = show ? '' : 'none'; if (show) initHeliosChart() }
+      break
     // [2026-06-16] New overlays (batch 1)
     case 'sma':
       if (show) initSMASeries()
@@ -423,7 +431,7 @@ export function openIndSettings(id: string): void {
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
-    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR'
+    levels: 'Levels (CSV)', step: 'Step', maxAf: 'Max Accel', er: 'Efficiency', atrP: 'ATR Length', bbMult: 'BB ×', kcMult: 'KC ×', lookback: 'Swing Lookback', setupLen: 'Setup Length', climaxMult: 'Climax ×', base: 'Base EMA', tpMult: 'Target ×ATR', slMult: 'Stop ×ATR', volMult: 'Climax Vol ×'
   }
   // [batch3-B] pivot.type dropdown options
   const typeOpts: Record<string, string[]> = {
@@ -688,7 +696,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -1236,6 +1244,67 @@ export function updatePythia(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PLUTUS — invented smart-money footprint (Wyckoff effort-vs-result)
+// main-chart markers: ◆ accumulation (green, below) / distribution (red, above)
+// ═══════════════════════════════════════════════════════════════
+
+export function initPlutusSeries(): void {
+  if (w.plutusS || !w.mainChart) return
+  // transparent carrier so markers anchor across the full time range
+  w.plutusS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+export function updatePlutus(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initPlutusSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.plutus || {}
+  const sigs = _calcPLUTUS(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume),
+    Math.round(s.lookback) || 20, s.volMult || 1.5
+  )
+  const marks = sigs.filter((g: any) => k[g.index]).map((g: any) => {
+    const strong = g.effort >= 2.5
+    return {
+      time: k[g.index].time,
+      position: g.dir === 'accumulation' ? 'belowBar' : 'aboveBar',
+      shape: 'circle',
+      color: g.dir === 'accumulation' ? (strong ? '#00e676' : '#66bb6a') : (strong ? '#ff1744' : '#ef5350'),
+      text: strong ? '◆◆' : '◆',
+    }
+  })
+  try { w.plutusS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.plutusS.setMarkers(marks) } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELIOS — invented regime oracle (rolling Hurst exponent, sub-pane)
+// gold line > 0.5 = trending/persistent · cyan < 0.5 = mean-reverting
+// ═══════════════════════════════════════════════════════════════
+
+export function initHeliosChart(): void {
+  if (w._heliosInited && w._heliosChart) { updateHelios(); return }
+  w._heliosChart = _createSubChart('heliosChart', 60)
+  if (!w._heliosChart) return
+  w._heliosSeries = w._heliosChart.addLineSeries({ color: '#f0c040', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'HELIOS H' })
+  // 0.5 random-walk reference line
+  w._heliosMidS = w._heliosChart.addLineSeries({ color: 'rgba(255,255,255,0.25)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._heliosInited = true
+  updateHelios()
+}
+export function updateHelios(): void {
+  if (!w._heliosInited || !w._heliosSeries || !w.S.klines.length) return
+  const k = w.S.klines, p = Math.round(w.IND_SETTINGS.helios?.period) || 30
+  const h = _calcHELIOS(k.map((b: any) => b.close), p)
+  const data: any[] = [], mid: any[] = []
+  for (let i = 0; i < h.length; i++) {
+    if (h[i] == null || !k[i]) continue
+    const v = h[i] as number
+    data.push({ time: k[i].time, value: v, color: v >= 0.5 ? '#f0c040' : '#32ade6' }) // gold trend / cyan revert
+    mid.push({ time: k[i].time, value: 0.5 })
+  }
+  try { w._heliosSeries.setData(data); w._heliosMidS.setData(mid) } catch (_) { }
+  _syncSubChartsToMain()
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INDICATOR RENDER HOOK
 // ═══════════════════════════════════════════════════════════════
 
@@ -1275,6 +1344,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.nem) updateNem()
   if (w.S.activeInds.iris) updateIris()
   if (w.S.activeInds.pythia) updatePythia()
+  if (w.S.activeInds.plutus) updatePlutus()
+  if (w.S.activeInds.helios && w._heliosInited) updateHelios()
 }
 
 export function renderActBar(): void {
@@ -1299,7 +1370,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040' }
   return map[id] || '#888'
 }
 

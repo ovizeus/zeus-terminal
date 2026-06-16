@@ -143,6 +143,8 @@ export const INDICATORS: any[] = [
   // [2026-06-16] IRIS + PYTHIA — Zeus originals (rainbow ribbon + backend entry oracle)
   { id: 'iris', ico: _ZI.wave, name: 'IRIS', desc: 'Rainbow EMA ribbon (trend strength)', cat: 'trend', def: false },
   { id: 'pythia', ico: _ZI.scope, name: 'PYTHIA', desc: 'Entry oracle + targets (brain-backed) 🔮', cat: 'trend', def: false },
+  { id: 'plutus', ico: _ZI.chart, name: 'PLUTUS', desc: 'Smart-money footprint (effort vs result) 💰', cat: 'volume', def: false },
+  { id: 'helios', ico: _ZI.scope, name: 'HELIOS', desc: 'Regime oracle — Hurst trending vs mean-revert ☀️', cat: 'momentum', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

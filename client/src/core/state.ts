@@ -1820,6 +1820,9 @@ export let _aroonChart: any = null, _aroonUpSeries: any = null, _aroonDnSeries: 
 export let _trixChart: any = null, _trixSeries: any = null, _trixInited = false
 export let _uoChart: any = null, _uoSeries: any = null, _uoInited = false
 export let _chopChart: any = null, _chopSeries: any = null, _chopInited = false
+// [2026-06-16] PLUTUS markers (main-chart carrier) + HELIOS regime pane
+export let plutusS: any = null
+export let _heliosChart: any = null, _heliosSeries: any = null, _heliosMidS: any = null, _heliosInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
@@ -1870,6 +1873,10 @@ export const IND_SETTINGS: any = {
   iris: { base: 8, step: 13 },
   // [2026-06-16] PYTHIA — backend-confirmed entries + ATR targets
   pythia: { fast: 21, slow: 50, atrLen: 14, tpMult: 2.5, slMult: 1.2 },
+  // [2026-06-16] PLUTUS — smart-money footprint (Wyckoff effort vs result)
+  plutus: { lookback: 20, volMult: 1.5 },
+  // [2026-06-16] HELIOS — regime oracle (rolling Hurst exponent)
+  helios: { period: 30 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

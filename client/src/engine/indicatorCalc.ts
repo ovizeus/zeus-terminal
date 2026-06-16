@@ -539,6 +539,81 @@ export function awesomeOscillator(highs: number[], lows: number[], fast = 5, slo
   return med.map((_, i) => (f[i] == null || s[i] == null) ? null : (f[i] as number) - (s[i] as number))
 }
 
+export interface PlutusSignal { index: number; dir: 'accumulation' | 'distribution'; effort: number; closePos: number }
+
+/**
+ * PLUTUS — the smart-money footprint (invented for Zeus). A Wyckoff "effort vs
+ * result" detector: it flags bars where EFFORT (climactic volume, > volMult × its
+ * average) produced little RESULT — i.e. price made a fresh local extreme yet the
+ * close was absorbed back the other way. A new local LOW closed strong (closePos
+ * high) = demand absorbed supply → ACCUMULATION (institutions buying the dip). A
+ * new local HIGH closed weak = supply absorbed demand → DISTRIBUTION (institutions
+ * selling into strength). `effort` = volume / avg, `closePos` = where in the bar's
+ * range the close landed (0 = at the low, 1 = at the high).
+ */
+export function plutus(highs: number[], lows: number[], closes: number[], volumes: number[], lookback = 20, volMult = 1.5): PlutusSignal[] {
+  const L = Math.max(2, Math.round(lookback))
+  const n = closes.length
+  const out: PlutusSignal[] = []
+  const volAvg = sma(volumes, L)
+  for (let i = L - 1; i < n; i++) {
+    if (volAvg[i] == null || (volAvg[i] as number) <= 0) continue
+    const effort = volumes[i] / (volAvg[i] as number)
+    if (effort < volMult) continue                      // need climactic effort
+    const range = highs[i] - lows[i]
+    if (range <= 0) continue
+    const closePos = (closes[i] - lows[i]) / range      // 0 at low, 1 at high
+    let lowest = true, highest = true
+    for (let j = i - L + 1; j < i; j++) {
+      if (lows[j] <= lows[i]) lowest = false
+      if (highs[j] >= highs[i]) highest = false
+    }
+    if (lowest && closePos > 0.6) out.push({ index: i, dir: 'accumulation', effort, closePos })
+    else if (highest && closePos < 0.4) out.push({ index: i, dir: 'distribution', effort, closePos })
+  }
+  return out
+}
+
+/**
+ * HELIOS — the regime oracle (invented for Zeus). A rolling Hurst exponent (via
+ * rescaled-range R/S analysis on log returns) that tells you which MODE the market
+ * is in: H > 0.5 = persistent / trending (a move tends to continue → trust trend
+ * tools, follow), H < 0.5 = anti-persistent / mean-reverting (a move tends to snap
+ * back → fade extremes), H ≈ 0.5 = random walk (no edge). It is the meta-indicator:
+ * it doesn't say which way, it says whether the OTHER indicators should be trusted
+ * to continue or faded. Per-bar over the last `period` bars; warm-up = null.
+ */
+export function helios(closes: number[], period = 30): (number | null)[] {
+  const p = Math.max(4, Math.round(period))
+  const n = closes.length
+  const out: (number | null)[] = new Array(n).fill(null)
+  const rets: number[] = new Array(n).fill(0)
+  for (let i = 1; i < n; i++) {
+    const a = closes[i - 1], b = closes[i]
+    rets[i] = (a > 0 && b > 0) ? Math.log(b / a) : 0
+  }
+  const logP = Math.log(p)
+  for (let i = p; i < n; i++) {
+    let m = 0
+    for (let j = i - p + 1; j <= i; j++) m += rets[j]
+    m /= p
+    let cum = 0, mn = Infinity, mx = -Infinity, varSum = 0
+    for (let j = i - p + 1; j <= i; j++) {
+      const d = rets[j] - m
+      cum += d
+      if (cum < mn) mn = cum
+      if (cum > mx) mx = cum
+      varSum += d * d
+    }
+    const R = mx - mn
+    const S = Math.sqrt(varSum / p)
+    if (S <= 0) { out[i] = 0.5; continue }
+    const rs = R / S
+    out[i] = rs <= 0 ? 0.5 : Math.max(0, Math.min(1, Math.log(rs) / logP))
+  }
+  return out
+}
+
 /** Parabolic SAR (Wilder). Returns the SAR value per bar + isUp (trend) flag. */
 export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf = 0.2): { sar: (number | null)[]; isUp: boolean[] } {
   const n = highs.length

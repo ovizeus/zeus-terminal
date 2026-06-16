@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -288,6 +288,56 @@ describe('keraunos', () => {
     const { highs, lows, closes, vol } = mk(Array.from({ length: 40 }, (_, i) => 100 + (i % 2 === 0 ? 0.3 : -0.3)))
     const k = keraunos(highs, lows, closes, vol)
     expect(Math.abs(k.conviction[k.conviction.length - 1] as number)).toBeLessThan(0.35)
+  })
+})
+
+describe('plutus', () => {
+  it('flags ACCUMULATION on a climax-volume bar that prints a new low but closes strong', () => {
+    // 24 quiet bars drifting down (vol 100), then a fresh-low bar that closes near its high on 3× volume
+    const closes = Array.from({ length: 24 }, (_, i) => 100 - i * 0.2)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const vol = closes.map(() => 100)
+    // climax bar
+    closes.push(90); highs.push(98); lows.push(88); vol.push(300) // low=88 (new low), close 90 → closePos=(90-88)/10=0.2? need >0.6
+    // fix close to land high in range: close 96 → (96-88)/10=0.8
+    closes[closes.length - 1] = 96
+    const sig = plutus(highs, lows, closes, vol, 20, 1.5)
+    const acc = sig.find((s) => s.dir === 'accumulation')
+    expect(acc).toBeTruthy()
+    expect(acc!.index).toBe(24)
+    expect(acc!.effort).toBeGreaterThan(1.5)
+  })
+  it('flags DISTRIBUTION on a climax-volume bar that prints a new high but closes weak', () => {
+    const closes = Array.from({ length: 24 }, (_, i) => 100 + i * 0.2)
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    const vol = closes.map(() => 100)
+    closes.push(116); highs.push(120); lows.push(110); vol.push(300) // high=120 new high, close 116 → (116-110)/10=0.6 not <0.4
+    closes[closes.length - 1] = 111 // closePos=(111-110)/10=0.1
+    const sig = plutus(highs, lows, closes, vol, 20, 1.5)
+    expect(sig.some((s) => s.dir === 'distribution' && s.index === 24)).toBe(true)
+  })
+  it('stays silent without climax volume', () => {
+    const closes = Array.from({ length: 30 }, (_, i) => 100 + (i % 2 ? 0.5 : -0.5))
+    const highs = closes.map((c) => c + 1), lows = closes.map((c) => c - 1)
+    expect(plutus(highs, lows, closes, closes.map(() => 100), 20, 1.5)).toEqual([])
+  })
+})
+
+describe('helios', () => {
+  it('reads a persistent (long-run) market as more trending than an alternating one', () => {
+    // 10 up-steps then 10 down-steps = two long runs → persistent (H>0.5)
+    const trend: number[] = [100]
+    for (let i = 0; i < 10; i++) trend.push(trend[trend.length - 1] + 1)
+    for (let i = 0; i < 10; i++) trend.push(trend[trend.length - 1] - 1)
+    const tH = helios(trend, 20)
+    const last = tH.length - 1
+    expect(tH[0]).toBeNull()
+    expect(tH[last] as number).toBeGreaterThan(0.5) // persistent runs → trending regime
+    // perfectly alternating returns = anti-persistent (H≈0)
+    const chop = Array.from({ length: 21 }, (_, i) => 100 + (i % 2 ? 1 : 0))
+    const cH = helios(chop, 20)
+    expect(cH[cH.length - 1] as number).toBeLessThan(0.5)
+    expect(cH[cH.length - 1] as number).toBeLessThan(tH[last] as number)
   })
 })
 

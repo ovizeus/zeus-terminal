@@ -60,6 +60,8 @@ export const IND_ICONS: Record<string, string> = {
   nem: g(p('M4 7V3m0 0L2 5m2-2l2 2') + p('M12 9v4m0 0l2-2m-2 2l-2-2')),      // reversal: up + down arrows
   iris: g(p('M2 13a6 6 0 0112 0') + p('M4 13a4 4 0 018 0') + p('M6 13a2 2 0 014 0')), // rainbow arcs
   pythia: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + dot(8, 8, 1.6)),            // oracle eye / crystal ball
+  plutus: g(p('M8 2v12M8 4h-2a2 2 0 000 4h4a2 2 0 010 4H6') ),               // money flow ($ effort/result)
+  helios: g(p('M8 5a3 3 0 100 6 3 3 0 000-6z') + p('M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13')), // sun / regime
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop
