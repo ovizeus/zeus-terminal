@@ -217,6 +217,10 @@ const _DSL_PARITY_SHADOW_ENABLED = (process.env.DSL_PARITY_SHADOW_ENABLED || 'fa
 // runtime, no behaviour change. Shadow NEVER applies to the real stop.
 const _ML_DSL_SHADOW_ENABLED = (process.env.ML_DSL_SHADOW_ENABLED || 'false') === 'true';
 
+// [ML-DSL v2] When enabled, serverAT records the price path per position and, on close,
+// computes the baseline counterfactual + trains the learner. Default OFF = zero runtime.
+const _ML_DSL_LEARN_ENABLED = (process.env.ML_DSL_LEARN_ENABLED || 'false') === 'true';
+
 // ── Safety invariant: mutual exclusion ──
 // [Phase 2 S1.C] Two enforcement modes:
 //   1. _validateMutex(f)  — pure check, returns {ok,violations[]}. No mutation.
@@ -366,6 +370,7 @@ module.exports = {
     get PARITY_SHADOW_ENABLED() { return flags.PARITY_SHADOW_ENABLED; },
     get DSL_PARITY_SHADOW_ENABLED() { return _DSL_PARITY_SHADOW_ENABLED; },
     get ML_DSL_SHADOW_ENABLED() { return _ML_DSL_SHADOW_ENABLED; },
+    get ML_DSL_LEARN_ENABLED() { return _ML_DSL_LEARN_ENABLED; },
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.
     get BYBIT_TESTNET_ENABLED() { return flags.BYBIT_TESTNET_ENABLED; },
