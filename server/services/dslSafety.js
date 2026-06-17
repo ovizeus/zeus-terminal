@@ -23,14 +23,17 @@ function clamp(proposed, pos) {
   prPct = Math.max(0.05, Math.min(5, prPct));
   ivPct = Math.max(0.05, Math.min(5, ivPct));
 
-  // ── Net A: PL never wider than originalSL ──
-  if (entry > 0 && originalSL > 0 && price > 0) {
-    if (side === 'LONG') {
-      const maxPlPct = (price - originalSL) / price * 100; // widest allowed (PL at originalSL)
+  // ── Net A: PL never wider than originalSL (fail-closed if the floor is unknown) ──
+  if (entry > 0 && price > 0) {
+    if (originalSL > 0) {
+      const maxPlPct = side === 'LONG'
+        ? (price - originalSL) / price * 100
+        : (originalSL - price) / price * 100;
       if (Number.isFinite(maxPlPct) && maxPlPct > 0) plPct = Math.min(plPct, maxPlPct);
+      // maxPlPct <= 0 means price already past originalSL — leave plPct; Net B handles the exit
     } else {
-      const maxPlPct = (originalSL - price) / price * 100;
-      if (Number.isFinite(maxPlPct) && maxPlPct > 0) plPct = Math.min(plPct, maxPlPct);
+      // floor unknown → cannot guarantee "not wider than originalSL" → degrade to tight default
+      plPct = Math.min(plPct, SAFE_DEFAULT.plPct);
     }
   }
 

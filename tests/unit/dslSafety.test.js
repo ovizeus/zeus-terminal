@@ -25,4 +25,11 @@ describe('dslSafety.clamp', () => {
     const plPrice = S.price * (1 + r.plPct / 100);
     expect(plPrice).toBeLessThanOrEqual(S.originalSL + 1e-6);
   });
+  test('fail-closed: missing/zero originalSL → Net A degrades plPct to tight default (never wide)', () => {
+    // no originalSL provided → the floor is unknown → must NOT let a wide 5% stop through
+    const r = clamp({ plPct: 5, prPct: 0.7, ivPct: 0.3, action: 'LOOSEN', reason: 'x' },
+      { side: 'LONG', entry: 100, price: 103, maxLossPct: 1.5 }); // originalSL absent
+    expect(r.plPct).toBeLessThanOrEqual(0.5 + 1e-9); // clamped to SAFE_DEFAULT.plPct, not 5
+    expect(Number.isFinite(r.plPct)).toBe(true);
+  });
 });
