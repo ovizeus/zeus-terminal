@@ -18,6 +18,11 @@ router.get('/state', (req, res) => {
       exchange: p.exchange || null, mode: p.mode || null,
       entry: p.price, sl: p.sl,
       ml: proposals[String(p.seq)] || null,
+      dsl: p.dsl ? {
+        phase: p.dsl.phase, active: !!p.dsl.active,
+        progress: Number(p.dsl.progress) || 0,
+        activationPrice: p.dsl.activationPrice, currentSL: p.dsl.currentSL,
+      } : null,
     }));
     res.json({ ok: true, mode: 'SHADOW', positions: rows, ts: Date.now() });
   } catch (e) {

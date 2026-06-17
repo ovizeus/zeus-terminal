@@ -12,6 +12,7 @@ type DriveRow = {
   seq: number; symbol: string; side: string
   exchange: string | null; mode: string | null
   entry: number; sl: number; ml: MlProposal
+  dsl: { phase: string; active: boolean; progress: number; activationPrice: number; currentSL: number } | null
 }
 type DriveState = { ok: boolean; mode: string; positions: DriveRow[]; ts: number }
 
@@ -62,6 +63,17 @@ export function DslDrivePanel() {
               <span className="dsldrive-venue">{p.exchange || p.mode || ''}</span>
             </div>
             <div className="dsldrive-row">entry {fmt(p.entry)} · SL {fmt(p.sl)}{ml && ml.realPhase ? ` · ${ml.realPhase}` : ''}</div>
+            {p.dsl ? (
+              p.dsl.active ? (
+                <div className="dsldrive-arm dsldrive-arm-on">● DSL ARMED · {p.dsl.phase}</div>
+              ) : (
+                <div className="dsldrive-arm dsldrive-arm-off">
+                  ○ DSL not armed · arms at {fmt(p.dsl.activationPrice || 0)}
+                  <div className="dsldrive-bar dsldrive-arm-bar"><i style={{ width: Math.max(2, Math.min(100, p.dsl.progress)) + '%' }} /></div>
+                  <span className="dsldrive-armpct">{Math.round(p.dsl.progress)}%</span>
+                </div>
+              )
+            ) : <div className="dsldrive-arm dsldrive-arm-off">○ DSL not attached</div>}
             {ml ? (
               <>
                 <div className="dsldrive-act" style={{ color: actionColor(ml.mlAction) }}>

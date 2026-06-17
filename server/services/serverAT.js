@@ -3283,17 +3283,26 @@ function onPriceUpdate(symbol, price) {
                 const _nowMl = Date.now();
                 const _lastMl = pos._mlDslLastEmit || 0;
                 if (_nowMl - _lastMl >= 1000) {
-                    const _prevP = pos._mlDslPrevPrice;
-                    const _atrPct = Number.isFinite(pos.slPct) && pos.slPct > 0 ? pos.slPct : 1.0;
-                    // favourable-signed momentum: +ve = price moving in the position's
-                    // favour, normalised by ATR% so a full-ATR interval move ≈ ±1.
+                    // Real momentum from live indicators (RSI + MACD dir + Supertrend dir),
+                    // favourable-signed (+ve = market moving in this position's favour).
+                    // ATR% taken from the indicator snapshot. Neutral (HOLD) when indicators
+                    // aren't ready. Read-only — never mutates serverState.
                     let _mom = 0;
-                    if (Number.isFinite(_prevP) && _prevP > 0) {
-                        const _ret = (price - _prevP) / _prevP * 100;
-                        const _fav = pos.side === 'SHORT' ? -_ret : _ret;
-                        _mom = Math.max(-1, Math.min(1, _fav / _atrPct));
-                    }
-                    pos._mlDslPrevPrice = price;
+                    let _atrPct = Number.isFinite(pos.slPct) && pos.slPct > 0 ? pos.slPct : 1.0;
+                    try {
+                        const _snap = require('./serverState').getSnapshotForSymbol(pos.symbol);
+                        const _ind = _snap && _snap.indicators;
+                        if (_ind) {
+                            if (Number.isFinite(+_ind.atr) && +_ind.atr > 0 && price > 0) _atrPct = (+_ind.atr / price) * 100;
+                            if (Number.isFinite(+_ind.rsi)) {
+                                const _rsiN = Math.max(-1, Math.min(1, (+_ind.rsi - 50) / 50));
+                                const _macdS = _ind.macdDir === 'bull' ? 1 : _ind.macdDir === 'bear' ? -1 : 0;
+                                const _stS = _ind.stDir === 'bull' ? 1 : _ind.stDir === 'bear' ? -1 : 0;
+                                const _bull = Math.max(-1, Math.min(1, 0.5 * _rsiN + 0.3 * _macdS + 0.2 * _stS));
+                                _mom = pos.side === 'SHORT' ? -_bull : _bull;
+                            }
+                        }
+                    } catch (_) { /* indicators not ready → neutral momentum */ }
                     pos._mlDslLastEmit = _nowMl;
 
                     const _dslState = serverDSL.getState(pos.seq) || {};
