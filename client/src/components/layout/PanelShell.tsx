@@ -26,6 +26,7 @@ import { AnalysisSections } from '../analysis/AnalysisSections'
 import { AutoTradePanel } from '../dock/AutoTradePanel'
 import { ManualTradePanel } from '../dock/ManualTradePanel'
 import { DSLZonePanel } from '../dock/DSLZonePanel'
+import { DslDrivePanel } from '../dock/DslDrivePanel'
 import { OmegaPage } from '../omega/OmegaPage'
 import { MultiExchangePage } from '../multiexchange/MultiExchangePage'
 import { ARESPanel } from '../dock/ARESPanel'
@@ -86,6 +87,7 @@ const DOCK_TITLES: Record<string, string> = {
   'autotrade': 'AutoTrade',
   'manual-trade': 'Manual Trade',
   'dsl': 'DSL',
+  'dsl-drive': 'DSL Drive',
   'omega': 'OMEGA',
   'multi-exchange': 'MultiExchange',
   'ares': 'ARES',
@@ -540,6 +542,9 @@ export function PanelShell() {
           </div>
           <div id="dsl-strip-panel" data-panel-id="dsl" className={dockActive === 'dsl' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <DSLZonePanel />
+          </div>
+          <div data-panel-id="dsl-drive" className={dockActive === 'dsl-drive' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <DslDrivePanel />
           </div>
           <div data-panel-id="omega" className={dockActive === 'omega' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <OmegaPage />
