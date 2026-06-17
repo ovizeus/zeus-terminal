@@ -32,4 +32,10 @@ describe('dslSafety.clamp', () => {
     expect(r.plPct).toBeLessThanOrEqual(0.5 + 1e-9); // clamped to SAFE_DEFAULT.plPct, not 5
     expect(Number.isFinite(r.plPct)).toBe(true);
   });
+  test('fail-closed: missing/zero entry (invalid pos) → plPct degrades to tight default', () => {
+    const r = clamp({ plPct: 5, prPct: 5, ivPct: 5, action: 'LOOSEN' }, { side: 'LONG' }); // no entry/price
+    expect(r.plPct).toBeLessThanOrEqual(0.5 + 1e-9); // not the wide 5
+    expect(Number.isFinite(r.plPct)).toBe(true);
+    expect(r.forcedExit).toBe(false); // no price → kill-switch cannot evaluate, stays false
+  });
 });
