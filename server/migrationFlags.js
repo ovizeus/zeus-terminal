@@ -211,6 +211,12 @@ try {
 // When enabled, serverDSL.tick logs source='server' rows. Default OFF = zero runtime.
 const _DSL_PARITY_SHADOW_ENABLED = (process.env.DSL_PARITY_SHADOW_ENABLED || 'false') === 'true';
 
+// ── ML-DSL Shadow — read-only from env var ──
+// [ML-DSL v1] When enabled, serverAT records shadow DSL-drive proposals (policy →
+// safety net) for the read-only DSL Drive endpoint + OMEGA box. Default OFF = zero
+// runtime, no behaviour change. Shadow NEVER applies to the real stop.
+const _ML_DSL_SHADOW_ENABLED = (process.env.ML_DSL_SHADOW_ENABLED || 'false') === 'true';
+
 // ── Safety invariant: mutual exclusion ──
 // [Phase 2 S1.C] Two enforcement modes:
 //   1. _validateMutex(f)  — pure check, returns {ok,violations[]}. No mutation.
@@ -359,6 +365,7 @@ module.exports = {
     get POSITIONS_WS() { return flags.POSITIONS_WS; },
     get PARITY_SHADOW_ENABLED() { return flags.PARITY_SHADOW_ENABLED; },
     get DSL_PARITY_SHADOW_ENABLED() { return _DSL_PARITY_SHADOW_ENABLED; },
+    get ML_DSL_SHADOW_ENABLED() { return _ML_DSL_SHADOW_ENABLED; },
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.
     get BYBIT_TESTNET_ENABLED() { return flags.BYBIT_TESTNET_ENABLED; },

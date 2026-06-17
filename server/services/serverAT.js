@@ -49,6 +49,9 @@ const audit = require('./audit');
 const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
+const mlDslPolicy = require('./mlDslPolicy');
+const dslSafety = require('./dslSafety');
+const mlDslShadow = require('./mlDslShadow');
 const db = require('./database');
 const marketFeed = require('./marketFeed');
 
@@ -2419,6 +2422,7 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     if (!pos.userId) { logger.error('AT_ENGINE', '_closePosition without pos.userId seq=' + pos.seq + ' — aborting'); return; }
     const userId = pos.userId;
     const us = _uState(userId);
+    try { mlDslShadow.remove(pos.seq); delete pos._mlDslPrevPrice; delete pos._mlDslLastEmit; } catch (_) { } // [ML-DSL] drop shadow proposal + scratch on close
 
     // [PHANTOM ROOT FIX 2026-06-05] Mark this uid|symbol as recently closed so
     // the userdata fast-path doesn't adopt our own mid-close fill snapshots as
@@ -3267,6 +3271,58 @@ function onPriceUpdate(symbol, price) {
                 }
             }
         }
+
+        // ── ML-DSL SHADOW (v1): propose, log, expose — DO NOT apply to the real stop ──
+        // Mirrors the parity-shadow pattern above: flag-gated (default OFF) + 1s throttle.
+        // Builds a favourable-momentum proxy from throttled price deltas, runs the
+        // deterministic policy through the fail-closed safety net, and records the
+        // proposal for the read-only DSL Drive endpoint. NEVER touches pos.sl — only
+        // private pos._mlDsl* scratch fields.
+        if (MF.ML_DSL_SHADOW_ENABLED) {
+            try {
+                const _nowMl = Date.now();
+                const _lastMl = pos._mlDslLastEmit || 0;
+                if (_nowMl - _lastMl >= 1000) {
+                    const _prevP = pos._mlDslPrevPrice;
+                    const _atrPct = Number.isFinite(pos.slPct) && pos.slPct > 0 ? pos.slPct : 1.0;
+                    // favourable-signed momentum: +ve = price moving in the position's
+                    // favour, normalised by ATR% so a full-ATR interval move ≈ ±1.
+                    let _mom = 0;
+                    if (Number.isFinite(_prevP) && _prevP > 0) {
+                        const _ret = (price - _prevP) / _prevP * 100;
+                        const _fav = pos.side === 'SHORT' ? -_ret : _ret;
+                        _mom = Math.max(-1, Math.min(1, _fav / _atrPct));
+                    }
+                    pos._mlDslPrevPrice = price;
+                    pos._mlDslLastEmit = _nowMl;
+
+                    const _dslState = serverDSL.getState(pos.seq) || {};
+                    const _feat = mlDslShadow.buildFeatures(pos, price, {
+                        momentum: _mom, atrPct: _atrPct, regime: pos.regime,
+                        progress: _dslState.progress,
+                    });
+                    const _raw = mlDslPolicy.decide(_feat);
+                    const _safe = dslSafety.clamp(_raw, {
+                        side: pos.side, entry: pos.price, price,
+                        originalSL: pos.originalSL || pos.sl, maxLossPct: 1.5,
+                    });
+                    mlDslShadow.record(pos.seq, {
+                        seq: pos.seq, symbol: pos.symbol, side: pos.side,
+                        exchange: pos.exchange || null, mode: pos.mode || null,
+                        entry: pos.price, price,
+                        realPL: _dslState.pivotLeft || pos.sl,
+                        realPR: _dslState.pivotRight || null,
+                        realIV: _dslState.impulseVal || null,
+                        realPhase: _dslState.phase || null,
+                        mlAction: _safe.action, mlReason: _safe.reason,
+                        mlPlPct: _safe.plPct, mlPrPct: _safe.prPct, mlIvPct: _safe.ivPct,
+                        forcedExit: _safe.forcedExit, momentum: _mom,
+                        mfePct: _feat.mfePct, maePct: _feat.maePct, ts: _nowMl,
+                    });
+                }
+            } catch (_) { /* SHADOW must never affect the live loop */ }
+        }
+        // ── END ML-DSL SHADOW ──
 
         // ── Classic SL/TP check ──
         let closed = false;
