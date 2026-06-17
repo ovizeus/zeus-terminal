@@ -2615,6 +2615,7 @@ select.zac-select optgroup {
 #zeus-dock .zd-item[data-dock="ares"] .zd-icon svg {
   color: #4a8a6a;
 }
+#zeus-dock .zd-item[data-dock="dsl-drive"] .zd-icon svg { color: var(--grn) }
 #zeus-dock .zd-item[data-dock="postmortem"] .zd-icon svg,
 #zeus-dock .zd-item[data-dock="pnllab"] .zd-icon svg,
 #zeus-dock .zd-item[data-dock="activity"] .zd-icon svg {
@@ -7826,3 +7827,21 @@ select option {
 /* ── Support unread badges (user side): Settings icon + SUPPORT tab ── */
 .sbtn-badge { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; pointer-events: none; box-shadow: 0 0 0 2px #0b0712; }
 .mtab-badge { display: inline-block; margin-left: 5px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; vertical-align: middle; }
+
+/* ── DSL DRIVE panel (ML-DSL shadow) ── */
+.dsldrive-panel { font: 11px/1.5 ui-monospace, Menlo, monospace; color: #cfe; padding: 0 0 12px }
+.dsldrive-mode { color: #f0c040; font-weight: 700; margin-left: 6px; letter-spacing: 1px }
+.dsldrive-empty { color: #5a6b7a; padding: 10px 12px }
+.dsldrive-card { border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: 7px 9px; margin: 8px 10px 0; background: rgba(10,15,22,.6) }
+.dsldrive-sym { font-weight: 700; margin-bottom: 3px; display: flex; gap: 6px; align-items: center }
+.dsldrive-venue { color: #5a6b7a; font-weight: 400; margin-left: auto; font-size: 10px }
+.dsldrive-row { color: #9fb6cc }
+.dsldrive-dim { color: #5a6b7a }
+.dsldrive-act { font-weight: 700; margin: 3px 0 5px }
+.dsldrive-pivots { display: flex; flex-direction: column; gap: 3px }
+.dsldrive-piv { display: flex; align-items: center; gap: 6px }
+.dsldrive-piv > span:first-child { width: 18px; color: #7e93a8 }
+.dsldrive-piv > span:last-child { width: 54px; text-align: right; color: #cfe }
+.dsldrive-bar { flex: 1; height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; overflow: hidden }
+.dsldrive-bar > i { display: block; height: 100%; border-radius: 3px; transition: width .35s ease }
+.dsldrive-mom { margin-top: 4px; color: #7e93a8 }

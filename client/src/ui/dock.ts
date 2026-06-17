@@ -19,6 +19,8 @@ export var DOCK_ITEMS: any[] = [
   { id: 'dsl',        label: 'DSL',        group: 'trading',
     svg: '<path d="M3 17l4-4 4 4 4-8 6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="15" r="2" fill="currentColor" opacity=".5"/><circle cx="3" cy="17" r="1.5" fill="currentColor" opacity=".35"/><path d="M3 20h18" stroke="currentColor" stroke-width="1" opacity=".2" stroke-linecap="round"/>' },
 
+  { id: 'dsl-drive', label: 'DSL Drive', group: 'trading', svg: '<circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' },
+
   // [OMEGA Wave 1 UI 2026-05-15] Ω rune — position 4 (after DSL, before ARES).
   // Geometric capital omega: vertical legs + arching crown + horizontal base.
   // Inner subtle glow + outer halo dot evoke "alien intelligence" presence.
@@ -96,7 +98,7 @@ export var DOCK_GROUPS: any[] = ['trading', 'review', 'intel', 'expand'];
 
 // ── ENABLED DOCK IDS (modules with page view wired) ──────────
 // Add ids here as each module gets its dedicated page view
-export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'omega', 'multi-exchange', 'ares', 'postmortem', 'pnllab', 'aria', 'nova', 'adaptive', 'flow', 'mtf', 'teacher', 'sigreg', 'liquidations', 'market-metrics', 'activity', 'aub'];
+export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'dsl-drive', 'omega', 'multi-exchange', 'ares', 'postmortem', 'pnllab', 'aria', 'nova', 'adaptive', 'flow', 'mtf', 'teacher', 'sigreg', 'liquidations', 'market-metrics', 'activity', 'aub'];
 
 // ── Z-glyph "Coming Soon" toast (UI-POLISH-1 2026-05-13) ──────
 // Operator-approved dedicated brand-aligned overlay (NU emoji).

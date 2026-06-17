@@ -1200,6 +1200,9 @@ app.use('/api/omega/doctor', doctorRoutes);
 const ring5Routes = require('./server/routes/ring5');
 app.use('/api/ring5', ring5Routes);
 
+const dslDriveRoutes = require('./server/routes/dslDrive');
+app.use('/api/dsldrive', dslDriveRoutes);
+
 // [Task B 2026-05-28] Admin operations — global halt toggle endpoint
 app.use('/api/admin', require('./server/routes/admin'));
 app.use('/api/support', require('./server/routes/support'));

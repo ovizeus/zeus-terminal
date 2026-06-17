@@ -42,6 +42,12 @@ const DOCK_ITEMS: DockItem[] = [
         <path d="M3 20h18" stroke="currentColor" strokeWidth="1" opacity=".2" strokeLinecap="round" />
       </>
     ) },
+  { id: 'dsl-drive', label: 'DSL Drive', group: 'trading', icon: (
+    <>
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </>
+  ) },
   // [OMEGA Wave 1 UI 2026-05-15] Ω rune — position 4 (after DSL, before ARES).
   // Geometric capital omega: arching crown + vertical legs + halo dot.
   { id: 'omega', label: 'OMEGA', group: 'trading',
