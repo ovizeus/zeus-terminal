@@ -3299,9 +3299,10 @@ function onPriceUpdate(symbol, price) {
         // deterministic policy through the fail-closed safety net, and records the
         // proposal for the read-only DSL Drive endpoint. NEVER touches pos.sl — only
         // private pos._mlDsl* scratch fields.
+        // [ML-DSL v2] record price path for counterfactual replay (independent of shadow)
+        if (MF.ML_DSL_LEARN_ENABLED) { try { priceTrace.record(pos.seq, price, Date.now()); } catch (_) {} }
         if (MF.ML_DSL_SHADOW_ENABLED) {
             try {
-                if (MF.ML_DSL_LEARN_ENABLED) { try { priceTrace.record(pos.seq, price, Date.now()); } catch (_) {} }
                 const _nowMl = Date.now();
                 const _lastMl = pos._mlDslLastEmit || 0;
                 if (_nowMl - _lastMl >= 1000) {
