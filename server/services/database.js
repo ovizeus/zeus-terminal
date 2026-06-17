@@ -10202,6 +10202,21 @@ migrate('409_ml_dsl_arm_posterior', () => {
         );
     `);
 });
+migrate('410_ml_dsl_outcome', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dsl_outcome (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            pos_id          TEXT NOT NULL,
+            user_id         INTEGER NOT NULL,
+            env             TEXT, symbol TEXT, regime TEXT,
+            arm             TEXT, cohort TEXT,
+            ml_pnl_pct      REAL, baseline_pnl_pct REAL, advantage REAL,
+            win             INTEGER,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldsl_out_ts ON ml_dsl_outcome(ts);
+    `);
+});
 
 // ─── User methods ───
 
