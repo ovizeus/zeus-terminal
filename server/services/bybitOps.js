@@ -389,13 +389,23 @@ async function closePosition(uid, params, creds) {
             source: params.source,
         });
 
+        // [ROOT-FIX 2026-06-18] Same fix as binanceOps: archive (INSERT OR REPLACE, own try)
+        // and the at_positions DELETE (own try) are separate so the CLOSED row is ALWAYS
+        // removed even if the archive throws — otherwise it lingers as status=CLOSED cruft
+        // with stale data.live.status=LIVE → recon re-adopts the leg as a duplicate orphan.
         try {
             const closedData = { ...positionData, closeOrderId: closeResp.result.orderId, closePrice: closeResp.result.avgPrice, source: params.source };
-            db.prepare(`INSERT INTO at_closed (seq, data, closed_at, user_id, exchange) VALUES (?, ?, datetime('now'), ?, 'bybit')`).run(params.seq, JSON.stringify(closedData), uid);
-            db.prepare(`DELETE FROM at_positions WHERE seq=?`).run(params.seq);
+            db.prepare(`INSERT OR REPLACE INTO at_closed (seq, data, closed_at, user_id, exchange) VALUES (?, ?, datetime('now'), ?, 'bybit')`).run(params.seq, JSON.stringify(closedData), uid);
         } catch (err) {
             if (typeof logger !== 'undefined' && logger && logger.warn) {
-                logger.warn('BYBIT', `[closePosition] at_closed INSERT/DELETE failed seq=${params.seq}: ${err.message}`);
+                logger.warn('BYBIT', `[closePosition] at_closed archive failed seq=${params.seq}: ${err.message}`);
+            }
+        }
+        try {
+            db.prepare(`DELETE FROM at_positions WHERE seq=?`).run(params.seq);
+        } catch (delErr) {
+            if (typeof logger !== 'undefined' && logger && logger.warn) {
+                logger.warn('BYBIT', `[closePosition] at_positions delete failed seq=${params.seq}: ${delErr.message}`);
             }
         }
 
