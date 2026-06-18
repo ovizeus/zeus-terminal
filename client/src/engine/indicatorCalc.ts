@@ -2340,3 +2340,83 @@ export function mentor(
 
   return { ma, candleState, osma, osmaState }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// EUNOMIA — RSX-NRP recreation (Zeus original). A Jurik/RSX-style
+// VERY-smooth RSI: take Wilder RSI(closes, period), then double-smooth
+// it with two EMA passes (smooth) → a glassy 0..100 oscillator. We also
+// expose the per-bar slope (rising) and a tri-state momentum strip used
+// for the centre signal band (1 = green/bullish, 0 = yellow/neutral,
+// -1 = red/bearish). strip is NUMERIC tri-state — never compared to strings.
+// All arrays aligned 1:1 to closes.length; null during warmup.
+// ═══════════════════════════════════════════════════════════════
+export interface Eunomia {
+  rsx: (number | null)[]
+  rising: (boolean | null)[]
+  strip: (number | null)[]
+}
+export function eunomia(closes: number[], period = 14, smooth = 7): Eunomia {
+  const n = closes.length
+  const p = Math.max(2, Math.round(period))
+  const sm = Math.max(1, Math.round(smooth))
+  const rsx: (number | null)[] = new Array(n).fill(null)
+  const rising: (boolean | null)[] = new Array(n).fill(null)
+  const strip: (number | null)[] = new Array(n).fill(null)
+  if (n === 0) return { rsx, rising, strip }
+
+  // Wilder RSI → NaN during warmup. Computed inline so that a no-movement
+  // window (avg gain == avg loss == 0) resolves to a neutral 50 rather than the
+  // 100 artifact of the divide-by-zero convention — a flat tape is chop, not a rally.
+  const rawRsi: number[] = new Array(n).fill(NaN)
+  {
+    let ag = 0, al = 0
+    for (let i = 1; i < n; i++) {
+      const ch = closes[i] - closes[i - 1], g = Math.max(ch, 0), l = Math.max(-ch, 0)
+      if (i <= p) {
+        ag += g; al += l
+        if (i === p) { ag /= p; al /= p; rawRsi[i] = (ag === 0 && al === 0) ? 50 : (al === 0 ? 100 : 100 - 100 / (1 + ag / al)) }
+      } else {
+        ag = (ag * (p - 1) + g) / p; al = (al * (p - 1) + l) / p
+        rawRsi[i] = (ag === 0 && al === 0) ? 50 : (al === 0 ? 100 : 100 - 100 / (1 + ag / al))
+      }
+    }
+  }
+  const finite: number[] = []
+  const idx: number[] = []
+  for (let i = 0; i < n; i++) {
+    if (Number.isFinite(rawRsi[i])) { finite.push(rawRsi[i]); idx.push(i) }
+  }
+  if (finite.length) {
+    const e1 = ema(finite, sm)
+    const e1f = e1.map((v) => (v == null ? 0 : v))
+    const e2 = ema(e1f, sm)
+    for (let k = 0; k < e2.length; k++) {
+      const v = e2[k]
+      if (v == null) continue
+      rsx[idx[k]] = Math.max(0, Math.min(100, v)) // clamp [0,100]
+    }
+  }
+
+  for (let i = 0; i < n; i++) {
+    const v = rsx[i]
+    if (v == null) continue
+    const prev = rsx[i - 1]
+    // rising: spec definition (>= prev). null when no prior value.
+    const ris = prev == null ? null : v >= (prev as number)
+    rising[i] = ris
+    // Slope with an epsilon dead-band so a genuinely FLAT curve sits in the
+    // neutral zone (chop → yellow), while saturated extremes still colour by zone.
+    const EPS = 0.05
+    const MID = 0.5 // dead-band around the 50 mid-line → chop stays yellow
+    const slope = prev == null ? 0 : v - (prev as number)
+    const climbing = slope > EPS
+    const falling = slope < -EPS
+    // tri-state momentum: green bullish / red bearish / yellow neutral.
+    // Upper zone + not falling = bullish (green); lower zone + not rising = bearish
+    // (red); the mid dead-band, or a stall against the trend, stays neutral (yellow).
+    if (v > 50 + MID && !falling) strip[i] = 1
+    else if (v < 50 - MID && !climbing) strip[i] = -1
+    else strip[i] = 0
+  }
+  return { rsx, rising, strip }
+}
