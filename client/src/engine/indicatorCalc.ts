@@ -2053,3 +2053,38 @@ export function hyperion(closes: number[], longP = 25, shortP = 13, signalP = 9)
   }
   return { fast, signal }
 }
+
+// [2026-06-18] KRONOS — MACD-style dual-line crossover oscillator (Zeus original).
+// macd = ema(closes, fastP) - ema(closes, slowP); signal = ema(macd, signalP).
+// Output arrays aligned 1:1 to closes.length; null during warmup.
+export interface Kronos { macd: (number | null)[]; signal: (number | null)[] }
+export function kronos(closes: number[], fastP = 12, slowP = 26, signalP = 9): Kronos {
+  const n = closes.length
+  const fP = Math.max(1, Math.round(fastP))
+  const sP = Math.max(1, Math.round(slowP))
+  const sigP = Math.max(1, Math.round(signalP))
+  const emaFast = ema(closes, fP)
+  const emaSlow = ema(closes, sP)
+  const macd: (number | null)[] = new Array(n).fill(null)
+  const macdFinite: number[] = []
+  for (let i = 0; i < n; i++) {
+    if (emaFast[i] == null || emaSlow[i] == null) continue
+    const v = (emaFast[i] as number) - (emaSlow[i] as number)
+    macd[i] = v
+    macdFinite.push(v)
+  }
+  // signal = ema(macd, signalP) over the non-null macd values, re-aligned back to the
+  // original indices that carried a macd value.
+  const signal: (number | null)[] = new Array(n).fill(null)
+  if (macdFinite.length) {
+    const sigFinite = ema(macdFinite, sigP)
+    let k = 0
+    for (let i = 0; i < n; i++) {
+      if (macd[i] == null) continue
+      const sv = sigFinite[k]
+      if (sv != null) signal[i] = sv
+      k++
+    }
+  }
+  return { macd, signal }
+}
