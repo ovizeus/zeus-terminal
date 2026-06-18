@@ -477,7 +477,7 @@ export async function runBacktest() {
 
   renderBacktestResults(results, equityCurve, fwdBars, lookback, minMovePct);
   { const _oe = el('btResults'); if (_oe) _oe.style.display = 'block'; }
-  { const _oe = el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
+  { const _oe = el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bars | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
   } catch (e: any) {
     // [M6] surface the failure to the user instead of swallowing into ZLOG
     try { toast('Backtest failed: ' + (e && e.message ? e.message : 'unknown error')); } catch (_) {}
