@@ -889,18 +889,10 @@ function _createSubChart(containerId: string, height?: number): any {
 export function _syncSubChartsToMain(): void {
   if (!w.mainChart) return
   try {
-    // [PANE-TIME-SYNC 2026-06-18] Align sub-panes by the price chart's visible TIME window,
-    // not by logical index. Sub-pane series are warmup-trimmed (fewer bars than the price
-    // chart), so the SAME logical index maps to a DIFFERENT timestamp per pane → a value at
-    // time T sat under the wrong candle. Time-sync puts every timestamp at the same x across
-    // all panes → aligned with the candles. ON-TICK ONLY (no scroll subscription), exactly
-    // like the existing MACD sync — so it CANNOT fight the user's pan/zoom gesture (the live
-    // subscription approach did, turning pan into zoom). Logical fallback if time range null.
-    const tr = w.mainChart.timeScale().getVisibleRange()
-    const lr = tr ? null : w.mainChart.timeScale().getVisibleLogicalRange()
-    if (!tr && !lr) return
+    const r = w.mainChart.timeScale().getVisibleLogicalRange()
+    if (!r) return
     ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, _macdChart].forEach((ch: any) => {
-      if (ch) try { if (tr) ch.timeScale().setVisibleRange(tr); else ch.timeScale().setVisibleLogicalRange(lr) } catch (_) { }
+      if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
 }
