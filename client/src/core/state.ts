@@ -2025,7 +2025,7 @@ export const IND_SETTINGS: any = {
   // [2026-06-16] MORPHEUS — 4-colour candle painter + MA + arrows + S/R + prints
   morpheus: { maPeriod: 50, swing: 8 },
   // [2026-06-18] HARMONIA — rainbow spectrum candle painter + dual-degree swing arrows
-  harmonia: { shortLB: 2, intLB: 5, hueStep: 13 },
+  harmonia: { shortLB: 2, intLB: 5, maPeriod: 20 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

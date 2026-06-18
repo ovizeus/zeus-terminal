@@ -3083,7 +3083,7 @@ export function updateHarmonia(): void {
   if (!w.mainChart || !w.S.klines.length || !w.cSeries) return
   initHarmoniaSeries()
   const k = w.S.klines, s = w.IND_SETTINGS.harmonia || {}
-  const r = _calcHARMONIA(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.shortLB) || 2, Math.round(s.intLB) || 5, Math.round(s.hueStep) || 13)
+  const r = _calcHARMONIA(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.shortLB) || 2, Math.round(s.intLB) || 5, Math.round(s.maPeriod) || 20)
   // RAINBOW recolour: every bar a vivid cycling spectrum colour
   const colored = k.map((b: any, i: number) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: r.colors[i], borderColor: r.colors[i], wickColor: r.colors[i] }))
   try { w.cSeries.setData(colored) } catch (_) { }

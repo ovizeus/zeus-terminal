@@ -1963,10 +1963,27 @@ export function magnes(
  * each detected as a strict pivot over [i-L, i+L]. `centerline` is the mean close for a
  * faint reference line. Pure — no DOM, no chart access.
  */
-export function harmonia(highs: number[], lows: number[], closes: number[], shortLB = 2, intLB = 5, hueStep = 13): Harmonia {
+export function harmonia(highs: number[], lows: number[], closes: number[], shortLB = 2, intLB = 5, maPeriod = 20): Harmonia {
   const n = closes.length
   const colors: string[] = new Array(n)
-  for (let i = 0; i < n; i++) colors[i] = _hslToHex((i * hueStep) % 360, 0.85, 0.55)
+  // [COLOUR LOGIC 2026-06-18] Hue is driven by the TREND / long-vs-short state, NOT the bar
+  // index (the old `(i*hueStep)%360` was a meaningless moving rainbow). Same vivid palette
+  // (_hslToHex at s=0.85 l=0.55) so the colours on the chart are unchanged — only their
+  // MEANING is added. Deviation of close from its EMA, self-normalised by recent volatility
+  // (ema of |dev|) and squashed with tanh into t∈[0,1]: 0 = strongly bearish/SHORT, 0.5 =
+  // neutral, 1 = strongly bullish/LONG. hue = t*240 → SHORT=red, neutral=green, LONG=blue.
+  const maP = Math.max(2, Math.round(maPeriod))
+  const ma = ema(closes, maP)
+  const absDev: number[] = new Array(n)
+  for (let i = 0; i < n; i++) { const m = ma[i]; absDev[i] = (m == null || !Number.isFinite(closes[i])) ? 0 : Math.abs(closes[i] - (m as number)) }
+  const scale = ema(absDev, maP)
+  for (let i = 0; i < n; i++) {
+    const m = ma[i]
+    if (m == null || !Number.isFinite(closes[i])) { colors[i] = _hslToHex(120, 0.85, 0.55); continue } // warmup → neutral green
+    const sc = (scale[i] != null && (scale[i] as number) > 1e-9) ? (scale[i] as number) : Math.max(1e-9, Math.abs(m as number) * 1e-4)
+    const t = 0.5 + 0.5 * Math.tanh((closes[i] - (m as number)) / (2 * sc)) // [0,1]; 0.5 = neutral
+    colors[i] = _hslToHex(t * 240, 0.85, 0.55)
+  }
   const pivots = (L: number): { highs: HarmoniaPivot[]; lows: HarmoniaPivot[] } => {
     const lb = Math.max(1, Math.round(L))
     const hh: HarmoniaPivot[] = [], ll: HarmoniaPivot[] = []
