@@ -67,6 +67,7 @@ export const IND_ICONS: Record<string, string> = {
   helios: g(p('M8 5a3 3 0 100 6 3 3 0 000-6z') + p('M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13')), // sun / regime
   hyperion: g(p('M2 12h12') + p('M5 12a3 3 0 016 0') + p('M8 4v2M3.5 6.5l1 1M12.5 6.5l-1 1M1 9h1.5M13.5 9H15')), // rising sun over horizon
   eunomia: g(p('M1 8q3 -5 6 0t6 0') + p('M2 13h12') + p('M4 11v2M8 10v3M12 11v2')), // smooth wave over a momentum strip
+  metis: g(p('M1 5h14') + p('M1 8h14') + p('M1 11h14')), // three TDI lines (green/red/yellow)
   kronos: g(p('M4 2h8M4 14h8') + p('M4 2c0 3 8 3 8 6s-8 3-8 6') + p('M12 2c0 3-8 3-8 6s8 3 8 6')), // hourglass (time / cycle)
   hermes: g(p('M3 3v3M3 13v-3M13 3v3M13 13v-3') + p('M2 6h3M2 10h3M11 6h3M11 10h3') + p('M6 8h4') + dot(8, 8, 0.8)), // imbalance gap between two candles
   charon: g(p('M2 5h12M2 11h12') + p('M9 5l2-2 2 2M5 11l-2 2-2-2')), // resting-liquidity levels swept up/down
