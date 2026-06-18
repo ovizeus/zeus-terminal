@@ -415,7 +415,7 @@ export function PanelShell() {
     <>
       {/* ── Full-screen page view overlay header ── */}
       {dockActive && activeTitle && (
-        <PageView title={activeTitle} onClose={closePageView}>
+        <PageView title={activeTitle} onClose={closePageView} infoKey={dockActive}>
           {/* Content rendered via #zeus-groups below, made visible via CSS */}
         </PageView>
       )}

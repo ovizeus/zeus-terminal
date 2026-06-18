@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
+import { PanelInfoButton } from './panelInfo'
 
 /** Full-screen page view overlay — 1:1 from public/css zpv + public/js/ui/pageview.js */
-export function PageView({ title, onClose, children }: { title: string; onClose: () => void; children?: ReactNode }) {
+export function PageView({ title, onClose, children, infoKey }: { title: string; onClose: () => void; children?: ReactNode; infoKey?: string | null }) {
   return (
     <div className="zpv" id="zeus-page-view">
       <div className="zpv-header">
@@ -10,6 +11,7 @@ export function PageView({ title, onClose, children }: { title: string; onClose:
           <span>Back</span>
         </button>
         <span className="zpv-title">{title}</span>
+        <PanelInfoButton infoKey={infoKey} />
       </div>
       <div className="zpv-content">
         {children}
