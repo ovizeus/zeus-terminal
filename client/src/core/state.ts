@@ -1823,6 +1823,7 @@ export let _chopChart: any = null, _chopSeries: any = null, _chopInited = false
 // [2026-06-16] PLUTUS markers (main-chart carrier) + HELIOS regime pane
 export let plutusS: any = null
 export let _heliosChart: any = null, _heliosSeries: any = null, _heliosMidS: any = null, _heliosInited = false
+export let _hyperionChart: any = null, _hyperionFillS: any = null, _hyperionSigS: any = null, _hyperionMidS: any = null, _hyperionInited = false
 // [2026-06-16] HERMES fair-value-gap markers + magnet band (main-chart overlay)
 export let hermesMarkS: any = null, hermesTopS: any = null, hermesBotS: any = null
 // [2026-06-16] CHARON liquidity-pool price lines (carrier + line refs) + ATLAS accel pane
@@ -1938,6 +1939,8 @@ export const IND_SETTINGS: any = {
   plutus: { lookback: 20, volMult: 1.5 },
   // [2026-06-16] HELIOS — regime oracle (rolling Hurst exponent)
   helios: { period: 30 },
+  // [2026-06-18] HYPERION — TSI-style dual-line momentum oscillator (sub-pane glow)
+  hyperion: { longP: 25, shortP: 13, signalP: 9 },
   // [2026-06-16] HERMES — fair-value-gap (imbalance) magnet zones
   hermes: { minPct: 0.05 },
   // [2026-06-16] CHARON — liquidity pools (stop-hunt levels)

@@ -2000,3 +2000,56 @@ export function parabolicSAR(highs: number[], lows: number[], step = 0.02, maxAf
   }
   return { sar, isUp }
 }
+
+// [2026-06-18] HYPERION — TSI-style dual-line momentum oscillator (Zeus original).
+// Double-smoothed True Strength Index: a fast momentum line + an EMA signal line,
+// oscillating around 0 in roughly the -100..100 range. Drives the green-top/red-bottom
+// intensifying glow sub-pane in the engine.
+export interface Hyperion { fast: (number | null)[]; signal: (number | null)[] }
+export function hyperion(closes: number[], longP = 25, shortP = 13, signalP = 9): Hyperion {
+  const n = closes.length
+  const lP = Math.max(1, Math.round(longP))
+  const sP = Math.max(1, Math.round(shortP))
+  const sigP = Math.max(1, Math.round(signalP))
+  // momentum + absolute momentum (m[0]=0)
+  const m: number[] = new Array(n)
+  const am: number[] = new Array(n)
+  for (let i = 0; i < n; i++) {
+    const d = i === 0 ? 0 : closes[i] - closes[i - 1]
+    m[i] = d
+    am[i] = Math.abs(d)
+  }
+  // doubleSmooth(x) = ema(ema(x, longP), shortP)
+  const doubleSmooth = (x: number[]): (number | null)[] => {
+    const e1 = ema(x, lP)
+    const e1f = e1.map((v) => (v == null ? 0 : v))
+    return ema(e1f, sP)
+  }
+  const dsM = doubleSmooth(m)
+  const dsAM = doubleSmooth(am)
+  const fast: (number | null)[] = new Array(n).fill(null)
+  // warm-up: only emit once both EMAs are warm (i >= longP-1 + shortP-1)
+  const warm = (lP - 1) + (sP - 1)
+  const fastFinite: number[] = []
+  for (let i = 0; i < n; i++) {
+    if (i < warm || dsM[i] == null || dsAM[i] == null) continue
+    const denom = dsAM[i] as number
+    const v = denom === 0 ? 0 : (100 * (dsM[i] as number)) / denom
+    fast[i] = v
+    fastFinite.push(v)
+  }
+  // signal = ema(fast, signalP) — computed over the finite (warmed) fast values,
+  // re-aligned back to the original indices that carried a fast value.
+  const signal: (number | null)[] = new Array(n).fill(null)
+  if (fastFinite.length) {
+    const sigFinite = ema(fastFinite, sigP)
+    let k = 0
+    for (let i = 0; i < n; i++) {
+      if (fast[i] == null) continue
+      const sv = sigFinite[k]
+      if (sv != null) signal[i] = sv
+      k++
+    }
+  }
+  return { fast, signal }
+}
