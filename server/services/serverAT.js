@@ -46,7 +46,7 @@ const telegram = require('./telegram');
 const audit = require('./audit');
 // [BUG-T2a + T2b 2026-05-13] Pure-function recon helpers extracted pentru
 // testability. T2a: hedge-aware Binance held map. T2b: strict userTrades filter.
-const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld } = require('./reconHelpers');
+const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld, hasActiveLeg } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const mlDslPolicy = require('./mlDslPolicy');
@@ -5795,6 +5795,21 @@ async function _runReconciliation(isStartup) {
                         logger.warn(label, `ORPHAN-ROOT-DIAG uid=${userId} ${bpos.side} ${symbol}: groupExch=${exchange} ulpCount=${userLivePositions.length} globalMatches=${_gm.length} :: ${_gm.map(pp => `seq=${pp.seq} live=${pp.live && pp.live.status} mode=${pp.mode} exch=${pp.exchange} status=${pp.status} pending=${pp._livePending} recon=${_isReconcilablePosition(pp)}`).join(' || ') || '<NONE in _positions>'}`);
                     } catch (_) { }
                     const _orphanKey = `${userId}:${heldKey}`;
+
+                    // [DEDUP-GUARD 2026-06-18 / Stage 1] One-way account → ONE net position
+                    // per (symbol,side). If the engine ALREADY tracks any non-demo record for
+                    // this key (even one the reconcilable filter missed — a dual-write stub,
+                    // a pending/just-opened leg), the exchange leg is already represented.
+                    // Adopting here is exactly what created the duplicate source=external
+                    // lev=1 "Manual x1" orphan. Skip — the existing record owns the leg.
+                    // Non-destructive: nothing is removed; only the duplicate adoption is
+                    // prevented. (The lingering stub itself is cleaned in stage 2.)
+                    if (hasActiveLeg(_positions, userId, symbol, bpos.side)) {
+                        logger.warn(label, `DEDUP-GUARD uid=${userId} ${bpos.side} ${symbol}: exchange leg already tracked (one-way, no dup) — NOT adopting duplicate external`);
+                        try { audit.record('SAT_RECON_DEDUP_GUARD', { symbol, side: bpos.side, userId }, 'SERVER_AT'); } catch (_) { }
+                        _orphanPending.delete(_orphanKey);
+                        continue;
+                    }
 
                     if (!_orphanPending.has(_orphanKey)) {
                         // First detection — mark pending, alert, wait for next cycle

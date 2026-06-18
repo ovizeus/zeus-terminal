@@ -562,16 +562,26 @@ async function closePosition(uid, params, creds) {
             source: params.source,
         });
 
-        // Move from at_positions → at_closed (preserves seq)
+        // Move from at_positions → at_closed (preserves seq).
+        // [ROOT-FIX 2026-06-18] Archive INSERT and the at_positions DELETE run in SEPARATE
+        // try blocks, and the archive uses INSERT OR REPLACE. Previously both were in one try
+        // with a raw INSERT: if the seq already existed in at_closed the INSERT threw UNIQUE,
+        // the DELETE was SKIPPED, and the row lingered in at_positions as status=CLOSED cruft
+        // (stale data.live.status=LIVE → recon mis-read it as live → re-adopted the exchange
+        // leg as a duplicate source=external "Manual x1" orphan). Now the DELETE ALWAYS runs
+        // once the position is CLOSED, regardless of the archive outcome.
         try {
             const closedData = { ...positionData, closeOrderId: closeResp.orderId, closePrice: closeResp.avgPrice, source: params.source };
             db.prepare(
-                `INSERT INTO at_closed (seq, data, closed_at, user_id, exchange) VALUES (?, ?, datetime('now'), ?, 'binance')`
+                `INSERT OR REPLACE INTO at_closed (seq, data, closed_at, user_id, exchange) VALUES (?, ?, datetime('now'), ?, 'binance')`
             ).run(params.seq, JSON.stringify(closedData), uid);
+        } catch (archiveErr) {
+            try { require('./logger').warn('BINANCE_OPS', `at_closed archive failed seq=${params.seq}: ${archiveErr.message}`); } catch (_) {}
+        }
+        try {
             db.prepare(`DELETE FROM at_positions WHERE seq=?`).run(params.seq);
-        } catch (moveErr) {
-            // at_closed move non-fatal — position state already CLOSED
-            try { require('./logger').warn('BINANCE_OPS', `at_closed move failed seq=${params.seq}: ${moveErr.message}`); } catch (_) {}
+        } catch (delErr) {
+            try { require('./logger').warn('BINANCE_OPS', `at_positions delete failed seq=${params.seq}: ${delErr.message}`); } catch (_) {}
         }
 
         positionEvents.append({

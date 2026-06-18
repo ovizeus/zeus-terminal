@@ -159,4 +159,23 @@ function isUntrustedEmptyHeld(heldSize, trackedCount) {
         && heldSize === 0 && trackedCount > 0;
 }
 
-module.exports = { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld };
+// [DEDUP-GUARD 2026-06-18 / Stage 1] On a Binance ONE-WAY account there is exactly ONE net
+// position per (symbol, side). Before reconciliation adopts an exchange leg as a NEW
+// source=external "orphan" (the lev=1 "Manual x1" the operator keeps seeing), check whether
+// the engine ALREADY tracks ANY non-demo record for that (user, symbol, side) — including a
+// record the reconcilable filter missed: a dual-write stub (status OPENING, no live.status),
+// a pending/just-opened leg, or a not-yet-promoted row. If one exists, the exchange leg is
+// already represented → adopting would create the duplicate. Non-destructive: the caller
+// just SKIPS the adoption; the existing record (and its protective SL / phantom-close path)
+// keeps owning the leg. Records in _positions are open by construction (closed ones are
+// removed), so a match means an active leg. Demo positions never map to the live exchange.
+function hasActiveLeg(positions, userId, symbol, side) {
+    if (!Array.isArray(positions)) return false;
+    return positions.some(p => p
+        && p.userId === userId
+        && p.symbol === symbol
+        && p.side === side
+        && p.mode !== 'demo');
+}
+
+module.exports = { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld, hasActiveLeg };
