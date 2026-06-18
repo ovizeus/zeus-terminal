@@ -99,6 +99,7 @@ export const IND_ICONS: Record<string, string> = {
   phoenix: g(p('M8 2c2 3-1 4 0 6 1-1 2-1 2-3 2 2 1 5-1 7 1 0 2-1 2-3 1 4-2 6-5 6s-5-3-5-6c0-4 4-5 7-7z') ), // rising phoenix / flame
   nephele: g(p('M3 7c-1 0-1 3 1 3h8c2 0 2-3 0-3 0-2-3-3-4-1-1-1-3 0-3 1z') + p('M2 13c2-1 4 1 6 0s4 1 6 0')), // glowing cloud band over a wave
   morpheus: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + p('M8 2a6 6 0 010 12z') + dot(5, 6, 0.9) + dot(11, 10, 0.9)), // colour palette / split mask (4 states)
+  harmonia: g(p('M2 12a6 6 0 0112 0') + p('M4 12a4 4 0 018 0') + p('M6 12a2 2 0 014 0')), // rainbow arcs (full spectrum bands)
   daimon: g(p('M8 2L5 8h6z') + p('M5 8h6l-1 6H6z') + dot(8, 5.5, 0.8)), // little wizard (pointed hat + robe)
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──

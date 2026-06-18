@@ -1863,6 +1863,65 @@ export function morpheus(highs: number[], lows: number[], closes: number[], maPe
   return { ma, trendUp, signals, levels, bullPrints, bearPrints }
 }
 
+export interface HarmoniaPivot { index: number; price: number }
+export interface Harmonia {
+  colors: string[]
+  shortHighs: HarmoniaPivot[]; shortLows: HarmoniaPivot[]
+  intHighs: HarmoniaPivot[]; intLows: HarmoniaPivot[]
+  centerline: number
+}
+
+/** HSL (h in [0,360), s/l in [0,1]) → "#rrggbb". Pure, no DOM. */
+function _hslToHex(h: number, s: number, l: number): string {
+  const c = (1 - Math.abs(2 * l - 1)) * s
+  const hp = ((h % 360) + 360) % 360 / 60
+  const x = c * (1 - Math.abs((hp % 2) - 1))
+  let r = 0, g = 0, b = 0
+  if (hp < 1) { r = c; g = x } else if (hp < 2) { r = x; g = c }
+  else if (hp < 3) { g = c; b = x } else if (hp < 4) { g = x; b = c }
+  else if (hp < 5) { r = x; b = c } else { r = c; b = x }
+  const m = l - c / 2
+  const to = (v: number): string => {
+    const n = Math.round((v + m) * 255)
+    const cl = n < 0 ? 0 : n > 255 ? 255 : n
+    return cl.toString(16).padStart(2, '0')
+  }
+  return '#' + to(r) + to(g) + to(b)
+}
+
+/**
+ * HARMONIA — invented for Zeus. A full-spectrum rainbow candle painter that flows hue
+ * across the series (every bar a vivid, distinct colour) plus dual-degree swing pivots:
+ * short-term highs/lows (tight lookback) and intermediate highs/lows (wider lookback),
+ * each detected as a strict pivot over [i-L, i+L]. `centerline` is the mean close for a
+ * faint reference line. Pure — no DOM, no chart access.
+ */
+export function harmonia(highs: number[], lows: number[], closes: number[], shortLB = 2, intLB = 5, hueStep = 13): Harmonia {
+  const n = closes.length
+  const colors: string[] = new Array(n)
+  for (let i = 0; i < n; i++) colors[i] = _hslToHex((i * hueStep) % 360, 0.85, 0.55)
+  const pivots = (L: number): { highs: HarmoniaPivot[]; lows: HarmoniaPivot[] } => {
+    const lb = Math.max(1, Math.round(L))
+    const hh: HarmoniaPivot[] = [], ll: HarmoniaPivot[] = []
+    for (let i = lb; i < n - lb; i++) {
+      let isH = true, isL = true
+      for (let j = i - lb; j <= i + lb; j++) {
+        if (j === i) continue
+        if (highs[j] >= highs[i]) isH = false
+        if (lows[j] <= lows[i]) isL = false
+      }
+      if (isH) hh.push({ index: i, price: highs[i] })
+      if (isL) ll.push({ index: i, price: lows[i] })
+    }
+    return { highs: hh, lows: ll }
+  }
+  const sp = pivots(shortLB), ip = pivots(intLB)
+  let sum = 0, cnt = 0
+  for (let i = 0; i < n; i++) { if (Number.isFinite(closes[i])) { sum += closes[i]; cnt++ } }
+  const centerline = cnt ? sum / cnt : 0
+  return { colors, shortHighs: sp.highs, shortLows: sp.lows, intHighs: ip.highs, intLows: ip.lows, centerline }
+}
+
 export interface DaimonMark { index: number; kind: 'long' | 'short' | 'exit' }
 export interface DaimonView { mood: string; speech: string; position: 'long' | 'short' | 'flat'; justEntered: boolean; markers: DaimonMark[] }
 
