@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -309,6 +309,9 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'helios':
       { const hex = document.getElementById('heliosChart'); if (hex) hex.style.display = show ? '' : 'none'; if (show) initHeliosChart() }
+      break
+    case 'hyperion':
+      { const hx = document.getElementById('hyperionChart'); if (hx) hx.style.display = show ? '' : 'none'; if (show) initHyperionChart() }
       break
     case 'hermes':
       if (show) initHermesSeries()
@@ -888,7 +891,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -1493,6 +1496,45 @@ export function updateHelios(): void {
     mid.push({ time: k[i].time, value: 0.5 })
   }
   try { w._heliosSeries.setData(data); w._heliosMidS.setData(mid) } catch (_) { }
+  _syncSubChartsToMain()
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HYPERION — invented TSI-style dual-line momentum oscillator (sub-pane).
+// FAST blue baseline w/ green-top / red-bottom intensifying glow + GREEN signal
+// line + dashed 0 midline. Brightest fill at the extremes (top green, bottom red).
+// ═══════════════════════════════════════════════════════════════
+
+export function initHyperionChart(): void {
+  if (w._hyperionInited && w._hyperionChart) { updateHyperion(); return }
+  w._hyperionChart = _createSubChart('hyperionChart', 90)
+  if (!w._hyperionChart) return
+  // baseline series = the FAST oscillator; green gradient fill INTENSIFIES toward top,
+  // red gradient INTENSIFIES toward bottom; the line itself is BLUE both sides.
+  w._hyperionFillS = w._hyperionChart.addBaselineSeries({
+    baseValue: { type: 'price', price: 0 },
+    topLineColor: '#5b8def', bottomLineColor: '#5b8def', lineWidth: 2,
+    topFillColor1: 'rgba(0,230,118,0.55)', topFillColor2: 'rgba(0,230,118,0.04)',
+    bottomFillColor1: 'rgba(255,59,48,0.04)', bottomFillColor2: 'rgba(255,59,48,0.55)',
+    priceLineVisible: false, lastValueVisible: true,
+  })
+  w._hyperionSigS = w._hyperionChart.addLineSeries({ color: '#26ff9a', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: true })
+  w._hyperionMidS = w._hyperionChart.addLineSeries({ color: 'rgba(255,255,255,0.22)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._hyperionInited = true
+  updateHyperion()
+}
+export function updateHyperion(): void {
+  if (!w._hyperionInited || !w._hyperionFillS || !w.S.klines.length) return
+  const k = w.S.klines, s = w.IND_SETTINGS.hyperion || {}
+  const r = _calcHYPERION(k.map((b: any) => b.close), Math.round(s.longP) || 25, Math.round(s.shortP) || 13, Math.round(s.signalP) || 9)
+  const fast: any[] = [], sig: any[] = [], mid: any[] = []
+  for (let i = 0; i < r.fast.length; i++) {
+    if (!k[i]) continue
+    if (r.fast[i] != null) fast.push({ time: k[i].time, value: r.fast[i] })
+    if (r.signal[i] != null) sig.push({ time: k[i].time, value: r.signal[i] })
+    mid.push({ time: k[i].time, value: 0 })
+  }
+  try { w._hyperionFillS.setData(fast); w._hyperionSigS.setData(sig); w._hyperionMidS.setData(mid) } catch (_) { }
   _syncSubChartsToMain()
 }
 
@@ -2972,6 +3014,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.pythia) updatePythia()
   if (w.S.activeInds.plutus) updatePlutus()
   if (w.S.activeInds.helios && w._heliosInited) updateHelios()
+  if (w.S.activeInds.hyperion && w._hyperionInited) updateHyperion()
   if (w.S.activeInds.hermes) updateHermes()
   if (w.S.activeInds.charon) updateCharon()
   if (w.S.activeInds.atlas && w._atlasInited) updateAtlas()
@@ -3035,7 +3078,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676', harmonia: '#ff2d95', daimon: '#f0c040' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hyperion: '#5b8def', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676', harmonia: '#ff2d95', daimon: '#f0c040' }
   return map[id] || '#888'
 }
 
