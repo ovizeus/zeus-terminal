@@ -52,6 +52,8 @@ const serverDSL = require('./serverDSL');
 const mlDslPolicy = require('./mlDslPolicy');
 const dslSafety = require('./dslSafety');
 const mlDslShadow = require('./mlDslShadow');
+const priceTrace = require('./priceTrace');
+const mlDslLearner = require('./mlDslLearner');
 const db = require('./database');
 const marketFeed = require('./marketFeed');
 
@@ -2423,6 +2425,25 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     const userId = pos.userId;
     const us = _uState(userId);
     try { mlDslShadow.remove(pos.seq); delete pos._mlDslPrevPrice; delete pos._mlDslLastEmit; } catch (_) { } // [ML-DSL] drop shadow proposal + scratch on close
+    // [ML-DSL v2] On close: counterfactual baseline + train the learner (telemetry-safe).
+    if (MF.ML_DSL_LEARN_ENABLED) {
+        try {
+            const _trace = priceTrace.get(pos.seq);
+            if (_trace.length > 1) {
+                const _baseParams = serverDSL.getPreset(pos.dslModeAtOpen || 'def');
+                const _meta = { side: pos.side, entry: pos.price, originalSL: pos.originalSL || pos.sl };
+                const _baseSim = serverDSL.simulate(_baseParams, _meta, _trace.map(s => s.p));
+                const _mlPnlPct = pos.price > 0 ? ((pos.side === 'LONG' ? (price - pos.price) : (pos.price - price)) / pos.price) * 100 : 0;
+                mlDslLearner.learn({
+                    posId: pos.seq, userId: pos.userId, env: (pos.env || 'TESTNET'),
+                    symbol: pos.symbol, regime: pos.regime || pos.closeRegime || 'unknown',
+                    arm: pos.dslArm || pos.dslModeAtOpen || 'def', cohort: pos.dslCohort || 'shadow',
+                    outcome: { pnlPct: _mlPnlPct }, baseline: { pnlPct: _baseSim.pnlPct }, ts: Date.now(),
+                });
+            }
+        } catch (_) { /* telemetry-safe */ }
+        try { priceTrace.clear(pos.seq); } catch (_) {}
+    }
 
     // [PHANTOM ROOT FIX 2026-06-05] Mark this uid|symbol as recently closed so
     // the userdata fast-path doesn't adopt our own mid-close fill snapshots as
@@ -3278,6 +3299,8 @@ function onPriceUpdate(symbol, price) {
         // deterministic policy through the fail-closed safety net, and records the
         // proposal for the read-only DSL Drive endpoint. NEVER touches pos.sl — only
         // private pos._mlDsl* scratch fields.
+        // [ML-DSL v2] record price path for counterfactual replay (independent of shadow)
+        if (MF.ML_DSL_LEARN_ENABLED) { try { priceTrace.record(pos.seq, price, Date.now()); } catch (_) {} }
         if (MF.ML_DSL_SHADOW_ENABLED) {
             try {
                 const _nowMl = Date.now();

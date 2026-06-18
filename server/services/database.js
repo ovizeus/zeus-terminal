@@ -10189,6 +10189,34 @@ migrate('408_support_messages', () => {
         CREATE INDEX IF NOT EXISTS idx_support_unread ON support_messages(read_by_admin);
     `);
 });
+migrate('409_ml_dsl_arm_posterior', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dsl_arm_posterior (
+            cell_key   TEXT NOT NULL,
+            arm        TEXT NOT NULL,
+            alpha      REAL NOT NULL DEFAULT 1,
+            beta       REAL NOT NULL DEFAULT 1,
+            n          INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (cell_key, arm)
+        );
+    `);
+});
+migrate('410_ml_dsl_outcome', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dsl_outcome (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            pos_id          TEXT NOT NULL,
+            user_id         INTEGER NOT NULL,
+            env             TEXT, symbol TEXT, regime TEXT,
+            arm             TEXT, cohort TEXT,
+            ml_pnl_pct      REAL, baseline_pnl_pct REAL, advantage REAL,
+            win             INTEGER,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldsl_out_ts ON ml_dsl_outcome(ts);
+    `);
+});
 
 // ─── User methods ───
 

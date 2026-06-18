@@ -7851,3 +7851,4 @@ select option {
 .dsldrive-arm-bar { flex: 0 0 70px; height: 5px }
 .dsldrive-arm-bar > i { background: #ffab40 }
 .dsldrive-armpct { color: #ffab40 }
+.dsldrive-score { display: flex; flex-direction: column; gap: 1px; padding: 5px 10px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 10px; color: #7e93a8 }

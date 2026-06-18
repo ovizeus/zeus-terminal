@@ -387,6 +387,32 @@ setInterval(() => {
     }
 }, 3600000);
 
+// Pure counterfactual replay — runs the same activation→pivot→PL logic as tick(),
+// but on a LOCAL state (no _states map, no logging, no side effects). Used by the
+// ML-DSL learner to estimate the baseline preset's PnL over an actual price path.
+function simulate(params, posMeta, prices) {
+  const p = { openDslPct: +params.openDslPct, pivotLeftPct: +params.pivotLeftPct, pivotRightPct: +params.pivotRightPct, impulseVPct: +params.impulseVPct };
+  const isLong = (posMeta.side || 'LONG') === 'LONG';
+  const entry = +posMeta.entry;
+  const originalSL = +posMeta.originalSL;
+  if (!(entry > 0) || !Array.isArray(prices) || prices.length === 0) return { exitReason: 'NONE', exitPrice: entry || 0, pnlPct: 0 };
+  const activationPrice = isLong ? entry * (1 + p.openDslPct / 100) : entry * (1 - p.openDslPct / 100);
+  let active = false, pivotLeft = originalSL;
+  const pnlAt = (px) => (isLong ? (px - entry) / entry : (entry - px) / entry) * 100;
+  for (const price of prices) {
+    if (!Number.isFinite(price)) continue;
+    if ((isLong && price <= originalSL) || (!isLong && price >= originalSL)) return { exitReason: 'SL', exitPrice: originalSL, pnlPct: pnlAt(originalSL) };
+    if (!active) { if ((isLong && price >= activationPrice) || (!isLong && price <= activationPrice)) active = true; }
+    if (active) {
+      const newPL = isLong ? price * (1 - p.pivotLeftPct / 100) : price * (1 + p.pivotLeftPct / 100);
+      pivotLeft = isLong ? Math.max(pivotLeft, newPL) : Math.min(pivotLeft, newPL); // monotonic tighten
+      if ((isLong && price <= pivotLeft) || (!isLong && price >= pivotLeft)) return { exitReason: 'DSL_PL', exitPrice: pivotLeft, pnlPct: pnlAt(pivotLeft) };
+    }
+  }
+  const last = prices[prices.length - 1];
+  return { exitReason: 'END', exitPrice: last, pnlPct: pnlAt(last) };
+}
+
 module.exports = {
     attach,
     tick,
@@ -396,4 +422,5 @@ module.exports = {
     DSL_DEFAULTS,
     DSL_PRESETS,
     getPreset,
+    simulate,
 };

@@ -26,6 +26,7 @@ export function DslDrivePanel() {
   const [mode, setMode] = useState('SHADOW')
   const [err, setErr] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [score, setScore] = useState<any>(null)
 
   useEffect(() => {
     let alive = true
@@ -43,6 +44,12 @@ export function DslDrivePanel() {
     return () => { alive = false; if (timer.current) clearInterval(timer.current) }
   }, [])
 
+  useEffect(() => {
+    let alive = true
+    const poll = async () => { try { const j = await api.raw<any>('GET', '/api/dsldrive/scoreboard'); if (alive && j && j.ok) setScore(j) } catch (_) {} }
+    poll(); const t = setInterval(poll, 5000); return () => { alive = false; clearInterval(t) }
+  }, [])
+
   const fmt = (x: number) => (Math.abs(x) >= 1000 ? x.toFixed(1) : x.toFixed(2))
   const pct = (x?: number | null) => (Number.isFinite(x as number) ? (x as number).toFixed(2) + '%' : '—')
   // map a trail-width % (0..2%) onto a 0..100% bar — state-driven width, animated by a
@@ -52,6 +59,14 @@ export function DslDrivePanel() {
   return (
     <div className="dsldrive-panel">
       <div className="sec"><div className="slbl">DSL DRIVE <span className="dsldrive-mode">{mode}</span></div></div>
+      {score && score.trades > 0 && (
+        <div className="dsldrive-score">
+          <span>ML vs baseline · {score.trades} trades</span>
+          <span style={{ color: score.avgAdvantage >= 0 ? '#26ff9a' : '#ff5277' }}>
+            adv {score.avgAdvantage >= 0 ? '+' : ''}{score.avgAdvantage}% · ML {score.avgMlPnlPct}% vs base {score.avgBaselinePnlPct}% · win {score.winRate}%
+          </span>
+        </div>
+      )}
       {err && <div className="dsldrive-empty">offline — {err}</div>}
       {!err && !rows.length && <div className="dsldrive-empty">no active positions</div>}
       {rows.map((p) => {
