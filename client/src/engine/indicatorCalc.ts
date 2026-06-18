@@ -2235,3 +2235,91 @@ export function boreas(highs: number[], lows: number[], closes: number[], atrPer
 
   return { trend, dir, flips }
 }
+
+/**
+ * MENTOR (FX Market Code / MarCo): a 50-period SMA trend filter that recolours
+ * candles into 4 states (bright/dark green above the MA, bright/dark red below),
+ * plus an OsMA momentum histogram (MACD − signal) with its own 4-state colour.
+ *
+ * State codes are NUMBERS (never strings): 2 = bright green, 1 = dark green,
+ * -2 = bright red, -1 = dark red, null during warm-up. The engine maps these to
+ * hex colours; keeping them numeric avoids string/number comparison pitfalls.
+ */
+export interface MentorResult {
+  ma: (number | null)[]
+  candleState: (number | null)[]
+  osma: (number | null)[]
+  osmaState: (number | null)[]
+}
+
+export function mentor(
+  closes: number[],
+  maPeriod = 50,
+  fast = 12,
+  slow = 26,
+  sigP = 9
+): MentorResult {
+  const n = closes.length
+  const ma = sma(closes, maPeriod)
+
+  // ── Part A: candle state vs the 50MA ─────────────────────────────────────
+  const candleState: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    const m = ma[i]
+    if (m == null) continue
+    const up = closes[i] > m
+    const dist = Math.abs(closes[i] - m)
+    const pm = i > 0 ? ma[i - 1] : null
+    if (pm == null) {
+      // First valid bar (no prior distance) → bright state by direction.
+      candleState[i] = up ? 2 : -2
+      continue
+    }
+    const prevDist = Math.abs(closes[i - 1] - pm)
+    const away = dist >= prevDist
+    candleState[i] = up ? (away ? 2 : 1) : (away ? -2 : -1)
+  }
+
+  // ── Part B: OsMA = MACD − signal ─────────────────────────────────────────
+  const macdLine = ema(closes, fast)
+  const slowLine = ema(closes, slow)
+  const macd: number[] = []
+  const macdIdx: number[] = []
+  const macdAll: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    if (macdLine[i] == null || slowLine[i] == null) continue
+    const v = (macdLine[i] as number) - (slowLine[i] as number)
+    macdAll[i] = v
+    macd.push(v)
+    macdIdx.push(i)
+  }
+  // Signal = EMA of the compacted MACD series; realign to original indices.
+  const sig = ema(macd, sigP)
+  const signalAll: (number | null)[] = new Array(n).fill(null)
+  for (let k = 0; k < sig.length; k++) {
+    if (sig[k] != null) signalAll[macdIdx[k]] = sig[k]
+  }
+
+  const osma: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    if (macdAll[i] == null || signalAll[i] == null) continue
+    osma[i] = (macdAll[i] as number) - (signalAll[i] as number)
+  }
+
+  const osmaState: (number | null)[] = new Array(n).fill(null)
+  let prevOsma: number | null = null
+  for (let i = 0; i < n; i++) {
+    const v = osma[i]
+    if (v == null) continue
+    if (prevOsma == null) {
+      osmaState[i] = v >= 0 ? 2 : -2
+    } else if (v >= 0) {
+      osmaState[i] = v > prevOsma ? 2 : 1
+    } else {
+      osmaState[i] = v < prevOsma ? -2 : -1
+    }
+    prevOsma = v
+  }
+
+  return { ma, candleState, osma, osmaState }
+}

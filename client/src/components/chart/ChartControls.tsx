@@ -580,6 +580,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'wma',      ico: '〰️', name: 'WMA 20/50',       desc: 'Weighted Moving Average',      hasGenericSettings: true },
   { id: 'st',       ico: '🚦', name: 'Supertrend',      desc: 'Trend + dynamic Stop Loss',    hasGenericSettings: true },
   { id: 'boreas',   ico: '🌬️', name: 'BOREAS',          desc: 'SuperTrend trend-follower — thick green/red trend line + Long/Short flip signals (Zeus original)', hasGenericSettings: true },
+  { id: 'mentor',   ico: '🧭', name: 'MENTOR',          desc: 'FX Market Code — 50MA trend + 4-state candle recolour + OsMA momentum pane (Zeus original)', hasGenericSettings: true },
   { id: 'vp',       ico: '📶', name: 'Volume Profile',  desc: 'Volume by price levels',       hasGenericSettings: true },
   { id: 'magnes',   ico: '🧲', name: 'MAGNES',          desc: 'Volume-profile liquidity heatmap — red POC magnet → blue low-volume, dims candles (Zeus original)', hasGenericSettings: true },
   { id: 'cvd',      ico: '🌊', name: 'CVD',             desc: 'Cumulative Volume Delta',      hasGenericSettings: true },

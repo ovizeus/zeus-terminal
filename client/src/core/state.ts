@@ -1825,6 +1825,7 @@ export let _chopChart: any = null, _chopSeries: any = null, _chopInited = false
 export let plutusS: any = null
 export let _heliosChart: any = null, _heliosSeries: any = null, _heliosMidS: any = null, _heliosInited = false
 export let _hyperionChart: any = null, _hyperionFillS: any = null, _hyperionSigS: any = null, _hyperionMidS: any = null, _hyperionInited = false
+export let mentorMaS: any = null, _mentorChart: any = null, _mentorOsmaS: any = null, _mentorMidS: any = null, _mentorInited = false
 export let _kronosChart: any = null, _kronosMacdS: any = null, _kronosSigS: any = null, _kronosMidS: any = null, _kronosInited = false
 // [2026-06-16] HERMES fair-value-gap markers + magnet band (main-chart overlay)
 export let hermesMarkS: any = null, hermesTopS: any = null, hermesBotS: any = null
@@ -1896,6 +1897,7 @@ export const IND_SETTINGS: any = {
   wma: { p1: 20, p2: 50 },
   st: { period: 10, mult: 3 },
   boreas: { atrPeriod: 10, mult: 3 },
+  mentor: { maPeriod: 50, fast: 12, slow: 26, sigP: 9 },
   bb: { period: 20, stdDev: 2 },
   rsi14: { period: 14 },
   stoch: { kPeriod: 14, dPeriod: 3, smooth: 3 },
