@@ -23,6 +23,7 @@ export const IND_ICONS: Record<string, string> = {
   vwma: g(p('M2 6c3 0 4 3 6 2s4-2 6-2') + p('M3 14v-2M6 14v-3M9 14v-2M12 14v-3')), // line over volume bars
   // ── Trend systems ──
   st: g(p('M2 11h4V6h4v4h4')),                                              // supertrend step/flip
+  boreas: g(p('M2 5c2 0 3 2 5 2s3-2 5-2') + p('M11 4l3 1-2 2')),            // north wind gust + arrow (trend follower)
   psar: g(p('M2 12c4 0 8-2 12-7') + dot(4, 13) + dot(8, 11) + dot(12, 7)),    // curve + trailing dots
   adx: g(p('M2 13h12') + p('M4 13v-3M8 13v-6M12 13v-9')),                    // rising strength bars
   aroon: g(p('M2 13L14 3') + p('M2 3L14 13')),                              // up/down lines crossing

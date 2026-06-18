@@ -579,6 +579,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'ema',      ico: '📈', name: 'EMA 50/200',      desc: 'Exponential Moving Average',   hasGenericSettings: true },
   { id: 'wma',      ico: '〰️', name: 'WMA 20/50',       desc: 'Weighted Moving Average',      hasGenericSettings: true },
   { id: 'st',       ico: '🚦', name: 'Supertrend',      desc: 'Trend + dynamic Stop Loss',    hasGenericSettings: true },
+  { id: 'boreas',   ico: '🌬️', name: 'BOREAS',          desc: 'SuperTrend trend-follower — thick green/red trend line + Long/Short flip signals (Zeus original)', hasGenericSettings: true },
   { id: 'vp',       ico: '📶', name: 'Volume Profile',  desc: 'Volume by price levels',       hasGenericSettings: true },
   { id: 'cvd',      ico: '🌊', name: 'CVD',             desc: 'Cumulative Volume Delta',      hasGenericSettings: true },
   { id: 'macd',     ico: '🔀', name: 'MACD',            desc: 'Moving Avg Convergence Div',   hasGenericSettings: true },

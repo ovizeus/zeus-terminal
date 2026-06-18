@@ -1886,12 +1886,15 @@ export let morphMaS: any = null, morphMarkS: any = null, morphCarrierS: any = nu
 export let harmMarkS: any = null, _harmLines: any[] = []
 // [2026-06-17] DAIMON — the chart-wizard sprite (DOM character + wand-mark carrier)
 export let _daimon: any = null, _daimonOnBar = false, daimonMarkS: any = null
+// [2026-06-18] BOREAS — SuperTrend overlay (glow + solid up/down lines + flip-marker carrier)
+export let boreasUpS: any = null, boreasDnS: any = null, boreasGlowUpS: any = null, boreasGlowDnS: any = null, boreasMarkS: any = null
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
   ema: { p1: 50, p2: 200, p3: 20, p4: 100 },
   wma: { p1: 20, p2: 50 },
   st: { period: 10, mult: 3 },
+  boreas: { atrPeriod: 10, mult: 3 },
   bb: { period: 20, stdDev: 2 },
   rsi14: { period: 14 },
   stoch: { kPeriod: 14, dPeriod: 3, smooth: 3 },
