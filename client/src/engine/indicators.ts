@@ -900,10 +900,18 @@ function _allSyncCharts(): any[] {
 export function _syncSubChartsToMain(): void {
   if (!w.mainChart) return
   try {
-    const r = w.mainChart.timeScale().getVisibleLogicalRange()
-    if (!r) return
+    // [PANE-SYNC 2026-06-18] Align by TIME, not logical index. Sub-pane series start at
+    // their first non-warmup bar, so the SAME logical range maps to DIFFERENT time windows
+    // per pane (a value at time T lands under a different candle → vertically misaligned).
+    // Syncing the visible TIME window makes every timestamp sit at the same x across all
+    // panes → perfectly aligned with the price candles. Logical fallback for the offset edge.
+    const tr = w.mainChart.timeScale().getVisibleRange()
+    const lr = w.mainChart.timeScale().getVisibleLogicalRange()
     _allSyncCharts().forEach((ch: any) => {
-      if (ch && ch !== w.mainChart) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
+      if (ch && ch !== w.mainChart) try {
+        if (tr) ch.timeScale().setVisibleRange(tr)
+        else if (lr) ch.timeScale().setVisibleLogicalRange(lr)
+      } catch (_) { }
     })
   } catch (_) { }
 }
@@ -922,11 +930,19 @@ function _registerChartForSync(chart: any): void {
   _syncRegistered.add(chart)
   try {
     chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
-      if (!range || w._chartSyncing) return
+      if (w._chartSyncing) return
       w._chartSyncing = true
       try {
+        // Propagate the SOURCE chart's visible TIME window to all others (time-aligned,
+        // robust to differing series start/length). Logical fallback for the offset edge.
+        const tr = chart.timeScale().getVisibleRange()
         for (const c of _allSyncCharts()) {
-          if (c && c !== chart) { try { c.timeScale().setVisibleLogicalRange(range) } catch (_) { } }
+          if (c && c !== chart) {
+            try {
+              if (tr) c.timeScale().setVisibleRange(tr)
+              else if (range) c.timeScale().setVisibleLogicalRange(range)
+            } catch (_) { }
+          }
         }
       } finally { w._chartSyncing = false }
     })
