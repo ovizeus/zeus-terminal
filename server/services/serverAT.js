@@ -5377,6 +5377,13 @@ function _reconAlertedShouldFire(cat, key) {
 }
 // [V5.4] Orphan pending map — tracks first detection for 2-cycle confirmation
 const _orphanPending = new Map(); // "userId:symbol:side" → { firstSeen, bpos, userId, symbol }
+// [ROOT FIX 2026-06-18] Consecutive empty-held-poll streak per "userId:exchange". An
+// empty positionRisk snapshot while tracking live positions is skipped (stale/failed
+// poll guard); this counts consecutive skips so a PERSISTENT empty condition (e.g.
+// revoked creds, long endpoint outage) escalates to a visible P1 alert instead of
+// silently skipping reconciliation forever.
+const _emptyHeldStreak = new Map();
+const _EMPTY_HELD_ALERT_AFTER = 5; // ~5 recon cycles (~5 min) of sustained empty before alert
 
 async function _runReconciliation(isStartup) {
     if (_reconRunning) return;
@@ -5517,11 +5524,26 @@ async function _runReconciliation(isStartup) {
             // live positions is almost always a bad poll, not a real mass-close (real
             // closes arrive via userDataStream). Skip ALL destructive recon for this
             // user-exchange this cycle; the next good poll reconciles correctly.
+            const _ehKey = `${userId}:${exchange}`;
             if (isUntrustedEmptyHeld(binanceHeld.size, userLivePositions.length)) {
-                logger.warn(label, `[RECON] SKIP uid=${userId}/${exchange} — positionRisk returned EMPTY while tracking ${userLivePositions.length} live position(s); treating as stale/failed poll (not mass-close)`);
-                try { audit.record('SAT_RECON_EMPTY_HELD_SKIP', { userId, exchange, tracked: userLivePositions.length }, 'SERVER_AT'); } catch (_) {}
+                const _ehStreak = (_emptyHeldStreak.get(_ehKey) || 0) + 1;
+                _emptyHeldStreak.set(_ehKey, _ehStreak);
+                logger.warn(label, `[RECON] SKIP uid=${userId}/${exchange} — positionRisk returned EMPTY while tracking ${userLivePositions.length} live position(s); treating as stale/failed poll (not mass-close) [streak ${_ehStreak}]`);
+                try { audit.record('SAT_RECON_EMPTY_HELD_SKIP', { userId, exchange, tracked: userLivePositions.length, streak: _ehStreak }, 'SERVER_AT'); } catch (_) {}
+                // Escalate ONCE when the empty condition persists abnormally — surfaces a
+                // long-term degraded poll (revoked creds / endpoint outage) instead of
+                // silently skipping recon. Does NOT change the skip (positions stay
+                // protected by the price-feed disaster-SL net regardless).
+                if (_ehStreak === _EMPTY_HELD_ALERT_AFTER) {
+                    try {
+                        _emitDoctor({ eventType: 'alert', severity: 'P1', moduleId: 'serverAT.recon.emptyHeld', ts: Date.now(),
+                            payload: { userId, exchange, tracked: userLivePositions.length, consecutiveSkips: _ehStreak } });
+                    } catch (_) {}
+                    try { telegram.sendToUser(userId, `⚠️ *RECON: exchange poll empty ${_ehStreak}× in a row*\n${exchange} positionRisk keeps returning EMPTY while ${userLivePositions.length} position(s) tracked.\nReconciliation paused (positions still protected by server SL). Check API keys / Binance connectivity.`); } catch (_) {}
+                }
                 continue;
             }
+            _emptyHeldStreak.delete(_ehKey); // good (non-empty) poll → reset streak
 
             // [D 2026-06-06 / F2] Periodic orphan-protection sweep (~10 min,
             // time-based — runs in idle AND busy recon): client-AT/manual closes
