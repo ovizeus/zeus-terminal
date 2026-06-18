@@ -315,6 +315,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'kronos':
       { const kx = document.getElementById('kronosChart'); if (kx) kx.style.display = show ? '' : 'none'; if (show) initKronosChart() }
+      if (!show) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } }
       break
     case 'hermes':
       if (show) initHermesSeries()
@@ -1590,6 +1591,20 @@ export function updateKronos(): void {
     }
   }
   try { w._kronosMacdS.setData(macd); w._kronosSigS.setData(sig); w._kronosMidS.setData(mid); w._kronosMacdS.setMarkers(marks) } catch (_) { }
+  // [KRONOS candle recolour] tie the price candles to the oscillator regime, like the screenshot:
+  // cyan = bull (macd ≥ signal & macd > 0), red = bear (macd < signal & macd < 0), yellow = transition.
+  if (w.cSeries) {
+    const colored = k.map((b: any, i: number) => {
+      const m = r.macd[i], sg = r.signal[i]
+      let col = '#ffd600' // transition / neutral — yellow
+      if (m != null && sg != null) {
+        if (m >= sg && m > 0) col = '#29b6f6'       // bull — cyan
+        else if (m < sg && m < 0) col = '#ff3b30'   // bear — red
+      }
+      return { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: col, borderColor: col, wickColor: col }
+    })
+    try { w.cSeries.setData(colored) } catch (_) { }
+  }
   _syncSubChartsToMain()
 }
 
