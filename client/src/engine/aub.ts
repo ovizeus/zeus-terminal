@@ -262,10 +262,15 @@ export function aubCalcMTFStrength(): any {
       return Math.max(0, Math.min(1, (r - 30) / 40))
     }
 
-    const s5m = rsiToStr(rsi['5m'] || rsi['now'] || 50)
-    const s15m = rsiToStr(rsi['15m'] || 50)
-    const s1h = rsiToStr(rsi['1h'] || 50)
-    const s4h = rsiToStr(rsi['4h'] || 50)
+    // [LIVE SOURCE 2026-06-18] Read the brain's live multi-TF alignment
+    // (BM.structure.mtfAlign: 'bull'/'bear'/'neut' per 15m/1h/4h — the same feed the working
+    // MTF panel uses) instead of the sparse client w.S.rsi map. 5m falls back to the chart RSI.
+    const mtfAlign: any = (typeof w.BM !== 'undefined' && w.BM.structure && w.BM.structure.mtfAlign) ? w.BM.structure.mtfAlign : {}
+    const dirToStr = (d: any) => d === 'bull' ? 0.78 : d === 'bear' ? 0.22 : 0.5
+    const s5m = (rsi['5m'] != null || rsi['now'] != null) ? rsiToStr(rsi['5m'] || rsi['now']) : dirToStr(mtfAlign['15m'])
+    const s15m = mtfAlign['15m'] != null ? dirToStr(mtfAlign['15m']) : rsiToStr(rsi['15m'] || 50)
+    const s1h = mtfAlign['1h'] != null ? dirToStr(mtfAlign['1h']) : rsiToStr(rsi['1h'] || 50)
+    const s4h = mtfAlign['4h'] != null ? dirToStr(mtfAlign['4h']) : rsiToStr(rsi['4h'] || 50)
 
     // Weighted composite (4h heaviest)
     const weighted = s4h * 0.40 + s1h * 0.30 + s15m * 0.20 + s5m * 0.10
@@ -275,7 +280,9 @@ export function aubCalcMTFStrength(): any {
     const penalty = s4h > 0.7 && s5m < 0.35
     AUB.mtfPenalty = penalty
 
-    if (AUB.expanded) _aubUpdateMTFCard(s5m, s15m, s1h, s4h, penalty)
+    // Always patch the store (not gated on expand) so the card is populated the instant the
+    // panel opens — and stays live via the aubRefresh interval below.
+    _aubUpdateMTFCard(s5m, s15m, s1h, s4h, penalty)
     return { weighted, penalty }
   } catch (_) { return { weighted: 0.5, penalty: false } }
 }
@@ -295,25 +302,32 @@ export function aubCalcCorrelation(): void {
   try {
     // Use wlPrices history if available, else skip
     // Simple: compare % change direction over last N ticks
-    const btcPrice = (typeof w.S !== 'undefined') ? w.S.price : 0
-    if (!btcPrice) return
-
-    // We use watchlist data snapshots if available
-    const eth = (typeof w.wlPrices !== 'undefined' && w.wlPrices['ETHUSDT']) ? w.wlPrices['ETHUSDT'] : null
-    const sol = (typeof w.wlPrices !== 'undefined' && w.wlPrices['SOLUSDT']) ? w.wlPrices['SOLUSDT'] : null
+    // [LIVE SOURCE 2026-06-18] BTC/ETH/SOL 24h % change come from the live multi-symbol scan
+    // (w.MSCAN.data — the brain scans BTC/ETH/SOL/BNB) with the watchlist (w.wlPrices) as a
+    // fallback. The old code read w.S.chg (doesn't exist) and w.wlPrices['ETHUSDT'] (the
+    // watchlist holds the user's symbols, not necessarily ETH/SOL) → always null.
+    const md: any = (typeof w.MSCAN !== 'undefined' && w.MSCAN.data) ? w.MSCAN.data : {}
+    const wl: any = (typeof w.wlPrices !== 'undefined') ? w.wlPrices : {}
+    const chgOf = (s: string) => {
+      const m = md[s]; if (m && Number.isFinite(m.chg)) return m.chg
+      const x = wl[s]; if (x && Number.isFinite(x.chg)) return x.chg
+      return null
+    }
+    const btcChg = chgOf('BTCUSDT')
+    const ethChg = chgOf('ETHUSDT')
+    const solChg = chgOf('SOLUSDT')
+    if (btcChg == null) return
 
     // Simple correlation proxy: if BTC & ALT both positive/negative chg → positive corr
-    function corrProxy(btcChg: any, altChg: any) {
-      if (!btcChg || !altChg) return null
-      const same = (btcChg >= 0) === (altChg >= 0)
-      // Deterministic proxy: scale by magnitude similarity (no Math.random)
-      const magRatio = Math.min(Math.abs(btcChg), Math.abs(altChg)) / (Math.max(Math.abs(btcChg), Math.abs(altChg)) || 1)
+    function corrProxy(b: any, alt: any) {
+      if (b == null || alt == null) return null
+      const same = (b >= 0) === (alt >= 0)
+      const magRatio = Math.min(Math.abs(b), Math.abs(alt)) / (Math.max(Math.abs(b), Math.abs(alt)) || 1)
       return same ? +0.7 + magRatio * 0.2 : -0.4 + magRatio * 0.2
     }
 
-    const btcChg = (typeof w.S !== 'undefined' && w.S.chg) ? w.S.chg : 0
-    AUB.corr.eth = eth ? corrProxy(btcChg, eth.chg || 0) : null
-    AUB.corr.sol = sol ? corrProxy(btcChg, sol.chg || 0) : null
+    AUB.corr.eth = corrProxy(btcChg, ethChg)
+    AUB.corr.sol = corrProxy(btcChg, solChg)
 
     // Penalty: if active sym is ALT and BTC goes strongly opposite → reduce score
     const sym = (typeof w.S !== 'undefined' && w.S.symbol) ? w.S.symbol : ''
@@ -322,7 +336,7 @@ export function aubCalcCorrelation(): void {
     const corrPenalty = isAlt && btcStrong && (AUB.corr.eth !== null && AUB.corr.eth < 0)
     AUB.corrPenalty = corrPenalty
 
-    if (AUB.expanded) _aubUpdateCorrCard()
+    _aubUpdateCorrCard()
   } catch (_) { }
 }
 
@@ -536,15 +550,47 @@ export function _aubUpdateDataBadge(): void {
   useAUBStore.getState().patch({ dataLabel, dataClass })
 }
 
+// [LIVE SOURCE 2026-06-18] Decision Blackbox feed. The client brain no longer makes decisions
+// (server-side cutover 2026-06-07), so the legacy in-browser aubBBSnapshot capture stays at 0.
+// Pull the SERVER's recent brain decisions/blocks instead. Throttled to ~8s; only meaningful
+// while the panel is open (aubRefreshAll callers gate on that).
+let _aubBlocksFetching = false
+let _aubBlocksLastFetch = 0
+export function _aubFetchServerBlocks(): void {
+  const now = (typeof performance !== 'undefined' ? performance.now() : 0)
+  if (_aubBlocksFetching || (now - _aubBlocksLastFetch) < 8000) return
+  _aubBlocksFetching = true
+  _aubBlocksLastFetch = now
+  try {
+    fetch('/api/brain/recent-blocks', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: any) => {
+        if (data && Array.isArray(data.blocks) && data.blocks.length) {
+          AUB.bb = data.blocks.slice(0, 100).map((b: any) => ({
+            ts: b.ts || b.time || Date.now(),
+            event: b.reason || b.decision || b.action || b.type || 'decision',
+            regime: b.regime || '—',
+            score: (b.confidence != null ? b.confidence : (b.score != null ? b.score : 0)),
+            symbol: b.symbol || '',
+            mode: b.mode || b.env || '—',
+          }))
+          _aubUpdateBBCard()
+        }
+      })
+      .catch(() => { })
+      .finally(() => { _aubBlocksFetching = false })
+  } catch (_) { _aubBlocksFetching = false }
+}
+
 // ════════════════════════════════════════════════════════════════
 // REFRESH ALL — called on expand + from renderBrainCockpit hook
 // ════════════════════════════════════════════════════════════════
 export function aubRefreshAll(): void {
   // Called on user expand only (req 6) — safe to compute
   aubCheckCompat()
-  aubCalcMTFStrength()   // MTF: triggered by user expand, not autonomous (req 9)
-  aubCalcCorrelation()   // Corr: triggered by user expand, not autonomous (req 9)
-  _aubUpdateBBCard()
+  aubCalcMTFStrength()   // MTF: now reads BM.structure.mtfAlign (live)
+  aubCalcCorrelation()   // Corr: reads live wlPrices
+  _aubFetchServerBlocks() // Blackbox: pull SERVER decisions (client brain is dead post-cutover)
   _aubRenderMacroEvents()
   _aubUpdateDataBadge()
   _aubUpdatePerfCard()
@@ -574,9 +620,15 @@ export function initAUB(): void {
   // Compat check — pure feature detection, no data (req 6)
   aubCheckCompat()
 
-  // DATA badge only — lightest possible status check (req 6)
-  // aubCalcMTFStrength / aubCalcCorrelation called only on user expand
-  w.Intervals.set('aubRefresh', _aubUpdateDataBadge, 3000)
+  // [LIVE 2026-06-18] DATA badge always; and WHILE the panel is open, keep MTF / Correlation /
+  // Blackbox refreshed from their live sources (cheap client reads + an 8s-throttled blocks
+  // fetch). Gated on AUB.expanded so it stays idle when the panel is closed (req 9 spirit).
+  w.Intervals.set('aubRefresh', () => {
+    _aubUpdateDataBadge()
+    if (AUB.expanded) {
+      try { aubCalcMTFStrength(); aubCalcCorrelation(); _aubFetchServerBlocks() } catch (_) { }
+    }
+  }, 3000)
 
   // Subscribe to zeusReady event for nightly sim (req 2, 9)
   w.addEventListener('zeusReady', () => {
