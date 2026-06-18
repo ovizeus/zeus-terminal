@@ -55,6 +55,7 @@ const mlDslShadow = require('./mlDslShadow');
 const priceTrace = require('./priceTrace');
 const mlDslLearner = require('./mlDslLearner');
 const { rewindSafeSeq } = require('./seqGuard');
+const seqAllocator = require('./seqAllocator');
 const db = require('./database');
 const marketFeed = require('./marketFeed');
 
@@ -758,6 +759,18 @@ function _restoreFromDb() {
                 logger.error('AT_DB', `Failed to restore state for uid=${uid}: ${e.message} — skipping`);
             }
         }
+
+        // [GLOBAL-SEQ 2026-06-18] Initialize the global seq allocator above the historical max
+        // across at_closed + at_positions + all restored open positions, so newly-issued seqs
+        // are globally unique and never collide with the at_closed PK (root cause of the orphan).
+        try {
+            const _mc = db.db.prepare('SELECT MAX(seq) m FROM at_closed').get();
+            const _mp = db.db.prepare('SELECT MAX(seq) m FROM at_positions').get();
+            let _gmax = Math.max(Number(_mc && _mc.m) || 0, Number(_mp && _mp.m) || 0);
+            for (const p of _positions) { if (p && Number.isFinite(p.seq) && p.seq > _gmax) _gmax = p.seq; }
+            seqAllocator.init(_gmax);
+            logger.info('AT_DB', `[GLOBAL-SEQ] allocator initialized at ${seqAllocator.current()} (global max across at_closed/at_positions/open)`);
+        } catch (e) { try { logger.warn('AT_DB', `[GLOBAL-SEQ] init failed: ${e.message}`); } catch (_) { } }
 
         if (restoredCount > 0) {
             logger.info('AT_DB', `Restored ${restoredCount} open position(s)${skippedCount > 0 ? ` (skipped ${skippedCount} stuck/corrupt)` : ''}`);
@@ -1465,7 +1478,7 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     const _entryExecEnv = _resolveExecutionEnv(userId);
     const _entryCreds = _entryExecEnv.env === 'DEMO' ? null : getExchangeCreds(userId);
     const entry = {
-        seq: ++us.seq,
+        seq: (us.seq = seqAllocator.next()),
         userId: userId,
         ts: Date.now(),
         // [Phase 2 S2.A] Stable decision id — feeds newClientOrderId on exchange
@@ -4016,8 +4029,9 @@ function _buildEntryFromOrderPlace(reqBody, userId) {
         dslParams: (reqBody.dslParams !== undefined) ? reqBody.dslParams : null,
         // clientReqId pentru idempotency (replays din client transient network fail)
         clientReqId: reqBody.clientReqId || null,
-        // seq: temporary timestamp-based; properly allocated post-M1.2 via _uState(userId).seq
-        seq: Date.now(),
+        // [GLOBAL-SEQ 2026-06-18] Pure function (_buildEntryFromOrderPlace) — no `us` in scope,
+        // so issue directly from the global allocator (still globally-unique, never-reused).
+        seq: seqAllocator.next(),
         ts: Date.now(),
     };
 }
@@ -4504,7 +4518,7 @@ async function registerManualPosition(userId, data) {
                 const coreResult = await module.exports._executeLiveEntryCore(validated, null, _creds);
                 // Allocate seq + push to _positions (local state tracking)
                 const us = _uState(userId);
-                const seq = ++us.seq;
+                const seq = (us.seq = seqAllocator.next());
                 coreResult.seq = seq;
                 // [SYNC-2 2026-06-01] Thread the position's OWN exchange from the creds used,
                 // so recon/close route correctly (else schema default 'binance' mislabels Bybit).
@@ -4610,7 +4624,7 @@ function _registerManualPositionLegacy(userId, data) {
         }
     }
 
-    const seq = ++us.seq;
+    const seq = (us.seq = seqAllocator.next());
 
     const sl = data.sl ? parseFloat(data.sl) : null;
     const tp = data.tp ? parseFloat(data.tp) : null;
@@ -4782,7 +4796,7 @@ function _syncExternalPosition(data) {
         return { ok: false, skipped: true, reason: 'duplicate_same_side_open', existingSeq: _dup.seq };
     }
     const us = _uState(userId);
-    const seq = ++us.seq;
+    const seq = (us.seq = seqAllocator.next());
     // [SP2 policy L] Attach a SERVER-side protective SL (markPrice ∓2%, entryPrice
     // fallback) so the server net (onPriceUpdate) + disaster backstop (reads
     // originalSL) protect this adopted position even if the recon caller's best-effort
