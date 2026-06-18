@@ -621,6 +621,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'plutus',   ico: '💰', name: 'PLUTUS',           desc: 'Smart-money footprint — effort vs result (Zeus original)', hasGenericSettings: true },
   { id: 'helios',   ico: '☀️', name: 'HELIOS',           desc: 'Regime oracle — Hurst trending vs mean-revert (Zeus original)', hasGenericSettings: true },
   { id: 'hyperion', ico: '🌅', name: 'HYPERION',         desc: 'Dual-line TSI momentum oscillator — green-top / red-bottom intensifying glow (Zeus original)', hasGenericSettings: true },
+  { id: 'kronos', ico: '⏳', name: 'KRONOS', desc: 'MACD-style dual-line crossover oscillator — Bull/Bear + Golden/Death Cross signals (Zeus original)', hasGenericSettings: true },
   { id: 'hermes',   ico: '☄️', name: 'HERMES',           desc: 'Fair-value gaps — imbalance magnet zones (Zeus original)', hasGenericSettings: true },
   { id: 'charon',   ico: '🪙', name: 'CHARON',           desc: 'Liquidity pools — stop-hunt magnet levels (Zeus original)', hasGenericSettings: true },
   { id: 'atlas',    ico: '🚀', name: 'ATLAS',            desc: 'Momentum acceleration — trend gaining vs tiring (Zeus original)', hasGenericSettings: true },

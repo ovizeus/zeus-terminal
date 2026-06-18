@@ -146,6 +146,7 @@ export const INDICATORS: any[] = [
   { id: 'plutus', ico: _ZI.chart, name: 'PLUTUS', desc: 'Smart-money footprint (effort vs result) 💰', cat: 'volume', def: false },
   { id: 'helios', ico: _ZI.scope, name: 'HELIOS', desc: 'Regime oracle — Hurst trending vs mean-revert ☀️', cat: 'momentum', def: false },
   { id: 'hyperion', ico: _ZI.scope, name: 'HYPERION', desc: 'Dual-line TSI momentum oscillator — green-top / red-bottom glow 🌅', cat: 'momentum', def: false },
+  { id: 'kronos', ico: _ZI.scope, name: 'KRONOS', desc: 'MACD-style dual-line crossover oscillator — Bull/Bear + Golden/Death Cross signals ⏳', cat: 'momentum', def: false },
   { id: 'hermes', ico: _ZI.tgt, name: 'HERMES', desc: 'Fair-value gaps — imbalance magnet zones ☄️', cat: 'vol', def: false },
   { id: 'charon', ico: _ZI.ruler, name: 'CHARON', desc: 'Liquidity pools — stop-hunt magnets 🪙', cat: 'volume', def: false },
   { id: 'atlas', ico: _ZI.bolt, name: 'ATLAS', desc: 'Momentum acceleration — trend gaining/tiring 🚀', cat: 'momentum', def: false },
