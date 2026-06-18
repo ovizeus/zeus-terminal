@@ -5759,6 +5759,14 @@ async function _runReconciliation(isStartup) {
                 const symbol = bpos.symbol;
                 const tracked = userLivePositions.find(p => p.symbol === symbol && p.side === bpos.side);
                 if (!tracked) {
+                    // [ORPHAN-ROOT-DIAG 2026-06-18] Dump every GLOBAL _positions record for this
+                    // user+symbol+side BEFORE flagging an orphan, so the next false orphan reveals
+                    // EXACTLY why the engine's own position is missing from userLivePositions
+                    // (excluded by _isReconcilablePosition? wrong exchange group? genuinely gone?).
+                    try {
+                        const _gm = _positions.filter(pp => pp.userId === userId && pp.symbol === symbol && pp.side === bpos.side);
+                        logger.warn(label, `ORPHAN-ROOT-DIAG uid=${userId} ${bpos.side} ${symbol}: groupExch=${exchange} ulpCount=${userLivePositions.length} globalMatches=${_gm.length} :: ${_gm.map(pp => `seq=${pp.seq} live=${pp.live && pp.live.status} mode=${pp.mode} exch=${pp.exchange} status=${pp.status} pending=${pp._livePending} recon=${_isReconcilablePosition(pp)}`).join(' || ') || '<NONE in _positions>'}`);
+                    } catch (_) { }
                     const _orphanKey = `${userId}:${heldKey}`;
 
                     if (!_orphanPending.has(_orphanKey)) {
