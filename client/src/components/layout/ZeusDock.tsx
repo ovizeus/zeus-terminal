@@ -210,11 +210,12 @@ const DOCK_ITEMS: DockItem[] = [
   { id: 'aub', label: 'Alien', group: 'review',
     icon: (
       <>
-        <path d="M12 2C8 2 4.5 5.5 4.5 10c0 2.5 1 4.5 2.5 6l-1 4 3.5-1.5c.8.3 1.6.5 2.5.5s1.7-.2 2.5-.5L18 20l-1-4c1.5-1.5 2.5-3.5 2.5-6C19.5 5.5 16 2 12 2z" fill="currentColor" opacity=".1" />
-        <path d="M12 2C8 2 4.5 5.5 4.5 10c0 2.5 1 4.5 2.5 6l-1 4 3.5-1.5c.8.3 1.6.5 2.5.5s1.7-.2 2.5-.5L18 20l-1-4c1.5-1.5 2.5-3.5 2.5-6C19.5 5.5 16 2 12 2z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-        <circle cx="9" cy="9" r="1.5" fill="currentColor" opacity=".5" />
-        <circle cx="15" cy="9" r="1.5" fill="currentColor" opacity=".5" />
-        <path d="M9 13c1.5 1.5 4.5 1.5 6 0" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        {/* classic elongated grey-alien head — serious, not the round smiley */}
+        <path d="M12 2.5C7.6 2.5 5 6 5 10.4c0 4.1 3 8.2 7 11.1 4-2.9 7-7 7-11.1C19 6 16.4 2.5 12 2.5z" fill="currentColor" opacity=".12" />
+        <path d="M12 2.5C7.6 2.5 5 6 5 10.4c0 4.1 3 8.2 7 11.1 4-2.9 7-7 7-11.1C19 6 16.4 2.5 12 2.5z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        {/* slanted almond eyes */}
+        <ellipse cx="9" cy="10.8" rx="2.1" ry="1.05" transform="rotate(38 9 10.8)" fill="currentColor" />
+        <ellipse cx="15" cy="10.8" rx="2.1" ry="1.05" transform="rotate(-38 15 10.8)" fill="currentColor" />
       </>
     ) },
   { id: 'more', label: 'More', group: 'expand',
