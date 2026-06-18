@@ -144,4 +144,19 @@ function groupPositionsByExchange(positions) {
     return groups;
 }
 
-module.exports = { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange };
+// [ROOT FIX 2026-06-18] Trust-gate for the exchange held-map snapshot.
+// /fapi/v2/positionRisk can return a 200-OK EMPTY array even while positions are
+// genuinely open (Binance eventual-consistency / stale read, worse under degraded
+// datacenter connectivity). Recon previously trusted this as ground truth → falsely
+// phantom-closed live positions → which then re-adopted as external/lev1 "Manual x1"
+// orphans (recurring bug). An empty held-map WHILE we track live positions is almost
+// always a stale/failed poll, not a real simultaneous close of every position (real
+// closes arrive via userDataStream). Treat it as untrusted → skip destructive recon
+// this cycle and wait for a good poll. Defensive: only flags the unambiguous case
+// (finite, heldSize===0, trackedCount>0); never skips on garbage inputs.
+function isUntrustedEmptyHeld(heldSize, trackedCount) {
+    return Number.isFinite(heldSize) && Number.isFinite(trackedCount)
+        && heldSize === 0 && trackedCount > 0;
+}
+
+module.exports = { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld };

@@ -46,7 +46,7 @@ const telegram = require('./telegram');
 const audit = require('./audit');
 // [BUG-T2a + T2b 2026-05-13] Pure-function recon helpers extracted pentru
 // testability. T2a: hedge-aware Binance held map. T2b: strict userTrades filter.
-const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange } = require('./reconHelpers');
+const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const mlDslPolicy = require('./mlDslPolicy');
@@ -5507,6 +5507,21 @@ async function _runReconciliation(isStartup) {
             // [P2c.1b] Generic held-map from normalized getPositions (binance+bybit).
             // Var name kept `binanceHeld` to minimize churn in the body below.
             const binanceHeld = buildHeldMap(held);
+
+            // [ROOT FIX 2026-06-18] Guard against a stale/empty positionRisk snapshot.
+            // /fapi/v2/positionRisk can return a 200-OK EMPTY array even while positions
+            // are genuinely open (Binance eventual-consistency / stale read, worse under
+            // degraded datacenter connectivity). Trusting an empty held-map here falsely
+            // phantom-closes every live position → which then re-adopt as external/lev1
+            // "Manual x1" orphans (the recurring bug). An empty snapshot WHILE we track
+            // live positions is almost always a bad poll, not a real mass-close (real
+            // closes arrive via userDataStream). Skip ALL destructive recon for this
+            // user-exchange this cycle; the next good poll reconciles correctly.
+            if (isUntrustedEmptyHeld(binanceHeld.size, userLivePositions.length)) {
+                logger.warn(label, `[RECON] SKIP uid=${userId}/${exchange} — positionRisk returned EMPTY while tracking ${userLivePositions.length} live position(s); treating as stale/failed poll (not mass-close)`);
+                try { audit.record('SAT_RECON_EMPTY_HELD_SKIP', { userId, exchange, tracked: userLivePositions.length }, 'SERVER_AT'); } catch (_) {}
+                continue;
+            }
 
             // [D 2026-06-06 / F2] Periodic orphan-protection sweep (~10 min,
             // time-based — runs in idle AND busy recon): client-AT/manual closes
