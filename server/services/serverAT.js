@@ -607,11 +607,24 @@ function _persistState(userId) {
 function _applyStateBlob(userId, saved) {
     const us = _uState(userId);
     us.engineMode = saved.mode || 'demo';
-    // [SEQ-REWIND FIX 2026-06-18] Clamp the loaded counter so it can NEVER sit below a
-    // seq already issued to a still-open restored position. Prevents seq reuse/collision
-    // (which re-adopted real exchange positions as source=external/lev=1 "Manual x1" and
-    // tripped the same-(user,symbol,side,mode) UNIQUE index). No-op in the healthy case.
-    us.seq = rewindSafeSeq(saved.seq, _positions.filter(p => p && p.userId === userId).map(p => p.seq));
+    // [SEQ-REWIND FIX 2026-06-18 / ARCHIVE-AWARE] Clamp the loaded counter so it can NEVER
+    // sit below ANY seq that already exists — open restored positions AND the persisted
+    // history in at_closed / at_positions. ROOT CAUSE of the recurring "Manual x1" orphan:
+    // a reused seq collides with at_closed.seq (UNIQUE) when the position closes → the
+    // at_closed archive move FAILS → the position vanishes from _positions while still LIVE
+    // on the exchange → recon orphan-adopts it (external/lev=1) or auto-closes it. Clamping
+    // above the GLOBAL max archived seq prevents reuse entirely → no UNIQUE collision → no
+    // corrupted close → no orphan. No-op in the healthy case. boot-only (one indexed query).
+    let _dbMaxSeq = 0;
+    try {
+        const _c = db.db.prepare('SELECT MAX(seq) m FROM at_closed').get();
+        const _o = db.db.prepare('SELECT MAX(seq) m FROM at_positions').get();
+        _dbMaxSeq = Math.max(Number(_c && _c.m) || 0, Number(_o && _o.m) || 0);
+    } catch (e) { try { logger.warn('AT_DB', `seq-clamp DB max query failed: ${e.message}`); } catch (_) { } }
+    const _openSeqs = _positions.filter(p => p && p.userId === userId).map(p => p.seq);
+    const _clamped = rewindSafeSeq(saved.seq, [..._openSeqs, _dbMaxSeq]);
+    if (_clamped > (saved.seq || 0)) { try { logger.warn('AT_DB', `[SEQ-CLAMP] uid=${userId} seq raised ${saved.seq || 0}→${_clamped} (dbMax=${_dbMaxSeq}) — preventing reuse/at_closed collision`); } catch (_) { } }
+    us.seq = _clamped;
     us.liveSeq = saved.liveSeq || 0;
     us.stats = saved.stats || { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 };
     // Restore demoStats; if missing (legacy), derive from stats - liveStats (one-time migration)
