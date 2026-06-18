@@ -1890,6 +1890,73 @@ function _hslToHex(h: number, s: number, l: number): string {
 }
 
 /**
+ * MAGNES heatmap colour ramp. t in [0,1]: 0 → blue (cold/low volume),
+ * 1 → red (hot/high volume), through cyan→green→yellow→orange. Pure.
+ * hue = 240*(1-t): t=0 → 240° blue, t=1 → 0° red.
+ */
+export function magnesHeat(t: number): string {
+  const tc = Math.max(0, Math.min(1, t))
+  return _hslToHex(240 * (1 - tc), 0.9, 0.55)
+}
+
+export interface MagnesBucket { priceMid: number; vol: number }
+export interface Magnes {
+  buckets: MagnesBucket[]
+  poc: number
+  maxVol: number
+  hi: number
+  lo: number
+  loIdx: number
+}
+
+/**
+ * MAGNES — invented for Zeus. A volume-by-price profile ("liquidity magnet"):
+ * over the last `lookback` bars, sum each bar's volume into `rows` price buckets
+ * (bucket chosen by the bar CLOSE, mirroring updateVP). `poc` is the index of the
+ * highest-volume bucket (the magnet); `maxVol` its volume. `loIdx` is the index in
+ * `closes` where the window starts (closes.length - usedBars) — used as profile anchor.
+ * Pure — no DOM, no chart access.
+ */
+export function magnes(
+  highs: number[], lows: number[], closes: number[], volumes: number[],
+  rows = 50, lookback = 240
+): Magnes {
+  const n = closes.length
+  const usedBars = Math.min(lookback, n)
+  const loIdx = n - usedBars
+  if (usedBars <= 0 || rows <= 0) {
+    return { buckets: [], poc: -1, maxVol: 0, hi: -Infinity, lo: Infinity, loIdx }
+  }
+  let hi = -Infinity, lo = Infinity
+  for (let i = loIdx; i < n; i++) {
+    if (highs[i] > hi) hi = highs[i]
+    if (lows[i] < lo) lo = lows[i]
+  }
+  if (!(hi > lo)) {
+    return { buckets: [], poc: -1, maxVol: 0, hi, lo, loIdx }
+  }
+  const step = (hi - lo) / rows
+  const vols = new Array(rows).fill(0)
+  let total = 0
+  for (let i = loIdx; i < n; i++) {
+    const v = volumes[i] || 0
+    const idx = Math.min(rows - 1, Math.max(0, Math.floor((closes[i] - lo) / step)))
+    vols[idx] += v
+    total += v
+  }
+  if (total <= 0) {
+    return { buckets: [], poc: -1, maxVol: 0, hi, lo, loIdx }
+  }
+  let poc = 0, maxVol = -Infinity
+  const buckets: MagnesBucket[] = new Array(rows)
+  for (let r = 0; r < rows; r++) {
+    buckets[r] = { priceMid: lo + (r + 0.5) * step, vol: vols[r] }
+    if (vols[r] > maxVol) { maxVol = vols[r]; poc = r }
+  }
+  return { buckets, poc, maxVol, hi, lo, loIdx }
+}
+
+/**
  * HARMONIA — invented for Zeus. A full-spectrum rainbow candle painter that flows hue
  * across the series (every bar a vivid, distinct colour) plus dual-degree swing pivots:
  * short-term highs/lows (tight lookback) and intermediate highs/lows (wider lookback),

@@ -102,6 +102,7 @@ export const INDICATORS: any[] = [
   { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + dynamic Stop Loss', cat: 'trend', def: true },
   { id: 'boreas', ico: _ZI.wave, name: 'BOREAS', desc: 'SuperTrend trend-follower — thick green/red trend line + Long/Short flip signals 🌬️', cat: 'trend', def: false },
   { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volume at price levels', cat: 'volume', def: true },
+  { id: 'magnes', ico: _ZI.chart, name: 'MAGNES', desc: 'Volume-profile liquidity heatmap — red POC magnet 🧲', cat: 'volume', def: false },
   { id: 'cvd', ico: _ZI.chart, name: 'CVD', desc: 'Cumulative Volume Delta', cat: 'volume', def: false },
   { id: 'macd', ico: _ZI.bolt, name: 'MACD', desc: 'Moving Avg Convergence Div', cat: 'momentum', def: false },
   { id: 'bb', ico: _ZI.tgt, name: 'Bollinger Bands', desc: 'Volatility and trend', cat: 'vol', def: false },

@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -206,6 +206,14 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'vp':
       if (show) updateVP()
       else { if (Array.isArray(w.vpSeries)) w.vpSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.vpSeries = [] }
+      break
+    case 'magnes':
+      if (show) updateMagnes()
+      else {
+        if (Array.isArray(w.magnesSeries)) w.magnesSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } })
+        w.magnesSeries = []
+        try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { }
+      }
       break
     case 'vwap':
       w.S.vwapOn = show
@@ -865,6 +873,36 @@ export function updateVP(): void {
   }
   vpS.setData(vpData)
   w.vpSeries.push(vpS)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OVERLAY — MAGNES (volume-profile liquidity heatmap)
+// ═══════════════════════════════════════════════════════════════
+
+export function updateMagnes(): void {
+  if (!Array.isArray(w.magnesSeries)) w.magnesSeries = []
+  w.magnesSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.magnesSeries = []
+  if (!w.mainChart || !w.cSeries || !w.S.klines.length) return
+  const k = w.S.klines, s = w.IND_SETTINGS.magnes || {}
+  const rows = Math.round(s.rows) || 50, lookback = Math.round(s.lookback) || 240
+  // dim the candles so the heatmap profile stands out
+  try { w.cSeries.setData(k.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: 'rgba(120,140,160,0.18)', borderColor: 'rgba(120,140,160,0.30)', wickColor: 'rgba(120,140,160,0.18)' }))) } catch (_) { }
+  const r = _calcMAGNES(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume || 0), rows, lookback)
+  if (!r.maxVol || !r.buckets.length) return
+  const anchorIdx = Math.max(0, r.loIdx)            // profile left edge
+  const usable = k.length - 1 - anchorIdx            // bars available to draw rightward
+  const maxBars = Math.max(4, Math.floor(usable * 0.6))
+  for (let i = 0; i < r.buckets.length; i++) {
+    const bk = r.buckets[i]; if (!(bk.vol > 0)) continue
+    const t = bk.vol / r.maxVol                       // 0..1 intensity
+    const isPoc = i === r.poc
+    const col = isPoc ? '#ffffff' : _calcMAGNESHEAT(t)
+    const wide = Math.max(1, Math.round(t * maxBars))
+    const endIdx = Math.min(k.length - 1, anchorIdx + wide)
+    const ls = w.mainChart.addLineSeries({ color: col, lineWidth: isPoc ? 3 : 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+    try { ls.setData([{ time: k[anchorIdx].time, value: bk.priceMid }, { time: k[endIdx].time, value: bk.priceMid }]) } catch (_) { }
+    w.magnesSeries.push(ls)
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3099,6 +3137,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.fib) updateFib()
   if (w.S.activeInds.pivot) updatePivot()
   if (w.S.activeInds.vp) updateVP()
+  if (w.S.activeInds.magnes) updateMagnes()
   if (w.S.activeInds.rsi14 && w._rsiInited) updateRSI()
   if (w.S.activeInds.stoch && w._stochInited) updateStoch()
   if (w.S.activeInds.atr && w._atrInited) updateATRInd()
@@ -3197,7 +3236,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hyperion: '#5b8def', kronos: '#26ff9a', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676', harmonia: '#ff2d95', daimon: '#f0c040', boreas: '#00e676' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hyperion: '#5b8def', kronos: '#26ff9a', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676', harmonia: '#ff2d95', daimon: '#f0c040', boreas: '#00e676', magnes: '#ff3b30' }
   return map[id] || '#888'
 }
 
