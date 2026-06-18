@@ -2096,7 +2096,7 @@ export function kronos(closes: number[], fastP = 12, slowP = 26, signalP = 9): K
 // ═══════════════════════════════════════════════════════════════
 export interface Boreas {
   trend: (number | null)[]
-  dir: (number | null)[]            // 'up' | 'down' (typed loosely for caller convenience)
+  dir: ('up' | 'down' | null)[]
   flips: { index: number; dir: 'up' | 'down' }[]
 }
 export function boreas(highs: number[], lows: number[], closes: number[], atrPeriod = 10, mult = 3): Boreas {
@@ -2106,7 +2106,7 @@ export function boreas(highs: number[], lows: number[], closes: number[], atrPer
   const trend: (number | null)[] = new Array(n).fill(null)
   const dir: ('up' | 'down' | null)[] = new Array(n).fill(null)
   const flips: { index: number; dir: 'up' | 'down' }[] = []
-  if (n === 0) return { trend, dir: dir as (number | null)[], flips }
+  if (n === 0) return { trend, dir, flips }
 
   // True Range
   const tr: number[] = new Array(n).fill(0)
@@ -2166,5 +2166,5 @@ export function boreas(highs: number[], lows: number[], closes: number[], atrPer
     prevDir = d
   }
 
-  return { trend, dir: dir as (number | null)[], flips }
+  return { trend, dir, flips }
 }
