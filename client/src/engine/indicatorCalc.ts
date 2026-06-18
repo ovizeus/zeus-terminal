@@ -2420,3 +2420,129 @@ export function eunomia(closes: number[], period = 14, smooth = 7): Eunomia {
   }
   return { rsx, rising, strip }
 }
+
+export interface Metis {
+  rsi: (number | null)[]
+  green: (number | null)[]
+  red: (number | null)[]
+  yellow: (number | null)[]
+  upper: (number | null)[]
+  lower: (number | null)[]
+  candleState: (number | null)[]
+  signal: (number | null)[]
+}
+
+/**
+ * METIS — Traders Dynamic Index (TDI-RSI [loxx] look). Zeus original.
+ * Wilder RSI on a 0–100 scale, smoothed into the green RSI-price line,
+ * red trade-signal line and yellow market-base line; volatility bands are
+ * SMA(baseP) ± 1.6185·stdev(baseP). candleState/signal are numeric only.
+ */
+export function metis(
+  closes: number[],
+  rsiPeriod = 13,
+  priceP = 2,
+  signalP = 7,
+  baseP = 34
+): Metis {
+  const n = closes.length
+  const rp = Math.max(1, Math.round(rsiPeriod))
+  // --- Wilder RSI (inline; no exported helper) ---
+  const rsi: (number | null)[] = new Array(n).fill(null)
+  if (n > rp) {
+    let avgGain = 0
+    let avgLoss = 0
+    for (let i = 1; i <= rp; i++) {
+      const ch = closes[i] - closes[i - 1]
+      if (ch >= 0) avgGain += ch
+      else avgLoss += -ch
+    }
+    avgGain /= rp
+    avgLoss /= rp
+    const rsiAt = (g: number, l: number): number => {
+      if (g === 0 && l === 0) return 50 // flat tape — no div-by-zero
+      if (l === 0) return 100
+      const rs = g / l
+      return 100 - 100 / (1 + rs)
+    }
+    rsi[rp] = rsiAt(avgGain, avgLoss)
+    for (let i = rp + 1; i < n; i++) {
+      const ch = closes[i] - closes[i - 1]
+      const gain = ch >= 0 ? ch : 0
+      const loss = ch < 0 ? -ch : 0
+      avgGain = (avgGain * (rp - 1) + gain) / rp
+      avgLoss = (avgLoss * (rp - 1) + loss) / rp
+      rsi[i] = rsiAt(avgGain, avgLoss)
+    }
+  }
+
+  // Smoothings reuse sma over the (sparse) rsi series. Treat null as a gap:
+  // build a finite-only series with index mapping so warmup nulls don't poison.
+  const rsiNums: number[] = []
+  const idxMap: number[] = []
+  for (let i = 0; i < n; i++) {
+    if (rsi[i] != null) { rsiNums.push(rsi[i] as number); idxMap.push(i) }
+  }
+  const remap = (compact: (number | null)[]): (number | null)[] => {
+    const out: (number | null)[] = new Array(n).fill(null)
+    for (let k = 0; k < compact.length; k++) {
+      if (compact[k] != null) out[idxMap[k]] = compact[k]
+    }
+    return out
+  }
+
+  const green = remap(sma(rsiNums, Math.max(1, Math.round(priceP))))
+  const red = remap(sma(rsiNums, Math.max(1, Math.round(signalP))))
+  const bp = Math.max(1, Math.round(baseP))
+  const mid = sma(rsiNums, bp)
+  // rolling stdev of rsi over baseP
+  const sdCompact: (number | null)[] = new Array(rsiNums.length).fill(null)
+  for (let k = 0; k < rsiNums.length; k++) {
+    if (k < bp - 1 || mid[k] == null) continue
+    let acc = 0
+    const m = mid[k] as number
+    for (let j = k - bp + 1; j <= k; j++) {
+      const d = rsiNums[j] - m
+      acc += d * d
+    }
+    sdCompact[k] = Math.sqrt(acc / bp)
+  }
+  const yellow = remap(mid)
+  const upperCompact: (number | null)[] = mid.map((m, k) =>
+    m == null || sdCompact[k] == null ? null : (m as number) + 1.6185 * (sdCompact[k] as number)
+  )
+  const lowerCompact: (number | null)[] = mid.map((m, k) =>
+    m == null || sdCompact[k] == null ? null : (m as number) - 1.6185 * (sdCompact[k] as number)
+  )
+  const upper = remap(upperCompact)
+  const lower = remap(lowerCompact)
+
+  // candleState: 2 brightGreen / 1 lightGreen / -2 brightRed / -1 lightRed
+  const candleState: (number | null)[] = new Array(n).fill(null)
+  const signal: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    const g = green[i]
+    const r = red[i]
+    const y = yellow[i]
+    if (g == null || r == null || y == null) continue
+    const gn = g as number
+    const rn = r as number
+    const yn = y as number
+    // green vs red splits bullish/bearish; ties (e.g. saturated extremes where
+    // both pin at 0/100) resolve to the green family so a strong uptrend never
+    // reads red. Strict gn<rn is the only path into the red family.
+    candleState[i] = gn >= rn ? (gn >= yn ? 2 : 1) : gn < yn ? -2 : -1
+    // crossover signals (numeric only)
+    const pg = green[i - 1]
+    const pr = red[i - 1]
+    if (pg != null && pr != null) {
+      const pgn = pg as number
+      const prn = pr as number
+      if (pgn <= prn && gn > rn && rn < 50) signal[i] = 1 // long, lower zone
+      else if (pgn >= prn && gn < rn && rn > 50) signal[i] = -1 // short, upper zone
+      else signal[i] = 0
+    }
+  }
+
+  return { rsi, green, red, yellow, upper, lower, candleState, signal }
+}

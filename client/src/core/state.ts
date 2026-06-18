@@ -1951,6 +1951,8 @@ export const IND_SETTINGS: any = {
   helios: { period: 30 },
   // [2026-06-18] HYPERION — TSI-style dual-line momentum oscillator (sub-pane glow)
   hyperion: { longP: 25, shortP: 13, signalP: 9 },
+  // [2026-06-18] METIS — Traders Dynamic Index (TDI-RSI)
+  metis: { rsiPeriod: 13, priceP: 2, signalP: 7, baseP: 34 },
   // [2026-06-18] EUNOMIA — RSX-NRP smoothed-RSI oscillator
   eunomia: { period: 14, smooth: 7 },
   kronos: { fastP: 12, slowP: 26, signalP: 9 },
