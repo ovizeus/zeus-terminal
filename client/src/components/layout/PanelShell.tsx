@@ -505,6 +505,7 @@ export function PanelShell() {
           <div id="hyperionChart" style={{ display: 'none', width: '100%', height: '90px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="metisChart" style={{ display: 'none', width: '100%', height: '100px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="eunomiaChart" style={{ display: 'none', width: '100%', height: '90px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
+          <div id="apolloChart" style={{ display: 'none', width: '100%', height: '95px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="mentorChart" style={{ display: 'none', width: '100%', height: '90px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="kronosChart" style={{ display: 'none', width: '100%', height: '110px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="atlasChart" style={{ display: 'none', width: '100%', height: '60px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>

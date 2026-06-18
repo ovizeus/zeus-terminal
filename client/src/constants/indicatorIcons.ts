@@ -68,6 +68,8 @@ export const IND_ICONS: Record<string, string> = {
   hyperion: g(p('M2 12h12') + p('M5 12a3 3 0 016 0') + p('M8 4v2M3.5 6.5l1 1M12.5 6.5l-1 1M1 9h1.5M13.5 9H15')), // rising sun over horizon
   eunomia: g(p('M1 8q3 -5 6 0t6 0') + p('M2 13h12') + p('M4 11v2M8 10v3M12 11v2')), // smooth wave over a momentum strip
   metis: g(p('M1 5h14') + p('M1 8h14') + p('M1 11h14')), // three TDI lines (green/red/yellow)
+  apollo: g(p('M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z') + p('M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15M3.05 3.05l1.55 1.55M11.4 11.4l1.55 1.55M12.95 3.05l-1.55 1.55M4.6 11.4l-1.55 1.55')), // radiant sun with rays
+
   kronos: g(p('M4 2h8M4 14h8') + p('M4 2c0 3 8 3 8 6s-8 3-8 6') + p('M12 2c0 3-8 3-8 6s8 3 8 6')), // hourglass (time / cycle)
   hermes: g(p('M3 3v3M3 13v-3M13 3v3M13 13v-3') + p('M2 6h3M2 10h3M11 6h3M11 10h3') + p('M6 8h4') + dot(8, 8, 0.8)), // imbalance gap between two candles
   charon: g(p('M2 5h12M2 11h12') + p('M9 5l2-2 2 2M5 11l-2 2-2-2')), // resting-liquidity levels swept up/down
