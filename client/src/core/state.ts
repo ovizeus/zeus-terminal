@@ -1955,6 +1955,8 @@ export const IND_SETTINGS: any = {
   metis: { rsiPeriod: 13, priceP: 2, signalP: 7, baseP: 34 },
   // [2026-06-18] EUNOMIA — RSX-NRP smoothed-RSI oscillator
   eunomia: { period: 14, smooth: 7 },
+  // [2026-06-18] APOLLO — Variety RSI + Fibonacci auto-channel
+  apollo: { rsiPeriod: 14, lookback: 50 },
   kronos: { fastP: 12, slowP: 26, signalP: 9 },
   // [2026-06-16] HERMES — fair-value-gap (imbalance) magnet zones
   hermes: { minPct: 0.05 },

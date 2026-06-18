@@ -151,6 +151,7 @@ export const INDICATORS: any[] = [
   { id: 'hyperion', ico: _ZI.scope, name: 'HYPERION', desc: 'Dual-line TSI momentum oscillator — green-top / red-bottom glow 🌅', cat: 'momentum', def: false },
   { id: 'metis', ico: _ZI.wave, name: 'METIS', desc: 'Traders Dynamic Index — RSI green/red/yellow lines + volatility bands + signals + bar colouring (Zeus original) 🟢', cat: 'momentum', def: false },
   { id: 'eunomia', ico: _ZI.wave, name: 'EUNOMIA', desc: 'RSX-NRP — smoothed RSI, slope-coloured line + green/yellow/red momentum strip 📊', cat: 'momentum', def: false },
+  { id: 'apollo', ico: _ZI.wave, name: 'APOLLO', desc: 'Variety RSI + Fibonacci Auto-Channel — gradient bar colouring + S/L signals (Zeus original) ☀️', cat: 'momentum', def: false },
   { id: 'kronos', ico: _ZI.scope, name: 'KRONOS', desc: 'MACD-style dual-line crossover oscillator — Bull/Bear + Golden/Death Cross signals ⏳', cat: 'momentum', def: false },
   { id: 'hermes', ico: _ZI.tgt, name: 'HERMES', desc: 'Fair-value gaps — imbalance magnet zones ☄️', cat: 'vol', def: false },
   { id: 'charon', ico: _ZI.ruler, name: 'CHARON', desc: 'Liquidity pools — stop-hunt magnets 🪙', cat: 'volume', def: false },

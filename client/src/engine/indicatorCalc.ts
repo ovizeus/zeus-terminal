@@ -2546,3 +2546,109 @@ export function metis(
 
   return { rsi, green, red, yellow, upper, lower, candleState, signal }
 }
+
+/**
+ * APOLLO heat ramp — gradient bar colouring by signal strength. t in [0,1]:
+ * 0 → red hue (oversold/weak), 1 → green hue 120 (overbought/strong-bull),
+ * passing through orange/yellow at the midpoint. Pure.
+ */
+export function apolloHeat(t: number): string {
+  return _hslToHex(Math.max(0, Math.min(1, t)) * 120, 0.85, 0.5)
+}
+
+export interface Apollo {
+  rsi: (number | null)[]
+  rising: (boolean | null)[]
+  fib236: (number | null)[]
+  fib382: (number | null)[]
+  fib618: (number | null)[]
+  fib786: (number | null)[]
+  mid: (number | null)[]
+  signal: (number | null)[]
+}
+
+/**
+ * APOLLO — Variety RSI with a Fibonacci Auto-Channel (recreation of
+ * "Variety RSI w/ Fibonacci Auto Channel [Loxx]"). Wilder RSI drives a fan of
+ * four Fibonacci channel lines computed from the RSI's own rolling range over
+ * `lookback` bars (hh=max, ll=min, range=hh-ll). The channel levels sit at
+ * 23.6/38.2/61.8/78.6% of the range; `mid` (50%) is the signal line. A BUY (1)
+ * fires when RSI crosses up through `mid` in the lower zone, a SELL (-1) when it
+ * crosses down through `mid` in the upper zone. All states numeric (never
+ * string-compared). Arrays aligned 1:1 with `closes`; warm-up = null.
+ */
+export function apollo(closes: number[], rsiPeriod = 14, lookback = 50): Apollo {
+  const n = closes.length
+  const lb = Math.max(2, Math.round(lookback))
+  const rp = Math.max(2, Math.round(rsiPeriod))
+  // Wilder RSI inline: a no-movement window (avg gain == avg loss == 0) resolves
+  // to a neutral 50 rather than the div0 edge; warm-up slots stay null.
+  const rsi: (number | null)[] = new Array(n).fill(null)
+  let ag = 0, al = 0
+  for (let i = 1; i < n; i++) {
+    const ch = closes[i] - closes[i - 1]
+    const g = ch > 0 ? ch : 0
+    const l = ch < 0 ? -ch : 0
+    if (i <= rp) {
+      ag += g; al += l
+      if (i === rp) {
+        ag /= rp; al /= rp
+        rsi[i] = (ag === 0 && al === 0) ? 50 : (al === 0 ? 100 : 100 - 100 / (1 + ag / al))
+      }
+    } else {
+      ag = (ag * (rp - 1) + g) / rp
+      al = (al * (rp - 1) + l) / rp
+      rsi[i] = (ag === 0 && al === 0) ? 50 : (al === 0 ? 100 : 100 - 100 / (1 + ag / al))
+    }
+  }
+
+  const rising: (boolean | null)[] = new Array(n).fill(null)
+  const fib236: (number | null)[] = new Array(n).fill(null)
+  const fib382: (number | null)[] = new Array(n).fill(null)
+  const fib618: (number | null)[] = new Array(n).fill(null)
+  const fib786: (number | null)[] = new Array(n).fill(null)
+  const mid: (number | null)[] = new Array(n).fill(null)
+  const signal: (number | null)[] = new Array(n).fill(null)
+
+  let prevValid = -1 // index of previous non-null rsi (for rising + crossing)
+  for (let i = 0; i < n; i++) {
+    const v = rsi[i]
+    if (v == null) continue
+
+    // rolling range over the available defined rsi values within [i-lb+1, i]
+    let hh = -Infinity, ll = Infinity
+    for (let j = Math.max(0, i - lb + 1); j <= i; j++) {
+      const rv = rsi[j]
+      if (rv == null) continue
+      if (rv > hh) hh = rv
+      if (rv < ll) ll = rv
+    }
+    if (!Number.isFinite(hh) || !Number.isFinite(ll)) { prevValid = i; continue }
+    const range = hh - ll
+    const m = ll + range * 0.5
+    fib236[i] = ll + range * 0.236
+    fib382[i] = ll + range * 0.382
+    fib618[i] = ll + range * 0.618
+    fib786[i] = ll + range * 0.786
+    mid[i] = m
+
+    if (prevValid >= 0) {
+      const pv = rsi[prevValid] as number
+      rising[i] = v >= pv
+      const pm = mid[prevValid]
+      if (pm != null) {
+        const pmn = pm as number
+        // BUY: cross up through mid while in the lower zone (rsi < 50)
+        if (pv <= pmn && v > m && v < 50) signal[i] = 1
+        // SELL: cross down through mid while in the upper zone (rsi > 50)
+        else if (pv >= pmn && v < m && v > 50) signal[i] = -1
+        else signal[i] = 0
+      } else {
+        signal[i] = 0
+      }
+    }
+    prevValid = i
+  }
+
+  return { rsi, rising, fib236, fib382, fib618, fib786, mid, signal }
+}
