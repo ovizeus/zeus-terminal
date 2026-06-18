@@ -54,6 +54,7 @@ const dslSafety = require('./dslSafety');
 const mlDslShadow = require('./mlDslShadow');
 const priceTrace = require('./priceTrace');
 const mlDslLearner = require('./mlDslLearner');
+const { rewindSafeSeq } = require('./seqGuard');
 const db = require('./database');
 const marketFeed = require('./marketFeed');
 
@@ -606,7 +607,11 @@ function _persistState(userId) {
 function _applyStateBlob(userId, saved) {
     const us = _uState(userId);
     us.engineMode = saved.mode || 'demo';
-    us.seq = saved.seq || 0;
+    // [SEQ-REWIND FIX 2026-06-18] Clamp the loaded counter so it can NEVER sit below a
+    // seq already issued to a still-open restored position. Prevents seq reuse/collision
+    // (which re-adopted real exchange positions as source=external/lev=1 "Manual x1" and
+    // tripped the same-(user,symbol,side,mode) UNIQUE index). No-op in the healthy case.
+    us.seq = rewindSafeSeq(saved.seq, _positions.filter(p => p && p.userId === userId).map(p => p.seq));
     us.liveSeq = saved.liveSeq || 0;
     us.stats = saved.stats || { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 };
     // Restore demoStats; if missing (legacy), derive from stats - liveStats (one-time migration)
