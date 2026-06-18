@@ -90,36 +90,34 @@ describe('BRAIN fusion parity: server _fuseDecision vs client computeFusionDecis
     expect(bad).toEqual([]);
   });
 
-  test('SHORT: gap is ONLY confidence + tier (dir identical), BIDIRECTIONAL, quantified', () => {
-    let shorts = 0, confDiverge = 0, tierDiverge = 0, clientHigher = 0, serverHigher = 0, maxDelta = 0;
-    const samples = [];
+  test('SHORT: gap CLOSED — server === client bit-identical after the direction-aware fix', () => {
+    // [2026-06-18] _fuseDecision now uses confNDirectional + dirConf, so shorts mirror the
+    // client too. Pre-fix this diverged (68 shorts, up to 27 confidence pts, 23 tier flips);
+    // post-fix it is bit-identical. This test now GUARDS the parity (regression tripwire).
+    let shorts = 0;
+    const bad = [];
     for (const v of vecs) {
       const c = clientFuse(v);
       if (c.dir !== 'short') continue;
       shorts++;
       const s = serverFuse(v);
-      expect(s.dir).toBe('short'); // dir is ALWAYS a true mirror
-      const cd = c.confidence - s.confidence;
-      if (cd !== 0) confDiverge++;
-      if (cd > 0) clientHigher++; else if (cd < 0) serverHigher++;
-      if (s.decision !== c.decision) tierDiverge++;
-      if (Math.abs(cd) > maxDelta) maxDelta = Math.abs(cd);
-      if (samples.length < 10 && (cd !== 0 || s.decision !== c.decision)) samples.push({ conf: v.conf, ofi: v.ofi, srv: `${s.decision}/${s.confidence}`, cli: `${c.decision}/${c.confidence}` });
+      if (s.dir !== c.dir || s.decision !== c.decision || s.confidence !== c.confidence || s.score !== c.score) {
+        bad.push({ conf: v.conf, ofi: v.ofi, srv: `${s.decision}/${s.confidence}`, cli: `${c.decision}/${c.confidence}` });
+      }
     }
-    // eslint-disable-next-line no-console
-    console.log(`SHORT gap → shorts=${shorts} confDiverge=${confDiverge} (clientHigher=${clientHigher} serverHigher=${serverHigher}) tierDiverge=${tierDiverge} maxDelta=${maxDelta}\n` + JSON.stringify(samples, null, 1));
+    if (bad.length) console.error('SHORT parity regressions:', JSON.stringify(bad.slice(0, 10), null, 1));
     expect(shorts).toBeGreaterThan(0);
-    expect(confDiverge).toBeGreaterThan(0); // the gap exists (it's the known confNDirectional/dirConf drift)
+    expect(bad).toEqual([]);
   });
 
-  test('PROOF the fix closes it: a confNDirectional+dirConf server == client for ALL inputs (long+short+neutral)', () => {
-    // serverMirror = the proposed _fuseDecision (direction-aware confN + dirConf tier) == clientFuse.
-    function serverMirror(inp) { return clientFuse(inp); } // identical formula by construction
+  test('FULL PARITY: server _fuseDecision === client for ALL inputs (long+short+neutral decision)', () => {
     const bad = [];
     for (const v of vecs) {
-      const c = clientFuse(v), m = serverMirror(v);
-      if (c.dir !== m.dir || c.decision !== m.decision || c.confidence !== m.confidence || c.score !== m.score) bad.push({ v });
+      const c = clientFuse(v), s = serverFuse(v);
+      // neutral → both NO_TRADE (confidence irrelevant on no-trade); else strict bit-identical.
+      if (c.dir === 'neutral') { if (s.dir !== 'neutral' || s.decision !== 'NO_TRADE') bad.push({ v }); continue; }
+      if (s.dir !== c.dir || s.decision !== c.decision || s.confidence !== c.confidence || s.score !== c.score) bad.push({ v, s, c });
     }
-    expect(bad).toEqual([]); // ⇒ applying the 2 changes to server _fuseDecision yields full bit-identical parity
+    expect(bad).toEqual([]); // server shadow is now a true direction-aware mirror of the client
   });
 });

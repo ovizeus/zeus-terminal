@@ -1907,17 +1907,27 @@ function _fuseDecision(inp) {
     dirScore = Math.max(-1, Math.min(1, dirScore));
     const dir = dirScore > 0.15 ? 'long' : dirScore < -0.15 ? 'short' : 'neutral';
 
+    // [PARITY 2026-06-18] Direction-aware confN + tier, mirroring the client's confNDirectional
+    // + classifyEntryTier (FEEDFIX Lever C). `conf` is a bull-magnitude confluence (low for
+    // shorts), so a short must mirror it ((50-conf)/50 for confN, dirConf=100-conf for the tier)
+    // — the old plain confN/raw-conf under-credited shorts vs the direction-aware client and
+    // produced the "65% parity" artifact in the shadow telemetry. Shadow-only (this fn feeds
+    // db.logParityRow, never execution — execution uses _computeFusion which is already
+    // direction-agnostic-strength via SHORT-FIX). LONG behaviour is byte-identical.
+    const confNDir = dir === 'long' ? Math.max(0, Math.min(1, (conf - 50) / 50))
+        : dir === 'short' ? Math.max(0, Math.min(1, (50 - conf) / 50)) : 0;
     const alignN = dir === 'neutral' ? 0 : (dir === 'long' ? ofiN : (1 - ofiN));
-    let confF = (confN * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20);
+    let confF = (confNDir * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20);
     confF *= (1 - (liqDangerN * 0.55));
     confF = Math.max(0, Math.min(1, confF));
     const confidence = Math.round(confF * 100);
 
+    const dirConf = dir === 'long' ? conf : dir === 'short' ? (100 - conf) : conf;
     let decision;
     if (dir === 'neutral') decision = 'NO_TRADE';
-    else if (confidence >= 82 && conf >= 75 && regimeN >= 0.55) decision = 'LARGE';
-    else if (confidence >= 72 && conf >= 68) decision = 'MEDIUM';
-    else if (confidence >= 62 && conf >= 60) decision = 'SMALL';
+    else if (confidence >= 82 && dirConf >= 75 && regimeN >= 0.55) decision = 'LARGE';
+    else if (confidence >= 72 && dirConf >= 68) decision = 'MEDIUM';
+    else if (confidence >= 62 && dirConf >= 60) decision = 'SMALL';
     else decision = 'NO_TRADE';
 
     return { dir, decision, confidence, score: Math.round(dirScore * confidence), dirScore };
