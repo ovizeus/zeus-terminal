@@ -2088,3 +2088,83 @@ export function kronos(closes: number[], fastP = 12, slowP = 26, signalP = 9): K
   }
   return { macd, signal }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// BOREAS — SuperTrend trend-follower (main-chart overlay).
+// Returns the trend line value, the active direction per bar, and the
+// list of flip bars (where direction changed). Aligned to closes.length.
+// ═══════════════════════════════════════════════════════════════
+export interface Boreas {
+  trend: (number | null)[]
+  dir: (number | null)[]            // 'up' | 'down' (typed loosely for caller convenience)
+  flips: { index: number; dir: 'up' | 'down' }[]
+}
+export function boreas(highs: number[], lows: number[], closes: number[], atrPeriod = 10, mult = 3): Boreas {
+  const n = closes.length
+  const p = Math.max(1, Math.round(atrPeriod))
+  const m = Number(mult) || 3
+  const trend: (number | null)[] = new Array(n).fill(null)
+  const dir: ('up' | 'down' | null)[] = new Array(n).fill(null)
+  const flips: { index: number; dir: 'up' | 'down' }[] = []
+  if (n === 0) return { trend, dir: dir as (number | null)[], flips }
+
+  // True Range
+  const tr: number[] = new Array(n).fill(0)
+  tr[0] = highs[0] - lows[0]
+  for (let i = 1; i < n; i++) {
+    const hl = highs[i] - lows[i]
+    const hc = Math.abs(highs[i] - closes[i - 1])
+    const lc = Math.abs(lows[i] - closes[i - 1])
+    tr[i] = Math.max(hl, hc, lc)
+  }
+  // ATR — Wilder smoothing seeded with the SMA of the first `p` TR values.
+  const atr: (number | null)[] = new Array(n).fill(null)
+  if (n >= p) {
+    let sum = 0
+    for (let i = 0; i < p; i++) sum += tr[i]
+    atr[p - 1] = sum / p
+    for (let i = p; i < n; i++) {
+      atr[i] = ((atr[i - 1] as number) * (p - 1) + tr[i]) / p
+    }
+  }
+
+  const finalUpper: (number | null)[] = new Array(n).fill(null)
+  const finalLower: (number | null)[] = new Array(n).fill(null)
+  let prevDir: 'up' | 'down' = 'up'
+
+  for (let i = 0; i < n; i++) {
+    const a = atr[i]
+    if (a == null) continue
+    const hl2 = (highs[i] + lows[i]) / 2
+    const upperBand = hl2 + m * a
+    const lowerBand = hl2 - m * a
+
+    const pfu = finalUpper[i - 1]
+    const pfl = finalLower[i - 1]
+    // First valid bar: no carry, bands seed directly.
+    if (pfu == null || pfl == null) {
+      finalUpper[i] = upperBand
+      finalLower[i] = lowerBand
+      prevDir = 'up'
+      dir[i] = 'up'
+      trend[i] = finalLower[i]
+      continue
+    }
+    finalUpper[i] = (upperBand < pfu || closes[i - 1] > pfu) ? upperBand : pfu
+    finalLower[i] = (lowerBand > pfl || closes[i - 1] < pfl) ? lowerBand : pfl
+
+    // Direction rule (standard SuperTrend): flip up when close pierces above
+    // the prior final upper band; flip down when it pierces below the prior
+    // final lower band; otherwise carry the previous direction.
+    let d: 'up' | 'down' = prevDir
+    if (prevDir === 'down' && closes[i] > pfu) d = 'up'
+    else if (prevDir === 'up' && closes[i] < pfl) d = 'down'
+
+    if (d !== prevDir) flips.push({ index: i, dir: d })
+    dir[i] = d
+    trend[i] = d === 'up' ? finalLower[i] : finalUpper[i]
+    prevDir = d
+  }
+
+  return { trend, dir: dir as (number | null)[], flips }
+}

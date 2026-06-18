@@ -100,6 +100,7 @@ export const INDICATORS: any[] = [
   { id: 'ema', ico: _ZI.tup, name: 'EMA 50/200', desc: 'Exponential Moving Average', cat: 'trend', def: true },
   { id: 'wma', ico: _ZI.wave, name: 'WMA 20/50', desc: 'Weighted Moving Average', cat: 'trend', def: true },
   { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + dynamic Stop Loss', cat: 'trend', def: true },
+  { id: 'boreas', ico: _ZI.wave, name: 'BOREAS', desc: 'SuperTrend trend-follower — thick green/red trend line + Long/Short flip signals 🌬️', cat: 'trend', def: false },
   { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volume at price levels', cat: 'volume', def: true },
   { id: 'cvd', ico: _ZI.chart, name: 'CVD', desc: 'Cumulative Volume Delta', cat: 'volume', def: false },
   { id: 'macd', ico: _ZI.bolt, name: 'MACD', desc: 'Moving Avg Convergence Div', cat: 'momentum', def: false },
