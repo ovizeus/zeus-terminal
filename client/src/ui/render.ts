@@ -68,7 +68,7 @@ export function renderPerfTracker() {
   if (!body) return;
   const entries = Object.entries(PERF);
   if (entries.every(([, p]: any) => p.wins + p.losses === 0)) {
-    body.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--dim)">Se colecteaza date din Auto Trade...</div>';
+    body.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--dim)">Collecting data from Auto Trade...</div>';
     return;
   }
   body.innerHTML = entries.map(([name, p]: any) => {

@@ -1182,8 +1182,8 @@ export function resetProtectMode(): void {
   BM.lossStreak = 0
   const banner = el('protectBanner')
   if (banner) banner.className = 'protect-banner'
-  brainThink('ok', _ZI.ok + ' Protect mode resetat manual')
-  toast('Protect mode resetat', 0, _ZI.ok)
+  brainThink('ok', _ZI.ok + ' Protect mode reset manually')
+  toast('Protect mode reset', 0, _ZI.ok)
 }
 
 // ── DSL TELEMETRY UPDATE ──────────────────────────────────────────
