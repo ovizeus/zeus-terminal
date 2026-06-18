@@ -883,7 +883,18 @@ function _createSubChart(containerId: string, height?: number): any {
       if (tr) chart.timeScale().setVisibleLogicalRange(tr)
     } catch (_) { }
   }
+  // [PANE-SYNC 2026-06-18] Lock the price chart AND this new sub-pane into the live
+  // bidirectional time-axis sync, so moving any one moves them all (no manual re-align).
+  _registerChartForSync(w.mainChart)
+  _registerChartForSync(chart)
   return chart
+}
+
+// [PANE-SYNC 2026-06-18] Single source of truth for EVERY chart that must share one time
+// axis — the price chart + every sub-pane oscillator. Used by both the data-update sync
+// and the live scroll/zoom sync below.
+function _allSyncCharts(): any[] {
+  return [w.mainChart, w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, _macdChart].filter(Boolean)
 }
 
 export function _syncSubChartsToMain(): void {
@@ -891,10 +902,39 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, _macdChart].forEach((ch: any) => {
-      if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
+    _allSyncCharts().forEach((ch: any) => {
+      if (ch && ch !== w.mainChart) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
+}
+
+// [PANE-SYNC 2026-06-18] LIVE bidirectional time-axis lock across price + all sub-panes.
+// BUG it fixes: sub-panes only re-aligned to the price chart on a DATA tick (via
+// _syncSubChartsToMain), so any user scroll/zoom of the price chart OR of a sub-pane
+// (handleScroll is on) drifted them out of alignment until the next tick — "one pane ahead,
+// one behind", needing manual re-align. Now EVERY chart's visible-range change instantly
+// propagates to ALL the others, so they move together as one and stay locked to the last
+// candle, regardless of how many panes are open. Re-entrancy guard (w._chartSyncing) stops
+// the propagation cascade from looping; WeakSet stops double-subscribing.
+const _syncRegistered = new WeakSet<any>()
+function _registerChartForSync(chart: any): void {
+  if (!chart || _syncRegistered.has(chart)) return
+  _syncRegistered.add(chart)
+  try {
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+      if (!range || w._chartSyncing) return
+      w._chartSyncing = true
+      try {
+        for (const c of _allSyncCharts()) {
+          if (c && c !== chart) { try { c.timeScale().setVisibleLogicalRange(range) } catch (_) { } }
+        }
+      } finally { w._chartSyncing = false }
+    })
+  } catch (_) { }
+}
+/** Lock the price chart + every currently-open sub-pane into the live sync. Idempotent. */
+export function _ensureChartSync(): void {
+  for (const c of _allSyncCharts()) _registerChartForSync(c)
 }
 
 // ═══════════════════════════════════════════════════════════════
