@@ -1803,6 +1803,7 @@ export let ichimokuSeries: any[] = []
 export let fibSeries: any[] = []
 export let pivotSeries: any[] = []
 export let vpSeries: any[] = []
+export let magnesSeries: any[] = []
 export let _rsiChart: any = null, _rsiSeries: any = null, _rsiInited = false
 export let _stochChart: any = null, _stochKSeries: any = null, _stochDSeries: any = null, _stochInited = false
 export let _atrChart: any = null, _atrSeries: any = null, _atrInited = false
@@ -1908,6 +1909,7 @@ export const IND_SETTINGS: any = {
   pivot: { type: 'standard' },
   vwap: { stdDev: 1, stdDev2: 2 },
   vp: { rows: 70 },
+  magnes: { rows: 50, lookback: 240 },
   cvd: { smoothing: 0 },
   // [2026-06-16] batch-1 overlays
   sma: { period: 20 },

@@ -49,6 +49,7 @@ export const IND_ICONS: Record<string, string> = {
   chop: g(p('M2 11l2-4 2 4 2-4 2 4 2-4 2 4')),                              // choppy saw
   // ── Volume family ──
   vp: g(p('M2 4h7M2 7h11M2 10h5M2 13h9')),                                  // horizontal volume profile
+  magnes: g(p('M4 3v5a4 4 0 008 0V3') + p('M3 3h2M11 3h2M3 8h2M11 8h2')),    // horseshoe magnet (liquidity magnet)
   obv: g(p('M2 12l3-1 3-3 3-1 3-4')),                                       // cumulative balance steps
   vwap: g(p('M2 12c4 0 8-8 12-8') + p('M3 14v-2M6 14v-2M9 14v-2M12 14v-2')),  // weighted avg over volume
   cvd: g(p('M2 8h3V5h3v6h3V7h2')),                                          // cumulative delta steps
