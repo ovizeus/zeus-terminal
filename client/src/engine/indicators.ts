@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -326,6 +326,14 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'hyperion':
       { const hx = document.getElementById('hyperionChart'); if (hx) hx.style.display = show ? '' : 'none'; if (show) initHyperionChart() }
+      break
+    case 'mentor':
+      { const mx = document.getElementById('mentorChart'); if (mx) mx.style.display = show ? '' : 'none' }
+      if (show) { initMentorSeries(); initMentorChart(); updateMentor() }
+      else {
+        if (w.mentorMaS) try { w.mentorMaS.setData([]) } catch (_) { }
+        try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { }
+      }
       break
     case 'kronos':
       { const kx = document.getElementById('kronosChart'); if (kx) kx.style.display = show ? '' : 'none'; if (show) initKronosChart() }
@@ -939,7 +947,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, w._kronosChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, w._kronosChart, w._mentorChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -1625,6 +1633,60 @@ export function updateHyperion(): void {
   }
   try { w._hyperionFillS.setData(fast); w._hyperionSigS.setData(sig); w._hyperionMidS.setData(mid) } catch (_) { }
   _syncSubChartsToMain()
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MENTOR — FX Market Code (MarCo): 50MA trend overlay + 4-state candle
+// recolour (main chart) + OsMA (MACD − signal) momentum histogram (sub-pane).
+// Zeus original recreation. State codes are NUMBERS (2/1/-2/-1) → hex via _mentorColor.
+// ═══════════════════════════════════════════════════════════════
+
+const _mentorColor = (st: number | null): string | undefined =>
+  st === 2 ? '#00e676' : st === 1 ? '#0b6b34' : st === -2 ? '#ff1744' : st === -1 ? '#7a1f1f' : undefined
+
+export function initMentorSeries(): void {
+  if (w.mentorMaS || !w.mainChart) return
+  w.mentorMaS = w.mainChart.addLineSeries({ color: '#2962ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+}
+
+export function initMentorChart(): void {
+  if (w._mentorInited && w._mentorChart) { updateMentor(); return }
+  w._mentorChart = _createSubChart('mentorChart', 90)
+  if (!w._mentorChart) return
+  w._mentorOsmaS = w._mentorChart.addHistogramSeries({ priceLineVisible: false, lastValueVisible: true, base: 0 })
+  w._mentorMidS = w._mentorChart.addLineSeries({ color: 'rgba(255,255,255,0.2)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._mentorInited = true
+  updateMentor()
+}
+
+export function updateMentor(): void {
+  if (!w.mainChart || !w.cSeries || !w.S.klines.length) return
+  initMentorSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.mentor || {}
+  const r = _calcMENTOR(k.map((b: any) => b.close), Math.round(s.maPeriod) || 50, Math.round(s.fast) || 12, Math.round(s.slow) || 26, Math.round(s.sigP) || 9)
+  // candle recolour on the MAIN chart
+  const colored = k.map((b: any, i: number) => {
+    const col = _mentorColor(r.candleState[i] as number | null)
+    return col
+      ? { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: col, borderColor: col, wickColor: col }
+      : { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }
+  })
+  try { w.cSeries.setData(colored) } catch (_) { }
+  // 50MA blue line
+  const ma: any[] = []
+  for (let i = 0; i < r.ma.length; i++) { if (r.ma[i] != null && k[i]) ma.push({ time: k[i].time, value: r.ma[i] }) }
+  try { w.mentorMaS.setData(ma) } catch (_) { }
+  // OsMA pane (only when the pane is open)
+  if (w._mentorInited && w._mentorOsmaS) {
+    const osma: any[] = [], mid: any[] = []
+    for (let i = 0; i < r.osma.length; i++) {
+      if (!k[i]) continue
+      if (r.osma[i] != null) osma.push({ time: k[i].time, value: r.osma[i], color: _mentorColor(r.osmaState[i] as number | null) || '#888' })
+      mid.push({ time: k[i].time, value: 0 })
+    }
+    try { w._mentorOsmaS.setData(osma); w._mentorMidS.setData(mid) } catch (_) { }
+    _syncSubChartsToMain()
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3212,6 +3274,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.harmonia) updateHarmonia()
   if (w.S.activeInds.daimon) updateDaimon()
   if (w.S.activeInds.boreas) updateBoreas()
+  if (w.S.activeInds.mentor) updateMentor()
 }
 
 export function renderActBar(): void {
@@ -3236,7 +3299,7 @@ export function renderActBar(): void {
 }
 
 export function getIndColor(id: string): string {
-  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hyperion: '#5b8def', kronos: '#26ff9a', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676', harmonia: '#ff2d95', daimon: '#f0c040', boreas: '#00e676', magnes: '#ff3b30' }
+  const map: Record<string, string> = { ema: '#f0c040', wma: '#aa44ff', st: '#ff8800', vp: '#00b8d4', macd: '#00e5ff', bb: '#ff6688', rsi14: '#f5c842', vwap: '#00d97a', fib: '#aa44ff', ichimoku: '#44aaff', stoch: '#ffaa00', obv: '#00b8d4', atr: '#ff8800', pivot: '#f0c040', mfi: '#00d97a', cci: '#ff3355', sma: '#26c6da', hma: '#ffca28', psar: '#00e5ff', kc: '#ab47bc', dc: '#42a5f5', adx: '#f0c040', willr: '#26c6da', roc: '#ffca28', cmf: '#ab47bc', ao: '#26ff9a', vwma: '#7e57c2', aroon: '#26ff9a', trix: '#ffca28', uo: '#26c6da', chop: '#ab47bc', kera: '#00e676', aether: '#f0c040', ms: '#26ff9a', nem: '#ff1744', iris: '#32ade6', pythia: '#00e676', plutus: '#ffab40', helios: '#f0c040', hyperion: '#5b8def', kronos: '#26ff9a', hermes: '#26c6da', charon: '#ffca28', atlas: '#00e676', eos: '#ff8f00', pantheon: '#f0c040', aegis: '#00e676', selene: '#b388ff', kratos: '#f0c040', prometheus: '#ff8f00', mnemosyne: '#b388ff', themis: '#f0c040', erebus: '#b388ff', anemoi: '#26c6da', cerberus: '#00e676', proteus: '#26c6da', typhon: '#ffab40', styx: '#ff5277', geras: '#26ff9a', ouranos: '#5b8def', hades: '#00e676', athena: '#26ff9a', echo: '#b388ff', kairos: '#26c6da', tyche: '#5b8def', nyx: '#26ff9a', olympus: '#f0c040', gaia: '#66bb6a', ananke: '#f0c040', psyche: '#ff2d95', hubris: '#7c4dff', okeanos: '#00e676', aurora: '#00e68c', argus: '#f0c040', orion: '#2b7bff', phoenix: '#ffd600', nephele: '#e040fb', morpheus: '#00e676', harmonia: '#ff2d95', daimon: '#f0c040', boreas: '#00e676', magnes: '#ff3b30', mentor: '#2962ff' }
   return map[id] || '#888'
 }
 
