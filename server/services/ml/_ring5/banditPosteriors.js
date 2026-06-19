@@ -31,14 +31,20 @@ function _validateLevel(level) {
     return level;
 }
 
+// [AUDIT-20260619 P3] The cell PK is a ':'-join; `regime` is free-form, so a label
+// containing ':' would collide two distinct cells (or shift level boundaries) into
+// one Beta posterior. Sanitize each dynamic segment (':' → '_'). No-op for every
+// current value (env/symbol/userId are controlled, no regime has ':'), so existing
+// persisted keys are byte-identical — this only forecloses a future collision.
+const _seg = (v) => String(v).replace(/:/g, '_');
 function buildCellKey(params) {
     const level = _required(params, 'level');
     _validateLevel(level);
     if (level === 0) return 'global';
-    if (level === 1) return `${_required(params, 'env')}`;
-    if (level === 2) return `${_required(params, 'env')}:${_required(params, 'symbol')}`;
-    if (level === 3) return `${_required(params, 'env')}:${_required(params, 'symbol')}:${_required(params, 'regime')}`;
-    return `${_required(params, 'userId')}:${_required(params, 'env')}:${_required(params, 'symbol')}:${_required(params, 'regime')}`;
+    if (level === 1) return `${_seg(_required(params, 'env'))}`;
+    if (level === 2) return `${_seg(_required(params, 'env'))}:${_seg(_required(params, 'symbol'))}`;
+    if (level === 3) return `${_seg(_required(params, 'env'))}:${_seg(_required(params, 'symbol'))}:${_seg(_required(params, 'regime'))}`;
+    return `${_seg(_required(params, 'userId'))}:${_seg(_required(params, 'env'))}:${_seg(_required(params, 'symbol'))}:${_seg(_required(params, 'regime'))}`;
 }
 
 const _stmts = {
