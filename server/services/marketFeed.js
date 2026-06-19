@@ -521,7 +521,15 @@ function _altStartPricePoller(symUpper) {
         } catch (_) { /* quiet failure — next tick retries */ }
     };
     let _firstFireDelay = 700;
-    try { _firstFireDelay = bootJitter(`marketFeed.altPrice.${symUpper}`); } catch (_) {}
+    // [AUDIT-20260619 P3] bootJitter was called here without being in scope
+    // (only required locally inside _altStartKlinePoller), so this threw a
+    // ReferenceError swallowed by the catch → every alt-price poller fired at a
+    // fixed 700ms, re-introducing the synchronized boot-burst the jitter prevents
+    // (418-ban class). Require it locally like the kline poller sibling does.
+    try {
+        const { bootJitter } = require('../utils/bootJitter');
+        _firstFireDelay = bootJitter(`marketFeed.altPrice.${symUpper}`);
+    } catch (_) { /* fall back to 700ms if utility missing */ }
     setTimeout(tick, _firstFireDelay);
     state.timer = setInterval(tick, ALT_PRICE_POLL_MS);
 }
