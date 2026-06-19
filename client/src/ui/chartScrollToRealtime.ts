@@ -29,7 +29,10 @@ export function initScrollToRealtime(): void {
       btn.innerHTML = '&#187;' // »
       btn.style.display = 'none'
       btn.addEventListener('click', () => {
-        try { w.mainChart.timeScale().scrollToRealTime() } catch (_) { }
+        // scrollToPosition(0,false) snaps the latest bar to the right edge reliably.
+        // scrollToRealTime() under-scrolls after a large history backfill (animation is
+        // distance-limited), leaving the view short of realtime so the button re-shows.
+        try { w.mainChart.timeScale().scrollToPosition(0, false) } catch (_) { }
         const e = document.getElementById('chartScrollRtBtn')
         if (e) e.style.display = 'none'
       })
