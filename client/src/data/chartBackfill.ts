@@ -89,8 +89,6 @@ export async function loadOlder(): Promise<void> {
   if (!w.cSeries || !w.mainChart || !Array.isArray(w.S?.klines) || !w.S.klines.length) return
   if (w.S.klines.length >= MAX_BARS) return
 
-  _inFlight = true
-  _showLoading(true)
   const gen = w.__wsGen
   const sym = w.S.symbol
   const tf = w.S.chartTf
@@ -99,6 +97,8 @@ export async function loadOlder(): Promise<void> {
   const oldest = w.S.klines[0].time
 
   try {
+    _inFlight = true
+    _showLoading(true)
     const ac = new AbortController()
     const acTimer = setTimeout(() => ac.abort(), 10000)
     let r: Response
