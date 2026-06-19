@@ -491,6 +491,11 @@ export async function aresPlaceOrder(params: any): Promise<any> {
       leverage: params.leverage,
       newClientOrderId: cid,
       referencePrice: params.referencePrice || 0,
+      // [AUDIT-20260619 P1-2] Tag as auto so the server-side double-execution
+      // backstop (ownership.shouldRejectClientAutoOrder → 409) covers ARES the
+      // same way it covers AT. Without this, a desynced ARES client could
+      // double-open under full server ownership.
+      source: 'auto',
     }),
   })
   const result = await _liveApiParse(res, 'ARES order/place')
