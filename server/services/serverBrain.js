@@ -1218,14 +1218,10 @@ function _runCycle() {
                                 fusion.confidence = _ring5Wrap.confidence;
                                 if (Array.isArray(_ring5Wrap.reasons)) fusion.reasons = _ring5Wrap.reasons;
                                 fusion.layeredBy = 'ring5-influence-applied';
-                                // Tier re-eval on cut. Boost never upgrades tier (sizing
-                                // stays at Phase 2 authoritative level for safety).
-                                if (_belowSmallBar(fusion.confidence, _soakConfFloorFor(userId)) && fusion.decision !== 'NO_TRADE') {
-                                    fusion.decision = 'NO_TRADE';
-                                } else if (fusion.confidence < 72 &&
-                                           (fusion.decision === 'MEDIUM' || fusion.decision === 'LARGE')) {
-                                    fusion.decision = 'SMALL';
-                                }
+                                // Tier re-eval on cut. Demote-only (boost never upgrades
+                                // tier). [AUDIT-20260619 P2] full ladder: LARGE→MEDIUM at
+                                // 72..81 too, not only →SMALL/<NO_TRADE.
+                                fusion.decision = _demoteTierForConfidence(fusion.decision, fusion.confidence, _soakConfFloorFor(userId));
                             }
                         }
                     } catch (_ring5Err) {
@@ -1272,8 +1268,9 @@ function _runCycle() {
                     // Apply confidence penalty from reflection
                     if (questioning.totalPenalty) {
                         decision.fusion.confidence = Math.max(0, decision.fusion.confidence + questioning.totalPenalty);
-                        // Re-evaluate tier after penalty
-                        if (_belowSmallBar(decision.fusion.confidence, _soakConfFloorFor(userId))) {
+                        // Re-evaluate tier after penalty [AUDIT-20260619 P2] full demote ladder
+                        const _reflTier = _demoteTierForConfidence(decision.fusion.decision, decision.fusion.confidence, _soakConfFloorFor(userId));
+                        if (_reflTier === 'NO_TRADE') {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('reflection_penalty');
                             _pushBlock(userId, symbol, ['reflection_penalty:conf=' + decision.fusion.confidence], 'reflection_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
@@ -1285,8 +1282,8 @@ function _runCycle() {
                                 ddDailyPnL: dailyPnL, ddRefBalance: refBalance,
                             })); } catch (_) {}
                             continue;
-                        } else if (decision.fusion.confidence < 72) {
-                            decision.fusion.decision = 'SMALL';
+                        } else {
+                            decision.fusion.decision = _reflTier;
                         }
                     }
 
@@ -1334,7 +1331,11 @@ function _runCycle() {
                     const corrMod = serverCorrelationGuard.getCorrelationModifier(snap.symbol, fusion.dir, openPos);
                     if (corrMod < 1.0) {
                         decision.fusion.confidence = Math.round(decision.fusion.confidence * corrMod);
-                        if (_belowSmallBar(decision.fusion.confidence, _soakConfFloorFor(userId))) {
+                        // [AUDIT-20260619 P2] full demote ladder. This site previously had
+                        // ONLY the NO_TRADE branch — a LARGE/MEDIUM cut by correlation but
+                        // still >=62 kept its tier and was over-sized.
+                        const _corrTier = _demoteTierForConfidence(decision.fusion.decision, decision.fusion.confidence, _soakConfFloorFor(userId));
+                        if (_corrTier === 'NO_TRADE') {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('correlation_penalty');
                             _pushBlock(userId, symbol, ['correlation_penalty:conf=' + decision.fusion.confidence], 'correlation_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
@@ -1344,6 +1345,8 @@ function _runCycle() {
                                 modCorrelation: corrMod,
                             })); } catch (_) {}
                             continue;
+                        } else {
+                            decision.fusion.decision = _corrTier;
                         }
                     }
 
@@ -2177,6 +2180,21 @@ function _belowSmallBar(confidence, soakFloor) {
     return confidence < smallBar;
 }
 
+// [AUDIT-20260619 P2] Demote-only re-tier after a post-fusion confidence cut
+// (Ring5 influence / reflection penalty / correlation modifier). The old inline
+// guards only handled <smallBar→NO_TRADE and <72→SMALL, so a LARGE penalized to
+// 72..81 stayed LARGE → over-sized (1.75x vs MEDIUM 1.35x). Mirrors _classifyTier's
+// thresholds (LARGE>=82, MEDIUM>=72, SMALL>=smallBar). NEVER promotes; needs no
+// confScore — the bars are monotonic, so a tier that already qualified on confScore
+// still satisfies every lower tier's confScore bar.
+function _demoteTierForConfidence(tier, confidence, soakFloor) {
+    if (tier === 'NO_TRADE') return 'NO_TRADE';
+    if (_belowSmallBar(confidence, soakFloor)) return 'NO_TRADE';
+    if (confidence < 72) return (tier === 'MEDIUM' || tier === 'LARGE') ? 'SMALL' : tier;
+    if (confidence < 82 && tier === 'LARGE') return 'MEDIUM';
+    return tier;
+}
+
 // [SP2-a soak] pure: only a cutover testnet user under an active flag gets the
 // soak floor; every other combination returns null → standard 62 SMALL bar.
 function _resolveSoakFloor(flagOn, isCutover, isTestnet, floorVal) {
@@ -2643,6 +2661,7 @@ module.exports = {
     // [SP2-a soak] Tier classifier + gating helpers. Pure/thin readers exported
     // for unit tests; runtime path (_computeFusion) references the local symbols.
     _classifyTier,
+    _demoteTierForConfidence,
     // [LEVER-A 2026-06-10] test-only — pure shadow-parity formula, no runtime
     // path calls this export (_runShadowCycle uses the local symbol).
     _calcConfluenceParity,
