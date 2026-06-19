@@ -199,6 +199,16 @@ function tick(posId, price) {
         s.pivotRight = _safePrice(s.pivotRight, price);
         s.impulseVal = _safePrice(s.impulseVal, s.pivotRight);
 
+        // [AUDIT-20260619 P1-3] Activation must NEVER loosen the stop below the
+        // user's original SL. With a wide preset + a tighter user stop, the raw
+        // pivotLeft can land further from price than originalSL. Clamp toward the
+        // trader: LONG keeps the HIGHER stop, SHORT keeps the LOWER one.
+        if (s.originalSL != null && Number.isFinite(s.originalSL) && s.originalSL > 0) {
+            s.pivotLeft = isLong
+                ? Math.max(s.pivotLeft, s.originalSL)
+                : Math.min(s.pivotLeft, s.originalSL);
+        }
+
         // Pivot Left becomes the new effective SL
         s.currentSL = s.pivotLeft;
         changed = true;
