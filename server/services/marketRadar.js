@@ -320,9 +320,15 @@ async function _pollOnce() {
     try {
         const mc = require('./marketCache');
         for (const t of top) {
+            // [AUDIT-20260619 P3] honest source attribution: during a Binance ban the
+            // ticker poll falls back to Bybit (_source='bybit') but the data was still
+            // written under the 'binance:' key with no provenance. Keep the key (consumers
+            // look it up by 'binance:'+symbol) but stamp the real source in the VALUE so a
+            // consumer can tell Bybit-sourced numbers from Binance-sourced ones.
             mc.set('ticker', 'binance:' + t.symbol, {
                 price: t.price, quoteVolume: t.quoteVolume,
                 priceChangePercent24h: t.priceChangePercent24h,
+                source: _source,
             }, { caller: 'marketRadar' });
         }
     } catch (_) {}
