@@ -982,7 +982,7 @@ export function computeMarketAtmosphere(): void {
     const re = BM.regimeEngine || {}
     const pf = BM.phaseFilter || {}
     const sw = BM.sweep || {}
-    const fakeBlocked = (typeof w._fakeout !== 'undefined') ? !!w._fakeout.invalid : false
+    const fakeBlocked = (typeof w._fakeout !== 'undefined') ? !!w._fakeout?.invalid : false
     const ofTrap = (typeof w.OF !== 'undefined' && w.OF.trap) ? !!w.OF.trap.active : false
     const ofCascade = (typeof w.OF !== 'undefined' && w.OF.cascade) ? (w.OF.cascade.state === 'fired') : false
     const trapRisk = re.trapRisk || 0
@@ -1771,7 +1771,7 @@ export function renderBrainCockpit(): void {
   const triggerOk = ctx.trigger
   // [ATMOSPHERE] Pre-filter: block ARM if atmosphere forbids entry
   const atmosAllow = BM.atmosphere ? BM.atmosphere.allowEntry !== false : true
-  const isArmed = !BM.protectMode && safetyPass && ctx.mtf && ctx.flow && triggerOk && !w._fakeout.invalid && score >= scoreThresh && confluenceScore >= confThresh && atmosAllow
+  const isArmed = !BM.protectMode && safetyPass && ctx.mtf && ctx.flow && triggerOk && !w._fakeout?.invalid && score >= scoreThresh && confluenceScore >= confThresh && atmosAllow
   // [BRAIN-MODE-SPLIT b74] TRADING badge must follow the active AT mode. Previously
   // hardcoded to getDemoPositions(), which kept the badge lit on LIVE when DEMO had
   // open positions (and vice-versa).
@@ -1808,7 +1808,7 @@ export function renderBrainCockpit(): void {
     mtf: { led: 'led-mtf', lbl: 'lbl-mtf', txt: `MTF Align ${mtfAlignCount}/3`, pass: ctx.mtf },
     flow: { led: 'led-flow', lbl: 'lbl-flow', txt: `Flow ${ctx.flow ? 'CONFIRM' : 'WEAK'}`, pass: ctx.flow },
     trigger: { led: 'led-trigger', lbl: 'lbl-trigger', txt: `Trigger: ${ctx.trigger ? 'Sweep+Reclaim' : 'NONE'}`, pass: ctx.trigger, wait: true },
-    antifake: { led: 'led-antifake', lbl: 'lbl-antifake', txt: `Anti-Fakeout ${w._fakeout.invalid ? 'BLOCK' : 'OK'}`, pass: !w._fakeout.invalid }
+    antifake: { led: 'led-antifake', lbl: 'lbl-antifake', txt: `Anti-Fakeout ${w._fakeout?.invalid ? 'BLOCK' : 'OK'}`, pass: !w._fakeout?.invalid }
   }
   Object.entries(ctxMap).forEach(([, o]: any) => {
     const { led, lbl, txt, pass, wait } = o
@@ -1849,7 +1849,7 @@ export function renderBrainCockpit(): void {
   if (scoreLbl) { scoreLbl.textContent = score >= scoreThresh ? 'READY' : score >= 60 ? 'WAIT' : 'BLOCK'; scoreLbl.className = 'znc-state ' + (score >= scoreThresh ? 'armed' : score >= 60 ? 'analyzing' : 'blocked') }
 
   // ── ORB LED NODES (gate state → LED ring dots) ──
-  const ledStates = [safety.risk, safety.spread, safety.cooldown, safety.news, safety.session, ctx.mtf, ctx.flow, ctx.trigger, !w._fakeout.invalid]
+  const ledStates = [safety.risk, safety.spread, safety.cooldown, safety.news, safety.session, ctx.mtf, ctx.flow, ctx.trigger, !w._fakeout?.invalid]
   ledStates.forEach((pass: any, i: number) => {
     const dot = el('zled' + i); if (!dot) return
     const c2 = pass ? '#39ff14' : '#ff3355'
@@ -1934,7 +1934,7 @@ export function renderBrainCockpit(): void {
   const cdLeft = Math.max(0, Math.round((_getCooldownMs() - (Date.now() - (getATLastTradeTs() || 0))) / 60000))
 
   // ── GATES SUMMARY (computed here; routed with zad-* into store) ──
-  const allGates = Object.assign({}, safety, { mtfCtx: ctx.mtf, flowCtx: ctx.flow, triggerCtx: ctx.trigger, antifakeCtx: !w._fakeout.invalid })
+  const allGates = Object.assign({}, safety, { mtfCtx: ctx.mtf, flowCtx: ctx.flow, triggerCtx: ctx.trigger, antifakeCtx: !w._fakeout?.invalid })
   const gatesOk = Object.values(allGates).filter(Boolean).length
   const gatesTotal = Object.keys(allGates).length
 
@@ -1967,7 +1967,7 @@ export function renderBrainCockpit(): void {
   else if (!safety.risk) { topReason = 'AUTO BLOCKED: Risk Limits reached (DD/Streak/MaxPos)'; reasonCls = 'block' }
   else if (!ctx.trigger) { topReason = 'AUTO WAIT: Trigger unconfirmed (Sweep+Reclaim or Disp)'; reasonCls = 'wait' }
   else if (!ctx.flow) { topReason = 'AUTO WAIT: FlowConfirm FAIL — CVD/Delta neutral'; reasonCls = 'wait' }
-  else if (w._fakeout.invalid) { topReason = 'AUTO WAIT: Anti-fakeout — 2 closes without follow-through'; reasonCls = 'wait' }
+  else if (w._fakeout?.invalid) { topReason = 'AUTO WAIT: Anti-fakeout — 2 closes without follow-through'; reasonCls = 'wait' }
   else if (!ctx.mtf) { topReason = `AUTO WAIT: MTF Align ${mtfAlignCount}/3 (min 2 required)`; reasonCls = 'wait' }
   else if (score < scoreThresh) { topReason = `AUTO WAIT: EntryScore ${score} < ${scoreThresh} (${prof})`; reasonCls = 'wait' }
   else if (confluenceScore < confThresh) { topReason = `AUTO WAIT: Confluence ${confluenceScore} < ${confThresh}`; reasonCls = 'wait' }

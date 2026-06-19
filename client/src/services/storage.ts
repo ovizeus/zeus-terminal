@@ -29,7 +29,9 @@ export function addTradeToJournal(trade: Record<string, any>): void {
   TP.journal.unshift(trade)
   if (TP.journal.length > 200) TP.journal.length = 200
   renderTradeJournal()
-  _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50))
+  // [AUDIT-20260619 P3] persist the full in-memory cap (200), not 50 — a cold
+  // reload before the server-journal merge otherwise restores only 50 entries.
+  _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 200))
   if (trade.journalEvent === 'CLOSE' && typeof recordDailyClose === 'function') recordDailyClose(trade)
   // Sync closed trades to server SQLite (Full Journal reads from there)
   if (trade.journalEvent === 'CLOSE') {

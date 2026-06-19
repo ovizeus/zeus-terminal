@@ -27,7 +27,7 @@ export function computeManualClosedStats(journal: any[], engineMode: string): Ma
   for (const e of entries) {
     const p = Number(e.pnl) || 0
     pnl += p
-    if (p >= 0) wins++
+    if (p > 0) wins++  // [AUDIT-20260619 P3] win = pnl>0 (match server; a 0/scratch close is not a win)
   }
   const trades = entries.length
   const pnlClass: ManualStats['pnlClass'] = pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'neut'

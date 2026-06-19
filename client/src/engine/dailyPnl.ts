@@ -33,7 +33,8 @@ function _addTradeToDailyStats(ds: any, trade: any): void {
   if (!ds.days[dateKey]) ds.days[dateKey] = { trades: 0, wins: 0, losses: 0, grossPnl: 0, fees: 0, netPnl: 0 }
   const day = ds.days[dateKey]
   day.trades += 1
-  if (trade.pnl >= 0) day.wins += 1; else day.losses += 1
+  // [AUDIT-20260619 P3] win=pnl>0, loss=pnl<0, 0/scratch=neither (match server convention)
+  if (trade.pnl > 0) day.wins += 1; else if (trade.pnl < 0) day.losses += 1
   day.grossPnl += trade.pnl
   let fees = 0
   if (Number.isFinite(trade.fees)) fees = trade.fees
