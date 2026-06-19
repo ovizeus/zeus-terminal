@@ -7,7 +7,7 @@ import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _sessLastBt, SESS_CFG } from '../core/config'
-import { calcExpectancy, calcGlobalExpectancy } from '../engine/perfStore'
+import { calcExpectancy, calcGlobalExpectancy, recordIndicatorPnl } from '../engine/perfStore'
 import { calcADX } from '../data/klines'
 import { scheduleAutoClose } from '../trading/autotrade'
 const w = window as any; // kept for w.PERF (self-ref SKIP), w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG
@@ -27,8 +27,15 @@ export function recordIndicatorPerformance(indicatorId: any, won: any) {
 }
 
 // BUG6 FIX: record ALL indicators from signalData, not just hardcoded 3
-export function recordAllIndicators(pos: any, won: any) {
+export function recordAllIndicators(pos: any, won: any, pnl?: number, fees?: number) {
   const PERF = w.PERF;
+  // [AUDIT-20260619 P2] also record the trade's realized PnL per contributing
+  // indicator (recordIndicatorPnl was never called → Avg Win/Loss, Net PnL, Fees
+  // and Expectancy were permanently $0/—). Each indicator that fired is credited
+  // with the trade outcome, mirroring the win/loss attribution above.
+  const _pnl = Number.isFinite(pnl as number) ? (pnl as number) : null;
+  const _fees = Number.isFinite(fees as number) ? (fees as number) : 0;
+  const _rec = (key: string) => { recordIndicatorPerformance(key, won); if (_pnl !== null) recordIndicatorPnl(key, _pnl, _fees); };
   const usedIndicators = pos.signalData?.indicators || pos.signalData?.signals?.map((s: any) => s.id || s.name?.toLowerCase().replace(/\s/g, '')) || [];
   if (usedIndicators.length) {
     usedIndicators.forEach((ind: any) => {
@@ -42,13 +49,13 @@ export function recordAllIndicators(pos: any, won: any) {
                   : ind.includes('fund') ? 'funding'
                     : ind.includes('conf') ? 'confluence'
                       : null;
-      if (key) recordIndicatorPerformance(key, won);
+      if (key) _rec(key);
     });
   } else {
     // Fallback: record confluence + supertrend as before
-    recordIndicatorPerformance('confluence', won);
-    recordIndicatorPerformance('supertrend', won);
-    if (pos.rsiAtEntry !== undefined) recordIndicatorPerformance('rsi', won);
+    _rec('confluence');
+    _rec('supertrend');
+    if (pos.rsiAtEntry !== undefined) _rec('rsi');
   }
   recalcPerfWeights();
   renderPerfTracker();

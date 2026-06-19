@@ -1693,7 +1693,7 @@ export function scheduleAutoClose(pos: any): void {
         const won2 = _finalPnl2 >= 0
         if (won2) AT.wins++; else AT.losses++
 
-        if (typeof w.recordAllIndicators === 'function') w.recordAllIndicators(pos, won2) // BUG6 FIX: all indicators from signalData
+        if (typeof w.recordAllIndicators === 'function') w.recordAllIndicators(pos, won2, _finalPnl2, 0) // BUG6 FIX: all indicators from signalData; [AUDIT-20260619 P2] pass realized PnL so per-indicator analytics populate
         const tradeNow = new Date()
         const dayNms = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         const tDay = dayNms[tradeNow.getUTCDay()]
