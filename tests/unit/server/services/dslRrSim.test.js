@@ -69,3 +69,21 @@ describe('_shouldEarlyExit', () => {
     expect(_shouldEarlyExit({ adversePct: 0.005, recovering: false, threshold: 0.01 })).toBe(false);
   });
 });
+
+const { _smartCutPnlPct } = require('../../../../server/services/dslRrSim');
+const cfg = { side: 'LONG', entry: 100, threshold: 0.01, recoverEps: 0.003, baselinePnlPct: 0 };
+
+describe('_smartCutPnlPct', () => {
+  it('cuts a loser that goes adverse and keeps falling (caps the loss near -threshold)', () => {
+    const pnl = _smartCutPnlPct([100, 99.5, 99.0, 98.5, 98.0], cfg);
+    expect(pnl).toBeLessThanOrEqual(-0.0099);
+    expect(pnl).toBeGreaterThan(-0.016);
+  });
+  it('spares a dip-then-recover winner (returns the baseline, not a cut)', () => {
+    const pnl = _smartCutPnlPct([100, 98.8, 99.6, 101, 102], { ...cfg, baselinePnlPct: 0.02 });
+    expect(pnl).toBe(0.02);
+  });
+  it('keeps baseline when never adverse past threshold', () => {
+    expect(_smartCutPnlPct([100, 100.2, 100.5, 101], { ...cfg, baselinePnlPct: 0.01 })).toBe(0.01);
+  });
+});

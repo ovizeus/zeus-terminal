@@ -49,4 +49,30 @@ function _shouldEarlyExit(o) {
   return o.adversePct >= o.threshold && o.recovering === false;
 }
 
-module.exports = { _cappedPnl, _rrStats, _recovering, _shouldEarlyExit };
+// Replay a price path through the smart cut. The discriminator is SUSTAINED falling:
+// `recovering` = the adverse move is not yet sustained (fewer than `sustain` consecutive new
+// adverse extremes). A dip-then-recover winner makes 1 new low then turns → spared. A genuine
+// loser makes consecutive new lows → cut. Returns the counterfactual exit PnL fraction, or the
+// supplied baselinePnlPct if the cut never fires.
+function _smartCutPnlPct(pricePath, cfg) {
+  if (!Array.isArray(pricePath) || pricePath.length === 0 || !cfg) return (cfg && cfg.baselinePnlPct) || 0;
+  const side = String(cfg.side).toUpperCase();
+  const entry = +cfg.entry, threshold = +cfg.threshold;
+  const K = Number.isFinite(+cfg.sustain) ? +cfg.sustain : 2;
+  const baseline = +cfg.baselinePnlPct || 0;
+  if (!isFinite(entry) || entry <= 0 || !isFinite(threshold)) return baseline;
+  let extreme = null, consec = 0;
+  for (const raw of pricePath) {
+    const p = +raw; if (!isFinite(p)) continue;
+    const newExtreme = extreme === null ? false : (side === 'LONG' ? p < extreme : p > extreme);
+    extreme = extreme === null ? p : (side === 'LONG' ? Math.min(extreme, p) : Math.max(extreme, p));
+    consec = newExtreme ? consec + 1 : 0;
+    const adversePct = side === 'LONG' ? (entry - p) / entry : (p - entry) / entry;
+    if (_shouldEarlyExit({ adversePct, recovering: consec < K, threshold })) {
+      return side === 'LONG' ? (p - entry) / entry : (entry - p) / entry;
+    }
+  }
+  return baseline;
+}
+
+module.exports = { _cappedPnl, _rrStats, _recovering, _shouldEarlyExit, _smartCutPnlPct };
