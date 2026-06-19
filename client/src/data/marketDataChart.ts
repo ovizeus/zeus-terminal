@@ -10,6 +10,7 @@ import { renderVWAP, renderOviLiquid } from '../ui/panels'
 import { _isHistoricalBarSane, _resetKlineWatchdog } from '../utils/guards'
 import { renderTradeMarkers } from './marketDataOverlays'
 import { _capKlines, initBackfill } from './chartBackfill'
+import { initScrollToRealtime } from '../ui/chartScrollToRealtime'
 
 const w = window as any
 
@@ -98,6 +99,7 @@ export function initCharts(): void {
     } catch (_) { }
   }
   try { initBackfill() } catch (_) { }
+  try { initScrollToRealtime() } catch (_) { }
 }
 
 // ===== FETCH KLINES =====
