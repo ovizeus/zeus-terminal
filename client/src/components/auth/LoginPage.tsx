@@ -409,7 +409,7 @@ export function LoginPage() {
     try {
       const res = await fetch('/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ email: em, password: pw }),
       })
       const data = await res.json()
@@ -442,7 +442,7 @@ export function LoginPage() {
     try {
       const res = await fetch('/auth/verify-code', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ email: pendingEmailRef.current, code }),
       })
       const data = await res.json()
@@ -464,7 +464,7 @@ export function LoginPage() {
     try {
       const res = await fetch('/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ email: pendingEmailRef.current, password: pendingPasswordRef.current }),
       })
       const data = await res.json()
@@ -517,7 +517,7 @@ export function LoginPage() {
     try {
       const res = await fetch('/auth/forgot-password/request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ email: em }),
       })
       const data = await res.json()
@@ -551,7 +551,7 @@ export function LoginPage() {
     try {
       const res = await fetch('/auth/forgot-password/confirm', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ email: em, code: cd, newPassword: np }),
       })
       const data = await res.json()
@@ -590,7 +590,7 @@ export function LoginPage() {
     try {
       const res = await fetch('/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({
           email: em,
           password: pw,
