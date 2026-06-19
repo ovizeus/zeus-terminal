@@ -2557,7 +2557,7 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                                   : exitType === 'HIT_SL' ? 'sl'
                                   : exitType.toLowerCase(),
                         pnl_pct: pnlPct,
-                        r_multiple: pos.rr && pnl !== 0 ? (pnl > 0 ? Math.abs(pnlPct / pos.slPct || 1) : -1) : null,
+                        r_multiple: _rMultiple(pos.rr, pnl, pnlPct, pos.slPct),
                         regime: pos.regime,
                         score_at_entry: pos.confluenceScore || null
                     },
@@ -6497,6 +6497,16 @@ setTimeout(() => {
     logger.info('WATCHDOG', `LIVE_NO_SL watchdog started — interval ${WATCHDOG_INTERVAL_MS / 1000}s`);
 }, 15000);
 
+// [AUDIT-20260619 P2] R-multiple for ML attribution. Zero-guard on the
+// DENOMINATOR (slPct) — the old inline `Math.abs(pnlPct / slPct || 1)` guarded
+// the RESULT, so slPct=0 on a win produced Infinity into ml_attribution_events.
+// Returns null when not applicable (no rr / flat pnl); -1 on a loss.
+function _rMultiple(rr, pnl, pnlPct, slPct) {
+    if (!rr || pnl === 0) return null;
+    if (pnl > 0) return Math.abs(pnlPct / (slPct || 1));
+    return -1;
+}
+
 module.exports = {
     processBrainDecision,
     onPriceUpdate,
@@ -6600,6 +6610,8 @@ module.exports = {
     _shouldRunOrphanSweep, // [F2 2026-06-06] time-based sweep cadence (test hook)
     // [G1/G2 2026-06-06] decision-time affordability gate + failure cooldown (test hooks)
     _entryGateTestHooks: Object.freeze({ affordable: _liveEntryAffordable, cooldown: _entryFailCooldown, enqueueEmergencyClose: _enqueueEmergencyClose }),
+    // [AUDIT-20260619 P2] r_multiple precedence fix — pure helper test hook.
+    _attribTestHooks: Object.freeze({ rMultiple: _rMultiple }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
