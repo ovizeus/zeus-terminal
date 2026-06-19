@@ -6352,6 +6352,21 @@ function onUserDataEvent(userId, event) {
                             logger.warn('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} sync failed: ${_syncRes && _syncRes.error} — no exchange SL placed`);
                         }
                     }
+                } else if (_isSideFlip(existing.side, p.positionAmt)) {
+                    // [AUDIT-20260619 P1-5] Position side FLIPPED (one-way net reversed).
+                    // The match is by symbol+OPEN only, so this MODIFIED event is for a
+                    // position whose side no longer matches our tracked row. Updating
+                    // qty/entry on the wrong-sided row would invert PnL, put the server-net
+                    // SL on the wrong side, and defeat recon self-heal. Do NOT update it:
+                    // detach DSL (so trailing can't act on a wrong-sided position), flag it,
+                    // and defer to the 60s exchange-truth recon to reconcile (close the gone
+                    // side + adopt the real one with its own protection). Conservative — no
+                    // fabricated PnL, no risky auto-close on a partial-fill misread.
+                    logger.warn('USERDATA', `[POSITION_SIDE_FLIP] uid=${userId} ${p.symbol} tracked ${existing.side} but exchange net is ${p.positionAmt > 0 ? 'LONG' : 'SHORT'} (amt=${p.positionAmt}) — NOT updating wrong-sided row; detaching DSL, deferring to recon`);
+                    try { audit.record('SAT_SIDE_FLIP_DETECTED', { userId, symbol: p.symbol, trackedSide: existing.side, exchangeSide: p.positionAmt > 0 ? 'LONG' : 'SHORT', amt: p.positionAmt, seq: existing.seq }, 'SERVER_AT'); } catch (_) {}
+                    try { serverDSL.detach(existing.seq); } catch (_) {}
+                    existing._sideFlipPending = true;
+                    _broadcastPositions(userId);
                 } else {
                     // Position MODIFIED (partial fill, scale in/out)
                     const newQty = Math.abs(p.positionAmt);
@@ -6517,6 +6532,15 @@ function _rMultiple(rr, pnl, pnlPct, slPct) {
     return -1;
 }
 
+// [AUDIT-20260619 P1-5] Detect a position side-flip from a one-way net amount.
+// The ACCOUNT_UPDATE MODIFIED branch matches by symbol only; a sign-flipped non-zero
+// net means the position reversed, and the wrong-sided row must NOT be updated.
+function _isSideFlip(trackedSide, netAmt) {
+    if (!trackedSide || !Number.isFinite(netAmt) || netAmt === 0) return false;
+    const netSide = netAmt > 0 ? 'LONG' : 'SHORT';
+    return netSide !== trackedSide;
+}
+
 // [AUDIT-20260619 P1-3 / SL-floor] The DSL stop must never move AGAINST the
 // trader. The stop (pivotLeft → currentSL) only ever tightens by design; the
 // "breather room" lives on pivotRight, NOT the stop. This predicate gates every
@@ -6637,6 +6661,8 @@ module.exports = {
     _attribTestHooks: Object.freeze({ rMultiple: _rMultiple }),
     // [AUDIT-20260619 P1-3 / SL-floor] monotonic SL guard — pure helper test hook.
     _slGuardHooks: Object.freeze({ isSLImprovement: _isSLImprovement }),
+    // [AUDIT-20260619 P1-5] side-flip detector — pure helper test hook.
+    _sideFlipHooks: Object.freeze({ isSideFlip: _isSideFlip }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
