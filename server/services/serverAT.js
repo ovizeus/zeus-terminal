@@ -3226,7 +3226,18 @@ function _resolveEntryExchange(pos, creds) {
     return (creds && creds.exchange) || null;
 }
 
-function onPriceUpdate(symbol, price) {
+// [AUDIT-20260619 B2] A position is driven only by its OWN exchange's price feed.
+// Default 'binance' (covers null/legacy positions + the marketFeed Binance feed).
+// Before this, the SL/TP/DSL path was fed ONLY by the Binance feed, so a Bybit
+// position froze whenever Binance @bookTicker stalled (Bybit's own live feed wasn't
+// wired into onPriceUpdate) AND Binance prices drove Bybit positions cross-venue.
+function _priceUpdateMatchesExchange(posExchange, feedExchange) {
+    const pe = String(posExchange || 'binance').toLowerCase();
+    const fe = String(feedExchange || 'binance').toLowerCase();
+    return pe === fe;
+}
+
+function onPriceUpdate(symbol, price, exchange) {
     if (!price || price <= 0) return;
 
     const dslChangedUsers = new Set();
@@ -3235,6 +3246,8 @@ function onPriceUpdate(symbol, price) {
         if (i >= _positions.length) continue; // guard: array shrunk during iteration
         const pos = _positions[i];
         if (!pos || pos.symbol !== symbol) continue;
+        // [AUDIT-20260619 B2] only this position's own exchange feed drives it.
+        if (!_priceUpdateMatchesExchange(pos.exchange, exchange)) continue;
         if (pos.status && pos.status !== 'OPEN') continue; // already closing
         // [BUG B 2026-06-05] Exchange reported amt=0 and we're deferring ~2.5s
         // for the SL/TP fill event — don't let the server-side SL net close it
@@ -6675,6 +6688,8 @@ module.exports = {
     _sideFlipHooks: Object.freeze({ isSideFlip: _isSideFlip }),
     // [AUDIT-20260619 FA-P1-1] per-exchange fee — pure helper test hooks.
     _feeHooks: Object.freeze({ feeRateForExchange: _feeRateForExchange, applyRoundTripFee: _applyRoundTripFee }),
+    // [AUDIT-20260619 B2] exchange-aware price routing — pure helper test hook.
+    _priceRouteHooks: Object.freeze({ matchesExchange: _priceUpdateMatchesExchange }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown

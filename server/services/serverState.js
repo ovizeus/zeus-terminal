@@ -210,10 +210,11 @@ function _onPrice(data) {
     if (data.price > 0) {
         sd.price = data.price;
         sd.priceTs = Date.now();
-        // Feed price to AT for SL/TP tracking
+        // Feed price to AT for SL/TP tracking. [AUDIT-20260619 B2] tag the feed
+        // exchange so onPriceUpdate only drives Binance positions with Binance prices.
         try {
             const serverAT = require('./serverAT');
-            serverAT.onPriceUpdate(sd.symbol, data.price);
+            serverAT.onPriceUpdate(sd.symbol, data.price, 'binance');
         } catch (_) { }
         // Sync SD alias
         if (sd.symbol === _primarySymbol) _syncAlias(sd);
@@ -315,6 +316,10 @@ function _onTradeBybit(data) {
     if (data.price > 0) {
         sd.price = data.price;
         sd.priceTs = Date.now();
+        // [AUDIT-20260619 B2] drive Bybit positions' SL/TP/DSL from Bybit's OWN feed
+        // (previously only the Binance feed reached onPriceUpdate → Bybit positions
+        // froze when Binance stalled, and ran on cross-venue Binance prices).
+        try { require('./serverAT').onPriceUpdate(sym, data.price, 'bybit'); } catch (_) {}
     }
 }
 
@@ -331,6 +336,8 @@ function _onBookTickerBybit(data) {
         sd.ask = data.ask;
         sd.price = (data.bid + data.ask) / 2;
         sd.priceTs = Date.now();
+        // [AUDIT-20260619 B2] Bybit positions driven by Bybit's own bookTicker.
+        try { require('./serverAT').onPriceUpdate(sym, sd.price, 'bybit'); } catch (_) {}
     }
 }
 
