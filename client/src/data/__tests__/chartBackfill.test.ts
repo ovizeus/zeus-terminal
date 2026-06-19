@@ -3,6 +3,7 @@ import {
   _shouldTriggerBackfill, _mergeOlderKlines, _computeRestoredRange, _nextEndTime,
   MAX_BARS, EDGE_THRESHOLD, FETCH_LIMIT,
 } from '../chartBackfill'
+import { _capKlines } from '../chartBackfill'
 
 const bar = (t: number) => ({ time: t, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 })
 
@@ -70,5 +71,22 @@ describe('constants', () => {
     expect(MAX_BARS).toBe(5000)
     expect(EDGE_THRESHOLD).toBe(12)
     expect(FETCH_LIMIT).toBe(1000)
+  })
+})
+
+describe('_capKlines', () => {
+  const arr = (n: number) => Array.from({ length: n }, (_, i) => bar(i))
+  it('enabled: keeps a sliding 5000-bar window, trimming only past the buffer', () => {
+    expect(_capKlines(arr(5000), true).length).toBe(5000)   // under buffer → untouched
+    expect(_capKlines(arr(5201), true).length).toBe(5000)   // over buffer → sliced to 5000
+  })
+  it('disabled: preserves the original 1500→1200 behavior', () => {
+    expect(_capKlines(arr(1500), false).length).toBe(1500)  // not over 1500 → untouched
+    expect(_capKlines(arr(1501), false).length).toBe(1200)  // over 1500 → sliced to 1200
+  })
+  it('keeps the NEWEST bars when trimming (drops oldest)', () => {
+    const out = _capKlines(arr(5201), true)
+    expect(out[out.length - 1].time).toBe(5200) // newest preserved
+    expect(out[0].time).toBe(201)               // oldest 201 dropped
   })
 })

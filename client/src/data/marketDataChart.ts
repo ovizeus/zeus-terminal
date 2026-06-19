@@ -9,6 +9,7 @@ import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
 import { renderVWAP, renderOviLiquid } from '../ui/panels'
 import { _isHistoricalBarSane, _resetKlineWatchdog } from '../utils/guards'
 import { renderTradeMarkers } from './marketDataOverlays'
+import { _capKlines } from './chartBackfill'
 
 const w = window as any
 
@@ -136,7 +137,7 @@ export async function fetchKlines(tf: any): Promise<void> {
       const _applyBarProxy = (bar: any) => {
         const last = w.S.klines?.[w.S.klines.length - 1]
         if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
-        else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
+        else { w.S.klines.push(bar); w.S.klines = _capKlines(w.S.klines, !!(w.__MF && w.__MF.CHART_BACKFILL_ENABLED === true)) }
         _resetKlineWatchdog()
         try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
         try { if (typeof updOvrs === 'function') updOvrs() } catch (_) { }
@@ -156,7 +157,7 @@ export async function fetchKlines(tf: any): Promise<void> {
       const _applyBar = (bar: any) => {
         const last = w.S.klines?.[w.S.klines.length - 1]
         if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
-        else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
+        else { w.S.klines.push(bar); w.S.klines = _capKlines(w.S.klines, !!(w.__MF && w.__MF.CHART_BACKFILL_ENABLED === true)) }
         _resetKlineWatchdog()
         try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
         try { if (typeof updOvrs === 'function') updOvrs() } catch (_) { }
@@ -187,7 +188,7 @@ export async function fetchKlines(tf: any): Promise<void> {
           const bar = { time: Math.floor(k.t / 1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v }
           const last = w.S.klines?.[w.S.klines.length - 1]
           if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
-          else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
+          else { w.S.klines.push(bar); w.S.klines = _capKlines(w.S.klines, !!(w.__MF && w.__MF.CHART_BACKFILL_ENABLED === true)) }
           _resetKlineWatchdog()
           try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
           try { if (typeof updOvrs === 'function') updOvrs() } catch (_) { }

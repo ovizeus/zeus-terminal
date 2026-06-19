@@ -38,3 +38,16 @@ export function _computeRestoredRange(prev: { from: number; to: number } | null,
 export function _nextEndTime(oldestBarTimeSec: number): number {
   return oldestBarTimeSec * 1000 - 1
 }
+
+// Trim the klines array to a bounded window. When backfill is enabled, use a sliding
+// MAX_BARS (5000) window with a small buffer so we don't slice on every tick — and so
+// backfilled history is not discarded by the next live append. When disabled, preserve
+// the original pre-backfill behavior exactly (>1500 → keep last 1200).
+export function _capKlines<T>(arr: T[], enabled: boolean): T[] {
+  if (enabled) {
+    if (arr.length > MAX_BARS + 200) return arr.slice(-MAX_BARS)
+    return arr
+  }
+  if (arr.length > 1500) return arr.slice(-1200)
+  return arr
+}
