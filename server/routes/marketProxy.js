@@ -19,10 +19,34 @@ const SPOT_BASE = 'https://api.binance.com';
 const CACHE_TTL = {
     klines_poll: 10000,
     klines_init: 60000,
+    klines_history: 3600000,
     ticker24hr: 30000,
     topLongShort: 60000,
     spot_klines: 120000,
 };
+
+// [2026-06-19] Pure, testable helpers for the /klines route. endTime is additive:
+// when absent the URL + cache key are byte-identical to the pre-backfill behavior.
+function _validEndTime(endTime) {
+    const n = Number(endTime);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+function _buildKlinesUrl(symbol, interval, lim, endTime) {
+    let url = `${FUTURES_BASE}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${lim}`;
+    const et = _validEndTime(endTime);
+    if (et !== null) url += `&endTime=${et}`;
+    return url;
+}
+function _klinesCacheKeyParams(symbol, interval, lim, endTime) {
+    const params = { symbol, interval, limit: lim };
+    const et = _validEndTime(endTime);
+    if (et !== null) params.endTime = et;
+    return params;
+}
+function _klinesTtl(lim, endTime) {
+    if (_validEndTime(endTime) !== null) return CACHE_TTL.klines_history; // immutable closed window
+    return lim <= 2 ? CACHE_TTL.klines_poll : CACHE_TTL.klines_init;
+}
 
 const _cache = new Map();
 const _pending = new Map();
@@ -89,9 +113,9 @@ router.get('/klines', async (req, res) => {
     const { symbol, interval, limit } = req.query;
     if (!symbol || !interval) return res.status(400).json({ error: 'symbol and interval required' });
     const lim = Math.min(parseInt(limit) || 500, 1500);
-    const url = `${FUTURES_BASE}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${lim}`;
-    const ttl = lim <= 2 ? CACHE_TTL.klines_poll : CACHE_TTL.klines_init;
-    const key = _cacheKey('klines', { symbol, interval, limit: lim });
+    const url = _buildKlinesUrl(symbol, interval, lim, req.query.endTime);
+    const ttl = _klinesTtl(lim, req.query.endTime);
+    const key = _cacheKey('klines', _klinesCacheKeyParams(symbol, interval, lim, req.query.endTime));
     try {
         const r = await _proxyFetch(url, key, ttl, lim <= 2 ? 1 : 5);
         if (!r.stale) { res.json(r.data); return; }
@@ -179,3 +203,7 @@ router.get('/oi', (req, res) => {
 router._serveTest = { resolveServe: _resolveServe };
 
 module.exports = router;
+module.exports._buildKlinesUrl = _buildKlinesUrl;
+module.exports._klinesCacheKeyParams = _klinesCacheKeyParams;
+module.exports._klinesTtl = _klinesTtl;
+module.exports.FUTURES_BASE = FUTURES_BASE;
