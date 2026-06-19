@@ -7,7 +7,7 @@ import { el } from '../utils/dom'
 import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/indicators'
 import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
 import { renderVWAP, renderOviLiquid } from '../ui/panels'
-import { _isPriceSane, _resetKlineWatchdog } from '../utils/guards'
+import { _isHistoricalBarSane, _resetKlineWatchdog } from '../utils/guards'
 import { renderTradeMarkers } from './marketDataOverlays'
 
 const w = window as any
@@ -114,13 +114,12 @@ export async function fetchKlines(tf: any): Promise<void> {
     if (!Array.isArray(d) || !d.length) return
     if (w.S.symbol !== sym) { console.warn('[fetchKlines] stale response for ' + sym); return }
     const _rawKlines = d.map((k: any) => ({ time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }))
-    w.S.klines = _rawKlines.filter((k: any) => {
-      if (!k.open || !k.high || !k.low || !k.close) return false
-      if (k.high < k.low || k.close < k.low || k.close > k.high) return false
-      if (k.open <= 0 || k.close <= 0) return false
-      if (!_isPriceSane(k.close)) return false
-      return true
-    })
+    // [2026-06-19] Validate each bar with a PURE per-bar integrity predicate, NOT the
+    // live cross-symbol _isPriceSane. On a symbol switch the live baseline (window.S.price)
+    // can still hold the PREVIOUS symbol's price (stale feed repoisons it before this
+    // filter runs), so _isPriceSane rejected the entire new history as "spikes" →
+    // klines=[] → renderChart skipped → blank chart (candles + indicator panes).
+    w.S.klines = _rawKlines.filter((k: any) => _isHistoricalBarSane(k))
     if (!w.S.klines.length) { console.warn('[fetchKlines] all candles failed sanity'); return }
     _resetKlineWatchdog()
     renderChart()

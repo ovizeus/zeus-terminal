@@ -107,6 +107,23 @@ export function _isPriceSane(newPrice: number): boolean {
 }
 // _isPriceSane — exported, consumers import directly
 
+// [2026-06-19] Per-bar integrity predicate for BULK HISTORICAL klines (fresh symbol
+// load). Deliberately has NO cross-symbol price baseline: _isPriceSane compares against
+// the live window.S.price, which after a symbol switch can still hold the PREVIOUS
+// symbol's price (stale feed repoisons it before the bulk filter runs). Using it on a
+// new symbol's history rejected every bar as a "spike" → klines=[] → blank chart.
+// Historical bars are trustworthy when internally consistent; the spike check belongs
+// only on live ticks within one symbol.
+export function _isHistoricalBarSane(bar: { open: number; high: number; low: number; close: number }): boolean {
+  const { open, high, low, close } = bar
+  if (!open || !high || !low || !close) return false                 // falsy incl. 0 / NaN
+  if (!Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) return false
+  if (high < low || close < low || close > high) return false        // OHLC integrity
+  if (open <= 0 || close <= 0) return false
+  return true
+}
+// _isHistoricalBarSane — exported, consumers import directly
+
 // ── 3. SERVER TIME SYNC ──────────────────────────────────────
 export async function _syncServerTime(): Promise<void> {
   try {
