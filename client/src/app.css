@@ -7932,3 +7932,10 @@ select option {
 .theia-chip.ok { border-color: #00d97a55; color: #00d97a; }
 .theia-chip.bad { border-color: #ff3b5c55; color: #ff6680; }
 .theia-chip.pending { border-color: #2a3a4a; color: #5a6a7a; }
+
+/* [2026-06-19] THEIA memory section */
+.theia-mem-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.theia-mem-cell { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 6px; }
+.theia-mem-cell > span { color: var(--dim, #5a6a7a); font-size: 9px; text-transform: uppercase; letter-spacing: .3px; }
+.theia-mem-cell > b { color: #c8d6e5; font-size: 13px; }
+.theia-mem-note { margin-top: 8px; font-size: 10px; color: #7a9ab8; font-style: italic; }
