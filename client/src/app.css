@@ -5706,7 +5706,11 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 
 /* ── Header: sticky compact on phones ── */
 @media (max-width: 480px) {
-  .hdr { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 200; padding: 12px 10px; gap: 4px; flex-wrap: nowrap; box-sizing: border-box }
+  /* [2026-06-19] min-height = --zt-content-top so the black header bottom reaches exactly
+     where the status bar starts (80px + safe-area), closing the thin different-coloured
+     strip the operator saw on notched phones (gap = content-top − natural header height).
+     No effect when the header is already taller than content-top. */
+  .hdr { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 200; padding: 12px 10px; gap: 4px; flex-wrap: nowrap; box-sizing: border-box; min-height: var(--zt-content-top) }
   .zlogo { width: 42px; height: 42px }
   .t1 { font-size: 16px; letter-spacing: 1.5px }
   .t2 { font-size: 7px; letter-spacing: 1px }
