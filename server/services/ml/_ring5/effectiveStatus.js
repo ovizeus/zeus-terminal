@@ -60,9 +60,12 @@ function resolve(params) {
 
 function invalidate(params) {
     const cellKey = _required(params, 'cellKey');
-    for (const k of [..._cache.keys()]) {
-        if (k === cellKey || k.includes(cellKey)) _cache.delete(k);
-    }
+    // [AUDIT-20260619 P3] exact match only. The old `k.includes(cellKey)` branch
+    // substring-matched, so invalidating "1:DEMO:BTC:TREND" also evicted
+    // "21:DEMO:BTC:TREND" (cross-user). The sole caller passes the full L4 cellKey,
+    // and includes() never matched parent levels (they are shorter) — so it only
+    // ever caused cross-user over-eviction.
+    _cache.delete(cellKey);
     return { invalidated: true };
 }
 
