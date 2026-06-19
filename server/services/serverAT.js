@@ -3285,6 +3285,15 @@ function onPriceUpdate(symbol, price) {
 
         // DSL moved SL → update internal state + live order on Binance
         if (dsl.changed) {
+            // [AUDIT-20260619 P1-3 / SL-floor] Defense-in-depth: never let a DSL
+            // move loosen the stop. Compare the proposed SL against the CURRENT
+            // resting SL (pos.sl, before reassignment) and refuse non-improving
+            // moves outright — covers the activation-floor (P1-3), restart re-tighten
+            // and any future regression at the single DSL→exchange choke point.
+            const _prevSL = pos.sl;
+            if (!_isSLImprovement(pos.side, _prevSL, effectiveSL)) {
+                logger.warn('AT_LIVE', `[${pos.seq}] DSL SL move REJECTED — not tighter (${pos.side} prev=$${_prevSL} proposed=$${effectiveSL})`);
+            } else {
             pos.sl = effectiveSL; // [TL-09] Sync internal SL with DSL tightened value
             if (pos.live && pos.live.status === 'LIVE') {
                 if (pos._slUpdateInFlight) { // [TL-05] Already updating — queue latest SL
@@ -3297,6 +3306,7 @@ function onPriceUpdate(symbol, price) {
             }
             _persistPosition(pos);
             if (pos.userId) dslChangedUsers.add(pos.userId);
+            }
         }
 
         // [BUG-S7] Shadow parity log — gated by DSL_PARITY_SHADOW_ENABLED.
@@ -6507,6 +6517,19 @@ function _rMultiple(rr, pnl, pnlPct, slPct) {
     return -1;
 }
 
+// [AUDIT-20260619 P1-3 / SL-floor] The DSL stop must never move AGAINST the
+// trader. The stop (pivotLeft → currentSL) only ever tightens by design; the
+// "breather room" lives on pivotRight, NOT the stop. This predicate gates every
+// DSL-driven SL move before it touches pos.sl / the exchange.
+//   LONG  tighter = HIGHER stop → newSL >= oldSL
+//   SHORT tighter = LOWER  stop → newSL <= oldSL
+// First placement (no/zero prior SL) is allowed; a non-finite/≤0 newSL is never placed.
+function _isSLImprovement(side, oldSL, newSL) {
+    if (!Number.isFinite(newSL) || newSL <= 0) return false;
+    if (oldSL == null || !Number.isFinite(oldSL) || oldSL <= 0) return true;
+    return side === 'LONG' ? newSL >= oldSL : newSL <= oldSL;
+}
+
 module.exports = {
     processBrainDecision,
     onPriceUpdate,
@@ -6612,6 +6635,8 @@ module.exports = {
     _entryGateTestHooks: Object.freeze({ affordable: _liveEntryAffordable, cooldown: _entryFailCooldown, enqueueEmergencyClose: _enqueueEmergencyClose }),
     // [AUDIT-20260619 P2] r_multiple precedence fix — pure helper test hook.
     _attribTestHooks: Object.freeze({ rMultiple: _rMultiple }),
+    // [AUDIT-20260619 P1-3 / SL-floor] monotonic SL guard — pure helper test hook.
+    _slGuardHooks: Object.freeze({ isSLImprovement: _isSLImprovement }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
