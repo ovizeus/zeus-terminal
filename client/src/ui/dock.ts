@@ -116,10 +116,15 @@ export function _zComingSoon(): void {
     t.id = 'z-coming-soon-toast';
     t.className = 'z-coming-soon';
     t.innerHTML =
-      '<svg class="z-cs-glyph" viewBox="0 0 32 32" width="28" height="28">' +
-        '<path d="M6 6 L26 6 L8 26 L26 26" fill="none" stroke="#00d4ff" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"/>' +
-      '</svg>' +
-      '<span class="z-cs-text">COMING SOON</span>';
+      '<span class="z-cs-badge">' +
+        '<svg class="z-cs-glyph" viewBox="0 0 32 32" width="20" height="20">' +
+          '<path d="M9 8 H23 L9 24 H23" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg>' +
+      '</span>' +
+      '<span class="z-cs-textwrap">' +
+        '<span class="z-cs-text">COMING SOON</span>' +
+        '<span class="z-cs-sub">new powers incoming</span>' +
+      '</span>';
     document.body.appendChild(t);
   }
   t.style.display = 'flex';
