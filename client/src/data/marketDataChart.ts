@@ -139,8 +139,8 @@ export async function fetchKlines(tf: any): Promise<void> {
         else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
         _resetKlineWatchdog()
         try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
-        if (typeof updOvrs === 'function') updOvrs()
-        if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
+        try { if (typeof updOvrs === 'function') updOvrs() } catch (_) { }
+        if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; try { if (typeof renderTradeMarkers === 'function') renderTradeMarkers() } catch (_) { } }, 5000) }
       }
       w._wsProxyKlineUnsub = on('market.kline', (msg: any) => {
         if (msg.symbol !== sym || msg.tf !== tf) return
@@ -159,8 +159,8 @@ export async function fetchKlines(tf: any): Promise<void> {
         else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
         _resetKlineWatchdog()
         try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
-        if (typeof updOvrs === 'function') updOvrs()
-        if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
+        try { if (typeof updOvrs === 'function') updOvrs() } catch (_) { }
+        if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; try { if (typeof renderTradeMarkers === 'function') renderTradeMarkers() } catch (_) { } }, 5000) }
       }
       const _pollKline = async () => {
         if (w.__wsGen !== _klineGen) return
@@ -190,8 +190,8 @@ export async function fetchKlines(tf: any): Promise<void> {
           else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
           _resetKlineWatchdog()
           try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
-          if (typeof updOvrs === 'function') updOvrs()
-          if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
+          try { if (typeof updOvrs === 'function') updOvrs() } catch (_) { }
+          if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; try { if (typeof renderTradeMarkers === 'function') renderTradeMarkers() } catch (_) { } }, 5000) }
         }
       })
     }
