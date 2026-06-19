@@ -407,16 +407,59 @@ function simulate(params, posMeta, prices) {
   const originalSL = +posMeta.originalSL;
   if (!(entry > 0) || !Array.isArray(prices) || prices.length === 0) return { exitReason: 'NONE', exitPrice: entry || 0, pnlPct: 0 };
   const activationPrice = isLong ? entry * (1 + p.openDslPct / 100) : entry * (1 - p.openDslPct / 100);
-  let active = false, pivotLeft = originalSL;
   const pnlAt = (px) => (isLong ? (px - entry) / entry : (entry - px) / entry) * 100;
+
+  // [AUDIT-20260619 P2] Faithful replay of the REAL tick() pivot logic so the ML-DSL
+  // learner's baseline counterfactual matches what actually runs (no biased advantage).
+  // Previously this trailed pivotLeft CONTINUOUSLY every tick — a tighter, better-
+  // protected stop than the real engine, which only ratchets pivotLeft at DISCRETE
+  // impulse-validation events. Now: activation floors pivotLeft at originalSL (tick
+  // Phase 1 + the P1-3 fix), Phase 2 tracks pivotRight + checks the PL exit, Phase 3
+  // tightens pivotLeft ONLY when the impulse condition fires (impulseTriggered gate).
+  let active = false, pivotLeft = originalSL, pivotRight = 0, impulseVal = 0, impulseTriggered = false;
+
   for (const price of prices) {
     if (!Number.isFinite(price)) continue;
-    if ((isLong && price <= originalSL) || (!isLong && price >= originalSL)) return { exitReason: 'SL', exitPrice: originalSL, pnlPct: pnlAt(originalSL) };
-    if (!active) { if ((isLong && price >= activationPrice) || (!isLong && price <= activationPrice)) active = true; }
-    if (active) {
-      const newPL = isLong ? price * (1 - p.pivotLeftPct / 100) : price * (1 + p.pivotLeftPct / 100);
-      pivotLeft = isLong ? Math.max(pivotLeft, newPL) : Math.min(pivotLeft, newPL); // monotonic tighten
-      if ((isLong && price <= pivotLeft) || (!isLong && price >= pivotLeft)) return { exitReason: 'DSL_PL', exitPrice: pivotLeft, pnlPct: pnlAt(pivotLeft) };
+
+    if (!active) {
+      // Pre-activation: the position's stop is the original SL.
+      if ((isLong && price <= originalSL) || (!isLong && price >= originalSL)) {
+        return { exitReason: 'SL', exitPrice: originalSL, pnlPct: pnlAt(originalSL) };
+      }
+      if ((isLong && price >= activationPrice) || (!isLong && price <= activationPrice)) {
+        active = true;
+        pivotLeft = isLong ? price * (1 - p.pivotLeftPct / 100) : price * (1 + p.pivotLeftPct / 100);
+        pivotLeft = isLong ? Math.max(pivotLeft, originalSL) : Math.min(pivotLeft, originalSL); // floor (tick Phase 1 + P1-3)
+        pivotRight = isLong ? price * (1 + p.pivotRightPct / 100) : price * (1 - p.pivotRightPct / 100);
+        impulseVal = isLong ? pivotRight * (1 + p.impulseVPct / 100) : pivotRight * (1 - p.impulseVPct / 100);
+        // fall through to Phase 2 in this same tick (mirrors tick())
+      } else {
+        continue;
+      }
+    }
+
+    // Phase 2: pivotRight tracks price; check the PL exit (the stop).
+    pivotRight = isLong ? price * (1 + p.pivotRightPct / 100) : price * (1 - p.pivotRightPct / 100);
+    if ((isLong && price <= pivotLeft) || (!isLong && price >= pivotLeft)) {
+      return { exitReason: 'DSL_PL', exitPrice: pivotLeft, pnlPct: pnlAt(pivotLeft) };
+    }
+
+    // Phase 3: impulse validation — tighten pivotLeft ONLY on a fresh impulse trigger.
+    if (Number.isFinite(pivotRight) && Number.isFinite(impulseVal)) {
+      const prDistPct = Math.abs(price - pivotRight) / price * 100;
+      const ivConditionMet = prDistPct >= 0.05 && (isLong ? (pivotRight >= impulseVal) : (pivotRight <= impulseVal));
+      if (ivConditionMet) {
+        if (!impulseTriggered) {
+          impulseTriggered = true;
+          const oldPL = pivotLeft;
+          const newPR = isLong ? price * (1 + p.pivotRightPct / 100) : price * (1 - p.pivotRightPct / 100);
+          impulseVal = isLong ? newPR * (1 + p.impulseVPct / 100) : newPR * (1 - p.impulseVPct / 100);
+          const newPL = isLong ? price * (1 - p.pivotLeftPct / 100) : price * (1 + p.pivotLeftPct / 100);
+          pivotLeft = isLong ? Math.max(oldPL, newPL) : Math.min(oldPL, newPL); // monotonic tighten
+        }
+      } else {
+        impulseTriggered = false; // price left IV zone → re-arm for next impulse (tick parity)
+      }
     }
   }
   const last = prices[prices.length - 1];

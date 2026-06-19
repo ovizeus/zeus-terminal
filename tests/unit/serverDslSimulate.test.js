@@ -18,4 +18,17 @@ describe('serverDSL.simulate (pure counterfactual)', () => {
     const r = serverDSL.simulate({ openDslPct: 0.6, pivotLeftPct: 0.8, pivotRightPct: 0.7, impulseVPct: 0.3 }, meta, []);
     expect(r.pnlPct).toBe(0);
   });
+
+  // [AUDIT-20260619 P2] pivotLeft must NOT trail continuously (the old bug) — it
+  // only ratchets at a discrete impulse trigger, like the real tick(). Here the
+  // impulse never fires (IV% high vs the small run-up), so pivotLeft stays at its
+  // activation level. A retrace to 101.4 does NOT hit it → exit END @101.4. The old
+  // continuous-trail would have ratcheted pivotLeft to ~101.69 at price 102 and
+  // exited DSL_PL on the retrace — a tighter, unrealistic baseline.
+  test('pivotLeft does not trail continuously — no impulse → holds, exits END not a high DSL_PL', () => {
+    const prices = [100, 100.7, 101.5, 102, 101.4];
+    const r = serverDSL.simulate({ openDslPct: 0.6, pivotLeftPct: 0.3, pivotRightPct: 0.7, impulseVPct: 3.0 }, meta, prices);
+    expect(r.exitReason).toBe('END');
+    expect(r.exitPrice).toBeCloseTo(101.4, 5);
+  });
 });
