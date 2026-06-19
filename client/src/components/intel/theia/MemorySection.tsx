@@ -18,7 +18,13 @@ export function MemorySection() {
   const AT = w.AT || {}
   const realized = typeof realizedDaily === 'number' ? realizedDaily : AT.realizedDailyPnL
   const closedToday = AT.closedTradesToday
-  const lastThought = Array.isArray(thoughts) && thoughts.length ? (thoughts[0]?.text ?? thoughts[0]) : null
+  const t0 = Array.isArray(thoughts) && thoughts.length ? thoughts[0] : null
+  const lastThought =
+    typeof t0 === 'string' ? t0
+      : (t0 && typeof t0.text === 'string') ? t0.text
+        : (t0 && typeof t0.msg === 'string') ? t0.msg
+          : (t0 && typeof t0.reason === 'string') ? t0.reason
+            : null
   return (
     <div className="theia-card theia-hero">
       <h4>📜 Memory</h4>
