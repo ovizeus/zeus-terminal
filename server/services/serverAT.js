@@ -5444,6 +5444,17 @@ const _orphanPending = new Map(); // "userId:symbol:side" → { firstSeen, bpos,
 // silently skipping reconciliation forever.
 const _emptyHeldStreak = new Map();
 const _EMPTY_HELD_ALERT_AFTER = 5; // ~5 recon cycles (~5 min) of sustained empty before alert
+// [AUDIT-20260619 BUG C] After a SUSTAINED empty-but-successful poll streak the exchange
+// genuinely holds nothing → the tracked rows are phantoms (the empty-held SKIP guard
+// otherwise never cleans them: 22 testnet phantoms persisted, faking UI positions + a
+// server SL/TP loop on nonexistent positions). 15 cycles (~15 min) is far beyond any
+// eventual-consistency blip (resolves in 1-2 polls). Only AGED rows are cleaned.
+const _EMPTY_HELD_CLEANUP_AFTER = 15;
+const _STALE_EMPTY_MIN_AGE_MS = 5 * 60000; // position must be ≥5 min old (not a registration race)
+function _shouldCleanupStaleEmpty(streak, cleanupAfter, posAgeMs, minAgeMs) {
+    return Number.isFinite(streak) && streak >= cleanupAfter
+        && Number.isFinite(posAgeMs) && posAgeMs >= minAgeMs;
+}
 
 async function _runReconciliation(isStartup) {
     if (_reconRunning) return;
@@ -5600,6 +5611,32 @@ async function _runReconciliation(isStartup) {
                             payload: { userId, exchange, tracked: userLivePositions.length, consecutiveSkips: _ehStreak } });
                     } catch (_) {}
                     try { telegram.sendToUser(userId, `⚠️ *RECON: exchange poll empty ${_ehStreak}× in a row*\n${exchange} positionRisk keeps returning EMPTY while ${userLivePositions.length} position(s) tracked.\nReconciliation paused (positions still protected by server SL). Check API keys / Binance connectivity.`); } catch (_) {}
+                }
+                // [AUDIT-20260619 BUG C] Catch-22 break: after a sustained empty-but-successful
+                // streak the exchange genuinely holds nothing → clean the AGED phantom rows
+                // (otherwise they persist forever, faking UI positions + a server SL/TP loop on
+                // nonexistent positions). PnL=0 (no fabrication); the exchange has nothing to lose.
+                if (_ehStreak >= _EMPTY_HELD_CLEANUP_AFTER) {
+                    const _now = Date.now();
+                    for (let _i = userLivePositions.length - 1; _i >= 0; _i--) {
+                        const _ph = userLivePositions[_i];
+                        const _ageMs = _now - Number(_ph.openTs || _ph.ts || 0);
+                        if (!_shouldCleanupStaleEmpty(_ehStreak, _EMPTY_HELD_CLEANUP_AFTER, _ageMs, _STALE_EMPTY_MIN_AGE_MS)) continue;
+                        const _idx = _positions.findIndex(pp => pp.seq === _ph.seq && pp.userId === userId);
+                        if (_idx < 0) continue;
+                        const _gk = `${userId}:${_ph.seq}`;
+                        if (_closingGuard.has(_gk)) continue;
+                        _closingGuard.set(_gk, Date.now());
+                        try {
+                            logger.warn(label, `[${_ph.seq}] RECON_PHANTOM_STALE_EMPTY uid=${userId}: ${_ph.side} ${_ph.symbol} — ${exchange} held NOTHING ${_ehStreak}× in a row; tracked row is a phantom`);
+                            _closePosition(_idx, _ph, 'RECON_PHANTOM_STALE_EMPTY', _ph.price, 0);
+                            try { telegram.sendToUser(userId, `🔧 *RECON: Stale phantom closed*\n${_ph.side} ${_ph.symbol} seq=${_ph.seq}\n${exchange} reported NO positions ${_ehStreak} polls in a row — the tracked record was a phantom (exchange holds nothing).`); } catch (_) {}
+                            try { audit.record('SAT_RECON_PHANTOM_STALE_EMPTY', { seq: _ph.seq, symbol: _ph.symbol, side: _ph.side, userId, exchange, streak: _ehStreak, ageMs: _ageMs }, 'SERVER_AT'); } catch (_) {}
+                        } finally {
+                            setTimeout(() => _closingGuard.delete(_gk), 5000);
+                        }
+                    }
+                    _notifyChange(userId);
                 }
                 continue;
             }
@@ -6690,6 +6727,8 @@ module.exports = {
     _feeHooks: Object.freeze({ feeRateForExchange: _feeRateForExchange, applyRoundTripFee: _applyRoundTripFee }),
     // [AUDIT-20260619 B2] exchange-aware price routing — pure helper test hook.
     _priceRouteHooks: Object.freeze({ matchesExchange: _priceUpdateMatchesExchange }),
+    // [AUDIT-20260619 BUG C] stale-empty phantom cleanup decision — pure helper test hook.
+    _staleEmptyHooks: Object.freeze({ shouldCleanup: _shouldCleanupStaleEmpty, cleanupAfter: _EMPTY_HELD_CLEANUP_AFTER, minAgeMs: _STALE_EMPTY_MIN_AGE_MS }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
