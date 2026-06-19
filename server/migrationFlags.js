@@ -14,6 +14,12 @@ const path = require('path');
 
 const FLAGS_FILE = path.join(__dirname, '..', 'data', 'migration_flags.json');
 
+// [AUDIT-20260619 P1-1] REAL-money master switches that must never be flipped ON
+// via any runtime/admin route — only the formal operator procedure (JSON edit +
+// restart). Shared so every caller (set() guard + both admin routes) uses one
+// source of truth and cannot drift.
+const PROTECTED_FLAGS = new Set(['_SRV_POS_REAL_ENABLED', '_USERDATA_STREAM_REAL_ENABLED']);
+
 // ── Defaults: current safe behavior (client does everything) ──
 // Adding a REAL-path flag? Add a coherence rule in services/realGateCoherence.js.
 const DEFAULTS = {
@@ -322,6 +328,18 @@ function save() {
 function set(key, value) {
     if (!(key in DEFAULTS)) throw new Error(`Unknown migration flag: ${key}`);
     if (typeof value !== 'boolean') throw new Error(`Migration flag value must be boolean`);
+    // [AUDIT-20260619 P1-1] REAL-money master switches are protected: they flip
+    // ONLY via the formal operator procedure (edit data/migration_flags.json +
+    // restart — the boot load path, NOT set()). Refuse turning them ON through
+    // ANY runtime route (defense-in-depth — the /auth/admin/flags route already
+    // blocks them, but /api/migration/flags did not). Throw BEFORE any I/O so a
+    // blocked attempt never persists or writes a rollback snapshot. Emergency-OFF
+    // (value=false) stays allowed — fail-safe.
+    if (PROTECTED_FLAGS.has(key) && value === true) {
+        const err = new Error(`Flag ${key} is protected — REAL execution flips only via the formal operator procedure, never a runtime/admin route`);
+        err.code = 'MF_PROTECTED_FLAG';
+        throw err;
+    }
     const candidate = Object.assign({}, flags, { [key]: value });
     const v = _validateMutex(candidate);
     if (!v.ok) {
@@ -419,6 +437,8 @@ module.exports = {
     getAll,
     save,
     DEFAULTS,
+    // [AUDIT-20260619 P1-1] Exported so the admin routes reuse the same blocklist.
+    PROTECTED_FLAGS,
     // [Phase 2 S6-B0] Test-only hook for the S6-B0 probe. Exposes
     // _validateMutex so the probe can exercise mutex carve-outs against
     // synthetic flag combinations without mutating live state. Frozen;

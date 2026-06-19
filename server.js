@@ -348,6 +348,13 @@ app.post('/api/migration/flags', (_req, res) => {
   // forensic trail.
   if (!_req.user || _req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   const { key, value } = _req.body;
+  // [AUDIT-20260619 P1-1] REAL-money master switches refuse this route too (parity
+  // with /auth/admin/flags). set() also throws on this (defense-in-depth), but we
+  // return a clean 403 + forensic audit instead of a generic 400.
+  if (value === true && MF.PROTECTED_FLAGS && MF.PROTECTED_FLAGS.has(key)) {
+    try { db.auditLog(_req.user.id || null, 'ADMIN_FLAG_TOGGLE_BLOCKED', { key, requested: value, route: '/api/migration/flags', reason: 'protected — operator procedure only' }, _req.ip); } catch (_) {}
+    return res.status(403).json({ error: 'Flag protected — REAL execution flips only via the formal operator procedure, not the admin panel' });
+  }
   try {
     const updated = MF.set(key, value);
     const userId = _req.user.id || null;
