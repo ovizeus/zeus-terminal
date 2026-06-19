@@ -388,10 +388,20 @@ function _dslPhaseString(s) {
 // Applied at terminal PnL sites (closePnl set) to correct gross-PnL overstatement
 // by ~0.08%. If maker fee promo, actual cost lower — this is conservative max.
 const _ROUND_TRIP_FEE_RATE = 0.0008;
-function _applyRoundTripFee(grossPnl, size, lev) {
+// [AUDIT-20260619 FA-P1-1] Per-exchange round-trip taker fee. Bybit's taker
+// (0.055%/side → 0.0011 round-trip) is ~37.5% higher than Binance's (0.04%/side →
+// 0.0008). Applying the Binance rate to Bybit understated fees → overstated PnL AND
+// made the kill-switch daily-loss tracker fire LATE on Bybit. Default stays Binance
+// (backward-compatible) for callers without exchange context.
+const _ROUND_TRIP_FEE_BY_EXCHANGE = { binance: 0.0008, bybit: 0.0011 };
+function _feeRateForExchange(exchange) {
+    const ex = String(exchange || 'binance').toLowerCase();
+    return _ROUND_TRIP_FEE_BY_EXCHANGE[ex] != null ? _ROUND_TRIP_FEE_BY_EXCHANGE[ex] : _ROUND_TRIP_FEE_RATE;
+}
+function _applyRoundTripFee(grossPnl, size, lev, exchange) {
     const notional = (size || 0) * (lev || 0);
     if (!Number.isFinite(notional) || notional <= 0) return grossPnl;
-    const fee = notional * _ROUND_TRIP_FEE_RATE;
+    const fee = notional * _feeRateForExchange(exchange);
     return +(grossPnl - fee).toFixed(2);
 }
 
@@ -2226,7 +2236,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                         const _grossPnl = pos.side === 'LONG'
                             ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
                             : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
-                        const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
+                        const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev, pos.exchange);
                         if (realPnl !== pos.closePnl) {
                             const pnlDelta = +(realPnl - pos.closePnl).toFixed(2);
                             logger.info('AT_LIVE', `[${pos.seq}] SL fill price correction: $${exitPrice.toFixed(2)} → $${realFill.toFixed(2)} | PnL: $${pos.closePnl} → $${realPnl} | slippage: ${exitSlippagePct >= 0 ? '+' : ''}${exitSlippagePct}%`);
@@ -2326,7 +2336,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                     const _grossPnl = pos.side === 'LONG'
                         ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
                         : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
-                    const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
+                    const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev, pos.exchange);
                     pos.live.exitFillPrice = realFill;
                     pos.live.exitExpectedPrice = exitPrice;
                     pos.closePnl = realPnl;
@@ -4888,7 +4898,7 @@ function closeBySeq(userId, seq) {
         const _grossPnl = pos.side === 'LONG'
             ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
             : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2);
-        const pnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
+        const pnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev, pos.exchange);
         _closePosition(idx, pos, 'MANUAL_CLIENT', exitPrice, pnl);
         success = true;
         return { ok: true, seq, pnl };
@@ -5757,7 +5767,7 @@ async function _runReconciliation(isStartup) {
                                     pos.side === 'LONG'
                                         ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
                                         : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2),
-                                    pos.size, pos.lev
+                                    pos.size, pos.lev, pos.exchange
                                 ));
                             if (estimatedClose) {
                                 logger.warn(label, `[${pos.seq}] PHANTOM closed at entry price (PnL=0) — userTrades unavailable; manual reconciliation required`);
@@ -6663,6 +6673,8 @@ module.exports = {
     _slGuardHooks: Object.freeze({ isSLImprovement: _isSLImprovement }),
     // [AUDIT-20260619 P1-5] side-flip detector — pure helper test hook.
     _sideFlipHooks: Object.freeze({ isSideFlip: _isSideFlip }),
+    // [AUDIT-20260619 FA-P1-1] per-exchange fee — pure helper test hooks.
+    _feeHooks: Object.freeze({ feeRateForExchange: _feeRateForExchange, applyRoundTripFee: _applyRoundTripFee }),
 
     // [S5] Test-only hooks. Exposed via require but never called by any
     // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
