@@ -95,7 +95,14 @@ export const useMarketRadarStore = create<MarketRadarState>((set, get) => ({
     const ts = (typeof lastEventTs === 'number' && isFinite(lastEventTs) && lastEventTs > 0)
       ? lastEventTs
       : (gc.concat(rc).reduce((m, e) => Math.max(m, e.ts), 0))
-    set({ green: gc, red: rc, lastEventTs: ts })
+    // [AUDIT-20260619 P3] carry the honest source on snapshot replay too (push
+    // captures it, hydrate previously did not) so the radar title doesn't mislabel a
+    // rehydrated Bybit universe as Binance after a reconnect, until the next push.
+    const _newest = gc.concat(rc).reduce((a: RadarEvent | null, e) => (e.ts > (a?.ts || 0) ? e : a), null)
+    const _src = _newest && typeof (_newest as { source?: unknown }).source === 'string'
+      ? (_newest as { source?: string }).source as string
+      : undefined
+    set({ green: gc, red: rc, lastEventTs: ts, ...(_src ? { source: _src } : {}) })
   },
 
   clear: () => set({ green: [], red: [], lastEventTs: 0 }),
