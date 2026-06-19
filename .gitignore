@@ -18,10 +18,13 @@ data/logs/
 # Runtime data
 data/sync_user/
 data/metrics_snapshot.json
+data/marketRadar-snapshot.json
 data/riskState.json
 data/config_overrides.json
 data/audit.jsonl
 data/user_ctx/
+# Pre-dedupe / ad-hoc exchange-account backups (contain encrypted creds — never commit)
+data/exchange_accounts.backup-*.json
 
 # Pre-edit backup snapshots (local-only; never deploy artifacts)
 data/backups/
