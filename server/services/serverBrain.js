@@ -395,6 +395,18 @@ function getRecentBlocks(userId, sinceTs) {
     return since > 0 ? buf.filter(e => e.ts > since) : buf.slice();
 }
 
+// [2026-06-19] THEIA: last brain decisions from the canonical POST-gate trail.
+// Read-only SELECT on the (user_id, ts) index. Returns newest-first.
+function getRecentDecisions(userId, limit) {
+    const lim = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 50);
+    try {
+        return db.db.prepare(
+            `SELECT symbol, ts, final_dir AS dir, final_action AS action, final_conf AS conf, final_tier AS tier
+             FROM brain_decisions WHERE user_id = ? ORDER BY ts DESC LIMIT ?`
+        ).all(userId, lim);
+    } catch (_) { return []; }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Start / Stop
 // ══════════════════════════════════════════════════════════════════
@@ -2668,6 +2680,7 @@ module.exports = {
     getStatus,
     getDecisionLog,
     getRecentBlocks,
+    getRecentDecisions,
     updateConfig,
     getSTC,
     getBrainVision,

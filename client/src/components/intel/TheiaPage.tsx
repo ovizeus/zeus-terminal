@@ -7,6 +7,7 @@ import { SinceCard } from './theia/SinceCard'
 import { SafetyHealthCard } from './theia/SafetyHealthCard'
 import { MlDigestCard } from './theia/MlDigestCard'
 import { MemorySection } from './theia/MemorySection'
+import { RecentDecisionsCard } from './theia/RecentDecisionsCard'
 import { useATStore } from '../../stores/atStore'
 
 // THEIA — read-only all-seeing oracle. Live modules read stores / the window.S bridge
@@ -87,6 +88,7 @@ export function TheiaPage() {
         <MarketLensCard />
         <MlDigestCard />
         <MemorySection />
+        <RecentDecisionsCard />
       </div>
     </div>
   )

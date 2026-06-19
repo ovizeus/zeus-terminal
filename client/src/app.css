@@ -7968,3 +7968,14 @@ select option {
 .theia-mem-cell > span { color: var(--dim, #5a6a7a); font-size: 9px; text-transform: uppercase; letter-spacing: .3px; }
 .theia-mem-cell > b { color: #c8d6e5; font-size: 13px; }
 .theia-mem-note { margin-top: 8px; font-size: 10px; color: #7a9ab8; font-style: italic; }
+
+/* [2026-06-19] THEIA recent decisions list */
+.theia-dec-empty { color: var(--dim, #5a6a7a); font-size: 11px; padding: 4px 0; }
+.theia-dec-list { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; }
+.theia-dec-row { display: grid; grid-template-columns: 1.4fr 0.9fr 0.7fr 0.6fr 0.7fr 0.9fr; align-items: baseline; gap: 6px; font-size: 11px; padding: 3px 4px; border-radius: 4px; }
+.theia-dec-row:nth-child(odd) { background: rgba(255,255,255,0.02); }
+.theia-dec-sym { color: #c8d6e5; font-weight: 600; }
+.theia-dec-act { font-weight: 700; }
+.theia-dec-dir, .theia-dec-tier { color: #7a9ab8; }
+.theia-dec-conf { color: #c8d6e5; text-align: right; }
+.theia-dec-time { color: var(--dim, #5a6a7a); text-align: right; }

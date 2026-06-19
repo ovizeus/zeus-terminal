@@ -1325,6 +1325,18 @@ router.get('/brain/recent-blocks', (req, res) => {
   }
 });
 
+// [2026-06-19] THEIA — last brain decisions (canonical brain_decisions trail, read-only)
+router.get('/brain/decisions/recent', (req, res) => {
+  try {
+    const serverBrain = require('../services/serverBrain');
+    const limit = parseInt(req.query.limit, 10) || 12;
+    const decisions = serverBrain.getRecentDecisions(req.user.id, limit);
+    res.json({ ok: true, ts: Date.now(), decisions });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: 'recent-decisions unavailable' });
+  }
+});
+
 // ─── Exit Analysis API ───
 router.get('/brain/exits', (req, res) => {
   try {
