@@ -18,7 +18,10 @@ export function initScrollToRealtime(): void {
   if (_installed || !w.mainChart) return
   _installed = true
   try {
-    const host = document.getElementById('csec') || document.body
+    // Anchor to the MAIN chart container (#mc, already position:relative) — NOT #csec,
+    // which spans the main chart PLUS all stacked indicator sub-panes (so #csec's bottom
+    // lands on the lowest indicator pane, not the candles). Same pattern as the HUD legend.
+    const host = document.getElementById('mc') || document.getElementById('csec') || document.body
     let btn = document.getElementById('chartScrollRtBtn') as HTMLElement | null
     if (!btn) {
       btn = document.createElement('button')

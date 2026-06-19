@@ -7879,10 +7879,11 @@ select option {
   pointer-events: none;
 }
 
-/* [2026-06-19] Chart "back to realtime" button (TradingView-style) */
+/* [2026-06-19] Chart "back to realtime" button (TradingView-style) — anchored to #mc
+   (main candle chart), pink so it stands out. */
 #chartScrollRtBtn {
   position: absolute;
-  bottom: 48px;
+  bottom: 14px;
   right: 16px;
   z-index: 31;
   display: none;
@@ -7891,14 +7892,19 @@ select option {
   width: 34px;
   height: 34px;
   padding: 0;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1;
-  color: #7a9ab8;
+  color: #ff2d95;
   background: rgba(10, 15, 22, 0.9);
-  border: 1px solid #1a2530;
+  border: 1px solid #ff2d95;
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  transition: color 0.15s, border-color 0.15s;
+  box-shadow: 0 0 10px rgba(255, 45, 149, 0.45), 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
-#chartScrollRtBtn:hover { color: #d4af37; border-color: #d4af37; }
+#chartScrollRtBtn:hover {
+  color: #fff;
+  background: #ff2d95;
+  border-color: #ff2d95;
+  box-shadow: 0 0 14px rgba(255, 45, 149, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
