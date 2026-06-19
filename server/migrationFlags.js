@@ -231,6 +231,10 @@ const _ML_DSL_SHADOW_ENABLED = (process.env.ML_DSL_SHADOW_ENABLED || 'false') ==
 // [ML-DSL v2] When enabled, serverAT records the price path per position and, on close,
 // computes the baseline counterfactual + trains the learner. Default OFF = zero runtime.
 const _ML_DSL_LEARN_ENABLED = (process.env.ML_DSL_LEARN_ENABLED || 'false') === 'true';
+// [2026-06-19] Smart loss-side cut — SHADOW-ONLY counterfactual (cohort='lossside' in
+// ml_dsl_outcome) for the DSL Drive R:R visual. Never touches the real stop/close. Default
+// OFF; enable via env + reload. Live control is a separate, evidence-gated decision.
+const _ML_DSL_LOSSSIDE_SHADOW = (process.env.ML_DSL_LOSSSIDE_SHADOW || 'false') === 'true';
 
 // ── Safety invariant: mutual exclusion ──
 // [Phase 2 S1.C] Two enforcement modes:
@@ -394,6 +398,7 @@ module.exports = {
     get DSL_PARITY_SHADOW_ENABLED() { return _DSL_PARITY_SHADOW_ENABLED; },
     get ML_DSL_SHADOW_ENABLED() { return _ML_DSL_SHADOW_ENABLED; },
     get ML_DSL_LEARN_ENABLED() { return _ML_DSL_LEARN_ENABLED; },
+    get ML_DSL_LOSSSIDE_SHADOW() { return _ML_DSL_LOSSSIDE_SHADOW; },
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     get CHART_BACKFILL_ENABLED() { return flags.CHART_BACKFILL_ENABLED; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.

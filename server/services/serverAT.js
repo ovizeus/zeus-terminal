@@ -2481,6 +2481,21 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                     arm: pos.dslArm || pos.dslModeAtOpen || 'def', cohort: pos.dslCohort || 'shadow',
                     outcome: { pnlPct: _mlPnlPct }, baseline: { pnlPct: _baseSim.pnlPct }, ts: Date.now(),
                 });
+                // [ML-DSL loss-side, 2026-06-19] SHADOW-only smart-cut counterfactual. Cuts a
+                // loser early only when adverse AND sustained-falling (spares dip-then-recover
+                // winners). Records cohort='lossside' for the DSL Drive R:R visual. Never touches
+                // the real stop/close. arm:null → does NOT update the bandit.
+                if (MF.ML_DSL_LOSSSIDE_SHADOW) {
+                    const _dslRrSim = require('./dslRrSim');
+                    const _lsBaseFrac = pos.price > 0 ? (pos.side === 'LONG' ? (price - pos.price) : (pos.price - price)) / pos.price : 0;
+                    const _lsSmartFrac = _dslRrSim._smartCutPnlPct(_trace.map(s => s.p), { side: pos.side, entry: pos.price, threshold: 0.0075, sustain: 2, baselinePnlPct: _lsBaseFrac });
+                    mlDslLearner.learn({
+                        posId: pos.seq, userId: pos.userId, env: (pos.env || 'TESTNET'),
+                        symbol: pos.symbol, regime: pos.regime || pos.closeRegime || 'unknown',
+                        arm: null, cohort: 'lossside',
+                        outcome: { pnlPct: _lsSmartFrac * 100 }, baseline: { pnlPct: _lsBaseFrac * 100 }, ts: Date.now(),
+                    });
+                }
             }
         } catch (_) { /* telemetry-safe */ }
         try { priceTrace.clear(pos.seq); } catch (_) {}
