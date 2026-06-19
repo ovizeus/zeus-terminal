@@ -861,6 +861,11 @@ app.get('/api/compare', (_req, res) => {
     // Demo vs Live
     const demo = _calcSet(allTrades.filter(t => t.mode !== 'live'));
     const live = _calcSet(allTrades.filter(t => t.mode === 'live'));
+    // [AUDIT-20260619 P2] 'live' mixes TESTNET practice + REAL money. Split them
+    // additively so the operator (and the REAL cutover) can read real performance
+    // apart from testnet. Backward-compatible: 'live' stays as the union.
+    const liveTestnet = _calcSet(allTrades.filter(t => t.mode === 'live' && String(t.env || '').toUpperCase() === 'TESTNET'));
+    const liveReal = _calcSet(allTrades.filter(t => t.mode === 'live' && String(t.env || '').toUpperCase() === 'REAL'));
 
     // Per regime
     const regimes = {};
@@ -892,7 +897,7 @@ app.get('/api/compare', (_req, res) => {
 
     res.json({
       ok: true,
-      demoVsLive: { demo, live },
+      demoVsLive: { demo, live, liveTestnet, liveReal },
       thisVsLast: { thisMonth: _calcSet(thisMonthTrades), lastMonth: _calcSet(lastMonthTrades), thisLabel: thisMonth, lastLabel: lastMonth },
       byRegime, bySymbol,
     });
@@ -907,9 +912,11 @@ app.get('/api/performance', (_req, res) => {
   try {
     const userId = _req.user.id;
     const mode = _req.query.mode; // optional: demo|live
+    const env = _req.query.env;   // [AUDIT-20260619 P2] optional: testnet|real — separate REAL from testnet under live
     const rows = db.journalGetClosed(userId, 500, 0);
     let trades = rows.map(r => { try { return JSON.parse(r.data); } catch (_) { return null; } }).filter(Boolean);
     if (mode) trades = trades.filter(t => t.mode === mode);
+    if (env) trades = trades.filter(t => String(t.env || '').toUpperCase() === String(env).toUpperCase());
 
     if (trades.length === 0) return res.json({ ok: true, empty: true });
 
