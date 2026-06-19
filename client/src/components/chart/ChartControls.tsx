@@ -8,6 +8,7 @@ import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn, applyVWAP
 import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
 import { setSymbol } from '../../data/marketDataWS'
 import { openIndSettings } from '../../engine/indicators'
+import { useScrollLock } from '../../core/scrollLock'
 import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
 import { USER_SETTINGS } from '../../core/config'
 import { IND_ICONS } from '../../constants/indicatorIcons'
@@ -693,6 +694,7 @@ export function ChartControls() {
   )
   const ctRef = useRef<HTMLDivElement>(null)
   const [indPanelOpen, setIndPanelOpen] = useState(false)
+  useScrollLock(indPanelOpen) // lock the page behind the SELECT INDICATOR sheet (mobile scroll-through)
   const [fsMode, setFsMode] = useState(false)
   // [Pack D.1 + D.2] Read initial state with FOUR fallback layers because
   // module load order isn't guaranteed: panels.ts IIFE may run BEFORE

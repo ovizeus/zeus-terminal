@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useScrollLock } from '../../core/scrollLock'
 
 /** Shared modal overlay wrapper — 1:1 from .mover + .modal pattern.
  *  Each modal is: <div class="mover"><div class="modal">...</div></div> */
@@ -14,6 +15,7 @@ interface ModalOverlayProps {
 }
 
 export function ModalOverlay({ id, visible, onClose, children, maxWidth, zIndex }: ModalOverlayProps) {
+  useScrollLock(visible) // lock the page behind the modal so mobile touch-scroll can't drift the background
   // Always render in DOM (hidden when !visible) so old JS can find elements by ID.
   // Old app keeps .mover always in DOM — old JS pre-populates modal fields at boot.
   const overlayStyle: React.CSSProperties = { display: visible ? 'flex' : 'none' }
