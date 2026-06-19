@@ -49,6 +49,13 @@ const LANE_RULES = [
     { pattern: /^marketFeed:alt-klines/, lane: 'P4' },
     { pattern: /^marketFeed:funding/, lane: 'P4' },
     { pattern: /^marketFeed:oi/, lane: 'P4' },
+    // [AUDIT-20260619 P2] The watchlist/quant REST pollers are the ONLY live
+    // price/funding/OI source while Hetzner blocks the fstream WS, and sentiment
+    // is a brain confluence input — NOT cosmetic. Lane P4 (live data feed) like
+    // funding/oi, so they survive the boot-blind window + order bursts instead of
+    // being shed at P5.
+    { pattern: /^wsproxy-/, lane: 'P4' },
+    { pattern: /^sentiment\b/, lane: 'P4' },
     { pattern: /^marketRadar:/, lane: 'P5' },
     { pattern: /^serverLiquidity:/, lane: 'P5' },
 ];
