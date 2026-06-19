@@ -56,6 +56,8 @@ export var DOCK_ITEMS: any[] = [
 
   { id: 'adaptive',   label: 'Adaptive',   group: 'intel',
     svg: '<circle cx="12" cy="12" r="10" fill="currentColor" opacity=".07"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 12s1.5-4 4-4 4 4 4 4-1.5 4-4 4-4-4-4-4" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" opacity=".4"/>' },
+  { id: 'theia',      label: 'THEIA',      group: 'intel',
+    svg: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="0.8" opacity=".4"/><path d="M3 12 Q12 4 21 12 Q12 20 3 12 Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor" opacity=".15" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="1" fill="currentColor"/>' },
 
   { id: 'flow',       label: 'Flow',       group: 'intel',
     svg: '<path d="M5 12h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="5" cy="12" r="2.5" fill="currentColor" opacity=".15"/><circle cx="5" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/>' },

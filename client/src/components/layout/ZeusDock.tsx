@@ -129,6 +129,15 @@ const DOCK_ITEMS: DockItem[] = [
         <circle cx="12" cy="12" r="1.5" fill="currentColor" opacity=".4" />
       </>
     ) },
+  { id: 'theia', label: 'THEIA', group: 'intel',
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="0.8" opacity=".4" />
+        <path d="M3 12 Q12 4 21 12 Q12 20 3 12 Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="3.2" fill="currentColor" opacity=".15" stroke="currentColor" strokeWidth="1.4" />
+        <circle cx="12" cy="12" r="1" fill="currentColor" />
+      </>
+    ) },
   { id: 'flow', label: 'Flow', group: 'intel',
     icon: (
       <>

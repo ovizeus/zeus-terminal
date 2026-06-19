@@ -8,6 +8,17 @@ import { createPortal } from 'react-dom'
  * render the (i) button — others simply omit it until their copy is written.
  */
 export const PANEL_INFO: Record<string, { title: string; body: string }> = {
+  theia: {
+    title: 'THEIA — The All-Seeing Oracle',
+    body: `THEIA is Zeus's bird's-eye view. It gathers everything — live and historical — into one place so you can read the whole machine at a glance, without opening ten panels.
+
+At the top is THE VERDICT: a single honest light — green, amber or red — answering "is Zeus fit to run autonomously right now?" with the one reason holding it back. It blends the safety circuit, trading halt, data freshness, kill-switch, brain↔server parity, regime stability and testnet P&L trend.
+
+Below it, modules: what happened since you last looked (engine trades, stop moves, P&L); the brain's live pulse (regime, direction, confidence, gates); engine & open positions; safety & feed health; the market lens (regime, movers, funding, open interest); an ML/OMEGA digest; and a memory section with the P&L curve and recent decisions.
+
+THEIA is read-only — it shows and explains, it does not trade. Every number is live from Zeus's real systems; nothing here is mocked. Tap through to the relevant panel when you want to act.`,
+  },
+
   autotrade: {
     title: 'AutoTrade',
     body: `AutoTrade is Zeus's fully autonomous trading engine. When it is ON, it decides and places trades by itself — no manual input needed.

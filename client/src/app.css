@@ -7908,3 +7908,12 @@ select option {
   border-color: #ff2d95;
   box-shadow: 0 0 14px rgba(255, 45, 149, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
 }
+
+/* [2026-06-19] THEIA oracle panel */
+.theia-page { padding: 8px; overflow-y: auto; height: 100%; }
+.theia-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.theia-card { background: rgba(10,15,22,0.6); border: 1px solid #1a2530; border-radius: 8px; padding: 10px 12px; min-height: 60px; }
+.theia-card h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .4px; color: #7a9ab8; text-transform: uppercase; }
+.theia-hero { grid-column: 1 / -1; }
+.theia-empty { grid-column: 1 / -1; color: var(--dim, #5a6a7a); text-align: center; }
+@media (max-width: 700px) { .theia-grid { grid-template-columns: 1fr; } }

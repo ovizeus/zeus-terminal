@@ -28,6 +28,7 @@ import { ManualTradePanel } from '../dock/ManualTradePanel'
 import { DSLZonePanel } from '../dock/DSLZonePanel'
 import { DslDrivePanel } from '../dock/DslDrivePanel'
 import { OmegaPage } from '../omega/OmegaPage'
+import { TheiaPage } from '../intel/TheiaPage'
 import { MultiExchangePage } from '../multiexchange/MultiExchangePage'
 import { ARESPanel } from '../dock/ARESPanel'
 import { PostMortemPanel } from '../dock/PostMortemPanel'
@@ -96,6 +97,7 @@ const DOCK_TITLES: Record<string, string> = {
   'aria': 'ARIA',
   'nova': 'Nova',
   'adaptive': 'Adaptive',
+  'theia': 'THEIA',
   'flow': 'Flow',
   'quantmonitor': 'Quantitative Monitor',
   'mtf': 'MTF',
@@ -554,6 +556,9 @@ export function PanelShell() {
           </div>
           <div data-panel-id="omega" className={dockActive === 'omega' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <OmegaPage />
+          </div>
+          <div data-panel-id="theia" className={dockActive === 'theia' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <TheiaPage />
           </div>
           <div data-panel-id="multi-exchange" className={dockActive === 'multi-exchange' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <MultiExchangePage />
