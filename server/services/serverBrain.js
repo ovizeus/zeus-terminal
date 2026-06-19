@@ -1067,15 +1067,15 @@ function _runCycle() {
                 // mood/wording for each confidence band.
                 // [Day 29.5] Also write neutral/flat thoughts (throttled longer)
                 // so feed isn't dead during sideways markets.
-                if (fusion.dir === 'neut') {
+                if (fusion.dir === 'neutral') {
                     _writeThought({
                         userId, symbol: snap.symbol, kind: 'neutral_watch', mood: 'CALM',
                         text: `watching ${snap.symbol} (${regime.regime}) — flat signal, no edge yet.`,
                         contextJson: JSON.stringify({ regime: regime.regime, confidence: fusion.confidence })
                     });
                 }
-                if (fusion.dir !== 'neut') {
-                    const sideWord = fusion.dir === 'bull' ? 'LONG' : 'SHORT';
+                if (fusion.dir !== 'neutral') {
+                    const sideWord = fusion.dir === 'LONG' ? 'LONG' : 'SHORT';
                     let kind, moodTh, text;
                     if (fusion.confidence >= 83) {
                         kind = 'conf_very_high'; moodTh = 'EXCITED';
@@ -1251,7 +1251,7 @@ function _runCycle() {
                         // [Day 29.4] Voice: brain self-doubts.
                         _writeThought({
                             userId, symbol: snap.symbol, kind: 'reflection_block', mood: 'NERVOUS',
-                            text: `second-guessed ${fusion.dir === 'bull' ? 'LONG' : 'SHORT'} ${snap.symbol} — ${questioning.concerns.map(c => c.type).join(', ')} flagged.`,
+                            text: `second-guessed ${fusion.dir === 'LONG' ? 'LONG' : 'SHORT'} ${snap.symbol} — ${questioning.concerns.map(c => c.type).join(', ')} flagged.`,
                             contextJson: JSON.stringify({ concerns: questioning.concerns.map(c => c.type) })
                         });
                         serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
@@ -1398,7 +1398,7 @@ function _runCycle() {
                             userId,
                             decision: {
                                 symbol: snap.symbol,
-                                side: fusion.dir === 'bull' ? 'LONG' : 'SHORT',
+                                side: fusion.dir === 'LONG' ? 'LONG' : 'SHORT',
                                 size: sizingStc.size,
                                 balance: _r1Balance,
                                 leverage: sizingStc.lev,
@@ -1423,7 +1423,7 @@ function _runCycle() {
                                 userId,
                                 decision: {
                                     symbol: snap.symbol,
-                                    side: fusion.dir === 'bull' ? 'LONG' : 'SHORT',
+                                    side: fusion.dir === 'LONG' ? 'LONG' : 'SHORT',
                                     size: sizingStc.size, leverage: sizingStc.lev,
                                     mode: us ? us.engineMode : 'demo',
                                 },
