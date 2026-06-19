@@ -33,4 +33,20 @@ function _rrStats(pnls) {
   return { n, wr: wins.length / n, avgWin, avgLoss, rr, expectancy };
 }
 
-module.exports = { _cappedPnl, _rrStats };
+// Is the position improving from its worst adverse extreme by more than eps?
+// LONG: price bounced up off the running low. SHORT: price dropped off the running high.
+function _recovering(currentPrice, extremeSoFar, side, eps) {
+  const c = +currentPrice, e = +extremeSoFar, ep = +eps || 0;
+  if (!isFinite(c) || !isFinite(e) || e <= 0) return false;
+  return String(side).toUpperCase() === 'LONG'
+    ? c > e * (1 + ep)
+    : c < e * (1 - ep);
+}
+
+// Cut iff adverse past the threshold AND not recovering.
+function _shouldEarlyExit(o) {
+  if (!o || typeof o.adversePct !== 'number' || typeof o.threshold !== 'number') return false;
+  return o.adversePct >= o.threshold && o.recovering === false;
+}
+
+module.exports = { _cappedPnl, _rrStats, _recovering, _shouldEarlyExit };

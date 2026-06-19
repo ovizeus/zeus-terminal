@@ -44,3 +44,28 @@ describe('_rrStats', () => {
     expect(_rrStats([-5]).rr).toBe(0);
   });
 });
+
+const { _recovering, _shouldEarlyExit } = require('../../../../server/services/dslRrSim');
+
+describe('_recovering', () => {
+  it('LONG recovers when price bounces off the low beyond eps', () => {
+    expect(_recovering(100.6, 100, 'LONG', 0.005)).toBe(true);
+    expect(_recovering(100.4, 100, 'LONG', 0.005)).toBe(false);
+  });
+  it('SHORT recovers when price drops off the high beyond eps', () => {
+    expect(_recovering(99.4, 100, 'SHORT', 0.005)).toBe(true);
+    expect(_recovering(99.6, 100, 'SHORT', 0.005)).toBe(false);
+  });
+});
+
+describe('_shouldEarlyExit', () => {
+  it('cuts when adverse past threshold AND not recovering', () => {
+    expect(_shouldEarlyExit({ adversePct: 0.012, recovering: false, threshold: 0.01 })).toBe(true);
+  });
+  it('holds when adverse but recovering (spare the dip-then-recover winner)', () => {
+    expect(_shouldEarlyExit({ adversePct: 0.012, recovering: true, threshold: 0.01 })).toBe(false);
+  });
+  it('holds when not yet adverse', () => {
+    expect(_shouldEarlyExit({ adversePct: 0.005, recovering: false, threshold: 0.01 })).toBe(false);
+  });
+});
