@@ -52,6 +52,11 @@ const DEFAULTS = {
     // Binance is misbehaving; flip OFF when the primary lane recovers. No
     // trading-path change, no DSL/Brain engine change; only the input layer.
     ALT_WS_FEEDS: false,
+    // [2026-06-19] CHART_BACKFILL_ENABLED — lazy historical backfill on left-edge
+    // scroll (up to 5000 bars/symbol×tf). Default ON (operator-requested feature).
+    // Flip OFF for instant rollback: client stops backfilling, _capKlines reverts
+    // to the original 1500→1200 window, no endTime is sent. No trading-path change.
+    CHART_BACKFILL_ENABLED: true,
     // [Phase 2 S4-B0] Bybit safety flags — INERT BY DESIGN.
     // S4-B0 introduces ONLY the flag surface and mutex assertions; no signer,
     // no route, no order builder, no exchange dispatch. Every Bybit code path
@@ -390,6 +395,7 @@ module.exports = {
     get ML_DSL_SHADOW_ENABLED() { return _ML_DSL_SHADOW_ENABLED; },
     get ML_DSL_LEARN_ENABLED() { return _ML_DSL_LEARN_ENABLED; },
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
+    get CHART_BACKFILL_ENABLED() { return flags.CHART_BACKFILL_ENABLED; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.
     get BYBIT_TESTNET_ENABLED() { return flags.BYBIT_TESTNET_ENABLED; },
     get BYBIT_LIVE_ENABLED() { return flags.BYBIT_LIVE_ENABLED; },
