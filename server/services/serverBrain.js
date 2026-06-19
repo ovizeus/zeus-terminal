@@ -435,11 +435,15 @@ function start() {
         _shadowTimer = setInterval(_runShadowCycle, CYCLE_INTERVAL_MS);
         setTimeout(_runShadowCycle, 5000);
     }
-    if (_shouldRunMainCycle() && MF.PARITY_SHADOW_ENABLED) {
+    if (_shouldRunMainCycle()) {
         // [SP1] The demo main cycle suppresses _runShadowCycle → testnet users
         // get no parity rows. This additive shadow restores them, execution-free,
         // scoped to testnet-live users only (_isTestnetShadowTarget).
-        logger.info('BRAIN', '[SP1] Testnet parity shadow starting alongside main cycle (testnet-live users, 30s cycle)');
+        // [AUDIT-20260619 P2] Scheduled whenever the main cycle runs (no longer
+        // gated on PARITY_SHADOW_ENABLED) so it ALWAYS refreshes _serverSigDirState
+        // — the live mscan/sigDirBonus input. Parity-row writes stay flag-gated
+        // inside _runShadowForUsers, so this adds no parity logging when the flag is off.
+        logger.info('BRAIN', '[SP1] Testnet shadow/sigDir refresh starting alongside main cycle (30s cycle)');
         _testnetShadowTimer = setInterval(_runTestnetShadowCycle, CYCLE_INTERVAL_MS);
         setTimeout(_runTestnetShadowCycle, 7000);
     }
@@ -1625,6 +1629,12 @@ function _runShadowForUsers(includeUserFn) {
             stDir: ind.stDir,
             adx: ind.adx,
         }));
+        // [AUDIT-20260619 P2] The scan score above is what feeds _serverSigDirState
+        // (the live mscan/sigDirBonus modifiers). The per-user parity work below is
+        // ONLY for parity rows → skip it when the shadow flag is off, so the LIVE
+        // sigDir input is decoupled from the diagnostic PARITY_SHADOW_ENABLED flag
+        // (previously, flag off → nothing fed sigDir → mscan silently pinned to 1.0).
+        if (!MF.PARITY_SHADOW_ENABLED) continue;
         let confluence, regime, bars;
         try {
             // [Phase 2 S3.1c] Use client-mirror confluence for shadow rows
@@ -1682,7 +1692,10 @@ function _runTestnetShadowCycle() {
     if (_testnetShadowRunning) return;
     const mainActive = _mainCycleActiveOverrideForTest != null
         ? _mainCycleActiveOverrideForTest : _shouldRunMainCycle();
-    if (!MF.PARITY_SHADOW_ENABLED || !mainActive) return;
+    // [AUDIT-20260619 P2] Run whenever the main cycle is active — even with the
+    // parity shadow OFF — so _serverSigDirState (the live mscan input) is always
+    // fed. _runShadowForUsers gates its parity-row writes on PARITY_SHADOW_ENABLED.
+    if (!mainActive) return;
     _testnetShadowRunning = true;
     try {
         _runShadowForUsers(_isTestnetShadowTarget);
