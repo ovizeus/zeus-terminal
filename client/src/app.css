@@ -7979,3 +7979,12 @@ select option {
 .theia-dec-dir, .theia-dec-tier { color: #7a9ab8; }
 .theia-dec-conf { color: #c8d6e5; text-align: right; }
 .theia-dec-time { color: var(--dim, #5a6a7a); text-align: right; }
+
+/* [2026-06-19] DSL Drive smart loss-cut card */
+.dsl-losscut-card { margin-top:8px; padding:10px 12px; background:rgba(10,15,22,.6); border:1px solid #1a2530; border-radius:8px; }
+.dsl-losscut-card h4 { margin:0 0 6px; font-size:11px; letter-spacing:.4px; color:#7a9ab8; text-transform:uppercase; }
+.dsl-shadow-tag { font-size:9px; color:#f0b429; border:1px solid #f0b42955; border-radius:8px; padding:1px 5px; margin-left:6px; }
+.dsl-losscut-verdict { font-size:12px; color:#c8d6e5; margin-bottom:4px; }
+.dsl-losscut-rows { display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:#7a9ab8; margin-bottom:6px; }
+.dsl-spark { display:block; }
+.dsl-losscut-card.dsl-muted { color:#5a6a7a; font-size:11px; }

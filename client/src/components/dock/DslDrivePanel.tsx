@@ -67,6 +67,21 @@ export function DslDrivePanel() {
           </span>
         </div>
       )}
+      {score?.lossSide && score.lossSide.n > 0 ? (
+        <div className="dsl-losscut-card">
+          <h4>🛡️ Smart Loss-Cut <span className="dsl-shadow-tag">SHADOW</span></h4>
+          <div className="dsl-losscut-verdict">
+            R:R {score.lossSide.rr} vs {score.lossSide.rrBaseline} · Δexp {score.lossSide.expDelta >= 0 ? '+' : ''}{score.lossSide.expDelta} · N={score.lossSide.n} · not yet live
+          </div>
+          <div className="dsl-losscut-rows">
+            <span>avgLoss {score.lossSide.avgLossSmart} vs {score.lossSide.avgLossBaseline}</span>
+            <span>WR {score.lossSide.wrSmart}% vs {score.lossSide.wrBaseline}%</span>
+          </div>
+          <DslSparkline data={score.lossSide.spark} />
+        </div>
+      ) : (
+        <div className="dsl-losscut-card dsl-muted">🛡️ Smart Loss-Cut (shadow) — no data yet</div>
+      )}
       {err && <div className="dsldrive-empty">offline — {err}</div>}
       {!err && !rows.length && <div className="dsldrive-empty">no active positions</div>}
       {rows.map((p) => {
@@ -110,5 +125,19 @@ export function DslDrivePanel() {
         )
       })}
     </div>
+  )
+}
+
+// Inline cumulative-advantage sparkline for the Smart Loss-Cut card.
+function DslSparkline({ data }: { data?: number[] }) {
+  if (!data || data.length < 2) return null
+  const w = 180, h = 32
+  const min = Math.min(...data), max = Math.max(...data), rng = max - min || 1
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${(h - ((v - min) / rng) * h).toFixed(1)}`).join(' ')
+  const up = data[data.length - 1] >= data[0]
+  return (
+    <svg className="dsl-spark" viewBox={`0 0 ${w} ${h}`} width={w} height={h} preserveAspectRatio="none">
+      <polyline points={pts} fill="none" stroke={up ? '#26ff9a' : '#ff5277'} strokeWidth="1.5" />
+    </svg>
   )
 }
