@@ -49,7 +49,10 @@ export function addLiq(exchange: string, liq: any): void {
   if (!ex) return
   ex.btc.push(liq)
   if (ex.btc.length > 300) ex.btc.shift()
-  ex.totalBtc += liq.vol
+  // [AUDIT-20260619 P2] guard NaN: a vol-less event would make totalBtc NaN
+  // permanently (NaN+x=NaN) → "$NaN" for the whole session. Siblings (liqPersist,
+  // liqMap) already guard this; addLiq was the only unguarded accumulator.
+  ex.totalBtc += Number(liq.vol) || 0
 }
 
 export function getLiqTotals(): { total: number; count: number } {

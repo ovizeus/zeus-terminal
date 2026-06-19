@@ -71,7 +71,12 @@ export default function WatchlistBar() {
           const j = JSON.parse(e.data)
           if (!j.data) return
           const d = j.data
-          setWlPrice(d.s, +d.c, (+d.c - +d.o) / +d.o * 100)
+          // [AUDIT-20260619 P3] guard NaN/Infinity: if open price is 0/absent the
+          // legacy miniTicker change rendered "NaN%"/"Infinity%". (Server path
+          // wsMarketProxy already guards this; only this client path was exposed.)
+          const _o = +d.o
+          const _chg = (Number.isFinite(_o) && _o > 0) ? (+d.c - _o) / _o * 100 : 0
+          setWlPrice(d.s, +d.c, _chg)
         } catch { /* ignore */ }
       }
       _ws.onclose = () => { if (!bridgeActive) reconnectTimer = setTimeout(connect, 5000) }

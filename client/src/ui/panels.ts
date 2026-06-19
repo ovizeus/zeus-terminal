@@ -509,7 +509,7 @@ export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: 
     totalWins += r.wins; totalTrades += tot;
     if (wr > bestWR) { bestWR = wr; bestName = ind.name; }
     if (ind.id === 'confluence_bull') confWR = wr;
-    rows.push({ ind, wr, tot, rr, grade, avgWin: avgWin.toFixed(2), avgLoss: avgLoss.toFixed(2) });
+    rows.push({ ind, wr, tot, rr, grade, wins: r.wins, losses: r.losses, avgWin: avgWin.toFixed(2), avgLoss: avgLoss.toFixed(2) });
   });
 
   rows.sort((a: any, b: any) => b.wr - a.wr);
@@ -538,7 +538,7 @@ export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: 
         <div>
           <div style="display:flex;align-items:center;gap:4px">
             <span class="bt-wr-val ${wrCls}">${row.wr}%</span>
-            <span style="font-size:11px;color:var(--dim)">${row.ind.wins || 0}W/${row.ind.losses || 0}L</span>
+            <span style="font-size:11px;color:var(--dim)">${row.wins || 0}W/${row.losses || 0}L</span>
           </div>
           <div class="bt-wr-bar"><div class="bt-wr-fill" style="width:${row.wr}%;background:${barColor}"></div></div>
         </div>
