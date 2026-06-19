@@ -19,6 +19,7 @@ import { PhaseFilter } from '../engine/phaseFilter'
 import { RegimeEngine } from '../engine/regime'
 import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
 import { fetchATR, updatePriceDisplay } from './marketDataFeeds'
+import { resetBackfill } from './chartBackfill'
 import { renderATPositions } from '../trading/autotrade'
 import { _soundBadgeClick, _updateAudioBadge } from '../ui/dom2'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
@@ -419,6 +420,7 @@ export function setSymbol(sym: string): void {
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SYM] \u2192 ' + sym)
     const lbl = el('chartTitleLbl'); if (lbl) lbl.textContent = sym
     w.S.klines = []; w.S.btcClusters = {}; w.S.events = []
+    try { resetBackfill() } catch (_) { }
     w.S.price = 0; w.S.totalUSD = 0; w.S.longUSD = 0; w.S.shortUSD = 0; w.S.cnt = 0; w.S.longCnt = 0; w.S.shortCnt = 0
     w.S.bids = []; w.S.asks = []
     // [OIFIX] Start the OI window fresh per symbol — otherwise the 5-min OI

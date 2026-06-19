@@ -9,7 +9,7 @@ import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
 import { renderVWAP, renderOviLiquid } from '../ui/panels'
 import { _isHistoricalBarSane, _resetKlineWatchdog } from '../utils/guards'
 import { renderTradeMarkers } from './marketDataOverlays'
-import { _capKlines } from './chartBackfill'
+import { _capKlines, initBackfill } from './chartBackfill'
 
 const w = window as any
 
@@ -97,6 +97,7 @@ export function initCharts(): void {
       })
     } catch (_) { }
   }
+  try { initBackfill() } catch (_) { }
 }
 
 // ===== FETCH KLINES =====

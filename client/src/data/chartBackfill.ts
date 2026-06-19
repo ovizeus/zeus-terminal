@@ -3,6 +3,10 @@
 // tests; the impure loadOlder/initBackfill/resetBackfill orchestration is added in a
 // later task. Gated by w.__MF.CHART_BACKFILL_ENABLED.
 
+import { _isHistoricalBarSane } from '../utils/guards'
+import { _indRenderHook } from '../engine/indicators'
+import { renderTradeMarkers } from './marketDataOverlays'
+
 export const MAX_BARS = 5000
 export const EDGE_THRESHOLD = 12
 export const FETCH_LIMIT = 1000
@@ -50,4 +54,104 @@ export function _capKlines<T>(arr: T[], enabled: boolean): T[] {
   }
   if (arr.length > 1500) return arr.slice(-1200)
   return arr
+}
+
+const w = window as any
+
+let _inFlight = false
+let _exhausted = false
+let _installed = false
+
+function _enabled(): boolean {
+  return !!(w.__MF && w.__MF.CHART_BACKFILL_ENABLED === true)
+}
+
+function _showLoading(show: boolean): void {
+  let el = document.getElementById('chartBackfillLoading')
+  if (!el && show) {
+    const host = document.getElementById('csec') || document.body
+    el = document.createElement('div')
+    el.id = 'chartBackfillLoading'
+    el.textContent = '⟳ loading history…'
+    host.appendChild(el)
+  }
+  if (el) el.style.display = show ? 'block' : 'none'
+}
+
+export function resetBackfill(): void {
+  _inFlight = false
+  _exhausted = false
+  _showLoading(false)
+}
+
+export async function loadOlder(): Promise<void> {
+  if (!_enabled() || _inFlight || _exhausted) return
+  if (!w.cSeries || !w.mainChart || !Array.isArray(w.S?.klines) || !w.S.klines.length) return
+  if (w.S.klines.length >= MAX_BARS) return
+
+  _inFlight = true
+  _showLoading(true)
+  const gen = w.__wsGen
+  const sym = w.S.symbol
+  const tf = w.S.chartTf
+  let prevRange: { from: number; to: number } | null = null
+  try { prevRange = w.mainChart.timeScale().getVisibleLogicalRange() } catch (_) { prevRange = null }
+  const oldest = w.S.klines[0].time
+
+  try {
+    const ac = new AbortController()
+    const acTimer = setTimeout(() => ac.abort(), 10000)
+    let r: Response
+    try {
+      r = await fetch(`/api/market/klines?symbol=${sym}&interval=${tf}&endTime=${_nextEndTime(oldest)}&limit=${FETCH_LIMIT}&bg=1`, { signal: ac.signal })
+    } finally { clearTimeout(acTimer) }
+    if (!r || !r.ok) return // no-op, never mutate klines on failure
+    const d = await r.json()
+    // Stale guard: symbol/tf/gen changed during the fetch → drop silently.
+    if (w.__wsGen !== gen || w.S.symbol !== sym || w.S.chartTf !== tf) return
+    if (!Array.isArray(d) || !d.length) { _exhausted = true; return }
+
+    const olderBars: Bar[] = d
+      .map((k: any) => ({ time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }))
+      .filter((k: Bar) => _isHistoricalBarSane(k))
+    if (!olderBars.length) { _exhausted = true; return }
+
+    const before = w.S.klines.length
+    const merged = _mergeOlderKlines(olderBars, w.S.klines)
+    const prepended = merged.length - before
+    if (prepended <= 0) { _exhausted = true; return } // nothing genuinely older
+    if (olderBars.length < FETCH_LIMIT) _exhausted = true // reached listing date
+
+    w.S.klines = merged
+    try { w.cSeries.setData(w.S.klines) } catch (_) { }
+    try { if (typeof w.rebuildCandleSeriesFromKlines === 'function') w.rebuildCandleSeriesFromKlines() } catch (_) { }
+    try { if (typeof _indRenderHook === 'function') _indRenderHook() } catch (_) { }
+    try { if (typeof renderTradeMarkers === 'function') renderTradeMarkers() } catch (_) { }
+    const restored = _computeRestoredRange(prevRange, prepended)
+    if (restored) { try { w.mainChart.timeScale().setVisibleLogicalRange(restored) } catch (_) { } }
+  } catch (_) {
+    // Any error → no-op. Never blank or partially-write the chart.
+  } finally {
+    _inFlight = false
+    _showLoading(false)
+  }
+}
+
+export function initBackfill(): void {
+  if (_installed || !w.mainChart) return
+  _installed = true
+  try {
+    w.mainChart.timeScale().subscribeVisibleLogicalRangeChange((r: any) => {
+      const ok = _shouldTriggerBackfill({
+        from: r ? r.from : null,
+        klinesLen: Array.isArray(w.S?.klines) ? w.S.klines.length : 0,
+        inFlight: _inFlight,
+        exhausted: _exhausted,
+        enabled: _enabled(),
+        maxBars: MAX_BARS,
+        edgeThreshold: EDGE_THRESHOLD,
+      })
+      if (ok) { void loadOlder() }
+    })
+  } catch (_) { _installed = false }
 }

@@ -8,6 +8,7 @@ import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _demoTick } from '../engine/aresUI'
 import { clearHeatmap, clearSR } from './marketDataOverlays'
+import { resetBackfill } from './chartBackfill'
 import { getChartH } from './marketDataChart'
 import { updateMainMetrics, sendAlert } from './marketDataWS'
 import { updateLiveLiqPrice } from './marketDataTrading'
@@ -19,6 +20,7 @@ const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn 
 // ===== TIMEFRAME =====
 export function setTF(tf: any, btn: any): void {
   w.S.chartTf = tf
+  try { resetBackfill() } catch (_) { }
   // [Pack D.4] Persist TF directly to localStorage so a refresh-before-
   // _usScheduleSave-fires (800ms debounce) still has the value. The
   // existing USER_SETTINGS path stays as the cross-device source of
