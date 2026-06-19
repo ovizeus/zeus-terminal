@@ -409,15 +409,23 @@ router.post('/switch', (req, res) => {
         return res.json({ ok: true, noOp: true, exchange: targetExchange });
     }
 
-    // Step 3.5: Verify target exchange has saved credentials
+    // Step 3.5: Verify target exchange has VERIFIED credentials. [AUDIT-20260619 P2]
+    // Must match Step 7's activation query (status='verified'). Previously this accepted
+    // a row of ANY status, so an unverified target passed here but Step 7 found no
+    // verified row → the transaction deactivated ALL rows and activated NONE → ZERO
+    // active = LIVE LOCKED, while the route still returned ok. Now reject up front.
     const targetAccount = rawDb.prepare(
-        `SELECT id FROM exchange_accounts WHERE user_id = ? AND exchange = ? LIMIT 1`
+        `SELECT id FROM exchange_accounts WHERE user_id = ? AND exchange = ? AND status = 'verified'
+         ORDER BY is_active DESC, last_verified_at DESC, id DESC LIMIT 1`
     ).get(uid, targetExchange);
     if (!targetAccount) {
+        const anyRow = rawDb.prepare(`SELECT status FROM exchange_accounts WHERE user_id = ? AND exchange = ? LIMIT 1`).get(uid, targetExchange);
         return res.status(400).json({
             ok: false,
-            code: 'NO_TARGET_CREDENTIALS',
-            error: `Cannot switch to ${targetExchange}: no saved API credentials. Add ${targetExchange} credentials first.`,
+            code: anyRow ? 'TARGET_NOT_VERIFIED' : 'NO_TARGET_CREDENTIALS',
+            error: anyRow
+                ? `Cannot switch to ${targetExchange}: credentials saved but not verified (status: ${anyRow.status}). Verify ${targetExchange} first.`
+                : `Cannot switch to ${targetExchange}: no saved API credentials. Add ${targetExchange} credentials first.`,
         });
     }
 
@@ -456,15 +464,12 @@ router.post('/switch', (req, res) => {
     // active → violated idx_exchange_user_active_single (UNIQUE one-active-per-user) →
     // the activate threw, the switch half-applied, and the user ended with ZERO active
     // exchange (LIVE LOCKED). Run in a transaction so it's all-or-nothing.
-    const _targetRow = rawDb.prepare(
-        `SELECT id FROM exchange_accounts WHERE user_id = ? AND exchange = ? AND status = 'verified'
-         ORDER BY is_active DESC, last_verified_at DESC, id DESC LIMIT 1`
-    ).get(uid, targetExchange);
+    // [AUDIT-20260619 P2] Reuse the verified targetAccount resolved in Step 3.5 — it is
+    // guaranteed non-null here, so the transaction always activates EXACTLY one row
+    // (never deactivate-all-then-activate-none → LIVE LOCKED).
     rawDb.transaction(() => {
         rawDb.prepare(`UPDATE exchange_accounts SET is_active = 0 WHERE user_id = ?`).run(uid);
-        if (_targetRow) {
-            rawDb.prepare(`UPDATE exchange_accounts SET is_active = 1 WHERE id = ?`).run(_targetRow.id);
-        }
+        rawDb.prepare(`UPDATE exchange_accounts SET is_active = 1 WHERE id = ?`).run(targetAccount.id);
     })();
 
     // Best-effort WS broadcast

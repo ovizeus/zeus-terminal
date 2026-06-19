@@ -208,6 +208,22 @@ describe('exchange routes — Phase 6 Task 36', () => {
             expect(res.body.openPositionsOnPrevious).toEqual([]);
         });
 
+        // [AUDIT-20260619 P2] Step 3.5 accepted a target of ANY status, but Step 7 only
+        // activates a status='verified' row. An UNVERIFIED target → deactivate-all then
+        // activate-none → ZERO active = LIVE LOCKED, with the route still returning ok.
+        it('[LIVE-LOCKED] switch to an UNVERIFIED target is rejected — current stays active (never zero)', async () => {
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, status, api_key_encrypted) VALUES (1, 'binance', 1, 'testnet', 'verified', 'enc')`).run();
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, status, api_key_encrypted) VALUES (1, 'bybit', 0, 'testnet', 'pending', 'enc2')`).run();
+
+            const res = await request(buildApp()).post('/api/exchange/switch').send({ targetExchange: 'bybit' });
+
+            expect(res.status).toBe(400);                       // rejected, not a silent ok
+            expect(res.body.ok).toBe(false);
+            const active = mockDb.prepare(`SELECT COUNT(*) c FROM exchange_accounts WHERE user_id=1 AND is_active=1`).get();
+            expect(active.c).toBe(1);                            // NEVER zero (no LIVE LOCKED)
+            expect(mockDb.prepare(`SELECT exchange FROM exchange_accounts WHERE user_id=1 AND is_active=1`).get().exchange).toBe('binance');
+        });
+
         it('400 on missing targetExchange', async () => {
             const app = buildApp();
             const res = await request(app).post('/api/exchange/switch').send({});
