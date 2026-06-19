@@ -926,10 +926,18 @@ export function dslManualParam(posId: any, param: any, value: any): void {
     const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
     if (cur > 0) {
       const isLong = pos.side === 'LONG'
+      const _oldPL = _dsl.pivotLeft
       _dsl.pivotLeft = isLong ? cur * (1 - _san.pivotLeftPct / 100) : cur * (1 + _san.pivotLeftPct / 100)
       _dsl.pivotRight = isLong ? cur * (1 + _san.pivotRightPct / 100) : cur * (1 - _san.pivotRightPct / 100)
       _dsl.impulseVal = isLong ? cur * (1 + _san.impulseVPct / 100) : cur * (1 - _san.impulseVPct / 100)
       _dsl.pivotLeft = _dslSafePrice(_dsl.pivotLeft, pos.sl, 'PL-manual')
+      // [AUDIT-20260619 P1-4] a manual param edit must never loosen the live stop.
+      // Mirror the engine impulse-path monotonic guard (PATCH PL-MONO above): LONG
+      // keeps the HIGHER stop, SHORT the LOWER. Widening PL% mid-trade no longer
+      // pushes currentSL against the trader (it would write straight to the exchange).
+      if (typeof _oldPL === 'number' && isFinite(_oldPL) && _oldPL > 0) {
+        _dsl.pivotLeft = isLong ? Math.max(_oldPL, _dsl.pivotLeft) : Math.min(_oldPL, _dsl.pivotLeft)
+      }
       _dsl.pivotRight = _dslSafePrice(_dsl.pivotRight, cur, 'PR-manual')
       _dsl.impulseVal = _dslSafePrice(_dsl.impulseVal, cur, 'IV-manual')
       _dsl.currentSL = _dsl.pivotLeft
