@@ -7917,3 +7917,18 @@ select option {
 .theia-hero { grid-column: 1 / -1; }
 .theia-empty { grid-column: 1 / -1; color: var(--dim, #5a6a7a); text-align: center; }
 @media (max-width: 700px) { .theia-grid { grid-template-columns: 1fr; } }
+
+/* [2026-06-19] THEIA modules */
+.theia-rows { display: flex; flex-direction: column; gap: 3px; }
+.theia-rows > div { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; }
+.theia-rows > div > span { color: var(--dim, #5a6a7a); }
+.theia-rows > div > b { color: #c8d6e5; font-weight: 600; }
+.theia-verdict-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.theia-verdict-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+.theia-verdict-level { font-weight: 800; font-size: 14px; letter-spacing: .5px; }
+.theia-verdict-reason { color: #c8d6e5; font-size: 12px; }
+.theia-verdict-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.theia-chip { font-size: 10px; padding: 2px 7px; border-radius: 10px; border: 1px solid #2a3a4a; color: #7a9ab8; text-transform: capitalize; }
+.theia-chip.ok { border-color: #00d97a55; color: #00d97a; }
+.theia-chip.bad { border-color: #ff3b5c55; color: #ff6680; }
+.theia-chip.pending { border-color: #2a3a4a; color: #5a6a7a; }
