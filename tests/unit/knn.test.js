@@ -144,4 +144,14 @@ describe('getKNNModifier', () => {
     const pred = { dir: 'SHORT', confidence: 45 };
     expect(getKNNModifier('LONG', pred)).toBe(0.92);
   });
+
+  // [AUDIT-20260619 P2] A 'neutral' prediction (neighbor tie / zero directional wins)
+  // is NO SIGNAL — it must be a 1.0 no-op, not a disagreement penalty. Previously
+  // 'neutral' !== tradeDir fell into the !agrees branch → 0.92/0.85, silently shaving
+  // live entry confidence on an uncertain KNN.
+  test('neutral prediction is a no-op (1.0), never a penalty', () => {
+    expect(getKNNModifier('LONG', { dir: 'neutral', confidence: 0 })).toBe(1.0);
+    expect(getKNNModifier('LONG', { dir: 'neutral', confidence: 70 })).toBe(1.0);
+    expect(getKNNModifier('SHORT', { dir: 'neutral', confidence: 50 })).toBe(1.0);
+  });
 });

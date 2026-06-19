@@ -199,6 +199,11 @@ function predict(snap, confluence, ind, userId) {
 
 function getKNNModifier(tradeDir, prediction) {
     if (!prediction) return 1.0;
+    // [AUDIT-20260619 P2] A 'neutral' prediction (neighbor tie / zero directional
+    // wins) is NO SIGNAL → 1.0 no-op. Otherwise 'neutral' !== tradeDir would fall
+    // into the !agrees branch and shave live entry confidence (0.92/0.85) on an
+    // uncertain KNN.
+    if (prediction.dir !== 'LONG' && prediction.dir !== 'SHORT') return 1.0;
 
     const agrees = prediction.dir === tradeDir;
     const strongPrediction = prediction.confidence >= 60;
