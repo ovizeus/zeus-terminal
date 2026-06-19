@@ -327,7 +327,17 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     _actualEngineMode = req.body.mode || 'demo';
   }
   const _isTestnet = req.exchangeMode === 'testnet';
-  if (_actualEngineMode === 'live' && !_isTestnet) {
+  // [AUDIT-20260619 BUG B] A reduce-only CLOSE never carries an SL (you don't
+  // stop-loss a close), so the SL-required entry guard must NOT reject it. Without
+  // this exemption a live close without `sl` was rejected 400 (the bug was acute when
+  // _isTestnet mis-resolved to false and treated a testnet close as a REAL entry).
+  const _slRequired = require('../services/orderGuards').slRequiredForEntry({
+    engineMode: _actualEngineMode,
+    isTestnet: _isTestnet,
+    closePosition: !!req.body.closePosition,
+    reduceOnly: req.body.reduceOnly === true || req.body.reduceOnly === 'true',
+  });
+  if (_slRequired) {
     const _slCheck = req.body.sl;
     if (_slCheck === undefined || _slCheck === null || _slCheck === '' ||
         typeof _slCheck === 'object' || typeof _slCheck === 'boolean') {
