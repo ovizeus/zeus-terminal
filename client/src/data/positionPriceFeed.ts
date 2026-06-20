@@ -38,6 +38,18 @@ export function collectOpenSymbols(): string[] {
   return Array.from(out)
 }
 
+/** Pure: given a server `market.price` message (carries Binance markPrice@1s) and the set of
+ *  open-position symbols, return the {symbol, price} to write into w.allPrices, or null when the
+ *  symbol isn't an open position or the price is invalid. */
+export function _positionMarkPrice(msg: any, openSyms: Set<string>): { symbol: string; price: number } | null {
+  if (!msg || !msg.symbol) return null
+  const sym = String(msg.symbol).toUpperCase()
+  if (!openSyms.has(sym)) return null
+  const px = parseFloat(msg.price)
+  if (!Number.isFinite(px) || px <= 0) return null
+  return { symbol: sym, price: px }
+}
+
 /** Write lastPrice into w.allPrices for each valid ticker. Returns updated symbols. */
 export function applyTickerPrices(tickers: any[]): string[] {
   if (!Array.isArray(tickers)) return []

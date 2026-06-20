@@ -90,3 +90,23 @@ describe('applyTickerPrices', () => {
     expect(cur - entry).not.toBe(0)   // the bug was cur===entry → diff 0 → pnl 0
   })
 })
+
+import { _positionMarkPrice } from '../positionPriceFeed'
+
+describe('_positionMarkPrice', () => {
+  const open = new Set(['BTCUSDT', 'ETHUSDT'])
+  it('returns {symbol, price} for an open-position symbol with a valid markPrice', () => {
+    expect(_positionMarkPrice({ symbol: 'BTCUSDT', price: '63700.5' }, open)).toEqual({ symbol: 'BTCUSDT', price: 63700.5 })
+  })
+  it('uppercases the symbol before matching', () => {
+    expect(_positionMarkPrice({ symbol: 'btcusdt', price: 100 }, open)).toEqual({ symbol: 'BTCUSDT', price: 100 })
+  })
+  it('returns null for a symbol not in the open set', () => {
+    expect(_positionMarkPrice({ symbol: 'SOLUSDT', price: 150 }, open)).toBeNull()
+  })
+  it('returns null for an invalid / non-positive price', () => {
+    expect(_positionMarkPrice({ symbol: 'BTCUSDT', price: '0' }, open)).toBeNull()
+    expect(_positionMarkPrice({ symbol: 'BTCUSDT', price: 'x' }, open)).toBeNull()
+    expect(_positionMarkPrice({ symbol: 'BTCUSDT' }, open)).toBeNull()
+  })
+})
