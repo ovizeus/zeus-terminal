@@ -162,7 +162,7 @@ export function updateQuantumClock() {
     const fill = (s / 60) * circ;
     secArc.setAttribute('stroke-dasharray', `${fill.toFixed(1)} ${circ}`);
     // Color pulses at :00
-    const secColor = s < 10 ? 'var(--grn-bright)' : s < 30 ? 'var(--pur)' : '#4400aa';
+    const secColor = s < 10 ? 'var(--grn-bright)' : s < 30 ? '#ff2d95' : '#cc2277'; // [2026-06-20] bright pink instead of purple
     secArc.setAttribute('stroke', secColor);
   }
 

@@ -508,7 +508,8 @@
 .bext-title {
   font-size: 6px;
   letter-spacing: 3px;
-  color: #4400aa;
+  color: #ff2d95;
+  text-shadow: 0 0 8px rgba(255, 45, 149, 0.55);
   font-family: 'Cinzel', serif;
   flex: 1
 }

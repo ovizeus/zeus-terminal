@@ -13,7 +13,7 @@ export function NeuralDataStream() {
             <circle cx="28" cy="28" r="26" fill="none" stroke="#1a0a30" strokeWidth="1.5" />
             <circle cx="28" cy="28" r="22" fill="none" stroke="#2a0a4a" strokeWidth="1" strokeDasharray="4 4" />
             {/* Second arc - fills up each minute */}
-            <circle cx="28" cy="28" r="19" fill="none" stroke="#aa44ff" strokeWidth="3" strokeDasharray="0 120"
+            <circle cx="28" cy="28" r="19" fill="none" stroke="#ff2d95" strokeWidth="3" strokeDasharray="0 120"
               strokeLinecap="round" id="qSecArc" transform="rotate(-90 28 28)"
               style={{ transition: 'stroke-dasharray 1s linear' }} />
             {/* Hour markers */}
@@ -22,19 +22,19 @@ export function NeuralDataStream() {
             <line x1="28" y1="52" x2="28" y2="48" stroke="#3a1060" strokeWidth="1.5" />
             <line x1="4" y1="28" x2="8" y2="28" stroke="#3a1060" strokeWidth="1.5" />
             {/* Center dot */}
-            <circle cx="28" cy="28" r="2" fill="#aa44ff" id="qClockCenter" />
+            <circle cx="28" cy="28" r="2" fill="#ff2d95" id="qClockCenter" />
             {/* Hour hand */}
-            <line id="qHourHand" x1="28" y1="28" x2="28" y2="14" stroke="#aa44ff" strokeWidth="2"
+            <line id="qHourHand" x1="28" y1="28" x2="28" y2="14" stroke="#ff2d95" strokeWidth="2"
               strokeLinecap="round" style={{ transformOrigin: '28px 28px' }} />
             {/* Min hand */}
-            <line id="qMinHand" x1="28" y1="28" x2="28" y2="10" stroke="#cc88ff" strokeWidth="1.5"
+            <line id="qMinHand" x1="28" y1="28" x2="28" y2="10" stroke="#ff80cc" strokeWidth="1.5"
               strokeLinecap="round" style={{ transformOrigin: '28px 28px' }} />
             {/* Sec hand */}
             <line id="qSecHand" x1="28" y1="32" x2="28" y2="6" stroke="#00ff88" strokeWidth="1"
               strokeLinecap="round" style={{ transformOrigin: '28px 28px' }} />
             {/* UTC label */}
             <text x="28" y="38" textAnchor="middle" fill="#3a1060" fontSize="4" fontFamily="monospace">RO</text>
-            <text x="28" y="44" textAnchor="middle" fill="#aa44ff" fontSize="5" fontFamily="monospace"
+            <text x="28" y="44" textAnchor="middle" fill="#ff2d95" fontSize="5" fontFamily="monospace"
               id="qClockTime">00:00</text>
           </svg>
         </div>
