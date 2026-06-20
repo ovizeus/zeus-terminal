@@ -1669,6 +1669,9 @@ export function initMetisChart(): void {
   w._metisYellowS = w._metisChart.addLineSeries({ color: '#ffeb3b', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false })
   w._metisRedS = w._metisChart.addLineSeries({ color: '#ff1744', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false })
   w._metisGreenS = w._metisChart.addLineSeries({ color: '#00e676', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: true })
+  // [2026-06-20] full-width 50 mid line — anchors the pane across the whole chart like HYPERION
+  // so METIS no longer drags behind the candles (RSI centre reference).
+  w._metisMidS = w._metisChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._metisInited = true
   updateMetis()
 }
@@ -1682,10 +1685,11 @@ export function updateMetis(): void {
   try { w.cSeries.setData(colored) } catch (_) { }
   // pane (only if open)
   if (w._metisInited && w._metisGreenS) {
-    const g: any[] = [], rd: any[] = [], yl: any[] = [], wh: any[] = [], up: any[] = [], lo: any[] = [], marks: any[] = []
+    const g: any[] = [], rd: any[] = [], yl: any[] = [], wh: any[] = [], up: any[] = [], lo: any[] = [], marks: any[] = [], mid: any[] = []
     for (let i = 0; i < r.green.length; i++) {
       if (!k[i]) continue
       const t = k[i].time
+      mid.push({ time: t, value: 50 }) // full-width 50 line (anchors the pane, like HYPERION)
       if (r.green[i] != null) { g.push({ time: t, value: r.green[i] }) }
       if (r.red[i] != null) { rd.push({ time: t, value: r.red[i] }) }
       if (r.yellow[i] != null) { yl.push({ time: t, value: r.yellow[i] }) }
@@ -1695,7 +1699,7 @@ export function updateMetis(): void {
       if (r.signal[i] === 1) marks.push({ time: t, position: 'belowBar', shape: 'arrowUp', color: '#00e676', text: 'L' })
       else if (r.signal[i] === -1) marks.push({ time: t, position: 'aboveBar', shape: 'circle', color: '#e040fb', text: '$' })
     }
-    try { w._metisFillS.setData(g); w._metisGreenS.setData(g); w._metisRedS.setData(rd); w._metisYellowS.setData(yl); w._metisWhiteS.setData(wh); w._metisUpperS.setData(up); w._metisLowerS.setData(lo); w._metisGreenS.setMarkers(marks) } catch (_) { }
+    try { w._metisFillS.setData(g); w._metisGreenS.setData(g); w._metisRedS.setData(rd); w._metisYellowS.setData(yl); w._metisWhiteS.setData(wh); w._metisUpperS.setData(up); w._metisLowerS.setData(lo); if (w._metisMidS) w._metisMidS.setData(mid); w._metisGreenS.setMarkers(marks) } catch (_) { }
     _syncSubChartsToMain()
   }
 }
