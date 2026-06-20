@@ -12,8 +12,13 @@
  */
 
 import { usePositionsStore } from '../stores/positionsStore'
+import { on, subscribeSymbol } from '../services/wsMarketBridge'
 
 const w = window as any
+
+// symbol → last time we wrote a live markPrice (so the lastPrice poll won't clobber it)
+const _markFresh: Record<string, number> = {}
+let _markFeedInstalled = false
 
 /** Collect unique symbols of all OPEN positions (demo + live, auto + manual).
  *  Reads BOTH the React positionsStore (the source the panels actually render —
@@ -50,6 +55,28 @@ export function _positionMarkPrice(msg: any, openSyms: Set<string>): { symbol: s
   return { symbol: sym, price: px }
 }
 
+/** Subscribe every open-position symbol to the server feed (Binance markPrice@1s) and write each
+ *  incoming live markPrice into w.allPrices — so off-chart positions price off markPrice, matching
+ *  Binance, live to the second. Idempotent (the handler installs once). */
+export function installPositionMarkFeed(): void {
+  if (_markFeedInstalled) return
+  _markFeedInstalled = true
+  if (!w.allPrices) w.allPrices = {}
+  on('market.price', (msg: any) => {
+    const r = _positionMarkPrice(msg, new Set(collectOpenSymbols()))
+    if (!r) return
+    w.allPrices[r.symbol] = r.price
+    _markFresh[r.symbol] = Date.now()
+  })
+}
+
+/** Ensure the server is streaming markPrice for every current open-position symbol. */
+export function subscribePositionSymbols(): void {
+  for (const sym of collectOpenSymbols()) {
+    try { subscribeSymbol(sym) } catch (_) { /* defensive */ }
+  }
+}
+
 /** Write lastPrice into w.allPrices for each valid ticker. Returns updated symbols. */
 export function applyTickerPrices(tickers: any[]): string[] {
   if (!Array.isArray(tickers)) return []
@@ -57,10 +84,13 @@ export function applyTickerPrices(tickers: any[]): string[] {
   const updated: string[] = []
   for (const t of tickers) {
     if (!t || !t.symbol) continue
+    const sym = String(t.symbol).toUpperCase()
+    // live markPrice wins — don't clobber a fresh markPrice with a polled lastPrice
+    if (_markFresh[sym] && (Date.now() - _markFresh[sym]) < 5000) continue
     const px = parseFloat(t.lastPrice)
     if (Number.isFinite(px) && px > 0) {
-      w.allPrices[t.symbol] = px
-      updated.push(t.symbol)
+      w.allPrices[sym] = px
+      updated.push(sym)
     }
   }
   return updated
@@ -69,6 +99,8 @@ export function applyTickerPrices(tickers: any[]): string[] {
 /** One poll cycle: gather open-position symbols, fetch their prices, update
  *  w.allPrices, then nudge the position panels to recompute PnL. */
 export async function pollPositionPrices(): Promise<void> {
+  installPositionMarkFeed()   // live Binance markPrice@1s → w.allPrices (primary)
+  subscribePositionSymbols()  // ensure the server streams markPrice for every open symbol
   const syms = collectOpenSymbols()
   if (syms.length === 0) return
   try {
