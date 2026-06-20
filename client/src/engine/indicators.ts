@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -469,6 +469,11 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (show) initOlympusSeries()
       ;[w.olyMarkS, w.olyBullTopS, w.olyBullBotS, w.olyBearTopS, w.olyBearBotS].forEach((sx: any) => { if (sx) { sx.applyOptions({ visible: show }); if (!show) try { if (sx.setMarkers) sx.setMarkers([]); sx.setData([]) } catch (_) { } } })
       if (show) updateOlympus()
+      break
+    case 'dolos':
+      if (show) initDolosSeries()
+      ;[w.dolosMarkS, w.dolosObTopS, w.dolosObBotS, w.dolosBbTopS, w.dolosBbBotS].forEach((sx: any) => { if (sx) sx.applyOptions({ visible: show }) })
+      if (show) updateDolos(); else clearDolos()
       break
     case 'gaia':
       if (show) initGaiaSeries()
@@ -2862,6 +2867,46 @@ export function updateOlympus(): void {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// DOLOS — SMC "liquidity trap": BOS / SWEEP / MSS labels + Order Block (red) &
+// Breaker Block (blue) zones + TARGET line. Main-chart overlay (mirrors OLYMPUS).
+// ═══════════════════════════════════════════════════════════════
+export function initDolosSeries(): void {
+  if (w.dolosMarkS || !w.mainChart) return
+  w.dolosMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  const band = (c: string) => w.mainChart.addLineSeries({ color: c, lineWidth: 1, lineStyle: 0, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w.dolosObTopS = band('rgba(255,59,48,0.6)'); w.dolosObBotS = band('rgba(255,59,48,0.6)')
+  w.dolosBbTopS = band('rgba(91,141,239,0.6)'); w.dolosBbBotS = band('rgba(91,141,239,0.6)')
+}
+export function updateDolos(): void {
+  if (!w.mainChart || !w.S.klines.length) return
+  initDolosSeries()
+  const k = w.S.klines, s = w.IND_SETTINGS.dolos || {}
+  const r = _calcDOLOS(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.open), k.map((b: any) => b.close), Math.round(s.lookback) || 5)
+  const col = r.bias === 'bull' ? '#00e676' : '#ff1744'
+  const marks: any[] = []
+  const mk = (p: any, text: string) => { if (p && k[p.index]) marks.push({ time: k[p.index].time, position: r.bias === 'bull' ? 'belowBar' : 'aboveBar', shape: r.bias === 'bull' ? 'arrowUp' : 'arrowDown', color: col, text }) }
+  mk(r.bos, 'BOS'); mk(r.sweep, 'SWEEP'); mk(r.mss, 'MSS')
+  try { w.dolosMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.dolosMarkS.setMarkers(marks.sort((a, b) => a.time - b.time)) } catch (_) { }
+  const t1 = k[k.length - 1].time
+  const drawZone = (topS: any, botS: any, z: any) => {
+    try {
+      if (z && k[z.index]) { const t0 = k[z.index].time; topS.setData([{ time: t0, value: z.top }, { time: t1, value: z.top }]); botS.setData([{ time: t0, value: z.bottom }, { time: t1, value: z.bottom }]) }
+      else { topS.setData([]); botS.setData([]) }
+    } catch (_) { }
+  }
+  drawZone(w.dolosObTopS, w.dolosObBotS, r.ob)
+  drawZone(w.dolosBbTopS, w.dolosBbBotS, r.bb)
+  try { if (w._dolosTargetLine) { w.dolosMarkS.removePriceLine(w._dolosTargetLine); w._dolosTargetLine = null } } catch (_) { }
+  if (r.target) { try { w._dolosTargetLine = w.dolosMarkS.createPriceLine({ price: r.target.level, color: 'rgba(255,255,255,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'TARGET' }) } catch (_) { } }
+}
+export function clearDolos(): void {
+  try {
+    ;[w.dolosObTopS, w.dolosObBotS, w.dolosBbTopS, w.dolosBbBotS].forEach((sx: any) => { if (sx) sx.setData([]) })
+    if (w.dolosMarkS) { w.dolosMarkS.setMarkers([]); if (w._dolosTargetLine) { w.dolosMarkS.removePriceLine(w._dolosTargetLine); w._dolosTargetLine = null } }
+  } catch (_) { }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // GAIA — invented composite REGIME tape (main-chart colour stripe under price).
 // ═══════════════════════════════════════════════════════════════
 
@@ -3504,6 +3549,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.tyche) updateTyche()
   if (w.S.activeInds.nyx && w._nyxInited) updateNyx()
   if (w.S.activeInds.olympus) updateOlympus()
+  if (w.S.activeInds.dolos) { try { updateDolos() } catch (_) { } }
   if (w.S.activeInds.gaia) updateGaia()
   if (w.S.activeInds.ananke) updateAnanke()
   if (w.S.activeInds.psyche && w._psycheInited) updatePsyche()
