@@ -201,6 +201,25 @@ export interface MSPivot { index: number; value: number; type: 'H' | 'L'; trend:
 export interface MSBreak { index: number; dir: 'up' | 'down'; level: number }
 export interface MarketStructure { pivots: MSPivot[]; breaks: MSBreak[] }
 
+export interface DolosSwing { index: number; value: number; type: 'H' | 'L' }
+// Fractal pivots: bar i is a swing High if its high is the strict max over [i-L, i+L]
+// (symmetric, edges excluded), a swing Low if its low is the strict min. Sorted by index.
+export function _dolosSwings(highs: number[], lows: number[], L: number): DolosSwing[] {
+  const out: DolosSwing[] = []
+  const n = highs.length
+  for (let i = L; i < n - L; i++) {
+    let isH = true, isL = true
+    for (let j = i - L; j <= i + L; j++) {
+      if (j === i) continue
+      if (highs[j] > highs[i]) isH = false
+      if (lows[j] < lows[i]) isL = false
+    }
+    if (isH) out.push({ index: i, value: highs[i], type: 'H' })
+    if (isL) out.push({ index: i, value: lows[i], type: 'L' })
+  }
+  return out.sort((a, b) => a.index - b.index)
+}
+
 /**
  * MOIRA — market structure (invented for Zeus). Reads the SKELETON of price:
  * detects swing pivots (a bar whose high/low is the extreme over ±lookback bars),
