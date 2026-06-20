@@ -97,6 +97,7 @@ export const IND_ICONS: Record<string, string> = {
   tyche: g(p('M3 8h2') + p('M5 8l9-4M5 8l9 0M5 8l9 4')), // probability fan opening into the future
   nyx: g('<path d="M2 8h3l2-4 2 8 2-5 3 1v5H2z" fill="currentColor" stroke="none" opacity="0.85"/>'), // filled flow area (accum/dist)
   olympus: g(p('M2 13l4-8 3 4 2-6 3 10z') + p('M2 13h12')), // mountain peaks (structure)
+  dolos: g(p('M3.4 4.6C3.4 3 12.6 3 12.6 4.6C13.6 9 10.6 13.6 8 13.6C5.4 13.6 2.4 9 3.4 4.6Z') + p('M5.6 10C6.6 11.4 9.4 11.4 10.4 10') + dot(6, 6.9, 0.9) + dot(10, 6.9, 0.9)), // theatre mask — DOLOS the deceiver (liquidity trap)
   gaia: g('<rect x="2" y="11" width="12" height="3" rx="1" fill="currentColor" stroke="none"/>' + p('M2 7c2-2 4 1 6-1s4 1 6-1')), // colour regime stripe under a price line
   ananke: g(p('M2 5c3 1 9 1 12 0M2 11c3 1 9 1 12 0') + p('M2 8c3 1 9 1 12 0')), // confluence channel rails
   psyche: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + p('M8 2v12') + dot(5, 6, 0.9) + dot(11, 10, 0.9)), // mind split into emotion halves
