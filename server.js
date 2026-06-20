@@ -1217,6 +1217,8 @@ app.use('/api/ring5', ring5Routes);
 const dslDriveRoutes = require('./server/routes/dslDrive');
 app.use('/api/dsldrive', dslDriveRoutes);
 
+app.use('/api/indicators', require('./server/routes/indicators'));
+
 // [Task B 2026-05-28] Admin operations — global halt toggle endpoint
 app.use('/api/admin', require('./server/routes/admin'));
 app.use('/api/support', require('./server/routes/support'));

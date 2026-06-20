@@ -10217,6 +10217,18 @@ migrate('410_ml_dsl_outcome', () => {
         CREATE INDEX IF NOT EXISTS idx_mldsl_out_ts ON ml_dsl_outcome(ts);
     `);
 });
+migrate('411_indicator_usage', () => {
+    // Per-user currently-active indicator set — drives the picker's live usage badge.
+    // Telemetry-only; never touches brain/trading/signals.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS indicator_usage (
+            user_id      INTEGER NOT NULL,
+            indicator_id TEXT NOT NULL,
+            updated_at   INTEGER NOT NULL,
+            PRIMARY KEY (user_id, indicator_id)
+        );
+    `);
+});
 
 // ─── User methods ───
 
