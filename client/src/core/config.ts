@@ -179,7 +179,7 @@ export const INDICATORS: any[] = [
   { id: 'tyche', ico: _ZI.tgt, name: 'TYCHE', desc: 'Monte-Carlo probability fan — future path odds 🎲', cat: 'trend', def: false },
   { id: 'nyx', ico: _ZI.chart, name: 'NYX', desc: 'Smart-money flow — accumulation/distribution area 🌌', cat: 'volume', def: false },
   { id: 'olympus', ico: _ZI.scope, name: 'OLYMPUS', desc: 'SMC suite — BOS · CHoCH · FVG · bias 🏔️', cat: 'trend', def: false },
-  { id: 'dolos', ico: _ZI.scope, name: 'DOLOS', desc: 'SMC liquidity trap — BOS · sweep · MSS + order & breaker blocks 🎭', cat: 'trend', def: false },
+  { id: 'dolos', ico: '🎭', name: 'DOLOS', desc: 'SMC liquidity trap — BOS · sweep · MSS + order & breaker blocks 🎭', cat: 'trend', def: false },
   { id: 'gaia', ico: _ZI.chart, name: 'GAIA', desc: 'Regime tape — trend+momentum+flow colour stripe 🌍', cat: 'trend', def: false },
   { id: 'ananke', ico: _ZI.tgt, name: 'ANANKE', desc: 'Confluence channel — width=vol, colour=confluence ⛓️', cat: 'trend', def: false },
   { id: 'psyche', ico: _ZI.wave, name: 'PSYCHE', desc: 'Market emotion spectrum — fear↔greed heatmap 🧬', cat: 'momentum', def: false },
