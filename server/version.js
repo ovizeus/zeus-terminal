@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.119',
-    build: 145,
+    version: '1.7.120',
+    build: 146,
     date: '2026-06-20',
     changelog: [
+        'b146 v1.7.120 — INDICATOR PICKER: search + live usage badge 2026-06-20. (1) Search box at the top of the indicator picker filters the list by name/description/category (client-only, instant). (2) Live usage badge by each indicator showing how many users currently use it (TradingView-style), hidden at 0. New telemetry-safe plumbing: indicator_usage table (migration 411) + POST /api/indicators/active (client reports its active set, debounced 2s on toggle/load) + GET /api/indicators/usage (distinct live users per id, 30-day liveness, 60s cache). Pure helpers _indMatchesQuery/_usageBadge (vitest 6/6) + _aggregateUsage (jest 3/3). Fail-safe: if the endpoint is down the badges just hide and search still works. Never touches brain/trading/signals.',
         'b145 v1.7.119 — 7 more sub-panes anchored like HYPERION 2026-06-20 (batched, one deploy). Group B drag-back oscillators (Atlas, Pantheon, Anemoi, Styx, Geras = histograms centred on 0; Cerberus = 3 level-rows; Typhon = %B with 80/20 bands) all pushed data only where value!=null, so their panes were not anchored full-width and dragged behind the candles. Fix: each now pushes a full-width anchor every bar — a faint zero line for the 0-centred histograms, the 80/20 ref bands for Typhon, and the level-rows for every bar (grey where null) for Cerberus. Calc/colors unchanged. Completes the drag-back sweep: SELENE/NYX/METIS/KAIROS/PSYCHE (b141-144) + these 7. Standard bounded oscillators (RSI/Stoch/etc.) reach the edge already and were left as-is.',
         'b144 v1.7.118 — KAIROS + PSYCHE sub-panes anchored like HYPERION 2026-06-20 (batched, one deploy). KAIROS had a per-point-colored line + a zero line that was only pushed where phase!=null (partial) → not anchored → dragged; rebuilt to a baseline-fill series (green above 0 / red below 0, cyan line) + full-width zero line (every bar). PSYCHE (histogram, emotion centred on 0 range [-1,1]) had no anchor at all → added a full-width zero line (every bar). Both keep their calc/functionality; only anchored like HYPERION/SELENE/NYX/METIS. Batched to avoid repeated pm2 reloads bursting Binance API (b141-143 rapid reloads briefly hit IP 429).',
         'b143 v1.7.117 — METIS sub-pane anchored like HYPERION 2026-06-20. METIS (TDI) had a baseline + many lines but none spanning full-width, so its pane was not anchored and dragged behind the candles. Added a full-width 50 mid line (RSI centre, pushed every bar like HYPERION/SELENE/NYX). Same drag-back fix pattern.',
