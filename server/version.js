@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.118',
-    build: 144,
+    version: '1.7.119',
+    build: 145,
     date: '2026-06-20',
     changelog: [
+        'b145 v1.7.119 — 7 more sub-panes anchored like HYPERION 2026-06-20 (batched, one deploy). Group B drag-back oscillators (Atlas, Pantheon, Anemoi, Styx, Geras = histograms centred on 0; Cerberus = 3 level-rows; Typhon = %B with 80/20 bands) all pushed data only where value!=null, so their panes were not anchored full-width and dragged behind the candles. Fix: each now pushes a full-width anchor every bar — a faint zero line for the 0-centred histograms, the 80/20 ref bands for Typhon, and the level-rows for every bar (grey where null) for Cerberus. Calc/colors unchanged. Completes the drag-back sweep: SELENE/NYX/METIS/KAIROS/PSYCHE (b141-144) + these 7. Standard bounded oscillators (RSI/Stoch/etc.) reach the edge already and were left as-is.',
         'b144 v1.7.118 — KAIROS + PSYCHE sub-panes anchored like HYPERION 2026-06-20 (batched, one deploy). KAIROS had a per-point-colored line + a zero line that was only pushed where phase!=null (partial) → not anchored → dragged; rebuilt to a baseline-fill series (green above 0 / red below 0, cyan line) + full-width zero line (every bar). PSYCHE (histogram, emotion centred on 0 range [-1,1]) had no anchor at all → added a full-width zero line (every bar). Both keep their calc/functionality; only anchored like HYPERION/SELENE/NYX/METIS. Batched to avoid repeated pm2 reloads bursting Binance API (b141-143 rapid reloads briefly hit IP 429).',
         'b143 v1.7.117 — METIS sub-pane anchored like HYPERION 2026-06-20. METIS (TDI) had a baseline + many lines but none spanning full-width, so its pane was not anchored and dragged behind the candles. Added a full-width 50 mid line (RSI centre, pushed every bar like HYPERION/SELENE/NYX). Same drag-back fix pattern.',
         'b142 v1.7.116 — NYX sub-pane anchored like HYPERION 2026-06-20. NYX already had the green/red baseline fill but NO full-width zero mid line, so its pane was not anchored across the chart and dragged behind the candles. Added the full-width zero mid line (pushed every bar, like HYPERION/SELENE) so NYX stays anchored to the right edge. Same drag-back fix pattern as SELENE (b141).',

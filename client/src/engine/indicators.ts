@@ -2019,6 +2019,8 @@ export function initAtlasChart(): void {
   w._atlasChart = _createSubChart('atlasChart', 60)
   if (!w._atlasChart) return
   w._atlasSeries = w._atlasChart.addHistogramSeries({ color: '#26ff9a', priceLineVisible: false, lastValueVisible: true, title: 'ATLAS' })
+  // [2026-06-20] full-width zero line anchors the pane like HYPERION (no drag-back)
+  w._atlasZeroS = w._atlasChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._atlasInited = true
   updateAtlas()
 }
@@ -2026,15 +2028,17 @@ export function updateAtlas(): void {
   if (!w._atlasInited || !w._atlasSeries || !w.S.klines.length) return
   const k = w.S.klines, s = w.IND_SETTINGS.atlas || {}
   const r = _calcATLAS(k.map((b: any) => b.close), Math.round(s.rocLen) || 10, Math.round(s.smooth) || 5)
-  const out: any[] = []
+  const out: any[] = [], zero: any[] = []
   for (let i = 0; i < r.accel.length; i++) {
-    if (r.accel[i] == null || r.momentum[i] == null || !k[i]) continue
+    if (!k[i]) continue
+    zero.push({ time: k[i].time, value: 0 }) // full-width anchor (every bar, like HYPERION)
+    if (r.accel[i] == null || r.momentum[i] == null) continue
     const m = r.momentum[i] as number, a = r.accel[i] as number
     // 4 regimes: up+gaining / up+tiring / down+gaining / down+tiring
     const col = m >= 0 ? (a >= 0 ? '#00e676' : '#2e7d5288') : (a <= 0 ? '#ff1744' : '#b71c1c88')
     out.push({ time: k[i].time, value: a, color: col })
   }
-  try { w._atlasSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+  try { w._atlasSeries.setData(out); if (w._atlasZeroS) w._atlasZeroS.setData(zero); _syncSubChartsToMain() } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2070,6 +2074,8 @@ export function initPantheonChart(): void {
   w._pantheonChart = _createSubChart('pantheonChart', 60)
   if (!w._pantheonChart) return
   w._pantheonSeries = w._pantheonChart.addHistogramSeries({ color: '#f0c040', priceLineVisible: false, lastValueVisible: true, title: 'PANTHEON' })
+  // [2026-06-20] full-width zero line anchors the pane like HYPERION (no drag-back)
+  w._pantheonZeroS = w._pantheonChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._pantheonInited = true
   updatePantheon()
 }
@@ -2077,15 +2083,17 @@ export function updatePantheon(): void {
   if (!w._pantheonInited || !w._pantheonSeries || !w.S.klines.length) return
   const k = w.S.klines
   const r = _calcPANTHEON(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume))
-  const out: any[] = []
+  const out: any[] = [], zero: any[] = []
   for (let i = 0; i < r.score.length; i++) {
-    if (r.score[i] == null || !k[i]) continue
+    if (!k[i]) continue
+    zero.push({ time: k[i].time, value: 0 }) // full-width anchor (every bar, like HYPERION)
+    if (r.score[i] == null) continue
     const v = r.score[i] as number
     const strong = Math.abs(v) >= 0.4
     const col = v >= 0 ? (strong ? '#00e676' : '#2e7d5288') : (strong ? '#ff1744' : '#b71c1c88')
     out.push({ time: k[i].time, value: v, color: col })
   }
-  try { w._pantheonSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+  try { w._pantheonSeries.setData(out); if (w._pantheonZeroS) w._pantheonZeroS.setData(zero); _syncSubChartsToMain() } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2403,6 +2411,8 @@ export function initAnemoiChart(): void {
   w._anemoiChart = _createSubChart('anemoiChart', 60)
   if (!w._anemoiChart) return
   w._anemoiSeries = w._anemoiChart.addHistogramSeries({ color: '#26c6da', priceLineVisible: false, lastValueVisible: true, title: 'ANEMOI z' })
+  // [2026-06-20] full-width zero line anchors the pane like HYPERION (no drag-back)
+  w._anemoiZeroS = w._anemoiChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._anemoiInited = true
   updateAnemoi()
 }
@@ -2410,14 +2420,16 @@ export function updateAnemoi(): void {
   if (!w._anemoiInited || !w._anemoiSeries || !w.S.klines.length) return
   const k = w.S.klines, p = Math.round(w.IND_SETTINGS.anemoi?.period) || 20
   const z = _calcANEMOI(k.map((b: any) => b.volume), p)
-  const out: any[] = []
+  const out: any[] = [], zero: any[] = []
   for (let i = 0; i < z.length; i++) {
-    if (z[i] == null || !k[i]) continue
+    if (!k[i]) continue
+    zero.push({ time: k[i].time, value: 0 }) // full-width anchor (every bar, like HYPERION)
+    if (z[i] == null) continue
     const v = z[i] as number
     const col = v >= 2 ? '#ff1744' : v >= 1 ? '#ffab40' : v <= -1 ? '#37474f' : '#26c6da'
     out.push({ time: k[i].time, value: v, color: col })
   }
-  try { w._anemoiSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+  try { w._anemoiSeries.setData(out); if (w._anemoiZeroS) w._anemoiZeroS.setData(zero); _syncSubChartsToMain() } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2441,7 +2453,9 @@ export function updateCerberus(): void {
   const col = (v: number | null) => (v == null ? '#37474f' : v > 0 ? '#00e676' : v < 0 ? '#ff1744' : '#90a4ae')
   const build = (arr: (number | null)[], level: number) => {
     const out: any[] = []
-    for (let i = 0; i < arr.length; i++) { if (arr[i] == null || !k[i]) continue; out.push({ time: k[i].time, value: level, color: col(arr[i]) }) }
+    // [2026-06-20] push EVERY bar (grey where null via col()) so the rows span full-width and
+    // anchor the pane like HYPERION — no drag-back.
+    for (let i = 0; i < arr.length; i++) { if (!k[i]) continue; out.push({ time: k[i].time, value: level, color: col(arr[i]) }) }
     return out
   }
   try {
@@ -2502,11 +2516,12 @@ export function updateTyphon(): void {
   const t = _calcTYPHON(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.atrP) || 14, Math.round(s.period) || 100)
   const data: any[] = [], hi: any[] = [], lo: any[] = []
   for (let i = 0; i < t.length; i++) {
-    if (t[i] == null || !k[i]) continue
+    if (!k[i]) continue
+    hi.push({ time: k[i].time, value: 80 }); lo.push({ time: k[i].time, value: 20 }) // full-width ref bands anchor the pane (every bar, like HYPERION)
+    if (t[i] == null) continue
     const v = t[i] as number
     const col = v >= 80 ? '#ff1744' : v <= 20 ? '#00e676' : '#ffab40'
     data.push({ time: k[i].time, value: v, color: col })
-    hi.push({ time: k[i].time, value: 80 }); lo.push({ time: k[i].time, value: 20 })
   }
   try { w._typhonSeries.setData(data); w._typhonHiS.setData(hi); w._typhonLoS.setData(lo); _syncSubChartsToMain() } catch (_) { }
 }
@@ -2520,6 +2535,8 @@ export function initStyxChart(): void {
   w._styxChart = _createSubChart('styxChart', 60)
   if (!w._styxChart) return
   w._styxSeries = w._styxChart.addHistogramSeries({ color: '#ff5277', priceLineVisible: false, lastValueVisible: true, title: 'STYX %' })
+  // [2026-06-20] full-width zero line anchors the pane like HYPERION (no drag-back)
+  w._styxZeroS = w._styxChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._styxInited = true
   updateStyx()
 }
@@ -2527,14 +2544,16 @@ export function updateStyx(): void {
   if (!w._styxInited || !w._styxSeries || !w.S.klines.length) return
   const k = w.S.klines, p = Math.round(w.IND_SETTINGS.styx?.period) || 100
   const d = _calcSTYX(k.map((b: any) => b.close), p)
-  const out: any[] = []
+  const out: any[] = [], zero: any[] = []
   for (let i = 0; i < d.length; i++) {
-    if (d[i] == null || !k[i]) continue
+    if (!k[i]) continue
+    zero.push({ time: k[i].time, value: 0 }) // full-width anchor (every bar, like HYPERION)
+    if (d[i] == null) continue
     const v = d[i] as number
     const col = v <= -20 ? '#b71c1c' : v <= -8 ? '#ff5277' : '#ffab40'
     out.push({ time: k[i].time, value: v, color: col })
   }
-  try { w._styxSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+  try { w._styxSeries.setData(out); if (w._styxZeroS) w._styxZeroS.setData(zero); _syncSubChartsToMain() } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2546,6 +2565,8 @@ export function initGerasChart(): void {
   w._gerasChart = _createSubChart('gerasChart', 60)
   if (!w._gerasChart) return
   w._gerasSeries = w._gerasChart.addHistogramSeries({ color: '#26ff9a', priceLineVisible: false, lastValueVisible: true, title: 'GERAS age' })
+  // [2026-06-20] full-width zero line anchors the pane like HYPERION (no drag-back)
+  w._gerasZeroS = w._gerasChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._gerasInited = true
   updateGeras()
 }
@@ -2553,15 +2574,17 @@ export function updateGeras(): void {
   if (!w._gerasInited || !w._gerasSeries || !w.S.klines.length) return
   const k = w.S.klines, p = Math.round(w.IND_SETTINGS.geras?.period) || 20
   const g = _calcGERAS(k.map((b: any) => b.close), p)
-  const out: any[] = []
+  const out: any[] = [], zero: any[] = []
   for (let i = 0; i < g.length; i++) {
-    if (g[i] == null || !k[i]) continue
+    if (!k[i]) continue
+    zero.push({ time: k[i].time, value: 0 }) // full-width anchor (every bar, like HYPERION)
+    if (g[i] == null) continue
     const v = g[i] as number, a = Math.abs(v)
     // young = bright, old (stretched) = dim/warning
     const col = v >= 0 ? (a >= 30 ? '#2e7d5288' : '#26ff9a') : (a >= 30 ? '#b71c1c88' : '#ff5277')
     out.push({ time: k[i].time, value: v, color: col })
   }
-  try { w._gerasSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+  try { w._gerasSeries.setData(out); if (w._gerasZeroS) w._gerasZeroS.setData(zero); _syncSubChartsToMain() } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
