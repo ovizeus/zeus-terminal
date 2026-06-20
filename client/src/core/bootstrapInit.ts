@@ -39,7 +39,7 @@ export function initZeusGroups(): void {
   mv('aria-strip', mi); mv('teacher-strip', mi); mv('pnl-lab-strip', mi)
   mv('dsl-strip', mi); mv('at-strip', mi); mv('pt-strip', mi); mv('nova-strip', mi)
   mv('mtf-strip', mi); mv('adaptive-strip', mi); mv('actfeed-strip', mi)
-  mv('zeusBrain', mi); mv('brainExt', mi)
+  mv('zeusBrain', mi) // [2026-06-20] brainExt NO LONGER moved here — it's React-rendered below Fear & Greed (NeuralDataStream); the legacy mv() relocated it into #zeus-groups, overriding the JSX position.
   // [UI-COMPACT 2026-06-13] .dttabs (ZEUS TRADER — AI METRICS) no longer mvSec()'d
   // — React-owned inside MarketMetricsPanel (data-panel-id="market-metrics").
   mvSec('#rsiupd', mi); mvSec('.conf-widget', mi); mvSec('.fgc', mi)
