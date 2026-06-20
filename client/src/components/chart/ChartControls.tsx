@@ -8,6 +8,7 @@ import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn, applyVWAP
 import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
 import { setSymbol } from '../../data/marketDataWS'
 import { openIndSettings } from '../../engine/indicators'
+import { _indMatchesQuery, _usageBadge } from '../../engine/indicatorPicker'
 import { useScrollLock } from '../../core/scrollLock'
 import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
 import { USER_SETTINGS } from '../../core/config'
@@ -695,6 +696,18 @@ export function ChartControls() {
   const ctRef = useRef<HTMLDivElement>(null)
   const [indPanelOpen, setIndPanelOpen] = useState(false)
   useScrollLock(indPanelOpen) // lock the page behind the SELECT INDICATOR sheet (mobile scroll-through)
+  const [indSearch, setIndSearch] = useState('') // picker search filter
+  const [indUsage, setIndUsage] = useState<Record<string, number>>({}) // live usage counts per indicator
+  // fetch live usage counts when the picker opens; badges stay hidden on any failure
+  useEffect(() => {
+    if (!indPanelOpen) return
+    let alive = true
+    fetch('/api/indicators/usage', { credentials: 'same-origin' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (alive && j && j.ok && j.usage) setIndUsage(j.usage) })
+      .catch(() => { /* badges just stay hidden */ })
+    return () => { alive = false }
+  }, [indPanelOpen])
   const [fsMode, setFsMode] = useState(false)
   // [Pack D.1 + D.2] Read initial state with FOUR fallback layers because
   // module load order isn't guaranteed: panels.ts IIFE may run BEFORE
@@ -1174,6 +1187,13 @@ export function ChartControls() {
           <span className="ind-panel-title">SELECT INDICATOR</span>
           <span style={{ cursor: 'pointer', color: 'var(--dim)', fontSize: '14px' }} onClick={() => setIndPanelOpen(false)}>✕</span>
         </div>
+        <div className="ind-search-wrap">
+          <input
+            className="ind-search" type="text" placeholder="Search indicators…" autoComplete="off"
+            value={indSearch} onChange={(e) => setIndSearch(e.target.value)}
+          />
+          {indSearch && <span className="ind-search-x" onClick={() => setIndSearch('')}>✕</span>}
+        </div>
         <div className="ind-panel-body" id="indPanelBody">
           {/* [2026-06-16] Ordering: (1) favorites pinned top in the order the operator
               starred them; (2) among the rest, active indicators float up. Stable sort
@@ -1184,7 +1204,7 @@ export function ChartControls() {
             if (fa !== fb) return fa - fb
             const on = (m: IndMeta) => (m.modalOnly ? 0 : ((m.isOverlay ? ((overlays as unknown as Record<string, boolean>)[m.id] ?? false) : (activeInds[m.id] ?? (indicators as unknown as Record<string, boolean>)[m.id] ?? false)) ? 1 : 0))
             return on(b) - on(a)
-          }).map((ind) => {
+          }).filter((ind) => _indMatchesQuery(ind, indSearch)).map((ind) => {
             // [batch3-A] Route on/off state + toggle through the correct store:
             //   isOverlay → overlays[id]   (togOvr)
             //   modalOnly → no toggle, just a gear/OPEN button (OVI pattern)
@@ -1204,6 +1224,7 @@ export function ChartControls() {
                     <div className="ind-row-name">{ind.name}</div>
                     <div className="ind-row-desc">{ind.desc}</div>
                   </div>
+                  {_usageBadge(indUsage[ind.id]) && <span className="ind-usage">👤 {_usageBadge(indUsage[ind.id])}</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span
