@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.121',
-    build: 147,
+    version: '1.7.122',
+    build: 148,
     date: '2026-06-20',
     changelog: [
+        'b148 v1.7.122 — OMEGA orb fits on browser 2026-06-20. On desktop/laptop the OMEGA orb container renders very wide+short (~1414x278, 5:1), but the central emblem + ETH/BTC coins were sized by container WIDTH (46%/21%) → a 660px square in a 278-tall strip → overflowed and got cut. Fix: size by min(width%, cqmin) so the smaller side (height) caps them on wide-short containers (emblem 660→231px, fits) while squarer/taller containers (mobile, already fine) keep the width% sizing → untouched. Added container-type:size on the orb root for cqmin. Verified headless desktop fits=true.',
         'b147 v1.7.121 — favicon → native Zeus logo 2026-06-20. The browser-tab favicon was the purple lightning/Z SVG (favicon.svg); switched it to the native Zeus ZT logo: /favicon.ico now serves public/assets/icon-192.png and index.html gains <link rel=icon> to it. Deleted the now-unused favicon.svg (the lightning). All other logo files stay (login=logo-zeus.jpg, header=zeus-logo.png, splash+manifest=icon-192/512).',
         'b146 v1.7.120 — INDICATOR PICKER: search + live usage badge 2026-06-20. (1) Search box at the top of the indicator picker filters the list by name/description/category (client-only, instant). (2) Live usage badge by each indicator showing how many users currently use it (TradingView-style), hidden at 0. New telemetry-safe plumbing: indicator_usage table (migration 411) + POST /api/indicators/active (client reports its active set, debounced 2s on toggle/load) + GET /api/indicators/usage (distinct live users per id, 30-day liveness, 60s cache). Pure helpers _indMatchesQuery/_usageBadge (vitest 6/6) + _aggregateUsage (jest 3/3). Fail-safe: if the endpoint is down the badges just hide and search still works. Never touches brain/trading/signals.',
         'b145 v1.7.119 — 7 more sub-panes anchored like HYPERION 2026-06-20 (batched, one deploy). Group B drag-back oscillators (Atlas, Pantheon, Anemoi, Styx, Geras = histograms centred on 0; Cerberus = 3 level-rows; Typhon = %B with 80/20 bands) all pushed data only where value!=null, so their panes were not anchored full-width and dragged behind the candles. Fix: each now pushes a full-width anchor every bar — a faint zero line for the 0-centred histograms, the 80/20 ref bands for Typhon, and the level-rows for every bar (grey where null) for Cerberus. Calc/colors unchanged. Completes the drag-back sweep: SELENE/NYX/METIS/KAIROS/PSYCHE (b141-144) + these 7. Standard bounded oscillators (RSI/Stoch/etc.) reach the edge already and were left as-is.',

@@ -92,11 +92,18 @@ export function TheOrb({ mood, intensity }: Props) {
     const moodColor = MOOD_COLOR[mood] || '#00d4ff'
 
     return (
-        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 'inherit', background: 'radial-gradient(120% 120% at 50% 40%, #0a1020 0%, #05070d 70%)' }}>
+        <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 'inherit', background: 'radial-gradient(120% 120% at 50% 40%, #0a1020 0%, #05070d 70%)', containerType: 'size' }}>
             <style>{`
                 @keyframes omegaFloatA { 0%,100%{ transform:translateY(-50%) translateY(0) } 50%{ transform:translateY(-50%) translateY(-7px) } }
                 @keyframes omegaFloatB { 0%,100%{ transform:translateY(-50%) translateY(0) } 50%{ transform:translateY(-50%) translateY(8px) } }
                 @keyframes omegaEmblem { 0%,100%{ transform:translate(-50%,-50%) translateY(0) scale(1) } 50%{ transform:translate(-50%,-50%) translateY(-6px) scale(1.015) } }
+                /* [2026-06-20] Size by min(width%, cqmin): on a wide+short container (desktop/
+                   browser, ~5:1) the cqmin (smaller side = height) wins → the orb fits instead of
+                   overflowing & getting cut. On a squarer/taller container (mobile, already fine)
+                   the width% wins → untouched. Self-adjusts at every size; cqmin needs the
+                   container-type:size set on the orb root above. */
+                .omega-emblem { width: min(46%, 82cqmin); }
+                .omega-coin { width: min(21%, 40cqmin); }
             `}</style>
 
             {/* fluid steam — dense + colorful, screen-blends over the dark scene */}
@@ -104,16 +111,16 @@ export function TheOrb({ mood, intensity }: Props) {
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', mixBlendMode: 'screen', opacity: 0.96 }} />
 
             {/* ETH left · BTC right — hand-drawn SVG coins, clear gap from the emblem */}
-            <div aria-hidden="true" style={{ position: 'absolute', top: '40%', left: '3%', width: '21%', aspectRatio: '1', filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.6))', animation: 'omegaFloatA 6.5s ease-in-out infinite' }}>
+            <div aria-hidden="true" className="omega-coin" style={{ position: 'absolute', top: '40%', left: '3%', aspectRatio: '1', filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.6))', animation: 'omegaFloatA 6.5s ease-in-out infinite' }}>
                 <EthCoin />
             </div>
-            <div aria-hidden="true" style={{ position: 'absolute', top: '40%', right: '3%', width: '21%', aspectRatio: '1', filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.6))', animation: 'omegaFloatB 7.5s ease-in-out infinite' }}>
+            <div aria-hidden="true" className="omega-coin" style={{ position: 'absolute', top: '40%', right: '3%', aspectRatio: '1', filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.6))', animation: 'omegaFloatB 7.5s ease-in-out infinite' }}>
                 <BtcCoin />
             </div>
 
             {/* OMEGA emblem center — screen blend = black bg + watermark vanish, fluid flows through the gold */}
-            <div aria-hidden="true" style={{
-                position: 'absolute', left: '50%', top: '45%', width: '46%', aspectRatio: '1',
+            <div aria-hidden="true" className="omega-emblem" style={{
+                position: 'absolute', left: '50%', top: '45%', aspectRatio: '1',
                 transform: 'translate(-50%,-50%)', backgroundImage: `url(${EMBLEM})`,
                 backgroundSize: '122%', backgroundRepeat: 'no-repeat', backgroundPosition: 'center',
                 mixBlendMode: 'screen', filter: 'contrast(2.3) brightness(1.45) saturate(1.15) drop-shadow(0 0 18px rgba(255,210,140,0.25))',
