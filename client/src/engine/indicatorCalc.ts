@@ -220,6 +220,72 @@ export function _dolosSwings(highs: number[], lows: number[], L: number): DolosS
   return out.sort((a, b) => a.index - b.index)
 }
 
+export interface DolosZone { index: number; top: number; bottom: number }
+export interface DolosPoint { index: number; level: number }
+export interface Dolos {
+  bias: 'bear' | 'bull' | null
+  bos: DolosPoint | null
+  sweep: DolosPoint | null
+  mss: DolosPoint | null
+  ob: DolosZone | null
+  bb: DolosZone | null
+  target: { level: number } | null
+}
+
+// DOLOS — Smart-Money-Concepts "liquidity trap". Returns the most-recent setup: a swing high (bear)
+// or low (bull) gets swept (wick past + close back), then structure shifts (MSS) the other way; the
+// order block is the last opposite candle before the shift, the breaker is the prior swing zone, the
+// target is the opposing liquidity. Pure & deterministic; all-null when no clean setup exists.
+export function dolos(highs: number[], lows: number[], opens: number[], closes: number[], lookback = 5): Dolos {
+  const NULL: Dolos = { bias: null, bos: null, sweep: null, mss: null, ob: null, bb: null, target: null }
+  const n = closes.length
+  const Lk = Math.max(2, Math.round(lookback))
+  if (n < Lk * 2 + 5) return NULL
+  const sw = _dolosSwings(highs, lows, Lk)
+  const swH = sw.filter((s) => s.type === 'H'), swL = sw.filter((s) => s.type === 'L')
+  if (swH.length < 1 || swL.length < 1) return NULL
+
+  // ── BEAR: a swing high swept (wick above + close back below), then MSS down ──
+  for (let hi = swH.length - 1; hi >= 0; hi--) {
+    const Hp = swH[hi]
+    let sweep: DolosPoint | null = null
+    for (let i = Hp.index + 1; i < n; i++) { if (highs[i] > Hp.value && closes[i] < Hp.value) { sweep = { index: i, level: Hp.value }; break } }
+    if (!sweep) continue
+    const priorLow = [...swL].reverse().find((s) => s.index < sweep!.index)
+    if (!priorLow) continue
+    let mss: DolosPoint | null = null
+    for (let i = sweep.index + 1; i < n; i++) { if (closes[i] < priorLow.value) { mss = { index: i, level: priorLow.value }; break } }
+    if (!mss) continue
+    let ob: DolosZone | null = null
+    for (let i = mss.index; i >= Math.max(0, sweep.index - 2); i--) { if (closes[i] > opens[i]) { ob = { index: i, top: Math.max(highs[i], closes[i]), bottom: Math.min(opens[i], lows[i]) }; break } }
+    const prevH = [...swH].reverse().find((s) => s.index < Hp.index)
+    const bb: DolosZone | null = prevH ? { index: prevH.index, top: prevH.value, bottom: Math.min(...lows.slice(Math.max(0, prevH.index - Lk), prevH.index + 1)) } : null
+    const tgt = [...swL].reverse().find((s) => s.value < mss!.level) || swL[0]
+    return { bias: 'bear', bos: { index: Hp.index, level: Hp.value }, sweep, mss, ob, bb, target: tgt ? { level: tgt.value } : null }
+  }
+
+  // ── BULL: a swing low swept (wick below + close back above), then MSS up ──
+  for (let li = swL.length - 1; li >= 0; li--) {
+    const Lp = swL[li]
+    let sweep: DolosPoint | null = null
+    for (let i = Lp.index + 1; i < n; i++) { if (lows[i] < Lp.value && closes[i] > Lp.value) { sweep = { index: i, level: Lp.value }; break } }
+    if (!sweep) continue
+    const priorHigh = [...swH].reverse().find((s) => s.index < sweep!.index)
+    if (!priorHigh) continue
+    let mss: DolosPoint | null = null
+    for (let i = sweep.index + 1; i < n; i++) { if (closes[i] > priorHigh.value) { mss = { index: i, level: priorHigh.value }; break } }
+    if (!mss) continue
+    let ob: DolosZone | null = null
+    for (let i = mss.index; i >= Math.max(0, sweep.index - 2); i--) { if (closes[i] < opens[i]) { ob = { index: i, top: Math.max(opens[i], highs[i]), bottom: Math.min(lows[i], closes[i]) }; break } }
+    const prevL = [...swL].reverse().find((s) => s.index < Lp.index)
+    const bb: DolosZone | null = prevL ? { index: prevL.index, top: Math.max(...highs.slice(Math.max(0, prevL.index - Lk), prevL.index + 1)), bottom: prevL.value } : null
+    const tgt = [...swH].reverse().find((s) => s.value > mss!.level) || swH[swH.length - 1]
+    return { bias: 'bull', bos: { index: Lp.index, level: Lp.value }, sweep, mss, ob, bb, target: tgt ? { level: tgt.value } : null }
+  }
+
+  return NULL
+}
+
 /**
  * MOIRA — market structure (invented for Zeus). Reads the SKELETON of price:
  * detects swing pivots (a bar whose high/low is the extreme over ±lookback bars),
