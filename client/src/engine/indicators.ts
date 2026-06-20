@@ -2132,10 +2132,20 @@ export function updateAegis(): void {
 
 export function initSeleneChart(): void {
   if (w._seleneInited && w._seleneChart) { updateSelene(); return }
-  w._seleneChart = _createSubChart('seleneChart', 60)
+  w._seleneChart = _createSubChart('seleneChart', 90)
   if (!w._seleneChart) return
-  w._seleneSeries = w._seleneChart.addLineSeries({ color: '#b388ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'SELENE' })
-  w._seleneMidS = w._seleneChart.addLineSeries({ color: 'rgba(255,255,255,0.2)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  // [2026-06-20] Rebuilt with HYPERION's construction so the pane no longer drags behind the
+  // candles: a SOLID baseline-fill series (green gradient above 0, red below 0, SELENE-purple
+  // line) + a full-width zero mid line that anchors the pane across the whole chart. The SELENE
+  // wave calc is unchanged — only the rendering matches HYPERION.
+  w._seleneSeries = w._seleneChart.addBaselineSeries({
+    baseValue: { type: 'price', price: 0 },
+    topLineColor: '#b388ff', bottomLineColor: '#b388ff', lineWidth: 2,
+    topFillColor1: 'rgba(0,230,118,0.55)', topFillColor2: 'rgba(0,230,118,0.04)',
+    bottomFillColor1: 'rgba(255,59,48,0.04)', bottomFillColor2: 'rgba(255,59,48,0.55)',
+    priceLineVisible: false, lastValueVisible: true,
+  })
+  w._seleneMidS = w._seleneChart.addLineSeries({ color: 'rgba(255,255,255,0.22)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._seleneInited = true
   updateSelene()
 }
@@ -2144,14 +2154,10 @@ export function updateSelene(): void {
   const k = w.S.klines, s = w.IND_SETTINGS.selene || {}
   const r = _calcSELENE(k.map((b: any) => b.close), Math.round(s.detrendLen) || 20, Math.round(s.minP) || 8, Math.round(s.maxP) || 60)
   const data: any[] = [], mid: any[] = []
-  let prev: number | null = null
   for (let i = 0; i < r.wave.length; i++) {
-    if (r.wave[i] == null || !k[i]) continue
-    const v = r.wave[i] as number
-    const rising = prev == null ? true : v >= prev
-    data.push({ time: k[i].time, value: v, color: rising ? '#26c6da' : '#e040fb' }) // cyan up toward peak / magenta down
-    mid.push({ time: k[i].time, value: 0 })
-    prev = v
+    if (!k[i]) continue
+    if (r.wave[i] != null) data.push({ time: k[i].time, value: r.wave[i] as number })
+    mid.push({ time: k[i].time, value: 0 }) // full-width zero line (anchors the pane, like HYPERION)
   }
   try {
     w._seleneSeries.applyOptions({ title: r.period ? `SELENE P${r.period}` : 'SELENE' })
