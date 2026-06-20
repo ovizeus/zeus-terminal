@@ -30,3 +30,19 @@ describe('resolveDisplayPnl', () => {
     expect(resolveDisplayPnl(true, 0, 0)).toBe(0)
   })
 })
+
+import { resolveDisplayPnlLive } from '../guards'
+
+describe('resolveDisplayPnlLive', () => {
+  it('prefers the LIVE local markPrice PnL when a live price is available (ignores stale server pnl)', () => {
+    // w.allPrices is live Binance markPrice@1s (b152) → local is accurate + to-the-second
+    expect(resolveDisplayPnlLive(true, true, -135.9, -137.0)).toBe(-137.0)
+    expect(resolveDisplayPnlLive(true, true, 0, -53.9)).toBe(-53.9)
+  })
+  it('falls back to the server pnl (via resolveDisplayPnl) when no live price', () => {
+    expect(resolveDisplayPnlLive(false, true, -26.3, -44.0)).toBe(-26.3)
+  })
+  it('falls back when local is non-finite even with a live price flag', () => {
+    expect(resolveDisplayPnlLive(true, true, -26.3, NaN)).toBe(-26.3)
+  })
+})

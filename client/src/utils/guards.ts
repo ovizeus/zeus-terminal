@@ -83,6 +83,15 @@ export function resolveDisplayPnl(isLive: boolean, serverPnl: any, localPnl: num
   return localPnl
 }
 
+// [2026-06-20] Live-PnL resolver. Since b152, w.allPrices holds live Binance markPrice@1s, so the
+// local PnL is both accurate (matches Binance markPrice) AND to-the-second. When a live price is
+// available, prefer it over the periodically-synced server pnl (which lags by $10-50 between
+// positionRisk syncs). Fall back to the server pnl (via resolveDisplayPnl) only when no live price.
+export function resolveDisplayPnlLive(hasLivePrice: boolean, isLive: boolean, serverPnl: any, localPnl: number): number {
+  if (hasLivePrice && Number.isFinite(localPnl)) return localPnl
+  return resolveDisplayPnl(isLive, serverPnl, localPnl)
+}
+
 // Recovery mode state
 let _recoveryMode = false
 

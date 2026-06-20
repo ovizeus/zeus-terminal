@@ -87,7 +87,7 @@ import { runPostMortem } from '../engine/postMortem'
 import { computeOrderGeometry } from './orderGeometry'
 import { onTradeExecuted } from '../trading/positions'
 import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
-import { _isExecAllowed , _safePnl, resolveDisplayPnl } from '../utils/guards'
+import { _isExecAllowed , _safePnl, resolveDisplayPnlLive } from '../utils/guards'
 import { _showConfirmDialog, _showConfirmDialog3 } from '../data/marketDataTrading'
 import { computeProbScore } from '../engine/forecast'
 import { PREDATOR, computePredatorState } from '../engine/events'
@@ -1961,21 +1961,17 @@ export function renderATPositions(): void {
   // add-on state). The user asked for "cards copy-paste identical with demo"
   // — this keeps AT's richer actions while the visual body matches 1:1.
   panel.innerHTML = autoPosns.map((pos: any) => {
-    const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
+    const _hasLivePrice = !!(w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0)
+    const symPrice = _hasLivePrice ? w.allPrices[pos.sym]
       : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
     const diff = symPrice - pos.entry
-    // [2026-05-18 PnL parity fix] For LIVE positions, prefer Binance-fetched
-    // unrealizedPnL when available (pos.pnl, set by liveApiSyncState from
-    // /fapi/v2/positionRisk = mark-price-based). Local last-price calc
-    // differs from Binance UI by $4-20 on volatile assets (mark vs last).
-    // Operator-reported -44 (Zeus local) vs -26 (Binance mark) on ETHUSDT.
-    // Falls back to local computation when pnl missing/NaN (e.g., during
-    // first 60s before liveApiSyncState polls).
     const _localPnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
-    // [2026-06-14] resolveDisplayPnl: trust the exchange pnl only when it's a real
-    // non-zero value — an uncomputed/stale server pnl of exactly 0 was being shown
-    // as +$0.00 even though entry != current price (impossible for a live position).
-    const pnl = resolveDisplayPnl(pos.mode === 'live' || pos.fromExchange, pos.pnl, _localPnl)
+    // [2026-06-20] w.allPrices is now live Binance markPrice@1s (b152) → the local PnL is accurate
+    // AND to-the-second, so prefer it when a live price exists (syncs the AT panel to Binance to the
+    // second, matching the exchange). Falls back to the periodically-synced server pos.pnl only when
+    // no live price yet. Supersedes the 2026-05-18 "prefer server pnl" band-aid (local was lastPrice
+    // then; -44 local vs -26 Binance on ETH) — that drift is fixed by markPrice.
+    const pnl = resolveDisplayPnlLive(_hasLivePrice, pos.mode === 'live' || pos.fromExchange, pos.pnl, _localPnl)
     const pnlPct = (w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00')
     const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))
     const safeSide = escHtml(pos.side)
