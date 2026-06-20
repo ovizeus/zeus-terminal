@@ -2752,6 +2752,9 @@ export function initNyxChart(): void {
     bottomLineColor: '#ff5277', bottomFillColor1: 'rgba(255,82,119,0.04)', bottomFillColor2: 'rgba(255,82,119,0.45)',
     lineWidth: 2, priceLineVisible: false, lastValueVisible: true,
   })
+  // [2026-06-20] full-width zero mid line — anchors the pane across the whole chart like
+  // HYPERION so NYX no longer drags behind the candles.
+  w._nyxMidS = w._nyxChart.addLineSeries({ color: 'rgba(255,255,255,0.22)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._nyxInited = true
   updateNyx()
 }
@@ -2759,9 +2762,13 @@ export function updateNyx(): void {
   if (!w._nyxInited || !w._nyxSeries || !w.S.klines.length) return
   const k = w.S.klines, p = Math.round(w.IND_SETTINGS.nyx?.period) || 20
   const r = _calcNYX(k.map((b: any) => b.open), k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), p)
-  const data: any[] = []
-  for (let i = 0; i < r.flow.length; i++) { if (r.flow[i] == null || !k[i]) continue; data.push({ time: k[i].time, value: r.flow[i] }) }
-  try { w._nyxSeries.setData(data); _syncSubChartsToMain() } catch (_) { }
+  const data: any[] = [], mid: any[] = []
+  for (let i = 0; i < r.flow.length; i++) {
+    if (!k[i]) continue
+    if (r.flow[i] != null) data.push({ time: k[i].time, value: r.flow[i] })
+    mid.push({ time: k[i].time, value: 0 }) // full-width zero line (anchors the pane, like HYPERION)
+  }
+  try { w._nyxSeries.setData(data); if (w._nyxMidS) w._nyxMidS.setData(mid); _syncSubChartsToMain() } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
