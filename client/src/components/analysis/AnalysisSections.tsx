@@ -1,6 +1,7 @@
 import { devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, devClearLog, devExportLog } from '../../utils/dev'
 // [UI-COMPACT 2026-06-06] QexitRiskStrip moved to NovaPanel.tsx together with
 // its host section (#scenario-sec).
+import { NeuralDataStream } from './NeuralDataStream'
 
 export function AnalysisSections() {
   return (
@@ -86,6 +87,9 @@ export function AnalysisSections() {
           </div>
         </div>
       </div>
+
+      {/* ===== NEURAL DATA STREAM (relocated here, always visible) ===== */}
+      <NeuralDataStream />
 
       {/* [UI-COMPACT 2026-06-13] BTC MARKET METRICS + BTC ORDER BOOK — LIVE moved
           1:1 into MarketMetricsPanel.tsx (Market Metrics dock page, between
