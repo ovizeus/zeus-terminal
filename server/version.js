@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.117',
-    build: 143,
+    version: '1.7.118',
+    build: 144,
     date: '2026-06-20',
     changelog: [
+        'b144 v1.7.118 — KAIROS + PSYCHE sub-panes anchored like HYPERION 2026-06-20 (batched, one deploy). KAIROS had a per-point-colored line + a zero line that was only pushed where phase!=null (partial) → not anchored → dragged; rebuilt to a baseline-fill series (green above 0 / red below 0, cyan line) + full-width zero line (every bar). PSYCHE (histogram, emotion centred on 0 range [-1,1]) had no anchor at all → added a full-width zero line (every bar). Both keep their calc/functionality; only anchored like HYPERION/SELENE/NYX/METIS. Batched to avoid repeated pm2 reloads bursting Binance API (b141-143 rapid reloads briefly hit IP 429).',
         'b143 v1.7.117 — METIS sub-pane anchored like HYPERION 2026-06-20. METIS (TDI) had a baseline + many lines but none spanning full-width, so its pane was not anchored and dragged behind the candles. Added a full-width 50 mid line (RSI centre, pushed every bar like HYPERION/SELENE/NYX). Same drag-back fix pattern.',
         'b142 v1.7.116 — NYX sub-pane anchored like HYPERION 2026-06-20. NYX already had the green/red baseline fill but NO full-width zero mid line, so its pane was not anchored across the chart and dragged behind the candles. Added the full-width zero mid line (pushed every bar, like HYPERION/SELENE) so NYX stays anchored to the right edge. Same drag-back fix pattern as SELENE (b141).',
         'b141 v1.7.115 — SELENE sub-pane rebuilt with HYPERION construction 2026-06-20. SELENE (middle bottom oscillator) was dragging behind the candles: its zero mid-line was only pushed where the wave was non-null, so the pane was not anchored full-width like HYPERION (whose mid spans every bar). Rebuilt initSeleneChart/updateSelene to match HYPERION: a SOLID baseline-fill series (green gradient above 0, red below 0, SELENE-purple line) replacing the per-point-colored line, a FULL-WIDTH zero mid line that anchors the pane across the whole chart, and height 90 (was 60). SELENE wave calc unchanged — only the rendering matches HYPERION so it stays anchored to the right edge and no longer drags back. Build clean; visual confirmation on device (headless does not render sub-panes).',

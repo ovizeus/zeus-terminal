@@ -2696,8 +2696,15 @@ export function initKairosChart(): void {
   if (w._kairosInited && w._kairosChart) { updateKairos(); return }
   w._kairosChart = _createSubChart('kairosChart', 60)
   if (!w._kairosChart) return
-  w._kairosSeries = w._kairosChart.addLineSeries({ color: '#26c6da', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'KAIROS °' })
-  w._kairosZeroS = w._kairosChart.addLineSeries({ color: 'rgba(255,255,255,0.2)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  // [2026-06-20] baseline-fill construction like HYPERION (green above 0 / red below 0, cyan line)
+  w._kairosSeries = w._kairosChart.addBaselineSeries({
+    baseValue: { type: 'price', price: 0 },
+    topLineColor: '#26c6da', bottomLineColor: '#26c6da', lineWidth: 2,
+    topFillColor1: 'rgba(0,230,118,0.55)', topFillColor2: 'rgba(0,230,118,0.04)',
+    bottomFillColor1: 'rgba(255,59,48,0.04)', bottomFillColor2: 'rgba(255,59,48,0.55)',
+    priceLineVisible: false, lastValueVisible: true,
+  })
+  w._kairosZeroS = w._kairosChart.addLineSeries({ color: 'rgba(255,255,255,0.22)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._kairosInited = true
   updateKairos()
 }
@@ -2708,10 +2715,9 @@ export function updateKairos(): void {
   const data: any[] = [], zero: any[] = []
   let lastPer = 0
   for (let i = 0; i < r.phase.length; i++) {
-    if (r.phase[i] == null || !k[i]) continue
-    const v = r.phase[i] as number
-    data.push({ time: k[i].time, value: v, color: v >= 0 ? '#26c6da' : '#e040fb' })
-    zero.push({ time: k[i].time, value: 0 })
+    if (!k[i]) continue
+    if (r.phase[i] != null) data.push({ time: k[i].time, value: r.phase[i] as number })
+    zero.push({ time: k[i].time, value: 0 }) // full-width anchor (every bar, like HYPERION)
     if (r.period[i] != null) lastPer = r.period[i] as number
   }
   try {
@@ -2899,6 +2905,9 @@ export function initPsycheChart(): void {
   w._psycheChart = _createSubChart('psycheChart', 60)
   if (!w._psycheChart) return
   w._psycheSeries = w._psycheChart.addHistogramSeries({ color: '#00bcd4', priceLineVisible: false, lastValueVisible: true, title: 'PSYCHE' })
+  // [2026-06-20] full-width zero line — anchors the pane across the whole chart like HYPERION
+  // so PSYCHE no longer drags behind the candles (emotion is centred on 0, range [-1,1]).
+  w._psycheZeroS = w._psycheChart.addLineSeries({ color: 'rgba(255,255,255,0.2)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._psycheInited = true
   updatePsyche()
 }
@@ -2906,15 +2915,17 @@ export function updatePsyche(): void {
   if (!w._psycheInited || !w._psycheSeries || !w.S.klines.length) return
   const k = w.S.klines, p = Math.round(w.IND_SETTINGS.psyche?.period) || 20
   const r = _calcPSYCHE(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume), p)
-  const out: any[] = []
+  const out: any[] = [], zero: any[] = []
   let lastE = 0
   for (let i = 0; i < r.emotion.length; i++) {
-    if (r.emotion[i] == null || !k[i]) continue
+    if (!k[i]) continue
+    zero.push({ time: k[i].time, value: 0 }) // full-width anchor (every bar, like HYPERION)
+    if (r.emotion[i] == null) continue
     const e = r.emotion[i] as number
     out.push({ time: k[i].time, value: e, color: _psycheColor(e) })
     lastE = e
   }
-  try { w._psycheSeries.applyOptions({ title: `PSYCHE · ${_psycheLabel(lastE)}` }); w._psycheSeries.setData(out); _syncSubChartsToMain() } catch (_) { }
+  try { w._psycheSeries.applyOptions({ title: `PSYCHE · ${_psycheLabel(lastE)}` }); w._psycheSeries.setData(out); if (w._psycheZeroS) w._psycheZeroS.setData(zero); _syncSubChartsToMain() } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
