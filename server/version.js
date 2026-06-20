@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.128',
-    build: 154,
+    version: '1.7.129',
+    build: 155,
     date: '2026-06-20',
     changelog: [
         'b149 v1.7.123 — DOLOS: SMC liquidity-trap indicator 2026-06-20. New main-chart overlay (mirrors OLYMPUS) that auto-detects the most-recent Smart-Money-Concepts liquidity-trap setup and draws all 6 elements: BOS / SWEEP / MSS markers + Order Block (red) & Breaker Block (blue) zone boxes + a TARGET price line. Pure deterministic detection dolos() in indicatorCalc.ts — composes fractal swings (_dolosSwings) + sweep (wick past a swing + close back) + MSS (structure shift the other way) + order/breaker blocks + opposing liquidity target; bear & bull symmetric; all-null when no clean setup. TDD: _dolosSwings + dolos() (bear all-6 / bull / no-setup) green. Toggle on/off from the indicator picker (cat: trend). Client-only; never touches brain/trading.',

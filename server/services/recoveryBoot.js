@@ -72,7 +72,16 @@ async function run() {
         const reconciledUsers = new Set();
         const haltArmedUsers = new Set();
         const erroredUsers = new Set();
+        const MF = require('../migrationFlags');
+        const { shouldReconcileExchange } = require('./reconcileFilter');
         for (const { user_id: uid, exchange } of users) {
+            // Skip non-dispatchable exchanges (e.g. Bybit while BYBIT_DRY_RUN_ONLY): there are no
+            // real positions/orders to reconcile, and erroring on it would land the user in
+            // erroredUsers and KEEP THEIR GLOBAL HALT ARMED despite a clean live exchange.
+            if (!shouldReconcileExchange(exchange, MF)) {
+                _logInfo('RECOVERY_BOOT', `uid=${uid} exchange=${exchange} skipped — dry-run only, nothing to reconcile`);
+                continue;
+            }
             totalUsers++;
             try {
                 const result = await _reconcileUser(uid, exchange);
