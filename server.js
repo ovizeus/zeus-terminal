@@ -1252,10 +1252,10 @@ app.post('/api/client-error', (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── /favicon.ico → reuse SVG favicon (browsers auto-request this at root) ───
+// ─── /favicon.ico → native Zeus ZT logo (browsers auto-request this at root) ───
 app.get('/favicon.ico', (_req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.sendFile(path.join(__dirname, 'public', 'app', 'favicon.svg'));
+  res.sendFile(path.join(__dirname, 'public', 'assets', 'icon-192.png'));
 });
 
 // ─── Serve sw.js dynamically with version-stamped cache ───
