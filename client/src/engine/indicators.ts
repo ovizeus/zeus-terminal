@@ -10,6 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { _usageBadge } from './indicatorPicker'
 import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { playAlertSound } from '../ui/dom2'
@@ -104,6 +105,18 @@ export function openIndPanel(): void {
   if (!ov || !pan || !body) return
 
   body.innerHTML = ''
+  // search box (injected once, above the list) — filters rows by name/desc/cat
+  if (pan && !document.getElementById('indSearch')) {
+    const wrap = document.createElement('div')
+    wrap.className = 'ind-search-wrap'
+    wrap.innerHTML = `<input id="indSearch" class="ind-search" type="text" placeholder="Search indicators…" autocomplete="off"><span class="ind-search-x" id="indSearchX">✕</span>`
+    pan.insertBefore(wrap, body)
+    wrap.querySelector('#indSearch')!.addEventListener('input', (e) => _filterIndRows((e.target as HTMLInputElement).value))
+    wrap.querySelector('#indSearchX')!.addEventListener('click', () => {
+      const inp = document.getElementById('indSearch') as HTMLInputElement
+      if (inp) { inp.value = ''; _filterIndRows('') }
+    })
+  }
   const _sorted = w.INDICATORS.slice().sort(function (a: any, b: any) {
     const aOn = w.S.activeInds[a.id] ? 1 : 0
     const bOn = w.S.activeInds[b.id] ? 1 : 0
@@ -113,6 +126,7 @@ export function openIndPanel(): void {
     const on = !!w.S.activeInds[ind.id]
     const row = document.createElement('div')
     row.className = 'ind-row'
+    row.setAttribute('data-search', `${ind.name || ''} ${ind.desc || ''} ${ind.cat || ''}`.toLowerCase())
     row.innerHTML = `
       <div class="ind-row-l">
         <span class="ind-row-ico">${ind.ico}</span>
@@ -120,6 +134,7 @@ export function openIndPanel(): void {
           <div class="ind-row-name">${ind.name}</div>
           <div class="ind-row-desc">${ind.desc}</div>
         </div>
+        <span class="ind-usage" data-usage-id="${ind.id}"></span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <span class="ind-gear" data-action="openIndSettings" data-id="${ind.id}" title="Settings">${_ZI.bolt}</span>
@@ -130,6 +145,10 @@ export function openIndPanel(): void {
     `
     body.appendChild(row)
   })
+  _applyUsageBadges()
+  // re-apply any active search filter after a re-render
+  const _sq = (document.getElementById('indSearch') as HTMLInputElement | null)?.value
+  if (_sq) _filterIndRows(_sq)
 
   // Event delegation for indicator panel buttons
   if (!body.dataset.delegated) {
@@ -146,6 +165,49 @@ export function openIndPanel(): void {
 
   ov.classList.add('open')
   pan.classList.add('open')
+
+  // fetch live usage counts; badges stay hidden on any failure
+  fetch('/api/indicators/usage', { credentials: 'same-origin' })
+    .then((r) => r.ok ? r.json() : null)
+    .then((j) => { if (j && j.ok && j.usage) { _indUsage = j.usage; _applyUsageBadges() } })
+    .catch(() => { /* badges just stay hidden */ })
+}
+
+// ── indicator picker: search filter + live usage badge + active-set report ──
+let _indUsage: Record<string, number> = {}
+
+function _filterIndRows(query: string): void {
+  const body = document.getElementById('indPanelBody'); if (!body) return
+  const q = (query || '').trim().toLowerCase()
+  body.querySelectorAll('.ind-row').forEach((r: any) => {
+    const hay = r.getAttribute('data-search') || ''
+    r.style.display = (!q || hay.includes(q)) ? '' : 'none'
+  })
+}
+
+function _applyUsageBadges(): void {
+  document.querySelectorAll('.ind-usage').forEach((el: any) => {
+    const id = el.getAttribute('data-usage-id')
+    const txt = _usageBadge(_indUsage[id] || 0)
+    if (txt == null) { el.textContent = ''; el.style.display = 'none' }
+    else { el.textContent = `👤 ${txt}`; el.style.display = '' }
+  })
+}
+
+// Report this user's currently-active indicator set (debounced, fire-and-forget).
+let _reportTimer: any = null
+export function _reportActiveIndicators(): void {
+  if (_reportTimer) clearTimeout(_reportTimer)
+  _reportTimer = setTimeout(() => {
+    try {
+      const active = Object.keys(w.S.activeInds || {}).filter((k) => w.S.activeInds[k])
+      fetch('/api/indicators/active', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active }),
+      }).catch(() => { /* fire-and-forget */ })
+    } catch (_) { /* ignore */ }
+  }, 2000)
 }
 
 export function closeIndPanel(): void {
@@ -164,6 +226,8 @@ export function toggleInd(id: string, toggleEl: HTMLElement): void {
   toast(w.S.activeInds[id] ? w.INDICATORS.find((i: any) => i.id === id)?.name + ' ON' : w.INDICATORS.find((i: any) => i.id === id)?.name + ' OFF')
   if (typeof w._usSave === 'function') w._usSave()
   if (typeof w._userCtxPushNow === 'function') w._userCtxPushNow()
+  _reportActiveIndicators()
+  _applyUsageBadges()
 }
 
 export function applyIndVisibility(id: string, visible: boolean): void {

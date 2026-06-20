@@ -1,7 +1,7 @@
 import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { applyIndVisibility, renderActBar, getMacdChart } from '../engine/indicators'
+import { applyIndVisibility, renderActBar, getMacdChart, _reportActiveIndicators } from '../engine/indicators'
 import { closeM } from '../data/marketDataWS'
 import { _usSave, _userCtxPush, _userCtxPushNow, INDICATORS } from '../core/config'
 import { renderChart } from '../data/marketDataChart'
@@ -204,6 +204,7 @@ export function initActBar(): void {
     var on = (ind.id in S.activeInds) ? !!S.activeInds[ind.id] : !!ind.def;
     applyIndVisibility(ind.id, on);
   });
+  _reportActiveIndicators();
 }
 
 // Store chart bars for signal analysis
@@ -238,6 +239,7 @@ export function togInd(id: any, btn: any): void {
   renderActBar();
   // [P5 FIX] Persist indicator state so it survives refresh
   _usSave();
+  _reportActiveIndicators();
   _userCtxPush();
 }
 

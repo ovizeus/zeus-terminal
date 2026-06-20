@@ -7988,3 +7988,10 @@ select option {
 .dsl-losscut-rows { display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:#7a9ab8; margin-bottom:6px; }
 .dsl-spark { display:block; }
 .dsl-losscut-card.dsl-muted { color:#5a6a7a; font-size:11px; }
+
+/* [2026-06-20] indicator picker search + usage badge */
+.ind-search-wrap { position:relative; padding:8px 10px 4px; }
+.ind-search { width:100%; box-sizing:border-box; padding:7px 28px 7px 10px; background:#0c1219; border:1px solid #1e2a36; border-radius:7px; color:#c8d6e5; font-size:13px; outline:none; }
+.ind-search:focus { border-color:#2e6f9e; }
+.ind-search-x { position:absolute; right:18px; top:14px; color:#5a6a7a; cursor:pointer; font-size:12px; }
+.ind-usage { font-size:10px; color:#7a9ab8; background:rgba(122,154,184,.12); border-radius:8px; padding:1px 6px; margin-left:6px; white-space:nowrap; }
