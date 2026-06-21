@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { collectOpenSymbols, applyTickerPrices } from '../positionPriceFeed'
+import { collectOpenSymbols, applyTickerPrices, markPxFor, _recordMarkPx, _clearMarkPx } from '../positionPriceFeed'
 import { usePositionsStore } from '../../stores/positionsStore'
 
 const w = globalThis as any
@@ -7,9 +7,10 @@ const w = globalThis as any
 beforeEach(() => {
   w.TP = { demoPositions: [], livePositions: [] }
   w.allPrices = {}
+  _clearMarkPx()
   usePositionsStore.setState({ demoPositions: [], livePositions: [] })
 })
-afterEach(() => { delete w.TP; delete w.allPrices; usePositionsStore.setState({ demoPositions: [], livePositions: [] }) })
+afterEach(() => { delete w.TP; delete w.allPrices; _clearMarkPx(); usePositionsStore.setState({ demoPositions: [], livePositions: [] }) })
 
 describe('collectOpenSymbols', () => {
   it('collects unique open symbols from demo + live, excludes closed', () => {
@@ -108,5 +109,34 @@ describe('_positionMarkPrice', () => {
     expect(_positionMarkPrice({ symbol: 'BTCUSDT', price: '0' }, open)).toBeNull()
     expect(_positionMarkPrice({ symbol: 'BTCUSDT', price: 'x' }, open)).toBeNull()
     expect(_positionMarkPrice({ symbol: 'BTCUSDT' }, open)).toBeNull()
+  })
+})
+
+describe('markPxFor — dedicated, unclobberable markPrice store (root-cause fix 2026-06-21)', () => {
+  it('returns the recorded markPrice when fresh', () => {
+    _recordMarkPx('BNBUSDT', 591.81, 1000)
+    expect(markPxFor('BNBUSDT', 15000, 5000)).toBe(591.81)
+  })
+  it('uppercases the symbol before matching', () => {
+    _recordMarkPx('bnbusdt', 100, 1000)
+    expect(markPxFor('BNBUSDT', 15000, 2000)).toBe(100)
+  })
+  it('returns null when the markPrice is stale (older than maxAge)', () => {
+    _recordMarkPx('ETHUSDT', 3000, 1000)
+    expect(markPxFor('ETHUSDT', 15000, 1000 + 15001)).toBeNull()
+  })
+  it('returns null for a symbol that was never recorded', () => {
+    expect(markPxFor('NOPEUSDT', 15000, 1000)).toBeNull()
+  })
+  it('returns null for a non-positive / invalid recorded price', () => {
+    _recordMarkPx('SOLUSDT', 0, 1000)
+    expect(markPxFor('SOLUSDT', 15000, 2000)).toBeNull()
+  })
+  it('REGRESSION (the bug): a lastPrice write to w.allPrices does NOT change markPxFor — position pricing stays on the exchange markPrice', () => {
+    _recordMarkPx('BNBUSDT', 591.81, 1000)   // exchange markPrice
+    w.allPrices['BNBUSDT'] = 591.33          // watchlist WS feed clobbers the shared map with lastPrice
+    // Before the fix, positions read w.allPrices (591.33, lastPrice) → PnL desynced from Binance.
+    // Now they read the dedicated store, immune to the clobber:
+    expect(markPxFor('BNBUSDT', 15000, 2000)).toBe(591.81)
   })
 })

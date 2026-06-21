@@ -18,6 +18,37 @@ const w = window as any
 // symbol → last time we wrote a live markPrice (so the slow lastPrice fallback won't clobber it)
 const _markFresh: Record<string, number> = {}
 
+// symbol → live Binance markPrice. DEDICATED, authoritative store written ONLY by the markPrice feed.
+// ROOT CAUSE (2026-06-21): the shared `w.allPrices` map is continuously overwritten with lastPrice by
+// the high-frequency watchlist + chart WS feeds (services/symbols.ts:63/119, core/managers.ts:122),
+// which have no markPrice guard. So the markPrice we wrote was clobbered ~instantly and positions were
+// priced off lastPrice → PnL desynced from Binance (which prices off markPrice) by the last↔mark spread.
+// Positions now read markPrice from HERE, where no lastPrice feed can reach it.
+const _markPx: Record<string, number> = {}
+
+/** Record a fresh markPrice for a symbol (called by pollMarkPrices and tests). */
+export function _recordMarkPx(sym: string, price: number, now = Date.now()): void {
+  const s = String(sym).toUpperCase()
+  _markPx[s] = price
+  _markFresh[s] = now
+}
+
+/** Authoritative live markPrice for a position symbol, or null when absent/stale/invalid.
+ *  Decoupled from w.allPrices so the high-frequency lastPrice feeds cannot clobber it. */
+export function markPxFor(sym: string, maxAgeMs = 15000, now = Date.now()): number | null {
+  const s = String(sym).toUpperCase()
+  const ts = _markFresh[s]
+  const px = _markPx[s]
+  if (ts && (now - ts) < maxAgeMs && Number.isFinite(px) && px > 0) return px
+  return null
+}
+
+/** Test helper: clear the dedicated markPrice store. */
+export function _clearMarkPx(): void {
+  for (const k of Object.keys(_markPx)) delete _markPx[k]
+  for (const k of Object.keys(_markFresh)) delete _markFresh[k]
+}
+
 /** Collect unique symbols of all OPEN positions (demo + live, auto + manual).
  *  Reads BOTH the React positionsStore (the source the panels actually render —
  *  populated by the positions.changed WS via applyDelta) AND the legacy w.TP
@@ -69,7 +100,11 @@ export async function pollMarkPrices(): Promise<void> {
     const now = Date.now()
     for (const sym of Object.keys(map || {})) {
       const px = parseFloat(map[sym])
-      if (Number.isFinite(px) && px > 0) { w.allPrices[sym] = px; _markFresh[sym] = now; any = true }
+      if (Number.isFinite(px) && px > 0) {
+        _recordMarkPx(sym, px, now)   // authoritative store positions read from (unclobberable)
+        w.allPrices[sym] = px         // also seed the shared map (best-effort; watchlist may overwrite)
+        any = true
+      }
     }
     if (any) {
       try {

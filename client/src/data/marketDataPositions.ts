@@ -20,12 +20,18 @@ import { atLog } from '../trading/autotrade'
 import { playExitSound } from '../ui/dom2'
 import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from './marketDataClose'
+import { markPxFor } from './positionPriceFeed'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 
 function _numOrDefault(val: any, fallback: number): number { const n = parseFloat(val); return Number.isFinite(n) ? n : fallback }
 
 // getSymPrice — full version with staleness check
 export function getSymPrice(pos: any): number | null {
+  // [2026-06-21] Authoritative exchange markPrice first — the shared w.allPrices map is overwritten
+  // with lastPrice by the watchlist/chart feeds, so positions MUST price off the dedicated markPrice
+  // store to stay in sync with Binance (which computes PnL off markPrice).
+  const mp = markPxFor(pos.sym)
+  if (mp != null) return mp
   if (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) return w.allPrices[pos.sym]
   const wlEntry = w.wlPrices[pos.sym] || w.wlPrices[pos.sym?.toUpperCase()]
   if (wlEntry?.price && wlEntry.price > 0) {

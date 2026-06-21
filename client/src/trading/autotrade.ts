@@ -25,7 +25,7 @@ export function _resolveClosePrice(pos: any): number {
     // Layer 1: live market price
     try {
         const live = getSymPrice(pos)
-        if (Number.isFinite(live) && live > 0) return live as number
+        if (live != null && Number.isFinite(live) && live > 0) return live
     } catch (_) { /* defensive */ }
     // Layer 2: pos.live.avgPrice (Binance fill at entry)
     const liveAvg = pos.live && Number(pos.live.avgPrice)
@@ -88,6 +88,7 @@ import { computeOrderGeometry } from './orderGeometry'
 import { onTradeExecuted } from '../trading/positions'
 import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
 import { _isExecAllowed , _safePnl, resolveDisplayPnlLive } from '../utils/guards'
+import { markPxFor } from '../data/positionPriceFeed'
 import { _showConfirmDialog, _showConfirmDialog3 } from '../data/marketDataTrading'
 import { computeProbScore } from '../engine/forecast'
 import { PREDATOR, computePredatorState } from '../engine/events'
@@ -1961,9 +1962,14 @@ export function renderATPositions(): void {
   // add-on state). The user asked for "cards copy-paste identical with demo"
   // — this keeps AT's richer actions while the visual body matches 1:1.
   panel.innerHTML = autoPosns.map((pos: any) => {
-    const _hasLivePrice = !!(w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0)
-    const symPrice = _hasLivePrice ? w.allPrices[pos.sym]
-      : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
+    // [2026-06-21] Exchange markPrice first (dedicated store, unclobberable by the watchlist/chart
+    // lastPrice feeds) — keeps the AT panel "Now" + PnL in lock-step with Binance, which prices off
+    // markPrice. Falls back to the shared map, then chart/watchlist, then entry.
+    const _markPxLive = markPxFor(pos.sym)
+    const _hasLivePrice = _markPxLive != null || !!(w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0)
+    const symPrice = _markPxLive != null ? _markPxLive
+      : (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0 ? w.allPrices[pos.sym]
+      : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry)))
     const diff = symPrice - pos.entry
     const _localPnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
     // [2026-06-20] w.allPrices is now live Binance markPrice@1s (b152) → the local PnL is accurate
