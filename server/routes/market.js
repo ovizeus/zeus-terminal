@@ -44,6 +44,15 @@ router.get('/ticker', (req, res) => {
     res.json({ ok: true, data: data || null, cached: !!data });
 });
 
+// [2026-06-20] Live Binance markPrice for open-position symbols (fstream is Hetzner-blocked, so we
+// poll premiumIndex server-side ~1s and cache it). Returns { SYM: markPrice }. ?symbols=BTC,ETH.
+router.get('/markprice', (req, res) => {
+    try {
+        const symbols = req.query.symbols ? String(req.query.symbols).split(',').filter(Boolean) : null;
+        res.json(require('../services/markPriceCache').get(symbols));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/ticker/all', (req, res) => {
     const exch = req.query.exchange || 'binance';
     const all = mc.getAll('ticker');

@@ -12,13 +12,11 @@
  */
 
 import { usePositionsStore } from '../stores/positionsStore'
-import { on, subscribeSymbol } from '../services/wsMarketBridge'
 
 const w = window as any
 
-// symbol → last time we wrote a live markPrice (so the lastPrice poll won't clobber it)
+// symbol → last time we wrote a live markPrice (so the slow lastPrice fallback won't clobber it)
 const _markFresh: Record<string, number> = {}
-let _markFeedInstalled = false
 
 /** Collect unique symbols of all OPEN positions (demo + live, auto + manual).
  *  Reads BOTH the React positionsStore (the source the panels actually render —
@@ -55,26 +53,32 @@ export function _positionMarkPrice(msg: any, openSyms: Set<string>): { symbol: s
   return { symbol: sym, price: px }
 }
 
-/** Subscribe every open-position symbol to the server feed (Binance markPrice@1s) and write each
- *  incoming live markPrice into w.allPrices — so off-chart positions price off markPrice, matching
- *  Binance, live to the second. Idempotent (the handler installs once). */
-export function installPositionMarkFeed(): void {
-  if (_markFeedInstalled) return
-  _markFeedInstalled = true
-  if (!w.allPrices) w.allPrices = {}
-  on('market.price', (msg: any) => {
-    const r = _positionMarkPrice(msg, new Set(collectOpenSymbols()))
-    if (!r) return
-    w.allPrices[r.symbol] = r.price
-    _markFresh[r.symbol] = Date.now()
-  })
-}
-
-/** Ensure the server is streaming markPrice for every current open-position symbol. */
-export function subscribePositionSymbols(): void {
-  for (const sym of collectOpenSymbols()) {
-    try { subscribeSymbol(sym) } catch (_) { /* defensive */ }
-  }
+/** Fast poll (~1s): fetch live Binance markPrice (server premiumIndex cache) for every open-position
+ *  symbol and write it into w.allPrices — so position PnL prices off the exchange's markPrice, to the
+ *  second, matching Binance. Binance's markPrice@1s WS is Hetzner-blocked, so this REST cache is the
+ *  live source; the slow lastPrice ticker poll stays only as a fallback (skips fresh markPrice). */
+export async function pollMarkPrices(): Promise<void> {
+  const syms = collectOpenSymbols()
+  if (syms.length === 0) return
+  try {
+    const r = await fetch('/api/market/markprice?symbols=' + encodeURIComponent(syms.join(',')), { signal: AbortSignal.timeout(4000) })
+    if (!r.ok) return
+    const map = await r.json() // { SYM: markPrice }
+    if (!w.allPrices) w.allPrices = {}
+    let any = false
+    const now = Date.now()
+    for (const sym of Object.keys(map || {})) {
+      const px = parseFloat(map[sym])
+      if (Number.isFinite(px) && px > 0) { w.allPrices[sym] = px; _markFresh[sym] = now; any = true }
+    }
+    if (any) {
+      try {
+        const ps = usePositionsStore.getState()
+        ps.setDemoPositions(ps.demoPositions.slice())
+        ps.setLivePositions(ps.livePositions.slice())
+      } catch (_) { /* render nudge optional */ }
+    }
+  } catch (_) { /* best-effort markPrice feed */ }
 }
 
 /** Write lastPrice into w.allPrices for each valid ticker. Returns updated symbols. */
@@ -99,8 +103,6 @@ export function applyTickerPrices(tickers: any[]): string[] {
 /** One poll cycle: gather open-position symbols, fetch their prices, update
  *  w.allPrices, then nudge the position panels to recompute PnL. */
 export async function pollPositionPrices(): Promise<void> {
-  installPositionMarkFeed()   // live Binance markPrice@1s → w.allPrices (primary)
-  subscribePositionSymbols()  // ensure the server streams markPrice for every open symbol
   const syms = collectOpenSymbols()
   if (syms.length === 0) return
   try {
@@ -125,16 +127,21 @@ export async function pollPositionPrices(): Promise<void> {
 }
 
 let _timer: any = null
-/** Start the periodic feed once. Idempotent. */
+let _markTimer: any = null
+/** Start the periodic feeds once. Idempotent. markPrice polls ~1s (live, primary); the lastPrice
+ *  ticker polls slower as a fallback for symbols without a fresh markPrice. */
 export function startPositionPriceFeed(intervalMs = 6000): void {
   if (w.__ZEUS_POS_PRICE_FEED__) return
   w.__ZEUS_POS_PRICE_FEED__ = true
+  pollMarkPrices()
+  _markTimer = setInterval(pollMarkPrices, 1000) // live markPrice, to the second
   pollPositionPrices()
   _timer = setInterval(pollPositionPrices, intervalMs)
 }
 
 /** Stop the feed (test/cleanup). */
 export function stopPositionPriceFeed(): void {
+  if (_markTimer) { clearInterval(_markTimer); _markTimer = null }
   if (_timer) { clearInterval(_timer); _timer = null }
   w.__ZEUS_POS_PRICE_FEED__ = false
 }

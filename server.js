@@ -1464,6 +1464,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     try { require('./server/services/wsMarketProxy').startQuantPoller(); } catch (_) {}
     try { require('./server/services/wsMarketProxy').startWatchlist(); } catch (_) {}
     try { require('./server/services/wsMarketProxy').startWatchlistREST(); } catch (_) {}
+    try { require('./server/services/markPriceCache').start(1000); } catch (_) {} // live markPrice (premiumIndex) for position PnL — fstream is Hetzner-blocked
     // [MULTI-SYM] Expose configured symbols for API
     app._sdSymbols = SD_SYMBOLS;
   } else {
