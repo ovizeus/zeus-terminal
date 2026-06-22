@@ -236,6 +236,13 @@ const _ML_DSL_LEARN_ENABLED = (process.env.ML_DSL_LEARN_ENABLED || 'false') === 
 // OFF; enable via env + reload. Live control is a separate, evidence-gated decision.
 const _ML_DSL_LOSSSIDE_SHADOW = (process.env.ML_DSL_LOSSSIDE_SHADOW || 'false') === 'true';
 
+// [LEVER-B 2026-06-22] LIVE smart loss-cut — when ON, the engine actually closes a losing
+// position early (exitType SMART_CUT) when adverse past threshold AND sustained-falling, instead
+// of waiting for the wider hard SL. TESTNET-ONLY by design (the onPriceUpdate hook gates on
+// pos.env==='TESTNET') — never touches REAL until the evidence gate (n>=30-50) is met. Default
+// OFF; enable via env + reload. Fail-closed: errors never disturb the existing SL/TP/DSL checks.
+const _ML_DSL_LOSSSIDE_ACTIVE = (process.env.ML_DSL_LOSSSIDE_ACTIVE || 'false') === 'true';
+
 // ── Safety invariant: mutual exclusion ──
 // [Phase 2 S1.C] Two enforcement modes:
 //   1. _validateMutex(f)  — pure check, returns {ok,violations[]}. No mutation.
@@ -399,6 +406,7 @@ module.exports = {
     get ML_DSL_SHADOW_ENABLED() { return _ML_DSL_SHADOW_ENABLED; },
     get ML_DSL_LEARN_ENABLED() { return _ML_DSL_LEARN_ENABLED; },
     get ML_DSL_LOSSSIDE_SHADOW() { return _ML_DSL_LOSSSIDE_SHADOW; },
+    get ML_DSL_LOSSSIDE_ACTIVE() { return _ML_DSL_LOSSSIDE_ACTIVE; },
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     get CHART_BACKFILL_ENABLED() { return flags.CHART_BACKFILL_ENABLED; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.

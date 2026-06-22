@@ -3435,6 +3435,28 @@ function onPriceUpdate(symbol, price, exchange) {
         }
         // ── END ML-DSL SHADOW ──
 
+        // ── LEVER-B: LIVE smart loss-cut (testnet-only, flag-gated, fail-closed) ──
+        // Close a losing position early when adverse past threshold AND sustained-falling (K
+        // consecutive new adverse extremes) — BEFORE the wider hard SL, which stays the backstop.
+        // DSL profit-lock (DSL_PL, above) already had precedence (winners). Per-position incremental
+        // state on pos._lsCutState (mirror of the dslRrSim replay loop). TESTNET-ONLY by design —
+        // never touches REAL until the evidence gate (n>=30-50) is met. Fail-closed: any error here
+        // must never disturb the classic SL/TP/DSL path below.
+        if (MF.ML_DSL_LOSSSIDE_ACTIVE && pos.env === 'TESTNET') {
+            try {
+                const _lsNext = _dslRrSim._smartCutStep(price, pos.side, pos.price, 0.0075, 2, pos._lsCutState || null);
+                pos._lsCutState = { extreme: _lsNext.extreme, consec: _lsNext.consec };
+                if (_lsNext.cut) {
+                    const _scPnl = pos.side === 'LONG'
+                        ? +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                        : +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
+                    logger.info('AT_LIVE', `[${pos.seq}] SMART_CUT ${pos.side} ${pos.symbol} @$${price} — adverse sustained (testnet) pnl=$${_scPnl}`);
+                    _closePosition(i, pos, 'SMART_CUT', price, _scPnl);
+                    continue;
+                }
+            } catch (e) { /* fail-closed: smart-cut must never disturb the live SL/TP/DSL path */ }
+        }
+
         // ── Classic SL/TP check ──
         let closed = false;
         let pnl = 0;

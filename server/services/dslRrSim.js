@@ -75,4 +75,25 @@ function _smartCutPnlPct(pricePath, cfg) {
   return baseline;
 }
 
-module.exports = { _cappedPnl, _rrStats, _recovering, _shouldEarlyExit, _smartCutPnlPct };
+// [LEVER-B 2026-06-22] LIVE incremental counterpart of _smartCutPnlPct's loop. Given the current
+// price + the carried state {extreme, consec}, returns the updated state plus `cut` = true when
+// adverse past the threshold AND sustained-falling (consec >= sustain consecutive new adverse
+// extremes). Same discriminator as the replay, evaluated one tick at a time — so the live engine
+// can fire a smart loss-cut without replaying the whole path. Fail-safe: invalid input → no cut,
+// state preserved.
+function _smartCutStep(price, side, entry, threshold, sustain, state) {
+  const s = state || { extreme: null, consec: 0 };
+  const p = +price, e = +entry;
+  const K = Number.isFinite(+sustain) ? +sustain : 2;
+  if (!isFinite(p) || !isFinite(e) || e <= 0) return { extreme: s.extreme, consec: s.consec, cut: false };
+  const SIDE = String(side).toUpperCase();
+  const prevExtreme = (s.extreme === null || s.extreme === undefined) ? null : s.extreme;
+  const newExtreme = prevExtreme === null ? false : (SIDE === 'LONG' ? p < prevExtreme : p > prevExtreme);
+  const extreme = prevExtreme === null ? p : (SIDE === 'LONG' ? Math.min(prevExtreme, p) : Math.max(prevExtreme, p));
+  const consec = newExtreme ? (s.consec || 0) + 1 : 0;
+  const adversePct = SIDE === 'LONG' ? (e - p) / e : (p - e) / e;
+  const cut = _shouldEarlyExit({ adversePct, recovering: consec < K, threshold: +threshold });
+  return { extreme, consec, cut };
+}
+
+module.exports = { _cappedPnl, _rrStats, _recovering, _shouldEarlyExit, _smartCutPnlPct, _smartCutStep };

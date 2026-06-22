@@ -87,3 +87,52 @@ describe('_smartCutPnlPct', () => {
     expect(_smartCutPnlPct([100, 100.2, 100.5, 101], { ...cfg, baselinePnlPct: 0.01 })).toBe(0.01);
   });
 });
+
+const { _smartCutStep } = require('../../../../server/services/dslRrSim');
+
+// [LEVER-B 2026-06-22] _smartCutStep is the LIVE, incremental per-tick counterpart of the
+// _smartCutPnlPct replay loop. Same discriminator (adverse past threshold AND sustained-falling
+// = K consecutive new adverse extremes). It carries {extreme, consec} state between ticks so the
+// live engine can decide a cut without replaying the whole path.
+describe('_smartCutStep (live incremental smart loss-cut)', () => {
+  const run = (path, side, entry, threshold, sustain) => {
+    let st = null; const cuts = [];
+    path.forEach((p, i) => { st = _smartCutStep(p, side, entry, threshold, sustain, st); if (st.cut) cuts.push(i); });
+    return cuts;
+  };
+
+  it('cuts a SHORT that goes adverse and keeps rising (sustained) at the K-th consecutive new high past threshold', () => {
+    // entry 100, threshold 0.01, K=2: 100→100.5(consec1,adv.005)→101(consec2,adv.01) → cut at index 2
+    const cuts = run([100, 100.5, 101, 101.5], 'SHORT', 100, 0.01, 2);
+    expect(cuts[0]).toBe(2);
+  });
+
+  it('cuts a LONG sustained loser symmetrically', () => {
+    const cuts = run([100, 99.5, 99.0, 98.5], 'LONG', 100, 0.01, 2);
+    expect(cuts[0]).toBe(2);
+  });
+
+  it('SPARES a dip-then-recover winner (consec resets on recovery → never cut)', () => {
+    // the shadow spared path: one new low past threshold (consec1<K) then recovers
+    const cuts = run([100, 98.8, 99.6, 101, 102], 'LONG', 100, 0.01, 2);
+    expect(cuts).toEqual([]);
+  });
+
+  it('does not cut while adverse is below threshold', () => {
+    const cuts = run([100, 100.2, 100.4, 100.6], 'SHORT', 100, 0.01, 2);
+    expect(cuts).toEqual([]);
+  });
+
+  it('is equivalent to _smartCutPnlPct: a path the replay cuts also fires a step cut', () => {
+    const path = [100, 100.4, 100.9, 101.4, 102];
+    const cuts = run(path, 'SHORT', 100, 0.01, 2);
+    const replay = _smartCutPnlPct(path, { side: 'SHORT', entry: 100, threshold: 0.01, sustain: 2, baselinePnlPct: 0.05 });
+    expect(cuts.length).toBeGreaterThan(0);
+    expect(replay).not.toBe(0.05); // replay returned a CUT pnl, not the baseline
+  });
+
+  it('is fail-safe on invalid inputs (no cut)', () => {
+    const st = _smartCutStep(NaN, 'SHORT', 100, 0.01, 2, { extreme: 101, consec: 1 });
+    expect(st.cut).toBe(false);
+  });
+});
