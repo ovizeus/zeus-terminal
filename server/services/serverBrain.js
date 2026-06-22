@@ -209,6 +209,20 @@ const DEFAULT_STC = {
     dslMode: 'def',     // Brain DSL mode (fast/tp/def/atr/swing)
     symbols: null,      // [MULTI-SYM] null = trade all configured symbols, or array of specific symbols
 };
+// [LEVER-A 2026-06-22] Hard cap on auto-trade leverage. Root-cause analysis of the
+// testnet soak bleed found liquidations + SL-overshoot losses concentrated at high
+// leverage (up to 20x → liquidations at -115% of margin). The MAX_LEVERAGE env was
+// 125 (Binance max, no real cap) and the R1 MAX_LEVERAGE principle is advisory-only.
+// This clamps the leverage the brain feeds into sizing + order geometry. Pure +
+// exported for unit tests. Cap value via SERVER_MAX_AUTO_LEVERAGE (default 10).
+function _capAutoLeverage(lev, cap) {
+    const l = Number(lev);
+    if (!Number.isFinite(l) || l <= 0) return 5; // safe default (matches DEFAULT_STC.lev)
+    const c = Number(cap);
+    if (!Number.isFinite(c) || c <= 0) return l; // no cap configured → pass through
+    return Math.min(l, c);
+}
+
 const _stcMap = new Map(); // userId → STC config
 // [SRV-2] Track last activity timestamp per user for unbounded-growth defense.
 // Updated on every _stcMap.set() and _stcMap.get() access via the helper
@@ -1373,7 +1387,11 @@ function _runCycle() {
                     // [V3] Drawdown size scaling
                     const ddSizeScale = ddAssess.sizeScale != null ? ddAssess.sizeScale : 1.0;
                     const finalSizeMult = sizingResult.multiplier * ddSizeScale;
-                    const sizingStc = { ...volAdjustedStc, size: Math.round(volAdjustedStc.size * finalSizeMult) };
+                    // [LEVER-A 2026-06-22] Hard-cap leverage at the single sizing chokepoint — flows
+                    // into R1, the decision, and serverAT.computeOrderGeometry (qty recomputed from the
+                    // capped lev, so margin↔qty stay consistent). Kills the high-lev liquidation tail.
+                    const _cappedLev = _capAutoLeverage(volAdjustedStc.lev, process.env.SERVER_MAX_AUTO_LEVERAGE || 10);
+                    const sizingStc = { ...volAdjustedStc, lev: _cappedLev, size: Math.round(volAdjustedStc.size * finalSizeMult) };
 
                     // [ML] Build snapshot for this trade decision
                     const _mlExtra = {
@@ -2688,6 +2706,7 @@ module.exports = {
     // for unit tests; runtime path (_computeFusion) references the local symbols.
     _classifyTier,
     _demoteTierForConfidence,
+    _capAutoLeverage,
     // [LEVER-A 2026-06-10] test-only — pure shadow-parity formula, no runtime
     // path calls this export (_runShadowCycle uses the local symbol).
     _calcConfluenceParity,
