@@ -13,7 +13,7 @@ import { wsService } from '../services/ws'
 import { syncApi, api } from '../services/api'
 import { usePositionsStore, useATStore, useUiStore } from '../stores'
 import { useJournalStore } from '../stores/journalStore'
-import { liveApiSyncState } from '../trading/liveApi'
+import { refreshLiveBalance } from '../trading/liveApi'
 import { startLiveBalanceAutoSync, stopLiveBalanceAutoSync } from '../trading/liveBalanceAutoSync'
 import { isTabVisible, onVisibilityChange } from '../utils/tabVisibility'
 import type { WsMessage, ServerATState, ServerDemoBalance } from '../types'
@@ -23,7 +23,12 @@ const LIVE_BALANCE_REFRESH_MS = 60000
 function _refreshLiveBalanceFor(env: 'DEMO' | 'TESTNET' | 'REAL' | null, apiConfigured: boolean): void {
   startLiveBalanceAutoSync({
     env, apiConfigured,
-    syncFn: () => liveApiSyncState(),
+    // [BALANCE-SYNC FIX 2026-06-22] Dedicated balance poll — decoupled from the
+    // position-write mutex. liveApiSyncState() self-skipped (return null) under WS
+    // mutex contention, so balance drifted on optimistic local math. refreshLiveBalance
+    // hits /api/balance directly. Positions keep their own sync paths (WS, livePosSync,
+    // focus, post-trade).
+    syncFn: () => refreshLiveBalance(),
     intervalMs: LIVE_BALANCE_REFRESH_MS,
   })
 }

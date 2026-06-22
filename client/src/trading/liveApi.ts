@@ -90,6 +90,39 @@ export async function liveApiGetBalance(): Promise<any> {
   return _liveApiParse(res, 'balance')
 }
 
+/** Pure: decide the balance to write, or null to skip. Guard: never wipe a known
+ *  positive balance with a transient 0 (exchange/circuit-breaker hiccup); accept 0
+ *  only on cold start (no known balance). Shared by refreshLiveBalance + the full sync. */
+export function _resolveBalanceUpdate(newBal: number, prevBal: number): number | null {
+  const nb = Number(newBal) || 0
+  const pb = Number(prevBal) || 0
+  if (nb > 0 || pb <= 0) return nb
+  return null
+}
+
+/** [BALANCE-SYNC FIX 2026-06-22] Dedicated, DECOUPLED exchange-balance refresh.
+ *  Reads /api/balance (authoritative walletBalance) and writes TP.liveBalance directly
+ *  — NO position-write mutex, NO position rebuild. The prior path (balance piggybacking
+ *  on liveApiSyncState) self-skipped under mutex contention from WS pushes, so the
+ *  displayed balance drifted on optimistic local arithmetic. This reads the exchange,
+ *  it doesn't maintain an invented local total. Best-effort: any failure is a no-op. */
+export async function refreshLiveBalance(): Promise<void> {
+  try {
+    const bal = await liveApiGetBalance()
+    if (!bal) return
+    const resolved = _resolveBalanceUpdate(bal.totalBalance || 0, (w.TP && w.TP.liveBalance) || 0)
+    if (resolved == null) return
+    w.TP.liveBalance = resolved
+    w.TP.liveAvailableBalance = bal.availableBalance || 0
+    w.TP.liveUnrealizedPnL = bal.unrealizedPnL || 0
+    usePositionsStore.getState().setLiveBalance({
+      totalBalance: resolved,
+      availableBalance: bal.availableBalance || 0,
+      unrealizedPnL: bal.unrealizedPnL || 0,
+    })
+  } catch (_) { /* best-effort; the periodic interval continues */ }
+}
+
 /**
  * Get open positions from exchange (via backend proxy).
  */
@@ -167,15 +200,14 @@ export async function liveApiSyncState(): Promise<any> {
       liveApiGetBalance(),
       liveApiGetPositions(),
     ])
-    // Update balance — never overwrite with 0 when existing balance is known
-    const _newBal = bal.totalBalance || 0
-    const _prevBal = w.TP.liveBalance || 0
-    if (_newBal > 0 || _prevBal <= 0) {
-      w.TP.liveBalance = _newBal
+    // Update balance — never overwrite with 0 when existing balance is known (shared guard)
+    const _resolvedBal = _resolveBalanceUpdate(bal.totalBalance || 0, w.TP.liveBalance || 0)
+    if (_resolvedBal != null) {
+      w.TP.liveBalance = _resolvedBal
       w.TP.liveAvailableBalance = bal.availableBalance || 0
       w.TP.liveUnrealizedPnL = bal.unrealizedPnL || 0
       usePositionsStore.getState().setLiveBalance({
-        totalBalance: _newBal,
+        totalBalance: _resolvedBal,
         availableBalance: bal.availableBalance || 0,
         unrealizedPnL: bal.unrealizedPnL || 0,
       })
