@@ -6,15 +6,14 @@ const router = express.Router();
 const db = require('../services/database').db;
 const { INDICATOR_IDS } = require('../services/indicatorIds');
 
-const LIVE_MS = 30 * 86400000; // 30-day liveness window
-
-// Pure: count distinct live users per known indicator id. Rows older than LIVE_MS or with
-// unknown ids are ignored. Returns { id: count } omitting zero-count ids.
+// Pure: count distinct users per known indicator id. Unknown ids are ignored. NO liveness
+// window — each user's row IS their persisted config (replaced on every report), so the badge
+// mirrors EVERY user who has a stored indicator config, regardless of how recently they were
+// online. Returns { id: count } omitting zero-count ids. `now` kept for signature stability.
 function _aggregateUsage(rows, now, knownIds) {
   const seen = {}; // id -> Set(user_id)
   for (const r of rows || []) {
     if (!knownIds.has(r.indicator_id)) continue;
-    if ((now - Number(r.updated_at)) > LIVE_MS) continue;
     (seen[r.indicator_id] = seen[r.indicator_id] || new Set()).add(r.user_id);
   }
   const out = {};
