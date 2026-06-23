@@ -113,3 +113,23 @@ describe('computeLeaderboard', () => {
     expect(r.users.every(u => u.trades === 0)).toBe(true);
   });
 });
+
+describe('computeLeaderboard — review gaps', () => {
+  const now = 2_000_000_000_000;
+  test('profitFactor 0 when no trades', () => {
+    const r = lb.computeLeaderboard([], [], {}, [{ id: 1, email: 'z@x.io', role: 'user', lastActiveAt: 0, engineActive: false }], { env: 'TESTNET', window: 'all', now });
+    expect(r.users[0].profitFactor).toBe(0);
+  });
+  test('currentStreak counts a winning run from the end', () => {
+    const mk = (pnl, i) => ({ userId: 1, env: 'TESTNET', closePnl: pnl, closeReason: 'DSL_PL', ts: now - (10 - i) * 60000, closeTs: now - (9 - i) * 60000, qty: 1, price: 100, lev: 10 });
+    const rows = [mk(-3, 0), mk(2, 1), mk(4, 2)]; // loss then two wins
+    const r = lb.computeLeaderboard(rows, [], {}, [{ id: 1, email: 'a@x.io', role: 'user', lastActiveAt: 0, engineActive: false }], { env: 'TESTNET', window: 'all', now });
+    expect(r.users[0].currentStreak).toBe(2);
+  });
+  test('row without closeTs counts only in the all window', () => {
+    const u = [{ id: 1, email: 'a@x.io', role: 'user', lastActiveAt: 0, engineActive: false }];
+    const row = [{ userId: 1, env: 'TESTNET', closePnl: 5, closeReason: 'DSL_PL', ts: now - 60000, qty: 1, price: 100, lev: 10 }]; // no closeTs
+    expect(lb.computeLeaderboard(row, [], {}, u, { env: 'TESTNET', window: 'today', now }).users[0].trades).toBe(0);
+    expect(lb.computeLeaderboard(row, [], {}, u, { env: 'TESTNET', window: 'all', now }).users[0].trades).toBe(1);
+  });
+});

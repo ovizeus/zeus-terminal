@@ -52,7 +52,7 @@ function _spark(pnls) {
   const cum = []; let c = 0;
   for (const p of pnls) { c += p; cum.push(+c.toFixed(4)); }
   const step = Math.max(1, Math.ceil(cum.length / 40));
-  return cum.filter((_, i) => i % step === 0);
+  return cum.filter((_, i) => i % step === 0 || i === cum.length - 1);
 }
 
 function computeLeaderboard(closedRows, openPositions, balances, users, opts) {
@@ -67,9 +67,10 @@ function computeLeaderboard(closedRows, openPositions, balances, users, opts) {
   const ensure = (uid) => { if (!byUser.has(uid)) byUser.set(uid, []); return byUser.get(uid); };
   const counted = (closedRows || []).filter(r => r && r.env === env && _isCountedTrade(r));
   for (const r of counted) {
-    const ct = _normalizeTs(r.closeTs) || _normalizeTs(r.ts);
-    if (ct == null || ct < cutoff) continue;
-    ensure(r.userId).push({ ...r, _closeMs: ct, _openMs: _normalizeTs(r.ts) });
+    const ct = _normalizeTs(r.closeTs);
+    if (ct == null) { if (cutoff > 0) continue; }   // no closeTs -> only the 'all' window (cutoff 0)
+    else if (ct < cutoff) continue;
+    ensure(r.userId).push({ ...r, _closeMs: ct || _normalizeTs(r.ts) || 0, _openMs: _normalizeTs(r.ts) });
   }
 
   const liveByUser = new Map();
