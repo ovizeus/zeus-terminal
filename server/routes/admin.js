@@ -124,4 +124,17 @@ router.get('/user-stats/:id', _requireAuth, _requireAdmin, async (req, res) => {
     }
 });
 
+// GET /api/admin/leaderboard?env=REAL|TESTNET|DEMO&window=today|7d|30d|all
+// Read-only aggregated ranking of all users. ~10s server cache per (env,window).
+router.get('/leaderboard', _requireAuth, _requireAdmin, async (req, res) => {
+    const env = ['REAL', 'TESTNET', 'DEMO'].includes(String(req.query.env)) ? String(req.query.env) : 'TESTNET';
+    const window = ['today', '7d', '30d', 'all'].includes(String(req.query.window)) ? String(req.query.window) : 'all';
+    try {
+        const data = await require('../services/leaderboard').gatherLeaderboardData({ env, window });
+        return res.json(data);
+    } catch (err) {
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 module.exports = router;

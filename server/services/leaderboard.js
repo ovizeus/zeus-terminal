@@ -139,4 +139,76 @@ function computeLeaderboard(closedRows, openPositions, balances, users, opts) {
   return { env, window, generatedAt: now, users: rows, totals };
 }
 
-module.exports = { estimateFee, _normalizeTs, _windowStart, _isCountedTrade, computeLeaderboard };
+// Impure adapter. Deps are injectable for tests; in production they default to
+// the live DB / serverAT / exchangeOps. Read-only. Caches ~10s per (env,window).
+const _cache = new Map(); // key `${env}:${window}` -> { ts, data }
+const CACHE_MS = 10000;
+
+async function gatherLeaderboardData(opts, deps) {
+  const env = (opts && opts.env) || 'TESTNET';
+  const window = (opts && opts.window) || 'all';
+  const now = (deps && Number.isFinite(deps.now)) ? deps.now : Date.now();
+  const key = `${env}:${window}`;
+  if (!deps) {
+    const hit = _cache.get(key);
+    if (hit && (now - hit.ts) < CACHE_MS) return hit.data;
+  }
+  const d = deps || _liveDeps();
+  const closedRows = await d.getClosedRows(env, _windowStart(window, now));
+  const openPositions = await d.getOpenPositions();
+  const balances = await d.getBalances(openPositions, env);
+  const users = await d.getUsers();
+  const computed = computeLeaderboard(closedRows, openPositions, balances, users, { env, window, now });
+  const data = { ok: true, ...computed };
+  if (!deps) _cache.set(key, { ts: now, data });
+  return data;
+}
+
+// Live data sources (kept tiny + isolated; covered by the adapter test via injection).
+function _liveDeps() {
+  const db = require('./database').db;
+  const serverAT = require('./serverAT');
+  return {
+    getClosedRows(env) {
+      const rows = db.prepare('SELECT data FROM at_closed').all();
+      const out = [];
+      for (const r of rows) {
+        let p; try { p = JSON.parse(r.data); } catch (_) { continue; }
+        if (!p || p.env !== env) continue;
+        out.push({ userId: p.userId, env: p.env, closePnl: p.closePnl, closeReason: p.closeReason, ts: p.ts, closeTs: p.closeTs, qty: p.qty, price: p.price, lev: p.lev, fee: p.fee });
+      }
+      return out;
+    },
+    getOpenPositions() {
+      const ids = db.prepare("SELECT DISTINCT user_id FROM at_positions WHERE status='OPEN'").all().map(r => r.user_id);
+      const out = [];
+      for (const uid of ids) {
+        for (const p of (serverAT.getOpenPositions(uid) || [])) {
+          const notional = (Number(p.qty) || 0) * (Number(p.price) || 0);
+          out.push({ userId: uid, env: p.env, unrealizedPnl: Number(p.unrealizedPnL != null ? p.unrealizedPnL : p.unrealizedPnl) || 0, notional, lev: p.lev });
+        }
+      }
+      return out;
+    },
+    async getBalances(openPositions) {
+      const bal = {};
+      const ids = [...new Set((openPositions || []).map(p => p.userId))];
+      for (const uid of ids) {
+        try { const b = await require('./exchangeOps').getBalance(uid); bal[uid] = b ? parseFloat(b.walletBalance != null ? b.walletBalance : (b.balance || 0)) : 0; }
+        catch (_) { bal[uid] = 0; }
+      }
+      return bal;
+    },
+    getUsers() {
+      const rows = db.prepare('SELECT id, email, role, last_active_at FROM users').all();
+      const serverAT2 = require('./serverAT');
+      return rows.map(u => ({
+        id: u.id, email: u.email, role: u.role,
+        lastActiveAt: u.last_active_at ? new Date(u.last_active_at).getTime() : 0,
+        engineActive: typeof serverAT2.isEngineActive === 'function' ? !!serverAT2.isEngineActive(u.id) : false,
+      }));
+    },
+  };
+}
+
+module.exports = { estimateFee, _normalizeTs, _windowStart, _isCountedTrade, computeLeaderboard, gatherLeaderboardData };
