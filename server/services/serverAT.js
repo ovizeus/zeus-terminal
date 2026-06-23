@@ -528,7 +528,10 @@ function _persistClose(pos) {
     // additive `fee` field for the admin leaderboard. Additive + fail-safe; absent → the
     // leaderboard uses its ≈ estimate. NEVER blocks the close.
     try {
-        if (pos && pos.fee == null && Number(pos._feeAccum) > 0) pos.fee = +Number(pos._feeAccum).toFixed(8);
+        // Only persist a REAL fee when BOTH legs were captured (entry + exit/reduceOnly),
+        // so a partial (entry-only) accumulation is never reported as authoritative — the
+        // leaderboard then uses its complete round-trip ≈ estimate instead.
+        if (pos && pos.fee == null && Number(pos._feeAccum) > 0 && pos._feeHasExit) pos.fee = +Number(pos._feeAccum).toFixed(8);
     } catch (_) { /* never break the close */ }
     try {
         db.atArchiveClosed(pos);
@@ -6542,7 +6545,13 @@ function onUserDataEvent(userId, event) {
                 // fill that lands after the position is already archived).
                 try {
                     const _fp = _positions.find(p => p.userId === userId && p.symbol === parsed.symbol && p.status !== 'CLOSED');
-                    if (_fp) _fp._feeAccum = (Number(_fp._feeAccum) || 0) + _fillCommission(parsed);
+                    if (_fp) {
+                        _fp._feeAccum = (Number(_fp._feeAccum) || 0) + _fillCommission(parsed);
+                        // Mark when the EXIT leg (reduceOnly) commission is captured, so a
+                        // fast close (POSITION_CLOSED before the exit fill) is NOT persisted as
+                        // a complete real fee — it falls back to the leaderboard ≈ estimate.
+                        if (parsed.reduceOnly) _fp._feeHasExit = true;
+                    }
                 } catch (_) { /* fee telemetry must never disturb fill handling */ }
             } else if (parsed.orderStatus === 'CANCELED' || parsed.orderStatus === 'EXPIRED') {
                 logger.info('USERDATA', `[ORDER_${parsed.orderStatus}] uid=${userId} ${parsed.symbol} orderId=${parsed.orderId}`);
