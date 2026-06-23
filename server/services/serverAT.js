@@ -524,6 +524,12 @@ function _persistClose(pos) {
             try { audit.record('SAT_SILENT_ARCHIVE_GUARD', { userId: pos.userId, seq: pos.seq, symbol: pos.symbol, side: pos.side, status: pos.status, liveStatus: pos.live && pos.live.status, lev: pos.lev, qty: pos.qty }, 'SERVER_AT'); } catch (_) {}
         }
     } catch (_) { /* instrumentation must never break the close path */ }
+    // [FEE-CAPTURE 2026-06-23] Persist the real accumulated fill commission (if any) as an
+    // additive `fee` field for the admin leaderboard. Additive + fail-safe; absent → the
+    // leaderboard uses its ≈ estimate. NEVER blocks the close.
+    try {
+        if (pos && pos.fee == null && Number(pos._feeAccum) > 0) pos.fee = +Number(pos._feeAccum).toFixed(8);
+    } catch (_) { /* never break the close */ }
     try {
         db.atArchiveClosed(pos);
     } catch (e) {
@@ -6256,6 +6262,11 @@ function exitKindToCloseType(kind) {
     return kind === 'EXTERNAL' ? 'EXTERNAL_CLOSE' : kind;
 }
 
+// [FEE-CAPTURE 2026-06-23] Pure: safe absolute commission from a parsed fill.
+function _fillCommission(parsed) {
+    return Math.abs(Number(parsed && parsed.commission) || 0);
+}
+
 const _exitFillTracker = {
     record(userId, symbol, fill, now) {
         if (!fill) return;
@@ -6524,6 +6535,15 @@ function onUserDataEvent(userId, event) {
                 // clientAlgoId — record so POSITION_CLOSED (before OR after
                 // this event) classifies HIT_SL/HIT_TP with real numbers.
                 _exitFillTracker.record(userId, parsed.symbol, parsed);
+                // [FEE-CAPTURE 2026-06-23] Accumulate the real fill commission onto the
+                // matching open position (entry + exit fills). Additive + fail-safe — never
+                // affects the fill/close logic. Surfaced as pos.fee at close for the admin
+                // leaderboard; the estimate fallback covers any fills we miss (e.g. an exit
+                // fill that lands after the position is already archived).
+                try {
+                    const _fp = _positions.find(p => p.userId === userId && p.symbol === parsed.symbol && p.status !== 'CLOSED');
+                    if (_fp) _fp._feeAccum = (Number(_fp._feeAccum) || 0) + _fillCommission(parsed);
+                } catch (_) { /* fee telemetry must never disturb fill handling */ }
             } else if (parsed.orderStatus === 'CANCELED' || parsed.orderStatus === 'EXPIRED') {
                 logger.info('USERDATA', `[ORDER_${parsed.orderStatus}] uid=${userId} ${parsed.symbol} orderId=${parsed.orderId}`);
             }
@@ -6684,6 +6704,7 @@ module.exports = {
     onPriceUpdate,
     _disasterStopPrice,
     _shouldDisasterClose,
+    _fillCommission, // [FEE-CAPTURE 2026-06-23] pure helper, unit-tested
     // [SILENT-ARCHIVE-GUARD 2026-06-12] pure detector, unit-tested
     __guards: { isUnexpectedArchive: _isUnexpectedArchive },
     // Getters

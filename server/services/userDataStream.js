@@ -86,6 +86,11 @@ function parseOrderUpdate(event) {
         origQty: parseFloat(o.q) || 0,
         filledQty: parseFloat(o.z) || 0,
         realizedPnL: parseFloat(o.rp) || 0,
+        // [FEE-CAPTURE 2026-06-23] Real fill commission (Binance o.n) + asset (o.N).
+        // Accumulated per-position by serverAT and surfaced as pos.fee at close for the
+        // admin leaderboard (estimate fallback covers fills we miss).
+        commission: parseFloat(o.n) || 0,
+        commissionAsset: o.N || null,
         // [T-EXTCLOSE 2026-06-08] reduceOnly (o.R) — distinguishes a closing fill
         // (manual/testnet/liquidation close, all reduceOnly) from an entry fill,
         // so EXTERNAL_CLOSE can capture the real realizedPnL instead of $0.00.
