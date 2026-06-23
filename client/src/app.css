@@ -7998,3 +7998,18 @@ select option {
 .ind-search:focus { border-color:#2e6f9e; }
 .ind-search-x { position:absolute; right:18px; top:14px; color:#5a6a7a; cursor:pointer; font-size:12px; }
 .ind-usage { font-size:10px; color:#7a9ab8; background:rgba(122,154,184,.12); border-radius:8px; padding:1px 6px; margin-left:6px; white-space:nowrap; }
+.lb-tabs { display:flex; gap:8px; margin-bottom:10px; }
+.lb-tabs button, .lb-seg button { background:rgba(10,15,22,.6); border:1px solid #1a2530; color:#7a9ab8; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:11px; }
+.lb-tabs button.on, .lb-seg button.on { color:#fff; border-color:#3a5a78; background:#16222e; }
+.lb-controls { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+.lb-seg { display:flex; gap:4px; }
+.lb-meta { font-size:11px; color:#7a9ab8; }
+.lb-table { width:100%; border-collapse:collapse; font-size:11px; }
+.lb-table th, .lb-table td { padding:5px 8px; text-align:right; border-bottom:1px solid #11202b; white-space:nowrap; }
+.lb-table th:nth-child(2), .lb-table td:nth-child(2) { text-align:left; }
+.lb-sortable { cursor:pointer; color:#7a9ab8; }
+.lb-row { cursor:pointer; }
+.lb-row:hover { background:rgba(26,37,48,.5); }
+.lb-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#445; margin-right:6px; }
+.lb-dot.on { background:#26ff9a; }
+.lb-empty { color:#5a6a7a; font-size:12px; padding:10px; }

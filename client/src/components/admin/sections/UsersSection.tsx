@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAdminStore, type AdminUser } from '../../../stores/adminStore'
 import { StatusBadge, ApiBadge, LoadingSkeleton, EmptyState, ConfirmDialog, fmtDate } from '../shared/components'
+import { LeaderboardTab } from './LeaderboardTab'
 
 export function UsersSection() {
   const users = useAdminStore((s) => s.users)
@@ -19,6 +20,7 @@ export function UsersSection() {
   const [toast, setToast] = useState<string>('')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [tempPasswordShow, setTempPasswordShow] = useState<{ email: string; pw: string } | null>(null)
+  const [tab, setTab] = useState<'users' | 'leaderboard'>('users')
 
   useEffect(() => { if (users.length === 0 && !usersLoading) loadUsers() }, [])
 
@@ -95,6 +97,12 @@ export function UsersSection() {
 
   return (
     <>
+      <div className="lb-tabs">
+        <button className={tab === 'users' ? 'on' : ''} onClick={() => setTab('users')}>Users</button>
+        <button className={tab === 'leaderboard' ? 'on' : ''} onClick={() => setTab('leaderboard')}>🏆 Leaderboard</button>
+      </div>
+      {tab === 'leaderboard' && <LeaderboardTab />}
+      {tab === 'users' && (<>
       {/* Filters bar */}
       <div className="zac-filters">
         <input
@@ -246,6 +254,7 @@ export function UsersSection() {
           letterSpacing: 1, zIndex: 9800, boxShadow: '0 4px 16px rgba(0,0,0,.5)'
         }}>{toast}</div>
       )}
+      </>)}
     </>
   )
 }
