@@ -67,6 +67,28 @@ export function DslDrivePanel() {
           </span>
         </div>
       )}
+      {score?.mlControl && score.mlControl.n > 0 ? (
+        <div className="dsl-losscut-card dsl-mlctl-card">
+          <h4>🧠 ML-Control DSL <span className="dsl-shadow-tag">REAL MEASURE</span></h4>
+          <div className="dsl-losscut-verdict" style={{ color: score.mlControl.expDelta >= 0 ? '#26ff9a' : '#ff5277' }}>
+            Δexp {score.mlControl.expDelta >= 0 ? '+' : ''}{score.mlControl.expDelta}% · ML {score.mlControl.avgMlPnlPct}% vs base {score.mlControl.avgBaselinePnlPct}% · N={score.mlControl.n}
+          </div>
+          <div className="dsl-losscut-rows">
+            <span>R:R {score.mlControl.rr} vs {score.mlControl.rrBaseline}</span>
+            <span>WR {score.mlControl.wrMl}% vs {score.mlControl.wrBaseline}%</span>
+          </div>
+          {score.mlControl.byAction && (
+            <div className="dsl-mlctl-actions">
+              {Object.entries(score.mlControl.byAction).map(([a, b]: [string, any]) => (
+                <span key={a} style={{ color: actionColor(a) }}>{a} ×{b.n} ({b.avgAdvantage >= 0 ? '+' : ''}{b.avgAdvantage}%)</span>
+              ))}
+            </div>
+          )}
+          <DslSparkline data={score.mlControl.spark} />
+        </div>
+      ) : (
+        <div className="dsl-losscut-card dsl-muted">🧠 ML-Control DSL (real measure) — gathering data…</div>
+      )}
       {score?.lossSide && score.lossSide.n > 0 ? (
         <div className="dsl-losscut-card">
           <h4>🛡️ Smart Loss-Cut <span className="dsl-shadow-tag">SHADOW</span></h4>

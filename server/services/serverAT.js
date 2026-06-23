@@ -2481,6 +2481,29 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                     arm: pos.dslArm || pos.dslModeAtOpen || 'def', cohort: pos.dslCohort || 'shadow',
                     outcome: { pnlPct: _mlPnlPct }, baseline: { pnlPct: _baseSim.pnlPct }, ts: Date.now(),
                 });
+                // [ML-DSL REAL MEASUREMENT 2026-06-23] cohort='mlctl' — the FAITHFUL counterfactual
+                // of the ML driving the DSL in real-time. Replays serverDSL.simulateMlPath() over the
+                // ACTUAL per-tick ML proposals the policy emitted live (stamped on the trace) vs the
+                // static baseline preset. THIS measures ML decision quality (unlike the 'shadow'
+                // cohort above, which only compares live-exec vs a re-sim of the same preset).
+                try {
+                    const _mlSim = serverDSL.simulateMlPath(
+                        { side: pos.side, entry: pos.price, originalSL: pos.originalSL || pos.sl, openDslPct: _baseParams.openDslPct, fallbackParams: _baseParams },
+                        _trace
+                    );
+                    // Dominant ML action over the trace = bandit arm (learns which action profile wins
+                    // per cell). Prefixed 'ml:' so it never collides with the static preset arms.
+                    const _actCount = {};
+                    for (const _s of _trace) { const _a = (_s.ml && _s.ml.action) || 'HOLD'; _actCount[_a] = (_actCount[_a] || 0) + 1; }
+                    let _domAct = 'HOLD', _domN = -1;
+                    for (const _a in _actCount) { if (_actCount[_a] > _domN) { _domN = _actCount[_a]; _domAct = _a; } }
+                    mlDslLearner.learn({
+                        posId: pos.seq, userId: pos.userId, env: (pos.env || 'TESTNET'),
+                        symbol: pos.symbol, regime: pos.regime || pos.closeRegime || 'unknown',
+                        arm: 'ml:' + _domAct, cohort: 'mlctl',
+                        outcome: { pnlPct: _mlSim.pnlPct }, baseline: { pnlPct: _baseSim.pnlPct }, ts: Date.now(),
+                    });
+                } catch (_) { /* measurement-safe */ }
                 // [ML-DSL loss-side, 2026-06-19] SHADOW-only smart-cut counterfactual. Cuts a
                 // loser early only when adverse AND sustained-falling (spares dip-then-recover
                 // winners). Records cohort='lossside' for the DSL Drive R:R visual. Never touches
@@ -3430,6 +3453,11 @@ function onPriceUpdate(symbol, price, exchange) {
                         forcedExit: _safe.forcedExit, momentum: _mom,
                         mfePct: _feat.mfePct, maePct: _feat.maePct, ts: _nowMl,
                     });
+                    // [ML-DSL REAL MEASUREMENT 2026-06-23] Stamp the live proposal onto the price
+                    // trace so the close-time learner can replay serverDSL.simulateMlPath() over
+                    // the real (price, ml) path (cohort='mlctl'). Causal: applies from the NEXT
+                    // recorded price sample (you cannot act on a proposal before it is computed).
+                    try { priceTrace.recordMl(pos.seq, { plPct: _safe.plPct, prPct: _safe.prPct, ivPct: _safe.ivPct, action: _safe.action }); } catch (_) { /* measurement-safe */ }
                 }
             } catch (_) { /* SHADOW must never affect the live loop */ }
         }

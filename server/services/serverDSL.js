@@ -466,6 +466,109 @@ function simulate(params, posMeta, prices) {
   return { exitReason: 'END', exitPrice: last, pnlPct: pnlAt(last) };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// simulateMlPath(posMeta, samples) — FAITHFUL counterfactual of the ML
+// driving the DSL in real-time. Mirrors simulate()'s activation→pivot→impulse
+// machine EXACTLY, but resolves the pivot widths PER-TICK from each sample's ML
+// proposal and honours the ML action:
+//   • EXIT    → close now at this tick's price (momentum reversed hard), any phase.
+//   • TIGHTEN → ratchet pivotLeft toward price (monotonic) to lock profit, even
+//               without an impulse trigger — the policy's "lock profit" lever.
+//   • LOOSEN/HOLD/BREATHER → ride the proposed (typically wider) widths; pivotLeft
+//               still ratchets on the normal impulse trigger.
+// samples: [{ p, ts, ml: { plPct, prPct, ivPct, action } | null }]. A sample with no
+// ml falls back to posMeta.fallbackParams (the preset). openDslPct (the activation
+// gate) stays POSITION-controlled via posMeta — the ML never moves activation.
+// Pure: no _states map, no logging, no side effects. Returns { exitReason, exitPrice, pnlPct }.
+// The SAME engine drives Phase-2 live control, so its mechanics must match simulate().
+// ══════════════════════════════════════════════════════════════════
+function simulateMlPath(posMeta, samples) {
+  if (!posMeta) return { exitReason: 'NONE', exitPrice: 0, pnlPct: 0 };
+  const isLong = (posMeta.side || 'LONG') === 'LONG';
+  const entry = +posMeta.entry;
+  const originalSL = +posMeta.originalSL;
+  const openDslPct = Number.isFinite(+posMeta.openDslPct) ? +posMeta.openDslPct : DSL_DEFAULTS.openDslPct;
+  const fb = _sanitizeParams(posMeta.fallbackParams || DSL_DEFAULTS);
+  if (!(entry > 0) || !Array.isArray(samples) || samples.length === 0) {
+    return { exitReason: 'NONE', exitPrice: entry > 0 ? entry : 0, pnlPct: 0 };
+  }
+  const activationPrice = isLong ? entry * (1 + openDslPct / 100) : entry * (1 - openDslPct / 100);
+  const pnlAt = (px) => (isLong ? (px - entry) / entry : (entry - px) / entry) * 100;
+
+  // Per-tick pivot widths from the ML proposal, falling back to the preset when absent.
+  const widthsFor = (ml) => {
+    if (ml && Number.isFinite(+ml.plPct) && Number.isFinite(+ml.prPct) && Number.isFinite(+ml.ivPct)) {
+      return _sanitizeParams({ openDslPct, pivotLeftPct: +ml.plPct, pivotRightPct: +ml.prPct, impulseVPct: +ml.ivPct });
+    }
+    return fb;
+  };
+
+  let active = false, pivotLeft = originalSL, pivotRight = 0, impulseVal = 0, impulseTriggered = false;
+
+  for (const s of samples) {
+    if (!s || !Number.isFinite(s.p)) continue;
+    const price = s.p;
+    const ml = s.ml || null;
+    const action = ml && ml.action ? String(ml.action).toUpperCase() : 'HOLD';
+    const p = widthsFor(ml);
+
+    // ML hard-reversal exit — close now, any phase (mirrors the policy's EXIT intent).
+    if (action === 'EXIT') {
+      return { exitReason: 'ML_EXIT', exitPrice: price, pnlPct: pnlAt(price) };
+    }
+
+    if (!active) {
+      if ((isLong && price <= originalSL) || (!isLong && price >= originalSL)) {
+        return { exitReason: 'SL', exitPrice: originalSL, pnlPct: pnlAt(originalSL) };
+      }
+      if ((isLong && price >= activationPrice) || (!isLong && price <= activationPrice)) {
+        active = true;
+        pivotLeft = isLong ? price * (1 - p.pivotLeftPct / 100) : price * (1 + p.pivotLeftPct / 100);
+        pivotLeft = isLong ? Math.max(pivotLeft, originalSL) : Math.min(pivotLeft, originalSL); // floor (tick Phase 1 + P1-3)
+        pivotRight = isLong ? price * (1 + p.pivotRightPct / 100) : price * (1 - p.pivotRightPct / 100);
+        impulseVal = isLong ? pivotRight * (1 + p.impulseVPct / 100) : pivotRight * (1 - p.impulseVPct / 100);
+        // fall through to Phase 2 in this same tick (mirrors simulate())
+      } else {
+        continue;
+      }
+    }
+
+    // Phase 2: pivotRight tracks price with this tick's PR width; check the PL exit.
+    pivotRight = isLong ? price * (1 + p.pivotRightPct / 100) : price * (1 - p.pivotRightPct / 100);
+    if ((isLong && price <= pivotLeft) || (!isLong && price >= pivotLeft)) {
+      return { exitReason: 'DSL_PL', exitPrice: pivotLeft, pnlPct: pnlAt(pivotLeft) };
+    }
+
+    // ML TIGHTEN — actively ratchet pivotLeft toward price (monotonic) to lock profit,
+    // independent of the impulse trigger.
+    if (action === 'TIGHTEN') {
+      const cand = isLong ? price * (1 - p.pivotLeftPct / 100) : price * (1 + p.pivotLeftPct / 100);
+      pivotLeft = isLong ? Math.max(pivotLeft, cand) : Math.min(pivotLeft, cand);
+    }
+
+    // Phase 3: impulse validation — tighten pivotLeft ONLY on a fresh impulse trigger.
+    if (Number.isFinite(pivotRight) && Number.isFinite(impulseVal)) {
+      const prDistPct = Math.abs(price - pivotRight) / price * 100;
+      const ivConditionMet = prDistPct >= 0.05 && (isLong ? (pivotRight >= impulseVal) : (pivotRight <= impulseVal));
+      if (ivConditionMet) {
+        if (!impulseTriggered) {
+          impulseTriggered = true;
+          const oldPL = pivotLeft;
+          const newPR = isLong ? price * (1 + p.pivotRightPct / 100) : price * (1 - p.pivotRightPct / 100);
+          impulseVal = isLong ? newPR * (1 + p.impulseVPct / 100) : newPR * (1 - p.impulseVPct / 100);
+          const newPL = isLong ? price * (1 - p.pivotLeftPct / 100) : price * (1 + p.pivotLeftPct / 100);
+          pivotLeft = isLong ? Math.max(oldPL, newPL) : Math.min(oldPL, newPL); // monotonic tighten
+        }
+      } else {
+        impulseTriggered = false; // price left IV zone → re-arm (tick parity)
+      }
+    }
+  }
+  const last = samples[samples.length - 1].p;
+  const lastPx = Number.isFinite(last) ? last : entry;
+  return { exitReason: 'END', exitPrice: lastPx, pnlPct: pnlAt(lastPx) };
+}
+
 module.exports = {
     attach,
     tick,
@@ -476,4 +579,5 @@ module.exports = {
     DSL_PRESETS,
     getPreset,
     simulate,
+    simulateMlPath,
 };

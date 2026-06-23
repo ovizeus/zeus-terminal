@@ -7989,6 +7989,8 @@ select option {
 .dsl-losscut-rows { display:flex; gap:12px; flex-wrap:wrap; font-size:10px; color:#7a9ab8; margin-bottom:6px; }
 .dsl-spark { display:block; }
 .dsl-losscut-card.dsl-muted { color:#5a6a7a; font-size:11px; }
+.dsl-mlctl-card { border-color:#234; }
+.dsl-mlctl-actions { display:flex; gap:10px; flex-wrap:wrap; font-size:10px; margin-bottom:6px; }
 
 /* [2026-06-20] indicator picker search + usage badge */
 .ind-search-wrap { position:relative; padding:8px 10px 4px; }
