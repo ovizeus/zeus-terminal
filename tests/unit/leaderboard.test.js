@@ -133,3 +133,31 @@ describe('computeLeaderboard — review gaps', () => {
     expect(lb.computeLeaderboard(row, [], {}, u, { env: 'TESTNET', window: 'all', now }).users[0].trades).toBe(1);
   });
 });
+
+describe('computeLeaderboard — active traders ranked first', () => {
+  const now = 2_000_000_000_000;
+  test('a user WITH trades ranks above a 0-trade user even with a lower net', () => {
+    // uid 1 = active loser (net -10); uid 2 = inactive (net 0). Active must rank first.
+    const closed = [{ userId: 1, env: 'TESTNET', closePnl: -10, closeReason: 'HIT_SL', ts: now - 600000, closeTs: now - 300000, qty: 1, price: 100, lev: 10 }];
+    const users = [
+      { id: 2, email: 'inactive@x.io', role: 'user', lastActiveAt: 0, engineActive: false },
+      { id: 1, email: 'active@x.io', role: 'user', lastActiveAt: 0, engineActive: false },
+    ];
+    const r = lb.computeLeaderboard(closed, [], {}, users, { env: 'TESTNET', window: 'all', now });
+    expect(r.users.map(u => u.userId)).toEqual([1, 2]); // active (net -10) before inactive (net 0)
+    expect(r.users[0].trades).toBe(1);
+    expect(r.users[1].trades).toBe(0);
+  });
+  test('among active users, higher net still ranks first', () => {
+    const closed = [
+      { userId: 1, env: 'TESTNET', closePnl: 5, closeReason: 'DSL_PL', ts: now - 600000, closeTs: now - 300000, qty: 1, price: 100, lev: 10 },
+      { userId: 2, env: 'TESTNET', closePnl: 20, closeReason: 'DSL_PL', ts: now - 600000, closeTs: now - 300000, qty: 1, price: 100, lev: 10 },
+    ];
+    const users = [
+      { id: 1, email: 'a@x.io', role: 'user', lastActiveAt: 0, engineActive: false },
+      { id: 2, email: 'b@x.io', role: 'user', lastActiveAt: 0, engineActive: false },
+    ];
+    const r = lb.computeLeaderboard(closed, [], {}, users, { env: 'TESTNET', window: 'all', now });
+    expect(r.users.map(u => u.userId)).toEqual([2, 1]); // both active → net desc
+  });
+});

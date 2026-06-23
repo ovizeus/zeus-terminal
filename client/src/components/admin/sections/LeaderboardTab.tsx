@@ -35,7 +35,8 @@ export function LeaderboardTab() {
     return () => { alive = false; clearInterval(t) }
   }, [env, window])
 
-  const rows = board ? [...board.users].sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0)) : []
+  // Active traders (with trades) always rank above inactive users; then by the chosen column desc.
+  const rows = board ? [...board.users].sort((a, b) => ((b.trades > 0 ? 1 : 0) - (a.trades > 0 ? 1 : 0)) || ((Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0))) : []
 
   return (
     <div className="lb-panel">

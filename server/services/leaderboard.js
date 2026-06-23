@@ -129,7 +129,8 @@ function computeLeaderboard(closedRows, openPositions, balances, users, opts) {
     };
   });
 
-  rows.sort((a, b) => b.netPnl - a.netPnl);
+  // Active traders (with trades) rank ABOVE inactive (0-trade) users; ties broken by net PnL desc.
+  rows.sort((a, b) => ((b.trades > 0 ? 1 : 0) - (a.trades > 0 ? 1 : 0)) || (b.netPnl - a.netPnl));
   const totals = {
     netPnl: rows.reduce((s, r) => s + r.netPnl, 0),
     unrealizedPnl: rows.reduce((s, r) => s + r.unrealizedPnl, 0),
