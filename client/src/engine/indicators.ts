@@ -12,6 +12,7 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
+import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
 import { renderVWAP, getVwapSeries, resetVwapSeries } from '../ui/panels'
@@ -174,7 +175,10 @@ export function _reportActiveIndicators(): void {
   if (_reportTimer) clearTimeout(_reportTimer)
   _reportTimer = setTimeout(() => {
     try {
-      const active = Object.keys(w.S.activeInds || {}).filter((k) => w.S.activeInds[k])
+      // Report the EFFECTIVE active set (toggled-on + default-on not turned off), matching what
+      // the chart actually shows — the old toggled-only list missed every default indicator,
+      // so most users contributed nothing to the picker's usage badge.
+      const active = effectiveActiveIds(w.INDICATORS || [], w.S.activeInds || {})
       fetch('/api/indicators/active', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
