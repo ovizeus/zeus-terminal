@@ -23,3 +23,21 @@ describe('leaderboard pure helpers', () => {
     expect(lb._windowStart('garbage', now)).toBe(0);
   });
 });
+
+describe('_isCountedTrade', () => {
+  const ok = (closeReason, closePnl = 1, qty = 0.5) => lb._isCountedTrade({ closeReason, closePnl, qty });
+  test('counts real filled trades', () => {
+    for (const r of ['DSL_PL', 'HIT_SL', 'HIT_TP', 'LIQUIDATED', 'SMART_CUT', 'DSL_TTP', 'Manual close', 'AUTO SL 🛑', 'Emergency Stop']) {
+      expect(ok(r)).toBe(true);
+    }
+  });
+  test('excludes non-trade noise', () => {
+    for (const r of ['ENTRY_FAILED_INSUFFICIENT_MARGIN', 'RECON_PHANTOM', 'RECON_PHANTOM_STALE_EMPTY', 'RESET', 'MANUAL_CLIENT', 'Close All Manual', 'TEST', 'TEST_GHOST', 'EXTERNAL_CLOSE']) {
+      expect(ok(r)).toBe(false);
+    }
+  });
+  test('excludes rows with no real fill or non-numeric pnl', () => {
+    expect(lb._isCountedTrade({ closeReason: 'DSL_PL', closePnl: 5, qty: 0 })).toBe(false);
+    expect(lb._isCountedTrade({ closeReason: 'DSL_PL', closePnl: null, qty: 1 })).toBe(false);
+  });
+});

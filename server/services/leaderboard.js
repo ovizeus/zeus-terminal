@@ -22,4 +22,15 @@ function _windowStart(window, now) {
   return 0; // 'all' / default
 }
 
-module.exports = { estimateFee, _normalizeTs, _windowStart };
+const _NOISE_REASON = /^(ENTRY_FAILED|RECON_PHANTOM|RESET|MANUAL_CLIENT|Close All Manual|TEST|TEST_GHOST|EXTERNAL_CLOSE)/i;
+
+function _isCountedTrade(row) {
+  if (!row) return false;
+  if (_NOISE_REASON.test(String(row.closeReason || ''))) return false;
+  if (row.closePnl === null || row.closePnl === undefined || row.closePnl === '') return false;
+  if (!Number.isFinite(Number(row.closePnl))) return false;
+  if (!(Number(row.qty) > 0)) return false;
+  return true;
+}
+
+module.exports = { estimateFee, _normalizeTs, _windowStart, _isCountedTrade };
