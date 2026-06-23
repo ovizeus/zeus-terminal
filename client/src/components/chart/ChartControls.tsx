@@ -699,15 +699,20 @@ export function ChartControls() {
   useScrollLock(indPanelOpen) // lock the page behind the SELECT INDICATOR sheet (mobile scroll-through)
   const [indSearch, setIndSearch] = useState('') // picker search filter
   const [indUsage, setIndUsage] = useState<Record<string, number>>({}) // live usage counts per indicator
-  // fetch live usage counts when the picker opens; badges stay hidden on any failure
+  // Live usage counts: fetch on open + poll every 5s while the picker stays open, so the
+  // per-indicator user counts update in real time (a toggle by THIS user — or any other user —
+  // shows up within a few seconds: the report lands, the server cache invalidates, next poll
+  // reflects it). Without the poll the badges were fetched once and froze. Badges hide on failure.
   useEffect(() => {
     if (!indPanelOpen) return
     let alive = true
-    fetch('/api/indicators/usage', { credentials: 'same-origin' })
+    const load = () => fetch('/api/indicators/usage', { credentials: 'same-origin' })
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (alive && j && j.ok && j.usage) setIndUsage(j.usage) })
       .catch(() => { /* badges just stay hidden */ })
-    return () => { alive = false }
+    load()
+    const t = setInterval(load, 5000)
+    return () => { alive = false; clearInterval(t) }
   }, [indPanelOpen])
   const [fsMode, setFsMode] = useState(false)
   // [Pack D.1 + D.2] Read initial state with FOUR fallback layers because
