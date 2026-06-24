@@ -10230,11 +10230,24 @@ migrate('411_indicator_usage', () => {
     `);
 });
 
+migrate('412_users_profile', () => {
+    // [2026-06-24] User profile fields (flip-header profile). Public, social-readable.
+    db.exec("ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN username TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN accent_color TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN tagline TEXT DEFAULT NULL");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
+});
+
 // ─── User methods ───
 
 const _stmts = {
     findByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
     findById: db.prepare('SELECT * FROM users WHERE id = ?'),
+    setUserProfile: db.prepare("UPDATE users SET display_name=?, username=?, avatar=?, accent_color=?, tagline=?, updated_at=datetime('now') WHERE id=?"),
+    getUserProfileById: db.prepare("SELECT id, display_name, username, avatar, accent_color, tagline FROM users WHERE id=?"),
+    findUserByUsername: db.prepare("SELECT id, username FROM users WHERE LOWER(username)=LOWER(?)"),
     countUsers: db.prepare('SELECT COUNT(*) as cnt FROM users'),
     insertUser: db.prepare('INSERT INTO users (email, password_hash, role, approved) VALUES (?, ?, ?, ?)'),
     setUserTermsConsent: db.prepare("UPDATE users SET terms_accepted_at = ?, terms_version = ?, updated_at = datetime('now') WHERE id = ?"),
@@ -10388,6 +10401,20 @@ function findUserByEmail(email) {
 
 function findUserById(id) {
     return _stmts.findById.get(id);
+}
+
+// ─── User profile (flip-header) ───
+function setUserProfile(id, p) {
+    p = p || {};
+    return _stmts.setUserProfile.run(
+        p.display_name ?? null, (p.username ?? null) || null, p.avatar ?? null,
+        p.accent_color ?? null, p.tagline ?? null, id);
+}
+function getUserProfileById(id) {
+    return _stmts.getUserProfileById.get(id) || null;
+}
+function findUserByUsername(u) {
+    return (u ? _stmts.findUserByUsername.get(u) : null) || null;
 }
 
 function countUsers() {
@@ -11471,6 +11498,9 @@ module.exports = {
     USER_STATUS, // [M6]
     findUserByEmail,
     findUserById,
+    setUserProfile,
+    getUserProfileById,
+    findUserByUsername,
     countUsers,
     createUser,
     setUserTermsConsent,
