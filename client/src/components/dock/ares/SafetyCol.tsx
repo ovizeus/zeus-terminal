@@ -12,8 +12,24 @@ import { useAresStore } from '../../../stores/aresStore'
 export const SafetyCol = memo(function SafetyCol() {
   const realOptIn = useAresStore((s) => s.realOptIn)
   const killSwitch = useAresStore((s) => s.killSwitch)
+  const aresActive = useAresStore((s) => s.aresActive)
   const setRealOptIn = useAresStore((s) => s.setRealOptIn)
   const setKillSwitch = useAresStore((s) => s.setKillSwitch)
+  const setAresActive = useAresStore((s) => s.setAresActive)
+
+  const toggleActive = useCallback(() => {
+    if (aresActive) {
+      setAresActive(false)
+      return
+    }
+    const ok = window.confirm(
+      'Activate ARES on this account?\n\n' +
+      'While ARES is ON, only ARES trades this account — AutoTrade / Brain / ML will be STOPPED and ' +
+      'will NOT open positions (so the two engines never open conflicting positions on the same symbol).\n\n' +
+      'AutoTrade is turned OFF now and cannot be re-enabled until you turn ARES OFF. Continue?'
+    )
+    if (ok) setAresActive(true)
+  }, [aresActive, setAresActive])
 
   const toggleOptIn = useCallback(() => {
     if (realOptIn) {
@@ -38,7 +54,27 @@ export const SafetyCol = memo(function SafetyCol() {
       flex: '0 0 auto', minWidth: '116px', textAlign: 'center',
       borderRight: '1px solid rgba(0,150,255,0.12)', padding: '0 8px',
     }}>
-      <div className="ares-meta-title" style={{ textAlign: 'center' }}>REAL SAFETY</div>
+      <div className="ares-meta-title" style={{ textAlign: 'center' }}>ARES CONTROL</div>
+
+      {/* ARES ACTIVE toggle — the main on/off (mutual exclusion with AT) */}
+      <button
+        id="ares-active-btn"
+        onClick={toggleActive}
+        title={aresActive
+          ? 'ARES is ACTIVE — only ARES trades this account (AutoTrade is paused). Click to turn OFF.'
+          : 'Activate ARES — stops AutoTrade/Brain/ML on this account so only ARES trades. Click to turn ON.'}
+        style={{
+          marginTop: '2px', width: '100%',
+          background: aresActive ? 'rgba(0,217,255,0.16)' : 'rgba(255,255,255,0.04)',
+          border: '1px solid ' + (aresActive ? 'rgba(0,217,255,0.6)' : 'rgba(255,255,255,0.18)'),
+          color: aresActive ? '#00d9ff' : 'rgba(255,255,255,0.5)',
+          fontFamily: 'monospace', fontSize: '11px', fontWeight: aresActive ? 700 : 400,
+          padding: '3px 6px', cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
+        }}
+      >{aresActive ? '⚡ ARES: ACTIVE' : '○ ARES: OFF'}</button>
+      <div style={{ fontFamily: 'monospace', fontSize: '9px', color: aresActive ? '#00d9ff99' : 'rgba(255,255,255,0.3)', marginTop: '2px', marginBottom: '4px', lineHeight: 1.3 }}>
+        {aresActive ? 'AutoTrade paused — ARES only' : 'AutoTrade runs normally'}
+      </div>
 
       {/* REAL opt-in toggle */}
       <button

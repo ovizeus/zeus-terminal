@@ -66,6 +66,8 @@ interface AresStoreState {
   killSwitch: boolean
   /** [2026-06-23] Live REAL exchange available balance ARES trades with (0 if not real / unknown). */
   realBalance: number
+  /** [2026-06-24] ARES ACTIVE for this account (mutual exclusion: AT/Brain paused while on). */
+  aresActive: boolean
 
   /** [R28.2] UI slice — mirrors aresUI.ts DOM render output. */
   ui: AresStoreUI
@@ -89,6 +91,8 @@ interface AresStoreState {
   /** [2026-06-23] Safety toggles — POST to /api/ares/{real-optin,kill} then re-pull. */
   setRealOptIn: (enabled: boolean, ack: boolean) => void
   setKillSwitch: (enabled: boolean) => void
+  /** [2026-06-24] ARES ACTIVE toggle (mutual exclusion with AT). Enabling forces AT off. */
+  setAresActive: (enabled: boolean) => void
 }
 
 // Module-scope debouncer — single shared instance across all callers.
@@ -117,6 +121,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
           realOptIn: a.realOptIn === true,
           killSwitch: a.killSwitch === true,
           realBalance: +a.realBalance || 0,
+          aresActive: a.aresActive === true,
           serverSide: true,
           loaded: true,
           // [SERVER-ARES P3] Capture the live reasoning snapshot so the panel
@@ -160,6 +165,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   realOptIn: false,
   killSwitch: false,
   realBalance: 0,
+  aresActive: false,
   ui: DEFAULT_ARES_UI,
 
   loadFromServer: async () => { _debouncedAresLoad!() },
@@ -244,6 +250,14 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
 
   setKillSwitch: (enabled) => {
     fetch('/api/ares/kill', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !!enabled }),
+    }).then(() => getState().loadFromServer()).catch(() => {})
+  },
+
+  setAresActive: (enabled) => {
+    fetch('/api/ares/active', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: !!enabled }),

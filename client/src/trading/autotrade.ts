@@ -213,7 +213,13 @@ export function _doEnableAT(): void {
   // [AT-TOGGLE-FIX] Server-authoritative toggle — call dedicated endpoint
   api.raw<any>('POST', '/api/at/toggle', { active: _newState }).then(function(data: any) {
     if (!data.ok) {
-      toast('AT toggle failed: ' + (data.error || 'Unknown error'), 3000, _ZI.x)
+      // [2026-06-24] ARES⟷AT mutual exclusion: surface the friendly dedicated message
+      // ("turn ARES off first") instead of the raw error code.
+      if (data.error === 'ARES_ACTIVE') {
+        toast(data.detail || 'ARES is active — turn ARES OFF before enabling AutoTrade.', 6000, _ZI.x)
+      } else {
+        toast('AT toggle failed: ' + (data.error || 'Unknown error'), 3000, _ZI.x)
+      }
       return
     }
     // Server confirmed — now update client state
