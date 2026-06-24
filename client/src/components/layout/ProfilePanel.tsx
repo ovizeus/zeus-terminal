@@ -48,8 +48,8 @@ export function ProfilePanel({ onAvatarClick }: { onAvatarClick?: () => void }) 
 
   return (
     <div className="profile-panel" style={{
-      height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '12px',
-      padding: '12px 16px', background: '#000', borderBottom: `1px solid ${accent}40`,
+      height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '11px',
+      padding: '6px 14px', overflow: 'hidden', background: '#000', borderBottom: `1px solid ${accent}40`,
     }}>
       <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={onFile} />
 
@@ -57,7 +57,7 @@ export function ProfilePanel({ onAvatarClick }: { onAvatarClick?: () => void }) 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flex: 'none' }}>
         <img
           src={avatarSrc} alt="profile" onClick={onAvatarClick} title="Tap to go back"
-          style={{ width: '46px', height: '46px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', border: `2px solid ${accent}`, boxShadow: `0 0 10px ${accent}55` }}
+          style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', border: `2px solid ${accent}`, boxShadow: `0 0 10px ${accent}55` }}
         />
         <button onClick={() => fileRef.current?.click()} style={{
           background: 'transparent', border: 'none', color: accent, fontFamily: 'monospace',
