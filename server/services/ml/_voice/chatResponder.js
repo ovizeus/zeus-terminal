@@ -1409,6 +1409,22 @@ const _ZEUS_INDICATORS_KNOWLEDGE = (() => {
     return lines.join('\n');
 })();
 
+// [2026-06-23] ZEUS ML / RING5 knowledge — so Omega can explain how Zeus learns and improves when
+// asked about ML / Ring / Ring5. Grounded in the real OMEGA ML Brain Pro 9-ring architecture
+// (server/services/ml/README.md). User-facing architecture, NO secrets / internals.
+const _ZEUS_ML_KNOWLEDGE = [
+    'ZEUS ML / RING5 — how Zeus learns (explain when asked about ML / Ring / Ring5 / how Zeus improves):',
+    '  • OMEGA ML Brain Pro: a learning layer wrapped around the Brain, organized as 9 "rings" (R0-R7), each with one job — it makes the Brain smarter over time, it does not replace it.',
+    '  • R2 Brain Detectors: read the market (regime, liquidity, order-flow, structure, sentiment).',
+    '  • R5A Learning Core (the heart): a Thompson-sampling BANDIT — it tries decision variants, scores them by REAL outcomes (reward), and shifts weight toward what actually works; plus attribution, drift detection and calibration.',
+    '  • R5B Governance: auto-quarantines a feature that turns bad, auto-resumes it when healthy, and promotes changes in TIERS (shadow → small → full) — never a reckless flip.',
+    '  • R3A/R3B Safety + Validation: black-swan guards, drawdown circuit-breakers, and evidence-sufficiency checks before any ML influence is allowed.',
+    '  • R6 Shadow/Meta: runs new ideas in SHADOW (watch-only, zero real risk) and A/B vs the baseline before they ever touch live trades.',
+    '  • Isolation: it learns SEPARATELY per user × environment × symbol — your testnet BTC learning is its own.',
+    '  • ML-DSL Drive: the ML reading the market tick-by-tick to tell the DSL how to move the stop (tighten / loosen / exit). Shown in the DSL Drive panel.',
+    '  • Safety floor: server-side only, additive, fail-safe — every ML lever ships OFF until it is proven on testnet; REAL money is never the test bed.',
+].join('\n');
+
 function _buildSystemPrompt(params) {
     const ctx = _buildLLMContext(params);
     const lang = _detectLanguage(params.text || '');
@@ -1451,6 +1467,8 @@ function _buildSystemPrompt(params) {
         _ZEUS_BRAIN_KNOWLEDGE,
         '',
         _ZEUS_INDICATORS_KNOWLEDGE,
+        '',
+        _ZEUS_ML_KNOWLEDGE,
         '',
         'GROUNDING — use the live state below. Do NOT invent numbers; if data is missing say so.',
         '',

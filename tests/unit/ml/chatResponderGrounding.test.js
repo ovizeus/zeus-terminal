@@ -85,6 +85,16 @@ describe('chatResponder grounding — absolute prices + creator identity', () =>
         expect(low).toContain('volume');         // volume = conviction
     });
 
+    test('system prompt explains how Zeus learns (ML / Ring5 / Thompson bandit / shadow)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'cum invata zeus ce e ring5 ml' });
+        const low = p.toLowerCase();
+        expect(low).toContain('thompson');   // the learning bandit
+        expect(low).toContain('bandit');
+        expect(low).toContain('shadow');      // shadow-first, no real risk
+        expect(low).toMatch(/r5|ring/);       // ring architecture
+        expect(low).toContain('testnet');     // proven on testnet, never REAL as test bed
+    });
+
     test('system prompt lists the Zeus indicator catalog (names, count, growing note)', () => {
         const p = responder._buildSystemPromptForTest({ userId: 1, text: 'ce indicatori are zeus' });
         expect(p).toMatch(/ZEUS INDICATORS/);
