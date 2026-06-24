@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useProfileStore } from '../../stores/profileStore'
 import { useAuthStore } from '../../stores'
 import { ModalOverlay, ModalHeader } from '../modals/ModalOverlay'
@@ -33,7 +34,9 @@ export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose
   const accent = profile.accent_color || '#f0c040'
   const refCode = 'ZEUS-' + ((profile.username || email || 'YOU').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'YOU8') + '-7K2'
 
-  return (
+  // Portal to <body> so the modal escapes the flip header's transformed/fixed ancestor
+  // (a transformed ancestor would otherwise clip the fixed overlay to the header box).
+  return createPortal(
     <ModalOverlay id="profile-settings-mover" visible={open} onClose={onClose} maxWidth="440px" zIndex={100001}>
       <ModalHeader title="PROFILE" onClose={onClose} titleStyle={{ color: accent, letterSpacing: '2px' }} />
 
@@ -90,6 +93,7 @@ export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose
           color: accent, background: `${accent}1f`, border: `1px solid ${accent}`, borderRadius: '4px', padding: '9px', cursor: 'pointer',
         }}>DONE</button>
       </div>
-    </ModalOverlay>
+    </ModalOverlay>,
+    document.body
   )
 }
