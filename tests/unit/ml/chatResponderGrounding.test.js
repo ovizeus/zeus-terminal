@@ -95,6 +95,31 @@ describe('chatResponder grounding — absolute prices + creator identity', () =>
         expect(low).toContain('testnet');     // proven on testnet, never REAL as test bed
     });
 
+    test('system prompt teaches trading strategies (trend/mean-reversion/breakout/momentum)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'ce strategii de trading sunt bune' });
+        const low = p.toLowerCase();
+        expect(low).toContain('trend-following');
+        expect(low).toContain('mean-reversion');
+        expect(low).toContain('breakout');
+        expect(low).toContain('momentum');
+    });
+
+    test('system prompt teaches manipulation/fraud detection (spoofing/pump/stop hunt)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'cum detectez manipularea pietei' });
+        const low = p.toLowerCase();
+        expect(low).toContain('manipulation');
+        expect(low).toContain('spoofing');
+        expect(low).toMatch(/pump|stop hunt|liquidity grab/);
+    });
+
+    test('system prompt enforces probabilistic forecasts + radar for trending (no overpromise)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'ce o sa creasca / prezice pretul' });
+        const low = p.toLowerCase();
+        expect(low).toContain('probabilistic');           // no guarantees
+        expect(low).toMatch(/never (certaint|guarantee)/); // explicit no-guarantee rule
+        expect(low).toContain('market radar');             // trending/new-coins via radar
+    });
+
     test('system prompt lists the Zeus indicator catalog (names, count, growing note)', () => {
         const p = responder._buildSystemPromptForTest({ userId: 1, text: 'ce indicatori are zeus' });
         expect(p).toMatch(/ZEUS INDICATORS/);

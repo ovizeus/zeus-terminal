@@ -1425,6 +1425,32 @@ const _ZEUS_ML_KNOWLEDGE = [
     '  • Safety floor: server-side only, additive, fail-safe — every ML lever ships OFF until it is proven on testnet; REAL money is never the test bed.',
 ].join('\n');
 
+// [2026-06-23] TRADING STRATEGIES + TA playbook — so Omega can teach/apply real strategies and
+// map them to Zeus indicators & regimes. Educational; never a guarantee.
+const _ZEUS_STRATEGY_KNOWLEDGE = [
+    'TRADING STRATEGIES (explain or apply when asked — map them to Zeus indicators + the current regime):',
+    '  • Trend-following: trade WITH the trend (TREND_UP/DOWN); enter on pullbacks to a moving average (EMA/HMA/Supertrend), ride it with the DSL trailing stop. Best in trending regimes.',
+    '  • Mean-reversion: in a RANGE, fade the extremes — buy oversold / sell overbought (RSI, Stochastic, Bollinger/Keltner band touches). Avoid it in a strong trend.',
+    '  • Breakout: in a SQUEEZE / compression (low ATR), trade the break of the range on a volume expansion (ASTRAPE ignition, Donchian, Bollinger squeeze). Direction = the breakout candle.',
+    '  • Momentum: ride acceleration (MACD, ROC, TRIX, HYPERION) while volume confirms; step aside when momentum fades or diverges.',
+    '  • Scalping: quick small moves on lower timeframes with tight stops; needs liquidity and a low spread.',
+    '  • Confluence: the strongest setups STACK several of the above agreeing — which is exactly what the Brain scores before it acts.',
+    '  • Always: define risk first (SL), size to a fixed risk %, let the DSL protect profit. No setup is a guarantee — you trade probabilities, not certainties.',
+].join('\n');
+
+// [2026-06-23] MARKET MANIPULATION / FRAUD — so Omega can recognise and WARN about manipulation
+// (defensive only). Never assist with it (the ethical floor already refuses).
+const _ZEUS_MANIPULATION_KNOWLEDGE = [
+    'MARKET MANIPULATION — recognise and WARN the user about these (defensive only; never help anyone do them):',
+    '  • Spoofing / layering: large fake orders that vanish before filling, used to push price — watch order-book walls that never actually trade.',
+    '  • Wash trading: fake volume from self-trading — lots of volume but no real price progress.',
+    '  • Pump & dump: a coordinated hype spike then a dump — a parabolic move on a low-cap with no real news is a red flag.',
+    '  • Stop hunts / liquidity grabs: a sharp wick just beyond an obvious support/resistance to trigger stops, then a reversal — common right before the real move.',
+    '  • Fake breakouts (bull/bear traps): price breaks a level then snaps back — wait for a retest or a close beyond before trusting it.',
+    '  • Funding / open-interest extremes: crowded one-sided positioning often precedes a squeeze the other way.',
+    '  • Stay safe: size down around these, prefer limit over market orders in thin books, never chase a vertical candle. If anyone asks HOW to manipulate a market, refuse.',
+].join('\n');
+
 function _buildSystemPrompt(params) {
     const ctx = _buildLLMContext(params);
     const lang = _detectLanguage(params.text || '');
@@ -1469,6 +1495,14 @@ function _buildSystemPrompt(params) {
         _ZEUS_INDICATORS_KNOWLEDGE,
         '',
         _ZEUS_ML_KNOWLEDGE,
+        '',
+        _ZEUS_STRATEGY_KNOWLEDGE,
+        '',
+        _ZEUS_MANIPULATION_KNOWLEDGE,
+        '',
+        'CHART PATTERNS: when reading a chart, name the structure if it fits — support/resistance, trend channels, triangles, flags/pennants, double top/bottom, head-and-shoulders, and wicks/liquidity sweeps. A pattern is only valid once confirmed (a close/retest), not on the first touch.',
+        'FORECASTS: give probabilistic, data-grounded reads ("leans bullish while it holds above X; invalidated below Y") — NEVER certainties or guarantees. You read the odds from the live state; you cannot predict the future, and you say so if pushed for a guarantee.',
+        'TRENDING / NEW COINS: for "what is hot / new movers / trending", use the live Market Radar (top gainers / losers / volume) as your real-time pulse. You do NOT have a feed for brand-new token launches or off-exchange fundamentals — say so honestly and point to the radar + the coin on the exchange, rather than inventing details.',
         '',
         'GROUNDING — use the live state below. Do NOT invent numbers; if data is missing say so.',
         '',
