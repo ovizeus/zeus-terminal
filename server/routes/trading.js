@@ -784,7 +784,9 @@ const SETTINGS_WHITELIST = new Set([
   // Chart
   'chartTf', 'chartTz', 'chartType', 'candleColors', 'heatmapSettings', 'timezoneOffset',
   // Indicators
-  'indSettings',
+  'indSettings', 'indicators', // [2026-06-24] 'indicators' = which indicators are toggled ON (the
+  // active map from w.S.activeInds); was NOT whitelisted, so the client's save was silently dropped
+  // server-side → active indicators were localStorage-only and lost on cache-clear / new device.
   // Liq / LLV / Supremus / S-R
   'liqSettings', 'llvSettings', 'zsSettings', 'srSettings',
   // Alerts
