@@ -39,6 +39,26 @@ describe('chatResponder._loadConvoHistory', () => {
         expect(convo[1]).toMatchObject({ role: 'assistant', content: 'r1' });
     });
 
+    // [2026-06-23] Continuity across sessions/restarts: a conversation from hours ago must still
+    // reach the LLM. Regression for the bug where rehydrated rows had no `ts` → _getConvo's TTL
+    // filter dropped them (NaN compare) → Omega "forgot" everything on re-entry / after a reload.
+    test('rehydrated turns carry a real ts and survive the TTL filter the LLM sees', async () => {
+        const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+        db.prepare(`INSERT INTO ml_voice_log (user_id, utterance_type, mood, text, context_json, created_at)
+                    VALUES (?, 'CHAT_REPLY', 'CALM', ?, ?, ?)`).run(
+            1, 'reply-from-earlier', JSON.stringify({ question: 'something we discussed earlier' }), twoHoursAgo
+        );
+        await chatResponder._loadConvoHistory(1);
+        const filtered = chatResponder._getConvoFilteredForTest(1); // the view the LLM receives
+        expect(filtered.length).toBe(2);                 // BUG before fix: 0 (dropped by NaN TTL)
+        expect(typeof filtered[0].ts).toBe('number');
+        expect(filtered[0].ts).toBeGreaterThan(0);
+        expect(filtered).toEqual(expect.arrayContaining([
+            expect.objectContaining({ role: 'user', content: 'something we discussed earlier' }),
+            expect.objectContaining({ role: 'assistant', content: 'reply-from-earlier' }),
+        ]));
+    });
+
     test('idempotent: second call with same userId is no-op (returns cached Promise)', async () => {
         _seedReply(1, 'q1', 'r1');
         await chatResponder._loadConvoHistory(1);
@@ -67,14 +87,14 @@ describe('chatResponder._loadConvoHistory', () => {
             chatResponder._loadConvoHistory(1),
             chatResponder._loadConvoHistory(2),
         ]);
-        expect(chatResponder._getConvoForTest(1)).toEqual([
-            { role: 'user', content: 'q-user1' },
-            { role: 'assistant', content: 'r-user1' },
-        ]);
-        expect(chatResponder._getConvoForTest(2)).toEqual([
-            { role: 'user', content: 'q-user2' },
-            { role: 'assistant', content: 'r-user2' },
-        ]);
+        const c1 = chatResponder._getConvoForTest(1);
+        expect(c1.length).toBe(2);
+        expect(c1[0]).toMatchObject({ role: 'user', content: 'q-user1' });
+        expect(c1[1]).toMatchObject({ role: 'assistant', content: 'r-user1' });
+        const c2 = chatResponder._getConvoForTest(2);
+        expect(c2.length).toBe(2);
+        expect(c2[0]).toMatchObject({ role: 'user', content: 'q-user2' });
+        expect(c2[1]).toMatchObject({ role: 'assistant', content: 'r-user2' });
     });
 
     test('caps load at CONVO_MAX_TURNS (10 turns = 20 messages)', async () => {

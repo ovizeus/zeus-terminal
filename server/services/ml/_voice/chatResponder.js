@@ -36,7 +36,11 @@ function _getServerState() {
 // Reset on server restart (acceptable trade-off vs DB persistence overhead).
 const _convoHistory = new Map(); // userId → Array<{role, content, ts}>
 const CONVO_MAX_TURNS = 10; // user+assistant pairs to keep (=20 messages max)
-const CONVO_TTL_MS = 30 * 60 * 1000; // drop entries older than 30min
+// [2026-06-23] Continuity window. Was 30min, which (plus a ts bug on DB-rehydrated rows) meant
+// Omega "forgot" the conversation whenever the user left and came back, or after any server
+// reload. Extended to 7 days so the last CONVO_MAX_TURNS exchanges persist across sessions and
+// restarts (DB rehydration repopulates them). Token cost stays bounded by CONVO_MAX_TURNS.
+const CONVO_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function _pushConvo(userId, role, content) {
     if (!userId) return;
@@ -75,7 +79,7 @@ async function _loadConvoHistory(userId) {
     const p = (async () => {
         try {
             const rows = db.prepare(`
-                SELECT text, context_json
+                SELECT text, context_json, created_at
                 FROM ml_voice_log
                 WHERE user_id = ? AND utterance_type = 'CHAT_REPLY'
                 ORDER BY created_at DESC
@@ -94,8 +98,14 @@ async function _loadConvoHistory(userId) {
                     } catch (_) { /* skip malformed row entirely */ }
                 }
                 if (question == null) continue; // skip rows without recoverable user question
-                arr.push({ role: 'user', content: question });
-                arr.push({ role: 'assistant', content: row.text });
+                // [2026-06-23] Stamp the row's real timestamp so rehydrated turns survive the TTL
+                // filter in _getConvo (without ts, `now - undefined` = NaN → silently dropped, which
+                // is why Omega forgot everything after a restart/re-entry). created_at is ms-epoch;
+                // normalize a seconds value defensively (mixed-units gotcha elsewhere in Zeus).
+                const ca = Number(row.created_at) || 0;
+                const ts = ca > 0 && ca < 1e12 ? ca * 1000 : ca;
+                arr.push({ role: 'user', content: question, ts });
+                arr.push({ role: 'assistant', content: row.text, ts });
             }
             _convoHistory.set(userId, arr);
         } catch (err) {
@@ -1935,6 +1945,7 @@ module.exports = {
     _invalidateConvoHistory,
     _resetLoadedForTest,
     _getConvoForTest,
+    _getConvoFilteredForTest: _getConvo, // TTL-filtered view the LLM actually receives
     // [Day 32C] Test-only hooks for the context layer fed to the LLM.
     _buildLLMContextForTest: _buildLLMContext,
     _buildSystemPromptForTest: _buildSystemPrompt,
