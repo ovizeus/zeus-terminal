@@ -44,8 +44,30 @@ function _defaultState() {
         // setRealOptIn() (server side); stripped from any client sync (see _stripDangerousKeys).
         realOptIn: false,
         realOptInTs: null,
+        // [2026-06-23] Daily-loss circuit breaker (REAL only). lossUsd accrues realized losses
+        // for the UTC day; when it reaches startBalance × cap, REAL entries pause until next day.
+        dailyLoss: { day: null, lossUsd: 0, startBalance: 0 },
+        // [2026-06-23] Persistent kill-switch (all envs). Survives restart (unlike the per-cycle
+        // killActive). Server-authoritative; set only via setKillSwitch(); stripped from client sync.
+        killSwitch: false,
     };
 }
+
+// [2026-06-23] Roll the daily-loss window to the current UTC day. Resets the accumulator and
+// snapshots the day's starting balance (the cap reference) on a new day. PURE-ish (mutates st).
+function _rollDailyWindow(st, now) {
+    const dayKey = new Date(Number.isFinite(+now) ? +now : Date.now()).toISOString().slice(0, 10);
+    if (!st.dailyLoss || st.dailyLoss.day !== dayKey) {
+        st.dailyLoss = { day: dayKey, lossUsd: 0, startBalance: Math.max(0, +st.wallet.balance || 0) };
+    }
+    return st.dailyLoss;
+}
+function _capNumAres(envVal, def, lo, hi) {
+    const n = Number(envVal);
+    if (!Number.isFinite(n) || n <= 0) return def;
+    return Math.min(hi, Math.max(lo, n));
+}
+const REAL_MAX_DAILY_LOSS_PCT = _capNumAres(process.env.ARES_REAL_MAX_DAILY_LOSS_PCT, 0.06, 0.005, 0.50); // default 6% of day-start balance
 
 function _loadState(userId) {
     let raw = null;
@@ -101,6 +123,9 @@ function tick(userId, mctx) {
 
     const now = Date.now();
     const st = _loadState(userId);
+    // [2026-06-23] Persistent kill-switch — if the user (or operator) hard-stopped ARES, do
+    // nothing until it is explicitly re-enabled. Survives restart (unlike per-cycle killActive).
+    if (st.killSwitch === true) { return null; }
     const traj = _trajectory(st, now);
     const eng = st.engine;
 
@@ -152,6 +177,18 @@ function tick(userId, mctx) {
         try { logger.info('ARES', `[consent] uid=${userId} REAL entry blocked — no real opt-in (fail-closed)`); } catch (_) { }
         _saveState(userId, st);
         return null;
+    }
+    // [2026-06-23] Daily-loss circuit breaker (REAL only) — pause new entries once the day's
+    // realized loss reaches startBalance × cap; auto-resumes next UTC day. Protective on real
+    // capital; testnet/demo unchanged (soak untouched).
+    if (_execEnv === 'REAL') {
+        const dl = _rollDailyWindow(st, now);
+        const cap = (dl.startBalance || st.wallet.balance || 0) * REAL_MAX_DAILY_LOSS_PCT;
+        if (cap > 0 && dl.lossUsd >= cap) {
+            try { logger.info('ARES', `[daily-loss] uid=${userId} REAL entry paused — day loss $${dl.lossUsd.toFixed(2)} ≥ cap $${cap.toFixed(2)}`); } catch (_) { }
+            _saveState(userId, st);
+            return null;
+        }
     }
     sizing = applyRealCaps(sizing, _execEnv, { balance: st.wallet.balance });
     if (sizing.capped) {
@@ -219,7 +256,10 @@ function onPositionClosed(pos) {
         const st = _loadState(pos.userId);
         const eng = st.engine;
         // Stake release: lastDecision.stake is best-effort; fall back to margin.
-        const stake = Number.isFinite(+(st.lastDecision && st.lastDecision.stake)) && st.lastDecision.executedSeq === pos.seq
+        // [2026-06-23] null-safe: st.lastDecision can be null (e.g. close after a restart with no
+        // in-memory decision). The old form threw on null.executedSeq → close hook silently failed
+        // → wallet/PnL/daily-loss never recorded. Guard lastDecision first.
+        const stake = (st.lastDecision && Number.isFinite(+st.lastDecision.stake) && st.lastDecision.executedSeq === pos.seq)
             ? +st.lastDecision.stake : (+pos.margin || 0);
         st.wallet.locked = Math.max(0, st.wallet.locked - stake);
         const gross = +pos.closePnl || 0;
@@ -227,6 +267,11 @@ function onPositionClosed(pos) {
         const net = gross - fees;
         st.wallet.balance = Math.max(0, st.wallet.balance + net);
         st.wallet.realizedPnL += net;
+        // [2026-06-23] Accrue the day's realized loss for the daily-loss circuit breaker. Recorded
+        // for every env (cheap accounting); the breaker only ACTS on REAL (see tick). Roll first so
+        // startBalance reflects the day's opening equity.
+        const dl = _rollDailyWindow(st, Date.now());
+        if (net < 0) dl.lossUsd += -net;
 
         const isWin = net > 0;
         eng.tradeHistory.unshift(isWin);
@@ -308,9 +353,21 @@ function setRealOptIn(userId, value, now) {
 function getRealOptIn(userId) {
     try { return _loadState(userId).realOptIn === true; } catch (_) { return false; }
 }
+// [2026-06-23] Persistent kill-switch — server-authoritative. True = ARES hard-stopped for the
+// user across restarts until explicitly re-enabled. Stripped from client sync.
+function setKillSwitch(userId, value) {
+    const st = _loadState(userId);
+    st.killSwitch = value === true;
+    _saveState(userId, st);
+    try { logger.info('ARES', `[kill] uid=${userId} killSwitch → ${st.killSwitch}`); } catch (_) { }
+    return st.killSwitch;
+}
+function getKillSwitch(userId) {
+    try { return _loadState(userId).killSwitch === true; } catch (_) { return false; }
+}
 
 module.exports = {
     tick, onPositionClosed, fund, withdraw, getPublicState,
-    setRealOptIn, getRealOptIn,
+    setRealOptIn, getRealOptIn, setKillSwitch, getKillSwitch,
     _loadStateForTest: _loadState, _saveStateForTest: _saveState, _trajectoryForTest: _trajectory,
 };

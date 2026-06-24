@@ -90,6 +90,57 @@ describe('REAL-money consent gate (fail-closed)', () => {
     });
 });
 
+describe('persistent kill-switch', () => {
+    test('killSwitch=true blocks tick in any env (survives via state blob)', () => {
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        serverAres.setKillSwitch(1, true);
+        expect(serverAres.getKillSwitch(1)).toBe(true);
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+        // re-enable → dispatches again (testnet)
+        serverAres.setKillSwitch(1, false);
+        expect(serverAres.tick(1, GO_MCTX)).not.toBeNull();
+    });
+});
+
+describe('daily-loss circuit breaker (REAL only)', () => {
+    const _today = new Date(NY_TS).toISOString().slice(0, 10);
+    // Full-shape state with a CLEAN engine (empty history → neutral confidence → would trade),
+    // so the test isolates the daily-loss gate from engine-state side effects.
+    const _seed = (lossUsd) => _dbStore.set(1, {
+        wallet: { balance: 1000, locked: 0, realizedPnL: 0, fundedTotal: 1000 },
+        engine: { tradeHistory: [], consecutiveLoss: 0, consecutiveWin: 0, lastLossTs: 0, lastTradeTs: 0, winRate10: 0, totalTrades: 0, totalWins: 0, totalLosses: 0 },
+        mission: { startBalance: 1000, startTs: NY_TS - 86400000 },
+        lastDecision: null,
+        realOptIn: true,
+        dailyLoss: { day: _today, lossUsd, startBalance: 1000 }, // cap = 1000×6% = $60
+        killSwitch: false,
+    });
+
+    test('REAL entry paused once day loss ≥ cap; testnet unaffected', () => {
+        _seed(200); // $200 ≥ $60 cap
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+        // Same state on TESTNET → NOT paused (breaker only gates REAL).
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'TESTNET' });
+        expect(serverAres.tick(1, GO_MCTX)).not.toBeNull();
+    });
+
+    test('small loss under cap does NOT pause REAL', () => {
+        _seed(10); // $10 < $60 cap
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        expect(serverAres.tick(1, GO_MCTX)).not.toBeNull();
+    });
+
+    test('onPositionClosed accrues the day loss (close hook null-safe with no lastDecision)', () => {
+        _dbStore.set(1, { balance: 1000, locked: 0, realizedPnL: 0, fundedTotal: 1000 });
+        serverAres.onPositionClosed({ owner: 'ARES', userId: 1, seq: 9, closePnl: -50, size: 0, lev: 0, margin: 0 });
+        const st = serverAres._loadStateForTest(1);
+        expect(st.dailyLoss.lossUsd).toBeCloseTo(50, 2); // recorded despite null lastDecision
+    });
+});
+
 describe('state seed/migration', () => {
     test('legacy flat client snapshot migrates into wallet shape (operator $655 preserved)', () => {
         _dbStore.set(1, { balance: 655, locked: 0, available: 655, realizedPnL: 0, fundedTotal: 46905, stageName: 'SEED' });

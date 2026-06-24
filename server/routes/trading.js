@@ -921,7 +921,7 @@ function _stripDangerousKeys(obj) {
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     // [2026-06-23] REAL-money consent is server-authoritative — a client sync can NEVER set it
     // (defense-in-depth on top of the SERVER_ARES 409 guard). Only setRealOptIn() flips it.
-    if (k === 'realOptIn' || k === 'realOptInTs') continue;
+    if (k === 'realOptIn' || k === 'realOptInTs' || k === 'killSwitch' || k === 'dailyLoss') continue;
     out[k] = obj[k];
   }
   return out;
