@@ -50,6 +50,13 @@ function _defaultState() {
         // [2026-06-23] Persistent kill-switch (all envs). Survives restart (unlike the per-cycle
         // killActive). Server-authoritative; set only via setKillSwitch(); stripped from client sync.
         killSwitch: false,
+        // [2026-06-24] Per-user ARES ACTIVE toggle (mutual exclusion with AT/Brain). When true:
+        // ARES trades on this account AND the AT/Brain/ML entry path is blocked for this user — so
+        // the two engines can never open conflicting positions on the same symbol (exchange nets
+        // them → 1 position). Default false = ARES off, AT free. Server-authoritative; stripped
+        // from client sync; set only via setAresActive() (which also forces AT off).
+        aresActive: false,
+        aresActiveTs: null,
     };
 }
 
@@ -160,6 +167,10 @@ function tick(userId, mctx) {
     // [2026-06-23] Persistent kill-switch — if the user (or operator) hard-stopped ARES, do
     // nothing until it is explicitly re-enabled. Survives restart (unlike per-cycle killActive).
     if (st.killSwitch === true) { return null; }
+    // [2026-06-24] ARES only trades when the user has explicitly ACTIVATED it for this account.
+    // While off, AT/Brain runs normally; while on, AT/Brain is blocked (mutual exclusion in
+    // serverAT). Default off → fail-closed (ARES never trades unless deliberately turned on).
+    if (st.aresActive !== true) { return null; }
     const traj = _trajectory(st, now);
     const eng = st.engine;
 
@@ -394,6 +405,8 @@ function getPublicState(userId) {
         dailyLoss: st.dailyLoss ? { day: st.dailyLoss.day, lossUsd: +(+st.dailyLoss.lossUsd || 0).toFixed(2) } : null,
         // [2026-06-23] Live REAL exchange balance ARES would trade with (0 if not on real / not yet fetched).
         realBalance: +(_realAvailable(userId) || 0).toFixed(2),
+        // [2026-06-24] ARES active toggle (mutual exclusion with AT) for the UI.
+        aresActive: st.aresActive === true,
     };
 }
 
@@ -422,10 +435,36 @@ function setKillSwitch(userId, value) {
 function getKillSwitch(userId) {
     try { return _loadState(userId).killSwitch === true; } catch (_) { return false; }
 }
+// [2026-06-24] Per-user ARES ACTIVE toggle (mutual exclusion with AT/Brain). Turning ARES ON
+// FORCES AT off for BOTH modes on this account (so only ARES trades — no conflicting positions
+// on the same symbol). Server-authoritative; stripped from client sync.
+function setAresActive(userId, value, now) {
+    const on = value === true;
+    if (on) {
+        // Stop AT first (defense-in-depth: AT entries are also blocked in processBrainDecision
+        // while aresActive, but we flip the visible toggle off too). Best-effort; never throws.
+        try {
+            const at = _serverAT();
+            if (at && typeof at.toggleActive === 'function') {
+                at.toggleActive(userId, false, 'demo');
+                at.toggleActive(userId, false, 'live');
+            }
+        } catch (e) { try { logger.warn('ARES', `[active] uid=${userId} could not force AT off: ${e && e.message}`); } catch (_) { } }
+    }
+    const st = _loadState(userId);
+    st.aresActive = on;
+    st.aresActiveTs = on ? (Number.isFinite(+now) ? +now : Date.now()) : null;
+    _saveState(userId, st);
+    try { logger.info('ARES', `[active] uid=${userId} aresActive → ${on}${on ? ' (AT forced off)' : ''}`); } catch (_) { }
+    return on;
+}
+function getAresActive(userId) {
+    try { return _loadState(userId).aresActive === true; } catch (_) { return false; }
+}
 
 module.exports = {
     tick, onPositionClosed, fund, withdraw, getPublicState,
-    setRealOptIn, getRealOptIn, setKillSwitch, getKillSwitch,
+    setRealOptIn, getRealOptIn, setKillSwitch, getKillSwitch, setAresActive, getAresActive,
     _loadStateForTest: _loadState, _saveStateForTest: _saveState, _trajectoryForTest: _trajectory,
     _setRealBalanceForTest, _resetRealBalanceForTest, _realAvailableForTest: _realAvailable,
 };

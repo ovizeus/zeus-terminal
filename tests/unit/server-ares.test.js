@@ -17,6 +17,7 @@ const _atMock = {
     processBrainDecision: jest.fn(() => ({ seq: 4242 })),
     isKillActive: jest.fn(() => false),
     resolveExecutionEnv: jest.fn(() => ({ env: 'TESTNET' })),
+    toggleActive: jest.fn(() => ({ ok: true })), // setAresActive(true) forces AT off via this
 };
 jest.mock('../../server/services/serverAT', () => _atMock);
 
@@ -62,7 +63,7 @@ describe('REAL exchange balance sizing', () => {
         wallet: { balance: 0, locked: 0, realizedPnL: 0, fundedTotal: 0 }, // virtual wallet EMPTY on real
         engine: { tradeHistory: [], consecutiveLoss: 0, consecutiveWin: 0, lastLossTs: 0, lastTradeTs: 0, winRate10: 0, totalTrades: 0, totalWins: 0, totalLosses: 0 },
         mission: { startBalance: 1000, startTs: NY_TS - 86400000 },
-        lastDecision: null, realOptIn: true, killSwitch: false,
+        lastDecision: null, realOptIn: true, killSwitch: false, aresActive: true,
         dailyLoss: { day: null, lossUsd: 0, startBalance: 0 },
     });
 
@@ -96,6 +97,7 @@ describe('REAL exchange balance sizing', () => {
 
     test('TESTNET still uses the virtual wallet (real balance ignored)', () => {
         _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        serverAres.setAresActive(1, true);
         serverAres._setRealBalanceForTest(1, 999999); // should be ignored on testnet
         _atMock.resolveExecutionEnv.mockReturnValue({ env: 'TESTNET' });
         const entry = serverAres.tick(1, GO_MCTX);
@@ -106,7 +108,7 @@ describe('REAL exchange balance sizing', () => {
 });
 
 describe('REAL-money consent gate (fail-closed)', () => {
-    const _fund = () => _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+    const _fund = () => { _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 }); serverAres.setAresActive(1, true); };
 
     test('REAL env without opt-in BLOCKS the entry', () => {
         _fund();
@@ -141,9 +143,39 @@ describe('REAL-money consent gate (fail-closed)', () => {
     });
 });
 
+describe('ARES active toggle + mutual exclusion with AT', () => {
+    test('ARES does NOT trade when aresActive is off (default)', () => {
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 }); // aresActive defaults false
+        expect(serverAres.getAresActive(1)).toBe(false);
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+    });
+
+    test('activating ARES forces AT off (both modes) and flips aresActive', () => {
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        const v = serverAres.setAresActive(1, true);
+        expect(v).toBe(true);
+        expect(serverAres.getAresActive(1)).toBe(true);
+        // AT forced off for BOTH modes
+        const modes = _atMock.toggleActive.mock.calls.map(c => [c[1], c[2]]);
+        expect(modes).toContainEqual([false, 'demo']);
+        expect(modes).toContainEqual([false, 'live']);
+    });
+
+    test('ARES trades once activated; deactivating stops it', () => {
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        serverAres.setAresActive(1, true);
+        expect(serverAres.tick(1, GO_MCTX)).not.toBeNull();
+        serverAres.setAresActive(1, false);
+        _atMock.processBrainDecision.mockClear();
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull(); // off → no trade
+    });
+});
+
 describe('persistent kill-switch', () => {
     test('killSwitch=true blocks tick in any env (survives via state blob)', () => {
         _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        serverAres.setAresActive(1, true);
         serverAres.setKillSwitch(1, true);
         expect(serverAres.getKillSwitch(1)).toBe(true);
         expect(serverAres.tick(1, GO_MCTX)).toBeNull();
@@ -164,6 +196,7 @@ describe('daily-loss circuit breaker (REAL only)', () => {
         mission: { startBalance: 1000, startTs: NY_TS - 86400000 },
         lastDecision: null,
         realOptIn: true,
+        aresActive: true,
         dailyLoss: { day: _today, lossUsd, startBalance: 1000 }, // cap = 1000×6% = $60
         killSwitch: false,
     });
@@ -229,6 +262,7 @@ describe('tick gating (fail-closed)', () => {
 describe('GO path — dispatch through serverAT', () => {
     test('reserves stake, dispatches owner=ARES decision, records lastTradeTs', () => {
         _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        serverAres.setAresActive(1, true);
         const entry = serverAres.tick(1, GO_MCTX);
         expect(entry).toEqual({ seq: 4242 });
         expect(_atMock.processBrainDecision).toHaveBeenCalledTimes(1);
@@ -251,18 +285,21 @@ describe('GO path — dispatch through serverAT', () => {
     test('entry refused by serverAT → reservation released', () => {
         _atMock.processBrainDecision.mockReturnValue(null);
         _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 0 });
+        serverAres.setAresActive(1, true);
         expect(serverAres.tick(1, GO_MCTX)).toBeNull();
         expect(_dbStore.get(1).wallet.locked).toBe(0);
     });
     test('open ARES position blocks a second entry (MAX_OPEN=1)', () => {
         _atMock.getOpenPositions.mockReturnValue([{ owner: 'ARES', symbol: 'BTCUSDT' }]);
         _dbStore.set(1, { balance: 655, locked: 78.6, realizedPnL: 0, fundedTotal: 0 });
+        serverAres.setAresActive(1, true);
         expect(serverAres.tick(1, GO_MCTX)).toBeNull();
         expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
     });
     test('AT-owned open positions do NOT block ARES (separate slot)', () => {
         _atMock.getOpenPositions.mockReturnValue([{ owner: 'AT', symbol: 'ETHUSDT' }, { owner: 'AT', symbol: 'BTCUSDT' }]);
         _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 0 });
+        serverAres.setAresActive(1, true);
         const entry = serverAres.tick(1, GO_MCTX);
         expect(entry).toEqual({ seq: 4242 });
         // maxPos passed to serverAT covers existing AT positions + the ARES slot

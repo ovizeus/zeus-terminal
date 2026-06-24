@@ -1015,6 +1015,16 @@ async function preLiveChecklist(userId) {
 function toggleActive(userId, active, mode) {
     if (typeof active !== 'boolean') return { ok: false, error: 'active must be boolean' };
     if (!userId) return { ok: false, error: 'Missing userId' };
+    // [2026-06-24] ARES⟷AT mutual exclusion: cannot ENABLE AT while ARES is active on this account
+    // (they would fight over the same symbol). The caller surfaces `detail` as a friendly message.
+    // ARES's own setAresActive(true) calls us with active=false to FORCE AT off — that path passes.
+    if (active === true) {
+        let aresOn = false;
+        try { aresOn = require('./serverAres').getAresActive(userId) === true; } catch (_) { aresOn = false; }
+        if (aresOn) {
+            return { ok: false, error: 'ARES_ACTIVE', detail: 'ARES is active on this account. Turn ARES OFF before enabling AutoTrade — only one engine can trade an account at a time (otherwise they would open conflicting positions on the same symbol).' };
+        }
+    }
     const us = _uState(userId);
     const targetMode = (mode === 'live' || mode === 'demo') ? mode : (us.engineMode || 'demo');
     const fieldName = targetMode === 'live' ? 'atActiveLive' : 'atActiveDemo';
@@ -1244,6 +1254,21 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         logger.info('AT_ENGINE', `Entry blocked uid=${userId} mode=${us.engineMode} — AT disabled for this mode`);
         _recordMissedTrade(userId, decision, 'AT_DISABLED');
         return null;
+    }
+
+    // [2026-06-24] ARES⟷AT mutual exclusion. While ARES is ACTIVE for this user, the AT/Brain/ML
+    // entry path must NOT open positions — otherwise both engines could trade the same symbol
+    // (e.g. ARES short BTC + AT short BTC = one netted exchange position, or opposite sides that
+    // cancel). ARES's own dispatch carries owner==='ARES' and is exempt. Fail-closed + lazy require
+    // to avoid the circular dep; any error here must NOT open an AT trade, so default to blocking.
+    if (decision.owner !== 'ARES') {
+        let aresOn = false;
+        try { aresOn = require('./serverAres').getAresActive(userId) === true; } catch (_) { aresOn = false; }
+        if (aresOn) {
+            logger.info('AT_ENGINE', `Entry blocked uid=${userId} — ARES is ACTIVE (mutual exclusion; AT/Brain paused)`);
+            _recordMissedTrade(userId, decision, 'ARES_ACTIVE');
+            return null;
+        }
     }
 
     // [Phase 2 S6-B3] Per-user decisionId dedup. Prevents client+server

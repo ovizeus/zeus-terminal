@@ -921,7 +921,7 @@ function _stripDangerousKeys(obj) {
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     // [2026-06-23] REAL-money consent is server-authoritative — a client sync can NEVER set it
     // (defense-in-depth on top of the SERVER_ARES 409 guard). Only setRealOptIn() flips it.
-    if (k === 'realOptIn' || k === 'realOptInTs' || k === 'killSwitch' || k === 'dailyLoss') continue;
+    if (k === 'realOptIn' || k === 'realOptInTs' || k === 'killSwitch' || k === 'dailyLoss' || k === 'aresActive' || k === 'aresActiveTs') continue;
     out[k] = obj[k];
   }
   return out;
@@ -1004,6 +1004,18 @@ router.post('/ares/kill', express.json(), (req, res) => {
     const value = serverAres.setKillSwitch(req.user.id, req.body.enabled === true);
     try { require('../services/database').auditLog(req.user.id, 'ARES_KILL_SWITCH', JSON.stringify({ enabled: value }), req.ip); } catch (_) {}
     res.json({ ok: true, killSwitch: value });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── [2026-06-24] ARES ACTIVE toggle (mutual exclusion with AT). Enabling ARES FORCES AutoTrade
+// off for this account so only ARES trades (no conflicting same-symbol positions). User sets only
+// their own. ───
+router.post('/ares/active', express.json(), (req, res) => {
+  try {
+    const serverAres = require('../services/serverAres');
+    const value = serverAres.setAresActive(req.user.id, req.body.enabled === true);
+    try { require('../services/database').auditLog(req.user.id, 'ARES_ACTIVE_TOGGLE', JSON.stringify({ enabled: value }), req.ip); } catch (_) {}
+    res.json({ ok: true, aresActive: value });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
