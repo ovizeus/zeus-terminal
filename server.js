@@ -1184,6 +1184,9 @@ app.get('/api/fng', async (_req, res) => {
 const syncRoutes = require('./server/routes/sync');
 app.use('/api/sync', syncRoutes);
 
+// [2026-06-24] User profile (flip-header) — own read/write + public read.
+app.use('/api/profile', require('./server/routes/profile'));
+
 // ─── Per-User Context Sync (cross-device preferences) ───
 const userContextRoutes = require('./server/routes/userContext');
 app.use('/api/sync', userContextRoutes);
