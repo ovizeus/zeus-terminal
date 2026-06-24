@@ -1281,6 +1281,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
     if (filePath.endsWith('.apk')) {
       res.setHeader('Content-Type', 'application/vnd.android.package-archive');
       res.setHeader('Content-Disposition', 'attachment; filename="zeus-terminal.apk"');
+      // [2026-06-24] Never cache the APK — a rebuilt/re-signed APK must reach the
+      // device immediately (the old default max-age=14400 served a stale APK after
+      // a widget rebuild, so re-installs picked up the previous broken build).
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
   }
 }));
