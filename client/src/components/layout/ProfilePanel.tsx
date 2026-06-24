@@ -1,17 +1,17 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useProfileStore } from '../../stores/profileStore'
 import { reencodeAvatar, initialsAvatar } from '../../profile/avatar'
 import { validateUsername } from '../../profile/validate'
 import { appConfirm } from '../common/confirmDialog'
+import { ProfileSettingsModal } from './ProfileSettingsModal'
 
 // [2026-06-24] Profile panel — the "back" of the flip header. Same dark header style.
 // Tap the avatar to flip back; "Upload photo" to change the picture (re-encoded, sterile);
-// tap name / @username / tagline to edit via the app dialog; pick an accent colour.
-const ACCENTS = ['#f0c040', '#00e676', '#ff4d6d', '#00d9ff', '#b388ff', '#ff9d3c', '#ffffff']
-
+// tap name / @username / tagline to edit via the app dialog; the gear opens profile settings.
 export function ProfilePanel({ onAvatarClick }: { onAvatarClick?: () => void }) {
   const profile = useProfileStore((s) => s.profile)
   const error = useProfileStore((s) => s.error)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const save = useProfileStore((s) => s.save)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
@@ -43,7 +43,6 @@ export function ProfilePanel({ onAvatarClick }: { onAvatarClick?: () => void }) 
     if (!ok) await appConfirm({ title: 'Username taken', body: 'That @username is already in use. Try another.', tone: 'danger', confirmLabel: 'OK' })
   }
 
-  const lbl: React.CSSProperties = { fontFamily: 'monospace', fontSize: '8px', color: 'rgba(255,255,255,0.4)', letterSpacing: '1px' }
   const editable: React.CSSProperties = { cursor: 'pointer', borderBottom: '1px dashed rgba(255,255,255,0.18)' }
 
   return (
@@ -79,18 +78,16 @@ export function ProfilePanel({ onAvatarClick }: { onAvatarClick?: () => void }) 
         {error ? <div style={{ fontFamily: 'monospace', fontSize: '8px', color: '#ff5b6e' }}>{error}</div> : null}
       </div>
 
-      {/* accent swatches */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flex: 'none' }}>
-        <span style={lbl}>ACCENT</span>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {ACCENTS.map((c) => (
-            <button key={c} onClick={() => save({ accent_color: c })} title={c} style={{
-              width: '14px', height: '14px', borderRadius: '50%', background: c, cursor: 'pointer',
-              border: c === accent ? '2px solid #fff' : '1px solid rgba(255,255,255,0.25)', padding: 0,
-            }} />
-          ))}
-        </div>
-      </div>
+      {/* bare settings gear (no box) — opens the dedicated profile settings panel */}
+      <button className="profile-gear" onClick={() => setSettingsOpen(true)} title="Profile settings" aria-label="Profile settings"
+        style={{ flex: 'none', background: 'transparent', border: 'none', padding: '4px', cursor: 'pointer', color: accent, lineHeight: 0 }}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
+
+      <ProfileSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

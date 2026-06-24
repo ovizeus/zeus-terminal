@@ -8051,3 +8051,7 @@ select option {
 @media (max-width: 480px) {
   .flip-header { top: env(safe-area-inset-top, 0px); }
 }
+
+/* [2026-06-24] bare profile gear — just the wheel, no box; spins on hover/press */
+.profile-gear svg { transition: transform .45s cubic-bezier(.4,0,.2,1); }
+.profile-gear:hover svg, .profile-gear:active svg { transform: rotate(90deg); }
