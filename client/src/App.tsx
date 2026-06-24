@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { LoginPage } from './components/auth/LoginPage'
-import { Header } from './components/layout/Header'
+import { FlipHeader } from './components/layout/FlipHeader'
+import { useProfileStore } from './stores/profileStore'
 import { PanelShell } from './components/layout/PanelShell'
 import { PinLockScreen } from './components/modals/PinLockScreen'
 import { ConfirmDialog } from './components/common/ConfirmDialog'
@@ -40,6 +41,8 @@ export function App() {
   // Connect WS when authenticated
   useEffect(() => {
     if (authenticated) {
+      // [2026-06-24] load the user's flip-header profile once authenticated
+      try { useProfileStore.getState().load() } catch (_) {}
       wsService.connect()
       // [WS-PROXY B.6] Install market bridge listener on /ws/sync
       try { require('./services/wsMarketBridge').install() } catch (_) {}
@@ -109,7 +112,7 @@ export function App() {
   return (
     <ErrorBoundary>
       <div id="zeus-app">
-        <Header />
+        <FlipHeader />
         <PanelShell />
         <PinLockScreen />
         <SecurityNudgeModal />

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
 import { useSupportStore } from '../../stores/supportStore'
 
-export function Header() {
+export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
   const connected = useUiStore((s) => s.connected)
   const openModal = useUiStore((s) => s.openModal)
   const price = useMarketStore((s) => s.market.price)
@@ -172,7 +172,10 @@ export function Header() {
         <div className="brand">
           <img
             src={import.meta.env.BASE_URL + 'zeus-logo.png'}
-            className="zlogo" alt="ZT" />
+            className="zlogo" alt="ZT"
+            onClick={onLogoClick}
+            title={onLogoClick ? 'Open your profile' : undefined}
+            style={onLogoClick ? { cursor: 'pointer' } : undefined} />
           <div>
             <div className="t1">ZEU&apos;S</div>
             <div className="t2">AI TRADING ANALYTICS</div>

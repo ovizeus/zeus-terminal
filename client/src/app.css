@@ -8013,3 +8013,36 @@ select option {
 .lb-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#445; margin-right:6px; }
 .lb-dot.on { background:#26ff9a; }
 .lb-empty { color:#5a6a7a; font-size:12px; padding:10px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   [2026-06-24] FLIP HEADER — profile on the back. The trading header is the front,
+   untouched. The container owns positioning so the 3D transform on the faces never
+   makes the (mobile) fixed header break (a transformed ancestor would re-anchor fixed).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.flip-header { position: relative; perspective: 1400px; }
+.flip-header .flip-face { transition: transform .6s cubic-bezier(.4, 0, .2, 1); backface-visibility: hidden; -webkit-backface-visibility: hidden; transform-style: preserve-3d; }
+.flip-header .flip-front { transform: rotateX(0deg); }
+.flip-header .flip-back { position: absolute; inset: 0; transform: rotateX(180deg); }
+.flip-header.is-flipped .flip-front { transform: rotateX(180deg); }
+.flip-header.is-flipped .flip-back { transform: rotateX(0deg); }
+/* glass-shine: a translucent crystal highlight sweeps across during the flip */
+.flip-header::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 6; mix-blend-mode: screen;
+  background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,0.10) 46%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0.10) 54%, transparent 62%);
+}
+.flip-header.is-flipping::after { animation: zeusGlassShine .6s ease-out; }
+@keyframes zeusGlassShine {
+  0% { opacity: 0; transform: translateX(-70%) skewX(-12deg); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(70%) skewX(-12deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flip-header .flip-face { transition: none; }
+  .flip-header.is-flipping::after { animation: none; }
+}
+/* MOBILE: the .hdr was position:fixed (in @media max-width:480px). Hand that role to
+   .flip-header so the inner .hdr can be static and the 3D flip is safe. Identical visual position. */
+@media (max-width: 480px) {
+  .flip-header { position: fixed; top: env(safe-area-inset-top, 0px); left: 0; right: 0; z-index: 200; }
+  .flip-header .flip-front .hdr { position: static !important; top: auto; }
+}
