@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.171',
-    build: 197,
+    version: '1.7.172',
+    build: 198,
     date: '2026-06-24',
     changelog: [
+        'b198 v1.7.172 — feature: user profile via a 3D flip header (Phase 1, preview). Click the Zeus logo and the top header flips over to a profile panel where you set a photo, display name, unique @username, accent colour and a tagline; tap the avatar to flip back. The photo is re-encoded in the browser before upload so it is sterile (no embedded payload). The trading header stays untouched (it is just the front of the flip). Server: new /api/profile route + users-table profile columns, public reads never expose email. Glass-shine sweep on flip. Built TDD server and client. No apostrophes in changelog.',
         'b197 v1.7.171 — change: removed the Welcome-back-Commander splash on app entry per operator request. It was a cosmetic daily-summary panel (balance, PnL, trades, win rate, positions, AT, brain) shown 2.5s after boot and after PIN unlock; the same stats live in the app, so it only added a dismiss step on launch. _showWelcomeModal now early-returns, which disables both the boot and PIN-unlock triggers. Reversible. Client-only. No-apostrophe changelog.',
         'b196 v1.7.170 — fix: Aroon sub-pane no longer drags behind the candles 2026-06-24. Aroon Up/Down lines only have points after the period warmup, so the pane time-axis did not reach the latest candle and the pane lagged behind the chart. Added a full-width 50 mid line (a point at every candle) that anchors the pane across the whole chart, the same pattern HYPERION and METIS use. Client-only. No-apostrophe changelog.',
         'b194 v1.7.168 — fix: settings-save schema accepts indicators (closes the regression + the persistence). The settings validator (validate.js SETTINGS_SHAPE) rejected any unknown key with a 400, so once the b192 client started sending the indicators map, EVERY settings save was rejected and nothing persisted since b192. Added indicators: object to SETTINGS_SHAPE (and earlier to the trading.js whitelist). Now the active-indicator round-trip works end to end: toggle persists across reload, cache-clear and devices, and renders on load. No-apostrophe changelog.',
