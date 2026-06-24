@@ -1390,6 +1390,25 @@ const _ZEUS_BRAIN_KNOWLEDGE = [
     '  • Context first: check BTC — most alts follow it; if BTC stalls, alt strength is suspect.',
 ].join('\n');
 
+// [2026-06-23] Compact catalog of ALL Zeus indicators (from indicatorCatalog.js, mirror of the
+// client INDICATORS) so Omega can answer "what indicators does Zeus have / what is X". Grouped by
+// category with short essences. Auto-reflects new indicators once the catalog is regenerated.
+const _ZEUS_INDICATORS_KNOWLEDGE = (() => {
+    let cat;
+    try { cat = require('../../indicatorCatalog').INDICATOR_CATALOG || []; } catch (_) { cat = []; }
+    if (!cat.length) return '';
+    const groups = {};
+    const label = { trend: 'TREND', momentum: 'MOMENTUM', mom: 'MOMENTUM', volatility: 'VOLATILITY', vol: 'VOLATILITY', volume: 'VOLUME', support: 'STRUCTURE/SR' };
+    for (const i of cat) {
+        const g = label[i.cat] || String(i.cat || 'OTHER').toUpperCase();
+        const essence = String(i.desc || '').split(/[-—(]/)[0].trim().split(/\s+/).slice(0, 6).join(' ');
+        (groups[g] = groups[g] || []).push(essence ? `${i.name} (${essence})` : i.name);
+    }
+    const lines = [`ZEUS INDICATORS (${cat.length}, and the set keeps growing — the full current list is always in the chart "Add Indicator" menu). When asked about an indicator, describe it from here; if one is not listed, say it is a Zeus indicator in that family and point to the picker:`];
+    for (const g of Object.keys(groups)) lines.push(`  ${g}: ${groups[g].join('; ')}`);
+    return lines.join('\n');
+})();
+
 function _buildSystemPrompt(params) {
     const ctx = _buildLLMContext(params);
     const lang = _detectLanguage(params.text || '');
@@ -1430,6 +1449,8 @@ function _buildSystemPrompt(params) {
         _ZEUS_KNOWLEDGE,
         '',
         _ZEUS_BRAIN_KNOWLEDGE,
+        '',
+        _ZEUS_INDICATORS_KNOWLEDGE,
         '',
         'GROUNDING — use the live state below. Do NOT invent numbers; if data is missing say so.',
         '',

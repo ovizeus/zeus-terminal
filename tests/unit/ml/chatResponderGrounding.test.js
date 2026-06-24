@@ -84,4 +84,13 @@ describe('chatResponder grounding — absolute prices + creator identity', () =>
         expect(low).toContain('compression');   // big moves from compression (ASTRAPE backtest)
         expect(low).toContain('volume');         // volume = conviction
     });
+
+    test('system prompt lists the Zeus indicator catalog (names, count, growing note)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'ce indicatori are zeus' });
+        expect(p).toMatch(/ZEUS INDICATORS/);
+        expect(p).toMatch(/ASTRAPE/);
+        expect(p).toMatch(/HYPERION/);
+        expect(p.toLowerCase()).toContain('add indicator');   // points to the picker for the full set
+        expect(p).toMatch(/keeps growing/i);                  // future indicators acknowledged
+    });
 });
