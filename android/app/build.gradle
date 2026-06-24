@@ -1,8 +1,25 @@
 apply plugin: 'com.android.application'
 
+// [2026-06-24] Release signing — credentials loaded from the (gitignored) keystore.properties so
+// they never live in git. If the file is absent (e.g. a clean checkout), release falls back to
+// unsigned and a warning is logged (debug builds are unaffected).
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) { keystoreProps.load(new FileInputStream(keystorePropsFile)) }
+
 android {
     namespace = "com.zeus.terminal"
     compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.zeus.terminal"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -20,6 +37,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystorePropsFile.exists()) { signingConfig signingConfigs.release }
         }
     }
 }
