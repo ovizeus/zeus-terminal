@@ -149,6 +149,7 @@ export const INDICATORS: any[] = [
   { id: 'plutus', ico: _ZI.chart, name: 'PLUTUS', desc: 'Smart-money footprint (effort vs result) 💰', cat: 'volume', def: false },
   { id: 'helios', ico: _ZI.scope, name: 'HELIOS', desc: 'Regime oracle — Hurst trending vs mean-revert ☀️', cat: 'momentum', def: false },
   { id: 'hyperion', ico: _ZI.scope, name: 'HYPERION', desc: 'Dual-line TSI momentum oscillator — green-top / red-bottom glow 🌅', cat: 'momentum', def: false },
+  { id: 'astrape', ico: _ZI.bolt, name: 'ASTRAPE', desc: 'Storm Charge & Ignition — multi-colour charge histogram; ⚡ flashes big moves BEFORE they break (backtest-calibrated). Green up / red down / amber accumulation / purple distribution ⚡', cat: 'momentum', def: false },
   { id: 'metis', ico: _ZI.wave, name: 'METIS', desc: 'Traders Dynamic Index — RSI green/red/yellow lines + volatility bands + signals + bar colouring (Zeus original) 🟢', cat: 'momentum', def: false },
   { id: 'eunomia', ico: _ZI.wave, name: 'EUNOMIA', desc: 'RSX-NRP — smoothed RSI, slope-coloured line + green/yellow/red momentum strip 📊', cat: 'momentum', def: false },
   { id: 'apollo', ico: _ZI.wave, name: 'APOLLO', desc: 'Variety RSI + Fibonacci Auto-Channel — gradient bar colouring + S/L signals (Zeus original) ☀️', cat: 'momentum', def: false },

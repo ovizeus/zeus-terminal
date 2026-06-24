@@ -66,6 +66,7 @@ export const IND_ICONS: Record<string, string> = {
   plutus: g(p('M8 2v12M8 4h-2a2 2 0 000 4h4a2 2 0 010 4H6') ),               // money flow ($ effort/result)
   helios: g(p('M8 5a3 3 0 100 6 3 3 0 000-6z') + p('M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13')), // sun / regime
   hyperion: g(p('M2 12h12') + p('M5 12a3 3 0 016 0') + p('M8 4v2M3.5 6.5l1 1M12.5 6.5l-1 1M1 9h1.5M13.5 9H15')), // rising sun over horizon
+  astrape: g('<path d="M9 1L4 9h4l-1 6 5-8H8l1-6z" fill="currentColor" stroke="none"/>'), // ⚡ lightning bolt
   eunomia: g(p('M1 8q3 -5 6 0t6 0') + p('M2 13h12') + p('M4 11v2M8 10v3M12 11v2')), // smooth wave over a momentum strip
   metis: g(p('M1 5h14') + p('M1 8h14') + p('M1 11h14')), // three TDI lines (green/red/yellow)
   apollo: g(p('M8 5.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z') + p('M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15M3.05 3.05l1.55 1.55M11.4 11.4l1.55 1.55M12.95 3.05l-1.55 1.55M4.6 11.4l-1.55 1.55')), // radiant sun with rays
