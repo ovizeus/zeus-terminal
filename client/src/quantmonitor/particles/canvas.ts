@@ -51,13 +51,32 @@ function spawnPart(cx: number, cy: number, cw: number): void {
 
 function frame(): void {
   if (_destroyed || !_ctx || !_canvas) return
+
+  // [2026-06-24] Re-measure the canvas from its rendered CSS box EVERY frame.
+  // Root-cause of the "green flood / Christmas-lights" flicker: the buffer was
+  // sized once at init from parent.clientWidth, but the panel often isn't laid
+  // out yet then (clientWidth≈0/1), leaving a 1×1 buffer that CSS stretched to
+  // full screen — so each particle became a full-screen green block. Lazy sync
+  // here also handles viewport rotation/resize. If still unlaid-out, clear+skip.
+  const cssW = _canvas.clientWidth, cssH = _canvas.clientHeight
+  const ready = cssW > 1 && cssH > 1
+  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  if (ready) {
+    const needW = Math.round(cssW * dpr), needH = Math.round(cssH * dpr)
+    if (_canvas.width !== needW || _canvas.height !== needH) {
+      _canvas.width = needW; _canvas.height = needH
+    }
+  }
+  _ctx.setTransform(1, 0, 0, 1, 0, 0)
   _ctx.clearRect(0, 0, _canvas.width, _canvas.height)
+  if (!ready) { _raf = requestAnimationFrame(frame); return }
+  _ctx.setTransform(dpr, 0, 0, dpr, 0, 0) // draw in CSS pixels
 
   calcDir()
   const dir = LIQ_DIR.dir, str = LIQ_DIR.str
-  const areaX = _canvas.width * 0.1
-  const areaW = _canvas.width * 0.8
-  const markY = _canvas.height / 2
+  const areaX = cssW * 0.1
+  const areaW = cssW * 0.8
+  const markY = cssH / 2
   const areaH = 280
 
   if (dir !== 0) {
@@ -101,11 +120,12 @@ export function initParticles(canvasId: string): void {
   _canvas = document.getElementById(canvasId) as HTMLCanvasElement
   if (!_canvas) return
   _ctx = _canvas.getContext('2d')
-  function resize() {
-    if (!_canvas) return
-    const parent = _canvas.parentElement
-    if (parent) { _canvas.width = parent.clientWidth; _canvas.height = parent.clientHeight }
-  }
+  // [2026-06-24] Sizing is handled lazily inside frame() (rendered CSS box ×
+  // devicePixelRatio), which is robust to the panel not being laid out yet at
+  // init — the old parent.clientWidth read here left a 1×1 buffer. Keep a resize
+  // handler only so rotation/viewport changes nudge a prompt re-measure; the
+  // actual resize happens on the next animation frame.
+  function resize() { /* no-op: frame() re-measures from the rendered CSS box */ }
   resize()
   // [PERF-1] Store ref so destroy can remove
   _resizeHandler = resize
