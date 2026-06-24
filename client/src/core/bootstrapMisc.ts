@@ -187,6 +187,11 @@ export function _renderBuildInfo(): void {
 // ===== WELCOME MODAL =====
 let _wlcShown = false
 export async function _showWelcomeModal(): Promise<void> {
+  // [2026-06-24] Welcome splash DISABLED per operator request — it was a cosmetic "Welcome back,
+  // Commander" daily-summary panel shown on every app entry (balance/PnL/trades/winrate/positions/
+  // AT/brain). The same stats live in the app, so it only added a dismiss step on launch. Early
+  // return here kills all triggers (boot + PIN-unlock) at once; remove this line to re-enable.
+  return
   try {
     if (_wlcShown) return; if ((await _pinIsSet()) && !_pinIsUnlocked()) return
     try {

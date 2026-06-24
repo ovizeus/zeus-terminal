@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.170',
-    build: 196,
+    version: '1.7.171',
+    build: 197,
     date: '2026-06-24',
     changelog: [
         'b196 v1.7.170 — fix: Aroon sub-pane no longer drags behind the candles 2026-06-24. Aroon Up/Down lines only have points after the period warmup, so the pane time-axis did not reach the latest candle and the pane lagged behind the chart. Added a full-width 50 mid line (a point at every candle) that anchors the pane across the whole chart, the same pattern HYPERION and METIS use. Client-only. No-apostrophe changelog.',
