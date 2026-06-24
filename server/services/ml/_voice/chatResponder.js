@@ -1371,6 +1371,25 @@ const _ZEUS_KNOWLEDGE = [
     'NEVER REVEAL (sensitive): API keys, secrets, passwords, JWT/tokens, internal credentials, DB contents, or any OTHER user balances / PnL / positions. If asked for these, refuse in one line.',
 ].join('\n');
 
+// [2026-06-23] ZEUS BRAIN + market-reading knowledge — so Omega can explain how decisions are
+// made and give sharper reads. Grounded in the real pipeline + Zeus's own ASTRAPE backtest.
+const _ZEUS_BRAIN_KNOWLEDGE = [
+    'ZEUS BRAIN — how it decides (explain plainly when asked how the brain / fusion works):',
+    '  • Pipeline per symbol: scan → CONFLUENCE → REGIME → entry GATES → FUSION (one final direction + confidence %).',
+    '  • CONFLUENCE: counts how many directional signals agree (bull dirs vs bear dirs across indicators); needs to clear a minimum (confMin, ~65) to act. More agreement = higher conviction.',
+    '  • REGIME: the market state — TREND_UP / TREND_DOWN / RANGE / BREAKOUT / SQUEEZE / EXPANSION / VOLATILE / CHAOS. The brain adapts: ride strong trends, fade extremes in a range, wait out a squeeze.',
+    '  • FUSION: blends the confluence direction + the regime + a multi-scan confirmation into the final {direction, confidence}. Higher confidence = stronger alignment of all three.',
+    '  • ENTRY discipline: instead of chasing, the brain usually places a PENDING entry — waits for a small pullback (better price) or a momentum break, and expires it if neither comes (discipline > FOMO).',
+    '  • EXITS: DSL (trailing stop) locks profit as price runs your way; the hard SL + liquidation are the backstops. Leverage is auto-capped; a smart loss-cut can trim losers early (testnet).',
+    'READING THE MARKET (give sharp reads — grounded in Zeus own backtests):',
+    '  • Big moves EXPLODE out of COMPRESSION: when volatility (ATR) drops below its average and volume builds, energy is coiling and a break is near. Direction shows on the breakout candle, not before. (This is exactly what the ASTRAPE indicator flags.)',
+    '  • Volume = conviction: a move on rising volume holds; a move on fading volume tends to fade.',
+    '  • Falls are faster than rises — manage risk tighter on the downside.',
+    '  • Do not fight a strong trend; in a range, fade the edges; in a squeeze, wait for the break.',
+    '  • Divergence (price one way, volume/pressure the other) = a trap forming — be cautious.',
+    '  • Context first: check BTC — most alts follow it; if BTC stalls, alt strength is suspect.',
+].join('\n');
+
 function _buildSystemPrompt(params) {
     const ctx = _buildLLMContext(params);
     const lang = _detectLanguage(params.text || '');
@@ -1409,6 +1428,8 @@ function _buildSystemPrompt(params) {
         '  • Encouraging breaking exchange ToS',
         '',
         _ZEUS_KNOWLEDGE,
+        '',
+        _ZEUS_BRAIN_KNOWLEDGE,
         '',
         'GROUNDING — use the live state below. Do NOT invent numbers; if data is missing say so.',
         '',

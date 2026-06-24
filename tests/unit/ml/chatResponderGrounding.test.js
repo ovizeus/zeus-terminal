@@ -69,4 +69,19 @@ describe('chatResponder grounding — absolute prices + creator identity', () =>
         expect(p.toLowerCase()).toMatch(/never reveal|do not reveal|sensitive/);
         expect(p.toLowerCase()).toMatch(/api key|secret|password|token/);
     });
+
+    test('system prompt explains how the Brain decides (confluence/regime/fusion)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'cum functioneaza brain-ul si fusion' });
+        const low = p.toLowerCase();
+        expect(low).toContain('confluence');
+        expect(low).toContain('regime');
+        expect(low).toContain('fusion');
+    });
+
+    test('system prompt carries market-reading heuristics (compression/volume)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'cum citesc piata' });
+        const low = p.toLowerCase();
+        expect(low).toContain('compression');   // big moves from compression (ASTRAPE backtest)
+        expect(low).toContain('volume');         // volume = conviction
+    });
 });
