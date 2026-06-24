@@ -1187,6 +1187,9 @@ app.use('/api/sync', syncRoutes);
 // [2026-06-24] User profile (flip-header) — own read/write + public read.
 app.use('/api/profile', require('./server/routes/profile'));
 
+// [2026-06-24] User-facing leaderboard (Phase 2) — public ranking, no sensitive fields.
+app.use('/api/leaderboard', require('./server/routes/leaderboard'));
+
 // ─── Per-User Context Sync (cross-device preferences) ───
 const userContextRoutes = require('./server/routes/userContext');
 app.use('/api/sync', userContextRoutes);

@@ -22,7 +22,7 @@ export function ProfilePanel({ onAvatarClick }: { onAvatarClick?: () => void }) 
       {/* avatar — tap to flip back to the trading header */}
       <img
         src={avatarSrc} alt="profile" onClick={onAvatarClick} title="Tap to go back"
-        style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', flex: 'none', border: `2px solid ${accent}`, boxShadow: `0 0 10px ${accent}55` }}
+        style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover', cursor: 'pointer', flex: 'none', border: `2px solid ${accent}`, filter: `drop-shadow(0 0 5px ${accent}) drop-shadow(0 0 11px ${accent}cc)` }}
       />
 
       {/* identity — display only */}

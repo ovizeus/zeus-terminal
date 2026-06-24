@@ -6,6 +6,7 @@ import { reencodeAvatar, initialsAvatar } from '../../profile/avatar'
 import { validateUsername } from '../../profile/validate'
 import { appConfirm } from '../common/confirmDialog'
 import { ModalOverlay, ModalHeader } from '../modals/ModalOverlay'
+import { LeaderboardPanel } from './LeaderboardPanel'
 
 // [2026-06-24] Profile settings — a dedicated panel (like the other Zeus settings) opened by the
 // bare gear in the profile strip. ALL editing lives here (photo / name / @username / tagline) so the
@@ -80,7 +81,7 @@ export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose
       {/* ✏️ EDIT PROFILE — all the editing lives here (deliberate, never by accident) */}
       <Section icon="✏️" title="EDIT PROFILE">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-          <img src={avatarSrc} alt="avatar" style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${accent}`, boxShadow: `0 0 10px ${accent}55`, flex: 'none' }} />
+          <img src={avatarSrc} alt="avatar" style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${accent}`, filter: `drop-shadow(0 0 6px ${accent}) drop-shadow(0 0 13px ${accent}cc)`, flex: 'none' }} />
           <button onClick={() => fileRef.current?.click()} style={{ ...editBtn, fontSize: '10px', padding: '7px 12px' }}>📷 CHANGE PHOTO</button>
         </div>
         <div style={row}>
@@ -115,16 +116,9 @@ export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose
         </label>
       </Section>
 
-      {/* 🏆 LEADERBOARD — UI preview (Phase 2) */}
-      <Section icon="🏆" title="LEADERBOARD" soon>
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '8px 10px' }}>
-          {[['🥇', 'TopTrader', '+$4,210'], ['🥈', 'whale_07', '+$2,980'], ['🥉', 'you?', '+$1,120']].map((r, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', fontFamily: 'monospace', fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>
-              <span>{r[0]} {r[1]}</span><span style={{ color: '#00e676' }}>{r[2]}</span>
-            </div>
-          ))}
-          <div style={{ fontFamily: 'monospace', fontSize: '9px', color: 'rgba(255,255,255,0.35)', marginTop: '5px' }}>Live ranking by real PnL — coming soon.</div>
-        </div>
+      {/* 🏆 LEADERBOARD — real (Phase 2) */}
+      <Section icon="🏆" title="LEADERBOARD">
+        <LeaderboardPanel />
       </Section>
 
       {/* 🎁 REFERRAL — UI preview (Phase 3) */}

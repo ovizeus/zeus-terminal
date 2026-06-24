@@ -159,6 +159,21 @@ export const profileApi = {
   save: (profile: ProfileFields) => _profileFetch('POST', { profile }),
 }
 
+// ── Leaderboard (Phase 2) ──
+export interface LeaderboardRow { rank: number; userId: number; name: string; username: string | null; avatar: string | null; accent: string | null; netPnl: number; winRate: number; trades: number; isYou: boolean }
+export interface LeaderboardResp { ok: boolean; env?: string; window?: string; leaderboard?: LeaderboardRow[]; error?: string }
+
+export const leaderboardApi = {
+  get: async (env: string, window: string): Promise<LeaderboardResp> => {
+    try {
+      const res = await fetch(`/api/leaderboard?env=${encodeURIComponent(env)}&window=${encodeURIComponent(window)}`, { headers: HEADERS, credentials: 'same-origin' })
+      const data = await res.json().catch(() => ({} as LeaderboardResp))
+      if (!res.ok) return { ok: false, error: (data as LeaderboardResp).error || ('HTTP ' + res.status) }
+      return data as LeaderboardResp
+    } catch (e) { return { ok: false, error: String((e as Error)?.message || e) } }
+  },
+}
+
 // ── State Sync ──
 
 import type { ServerSnapshot, SyncStatePush } from '../types'
