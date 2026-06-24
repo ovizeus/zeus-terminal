@@ -1,11 +1,16 @@
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useProfileStore } from '../../stores/profileStore'
 import { useAuthStore } from '../../stores'
+import { reencodeAvatar, initialsAvatar } from '../../profile/avatar'
+import { validateUsername } from '../../profile/validate'
+import { appConfirm } from '../common/confirmDialog'
 import { ModalOverlay, ModalHeader } from '../modals/ModalOverlay'
 
 // [2026-06-24] Profile settings — a dedicated panel (like the other Zeus settings) opened by the
-// bare gear in the profile panel. Holds the accent picker (real) plus Leaderboard + Referral as
-// UI previews (wired for real in Phase 2 / Phase 3). Keeps the flip profile strip clean.
+// bare gear in the profile strip. ALL editing lives here (photo / name / @username / tagline) so the
+// flip strip is display-only and never opens an editor by accident. Plus accent (real), and
+// Leaderboard + Referral as UI previews (wired for real in Phase 2 / Phase 3).
 const ACCENTS = [
   '#f0c040', '#ffd700', '#ff9d3c', '#ff6f00',
   '#00e676', '#00c853', '#26ffd0', '#00d9ff',
@@ -31,14 +36,66 @@ export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose
   const save = useProfileStore((s) => s.save)
   const email = useAuthStore((s) => s.email)
   const role = useAuthStore((s) => s.role)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+
   const accent = profile.accent_color || '#f0c040'
+  const name = profile.display_name || ''
+  const avatarSrc = profile.avatar || initialsAvatar(name || '?', accent)
   const refCode = 'ZEUS-' + ((profile.username || email || 'YOU').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) || 'YOU8') + '-7K2'
 
-  // Portal to <body> so the modal escapes the flip header's transformed/fixed ancestor
-  // (a transformed ancestor would otherwise clip the fixed overlay to the header box).
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!f) return
+    try { const data = await reencodeAvatar(f); await save({ avatar: data }) } catch (_) { /* bad image — ignored */ }
+  }
+  const editName = async () => {
+    const r = await appConfirm({ title: 'Display name', body: 'Shown across the app.', confirmLabel: 'SAVE', text: { label: 'NAME', initial: name, maxLength: 40, placeholder: 'Your name' } })
+    if (r.confirmed && r.text !== undefined) await save({ display_name: r.text.trim() })
+  }
+  const editTagline = async () => {
+    const r = await appConfirm({ title: 'Tagline', body: 'A short line about you.', confirmLabel: 'SAVE', text: { label: 'TAGLINE', initial: profile.tagline || '', maxLength: 80, placeholder: 'Hunting liquidations' } })
+    if (r.confirmed && r.text !== undefined) await save({ tagline: r.text.trim() })
+  }
+  const editUsername = async () => {
+    const r = await appConfirm({ title: 'Username', body: '3-20 letters, digits or _. Must be unique.', tone: 'info', confirmLabel: 'SAVE', text: { label: 'USERNAME', initial: profile.username || '', maxLength: 20, placeholder: 'zeus_ovi' } })
+    if (!r.confirmed || r.text === undefined) return
+    const u = r.text.trim()
+    if (u && !validateUsername(u)) { await appConfirm({ title: 'Invalid username', body: 'Use 3-20 letters, digits or _ (no spaces or symbols).', tone: 'danger', confirmLabel: 'OK' }); return }
+    const ok = await save({ username: u })
+    if (!ok) await appConfirm({ title: 'Username taken', body: 'That @username is already in use. Try another.', tone: 'danger', confirmLabel: 'OK' })
+  }
+
+  const editBtn: React.CSSProperties = { fontFamily: 'monospace', fontSize: '9px', fontWeight: 700, letterSpacing: '0.5px', color: accent, background: `${accent}14`, border: `1px solid ${accent}55`, borderRadius: '4px', padding: '5px 9px', cursor: 'pointer' }
+  const fieldLbl: React.CSSProperties = { fontFamily: 'monospace', fontSize: '8px', letterSpacing: '1px', color: 'rgba(255,255,255,0.4)' }
+  const fieldVal: React.CSSProperties = { fontFamily: 'monospace', fontSize: '12px', color: 'rgba(255,255,255,0.85)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+  const row: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '6px 0' }
+
   return createPortal(
     <ModalOverlay id="profile-settings-mover" visible={open} onClose={onClose} maxWidth="440px" zIndex={100001}>
       <ModalHeader title="PROFILE" onClose={onClose} titleStyle={{ color: accent, letterSpacing: '2px' }} />
+
+      <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={onFile} />
+
+      {/* ✏️ EDIT PROFILE — all the editing lives here (deliberate, never by accident) */}
+      <Section icon="✏️" title="EDIT PROFILE">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+          <img src={avatarSrc} alt="avatar" style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${accent}`, boxShadow: `0 0 10px ${accent}55`, flex: 'none' }} />
+          <button onClick={() => fileRef.current?.click()} style={{ ...editBtn, fontSize: '10px', padding: '7px 12px' }}>📷 CHANGE PHOTO</button>
+        </div>
+        <div style={row}>
+          <div style={{ minWidth: 0 }}><div style={fieldLbl}>DISPLAY NAME</div><div style={fieldVal}>{name || '— not set'}</div></div>
+          <button onClick={editName} style={editBtn}>CHANGE</button>
+        </div>
+        <div style={row}>
+          <div style={{ minWidth: 0 }}><div style={fieldLbl}>USERNAME</div><div style={fieldVal}>{profile.username ? '@' + profile.username : '— not set'}</div></div>
+          <button onClick={editUsername} style={editBtn}>CHANGE</button>
+        </div>
+        <div style={row}>
+          <div style={{ minWidth: 0 }}><div style={fieldLbl}>TAGLINE</div><div style={fieldVal}>{profile.tagline || '— not set'}</div></div>
+          <button onClick={editTagline} style={editBtn}>CHANGE</button>
+        </div>
+      </Section>
 
       {/* 🎨 ACCENT — real */}
       <Section icon="🎨" title="ACCENT COLOR">
