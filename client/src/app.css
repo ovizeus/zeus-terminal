@@ -8023,7 +8023,9 @@ select option {
    position:fixed). The inner .zeus-fixed-top is neutralised to static so the front face has real
    height and the 3D transform never re-anchors a fixed descendant. */
 .flip-header { position: fixed; top: 0; left: 0; right: 0; z-index: 200; perspective: 1400px; }
-.flip-header .zeus-fixed-top { position: static !important; }
+/* both the header root (.zeus-fixed-top) AND .hdr are position:fixed (desktop + mobile) — neutralise
+   both to static so they flow inside the front face and give it real height. */
+.flip-header .zeus-fixed-top, .flip-header .hdr { position: static !important; }
 .flip-header .flip-face { transition: transform .6s cubic-bezier(.4, 0, .2, 1); backface-visibility: hidden; -webkit-backface-visibility: hidden; transform-style: preserve-3d; }
 .flip-header .flip-front { transform: rotateX(0deg); }
 .flip-header .flip-back { position: absolute; inset: 0; transform: rotateX(180deg); }
@@ -8048,5 +8050,4 @@ select option {
    it too, and give .flip-header the safe-area top the inner .hdr used to apply. Identical visual position. */
 @media (max-width: 480px) {
   .flip-header { top: env(safe-area-inset-top, 0px); }
-  .flip-header .hdr { position: static !important; top: auto; }
 }
