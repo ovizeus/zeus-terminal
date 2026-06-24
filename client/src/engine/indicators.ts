@@ -1289,6 +1289,9 @@ export function initAroonChart(): void {
   if (!w._aroonChart) return
   w._aroonUpSeries = w._aroonChart.addLineSeries({ color: '#26ff9a', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'Up' })
   w._aroonDnSeries = w._aroonChart.addLineSeries({ color: '#ff5277', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'Dn' })
+  // [2026-06-24] full-width 50 mid line — anchors the pane across the whole chart like HYPERION,
+  // so Aroon no longer drags behind the candles (Up/Down start only after `period` bars).
+  w._aroonMidS = w._aroonChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._aroonInited = true
   updateAroon()
 }
@@ -1297,6 +1300,10 @@ export function updateAroon(): void {
   const k = w.S.klines, p = Math.round(w.IND_SETTINGS.aroon.period) || 14
   const r = _calcAROON(k.map((b: any) => b.high), k.map((b: any) => b.low), p)
   _osc(w._aroonUpSeries, r.up); _osc(w._aroonDnSeries, r.down)
+  // full-width anchor: a point at EVERY candle so the pane spans the whole chart (no drag-behind)
+  const mid: any[] = []
+  for (let i = 0; i < k.length; i++) { if (k[i]) mid.push({ time: k[i].time, value: 50 }) }
+  try { if (w._aroonMidS) w._aroonMidS.setData(mid) } catch (_) { }
   _syncSubChartsToMain()
 }
 

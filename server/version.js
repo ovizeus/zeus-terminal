@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.169',
-    build: 195,
+    version: '1.7.170',
+    build: 196,
     date: '2026-06-24',
     changelog: [
+        'b196 v1.7.170 — fix: Aroon sub-pane no longer drags behind the candles 2026-06-24. Aroon Up/Down lines only have points after the period warmup, so the pane time-axis did not reach the latest candle and the pane lagged behind the chart. Added a full-width 50 mid line (a point at every candle) that anchors the pane across the whole chart, the same pattern HYPERION and METIS use. Client-only. No-apostrophe changelog.',
         'b194 v1.7.168 — fix: settings-save schema accepts indicators (closes the regression + the persistence). The settings validator (validate.js SETTINGS_SHAPE) rejected any unknown key with a 400, so once the b192 client started sending the indicators map, EVERY settings save was rejected and nothing persisted since b192. Added indicators: object to SETTINGS_SHAPE (and earlier to the trading.js whitelist). Now the active-indicator round-trip works end to end: toggle persists across reload, cache-clear and devices, and renders on load. No-apostrophe changelog.',
         'b193 v1.7.167 — fix: server settings whitelist now includes indicators 2026-06-24. The b192 client change started sending the active-indicator map, but POST /api/user/settings whitelisted only indSettings (params), not indicators (the on/off map), so the server silently dropped it. Added indicators to the allowlist (trading.js). Together with b192 the round-trip is closed: toggling an indicator now persists across reloads, cache-clears and devices, and renders on load. No-apostrophe changelog.',
         'b192 v1.7.166 — fix: active indicators now persist server-side 2026-06-24. Which indicators are toggled ON lived only in legacy w.S.activeInds (localStorage), never copied into the synced settings, so it was lost on a cache-clear or a new device (operator + second user saw indicators not persisting / not displaying after clearing the PWA cache for b191). saveToServer now mirrors the active-indicator map into payload.indicators (guarded against an empty boot-time map clobbering a saved set); the existing load path applies server indicators to the chart. The lost lists could not be recovered (they were localStorage-only) but re-toggling now persists across reloads, cache-clears and devices. No-apostrophe changelog.',
