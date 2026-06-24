@@ -68,6 +68,13 @@ self.addEventListener('fetch', event => {
         // Network only — do NOT call respondWith so browser handles it natively
         return;
     }
+    // [2026-06-24] File downloads (APK etc.) — NEVER let the SW intercept. A navigation to an
+    // attachment (Content-Disposition) served back through respondWith() silently fails to
+    // download on mobile/standalone PWA, and we'd also try to cache a ~30MB file. Bare return =
+    // the browser performs the native download.
+    if (url.indexOf('/download/') !== -1 || url.indexOf('.apk') !== -1) {
+        return;
+    }
     // Navigation requests (other HTML pages) — network first with offline fallback
     if (event.request.mode === 'navigate') {
         event.respondWith(
