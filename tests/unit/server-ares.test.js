@@ -53,6 +53,56 @@ beforeEach(() => {
     _atMock.processBrainDecision.mockClear();
     _atMock.processBrainDecision.mockReturnValue({ seq: 4242 });
     _atMock.resolveExecutionEnv.mockReturnValue({ env: 'TESTNET' });
+    serverAres._resetRealBalanceForTest();
+});
+
+describe('REAL exchange balance sizing', () => {
+    // CLEAN engine (would trade) + opt-in; vary the cached real exchange balance.
+    const _seed = () => _dbStore.set(1, {
+        wallet: { balance: 0, locked: 0, realizedPnL: 0, fundedTotal: 0 }, // virtual wallet EMPTY on real
+        engine: { tradeHistory: [], consecutiveLoss: 0, consecutiveWin: 0, lastLossTs: 0, lastTradeTs: 0, winRate10: 0, totalTrades: 0, totalWins: 0, totalLosses: 0 },
+        mission: { startBalance: 1000, startTs: NY_TS - 86400000 },
+        lastDecision: null, realOptIn: true, killSwitch: false,
+        dailyLoss: { day: null, lossUsd: 0, startBalance: 0 },
+    });
+
+    test('REAL: sizes off the live exchange balance even with an EMPTY virtual wallet', () => {
+        _seed();
+        serverAres._setRealBalanceForTest(1, 1000); // $1000 real on the exchange
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        const entry = serverAres.tick(1, GO_MCTX);
+        expect(entry).not.toBeNull();
+        const stc = _atMock.processBrainDecision.mock.calls[0][1];
+        expect(stc.size).toBe(20);  // 2% of the REAL $1000 (not the empty virtual wallet)
+        expect(stc.lev).toBeLessThanOrEqual(5);
+    });
+
+    test('REAL: fail-closed when the exchange balance is not known yet (no trade)', () => {
+        _seed(); // no _setRealBalanceForTest → cache empty → realAvail 0
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+    });
+
+    test('REAL: small $50 account still places a viable floored trade', () => {
+        _seed();
+        serverAres._setRealBalanceForTest(1, 50);
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        const entry = serverAres.tick(1, GO_MCTX);
+        expect(entry).not.toBeNull();
+        const stc = _atMock.processBrainDecision.mock.calls[0][1];
+        expect(stc.size).toBe(5);   // floored to min-notional (2% of $50 = $1 → $5, ≤ 25% ceiling)
+    });
+
+    test('TESTNET still uses the virtual wallet (real balance ignored)', () => {
+        _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+        serverAres._setRealBalanceForTest(1, 999999); // should be ignored on testnet
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'TESTNET' });
+        const entry = serverAres.tick(1, GO_MCTX);
+        expect(entry).not.toBeNull();
+        const stc = _atMock.processBrainDecision.mock.calls[0][1];
+        expect(stc.size).toBeCloseTo(655 * 0.12, 1); // virtual $655 tier, NOT the real balance
+    });
 });
 
 describe('REAL-money consent gate (fail-closed)', () => {
@@ -68,6 +118,7 @@ describe('REAL-money consent gate (fail-closed)', () => {
     test('REAL env WITH explicit opt-in dispatches', () => {
         _fund();
         _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        serverAres._setRealBalanceForTest(1, 1000); // real exchange balance known
         expect(serverAres.setRealOptIn(1, true)).toBe(true); // loads funded state, preserves balance
         const entry = serverAres.tick(1, GO_MCTX);
         expect(entry).not.toBeNull();
@@ -119,6 +170,7 @@ describe('daily-loss circuit breaker (REAL only)', () => {
 
     test('REAL entry paused once day loss ≥ cap; testnet unaffected', () => {
         _seed(200); // $200 ≥ $60 cap
+        serverAres._setRealBalanceForTest(1, 1000); // real balance known → reaches the daily-loss gate
         _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
         expect(serverAres.tick(1, GO_MCTX)).toBeNull();
         expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
@@ -129,6 +181,7 @@ describe('daily-loss circuit breaker (REAL only)', () => {
 
     test('small loss under cap does NOT pause REAL', () => {
         _seed(10); // $10 < $60 cap
+        serverAres._setRealBalanceForTest(1, 1000); // real balance known
         _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
         expect(serverAres.tick(1, GO_MCTX)).not.toBeNull();
     });

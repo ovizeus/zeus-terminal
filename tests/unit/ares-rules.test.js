@@ -37,6 +37,29 @@ describe('applyRealCaps — REAL-money safety caps', () => {
     expect(out.capped).toBe(false);
   });
 
+  test('small account $50 — soft cap would be $1, floored to min-notional $5 (still placeable)', () => {
+    const out = applyRealCaps({ stake: 8, leverage: 10 }, 'REAL', { balance: 50 })
+    expect(out.stake).toBe(5)        // 2% = $1 → floored to $5 min notional (≤ 25% ceiling $12.5)
+    expect(out.leverage).toBe(5)
+    expect(out.capped).toBe(true)
+  })
+
+  test('tiny account $20 — floor $5 == hard ceiling (25%), exactly placeable', () => {
+    const out = applyRealCaps({ stake: 8, leverage: 10 }, 'REAL', { balance: 20 })
+    expect(out.stake).toBe(5)        // ceiling 25% = $5, floor = $5
+    expect(out.leverage).toBe(5)
+  })
+
+  test('too-small account $15 — no viable trade (stake 0, blocked downstream)', () => {
+    const out = applyRealCaps({ stake: 8, leverage: 10 }, 'REAL', { balance: 15 })
+    expect(out.stake).toBe(0)        // ceiling 25% = $3.75 < $5 min notional → too small
+  })
+
+  test('large account keeps the 2% soft cap (not the floor)', () => {
+    const out = applyRealCaps({ stake: 999, leverage: 10 }, 'REAL', { balance: 5000 })
+    expect(out.stake).toBe(100)      // 2% of $5000, well above the $5 floor
+  })
+
   test('defaults are conservative (≤10% stake, ≤20x) and pure (no mutation)', () => {
     expect(REAL_MAX_STAKE_PCT).toBeLessThanOrEqual(0.10);
     expect(REAL_MAX_LEVERAGE).toBeLessThanOrEqual(20);

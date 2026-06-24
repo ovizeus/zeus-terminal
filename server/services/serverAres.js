@@ -111,6 +111,40 @@ function _openAresPositions(userId) {
     } catch (_) { return []; }
 }
 
+// ── [2026-06-23] REAL exchange balance — ARES trades the user's ACTUAL money on a real account.
+// tick() is synchronous; getBalance() is an async exchange call. So we cache the live
+// availableBalance per user and refresh it asynchronously (throttled, stampede-guarded). On REAL,
+// sizing uses this real available balance (binance OR bybit, whichever the user's account is on —
+// exchangeOps routes automatically). Fail-closed: balance unknown (0) → no trade until first fetch.
+const _realBal = new Map(); // userId -> { avail:number, ts:number, inflight:boolean }
+const REAL_BAL_TTL_MS = 45000;
+function _refreshRealBalanceAsync(userId) {
+    const now = Date.now();
+    const c = _realBal.get(userId);
+    if (c && c.inflight) return;
+    if (c && (now - c.ts) < REAL_BAL_TTL_MS) return; // still fresh
+    const entry = c || { avail: 0, ts: 0, inflight: false };
+    entry.inflight = true;
+    _realBal.set(userId, entry);
+    Promise.resolve()
+        .then(() => require('./exchangeOps').getBalance(userId))
+        .then((bal) => {
+            const avail = parseFloat((bal && bal.availableBalance) || 0);
+            _realBal.set(userId, { avail: Number.isFinite(avail) && avail > 0 ? avail : 0, ts: Date.now(), inflight: false });
+        })
+        .catch((e) => {
+            const prev = _realBal.get(userId) || entry;
+            _realBal.set(userId, { avail: prev.avail || 0, ts: Date.now(), inflight: false }); // keep last, back off TTL
+            try { logger.warn('ARES', `[real-balance] uid=${userId} refresh failed: ${e && e.message}`); } catch (_) { }
+        });
+}
+function _realAvailable(userId) {
+    const c = _realBal.get(userId);
+    return c && Number.isFinite(c.avail) ? c.avail : 0;
+}
+function _setRealBalanceForTest(userId, avail) { _realBal.set(userId, { avail: +avail || 0, ts: Date.now(), inflight: false }); }
+function _resetRealBalanceForTest() { _realBal.clear(); }
+
 // ── Tick — called from serverBrain's per-user BTCUSDT cycle ────────────────
 // mctx: { price, regime: {regime, confidence, trendBias}, confluenceScore,
 //         atrPct, killActive }
@@ -143,10 +177,49 @@ function tick(userId, mctx) {
         winRate10: eng.tradeHistory.length > 0 ? eng.winRate10 : null,
     });
 
+    // [2026-06-23] Resolve execution env + the correct sizing BALANCE *before* the gate matrix, so
+    // evaluateAres' funds gate (and sizing) see the REAL exchange balance on a real account — NOT
+    // the empty virtual wallet (which would block every real entry on the min-balance gate).
+    let _execEnv = null;
+    try { _execEnv = (_serverAT().resolveExecutionEnv(userId) || {}).env; } catch (_) { _execEnv = null; }
+
+    // Consent gate (fail-closed): never auto-trade REAL capital without explicit opt-in.
+    if (_execEnv === 'REAL' && st.realOptIn !== true) {
+        try { logger.info('ARES', `[consent] uid=${userId} REAL entry blocked — no real opt-in (fail-closed)`); } catch (_) { }
+        _saveState(userId, st);
+        return null;
+    }
+
+    // Sizing base: REAL → live exchange available balance (cached async; binance/bybit auto-routed).
+    // Fail-closed if not yet known. testnet/demo → virtual wallet.
+    let _sizeBalance = st.wallet.balance;
+    let _sizeAvail = Math.max(0, st.wallet.balance - st.wallet.locked);
+    if (_execEnv === 'REAL') {
+        _refreshRealBalanceAsync(userId);
+        const realAvail = _realAvailable(userId);
+        if (!(realAvail > 0)) {
+            try { logger.info('ARES', `[real-balance] uid=${userId} REAL entry skipped — exchange balance not known yet (fetching)`); } catch (_) { }
+            _saveState(userId, st);
+            return null;
+        }
+        _sizeBalance = realAvail;
+        _sizeAvail = realAvail;
+
+        // Daily-loss circuit breaker (REAL only) — referenced to the REAL day-opening balance.
+        const dl = _rollDailyWindow(st, now);
+        if (dl.lossUsd === 0 || !(dl.startBalance > 0)) dl.startBalance = realAvail; // track real opening equity
+        const cap = dl.startBalance * REAL_MAX_DAILY_LOSS_PCT;
+        if (cap > 0 && dl.lossUsd >= cap) {
+            try { logger.info('ARES', `[daily-loss] uid=${userId} REAL entry paused — day loss $${dl.lossUsd.toFixed(2)} ≥ cap $${cap.toFixed(2)}`); } catch (_) { }
+            _saveState(userId, st);
+            return null;
+        }
+    }
+
     const decision = evaluateAres({
         now,
-        balance: st.wallet.balance,
-        available: Math.max(0, st.wallet.balance - st.wallet.locked),
+        balance: _sizeBalance,
+        available: _sizeAvail,
         openAresCount: _openAresPositions(userId).length,
         killActive: mctx.killActive === true,
         lastTradeTs: eng.lastTradeTs,
@@ -164,33 +237,10 @@ function tick(userId, mctx) {
 
     if (!decision.shouldTrade) { _saveState(userId, st); return null; }
 
-    // ── GO: sizing + dispatch through serverAT ──
-    let sizing = aresSizing({ balance: st.wallet.balance, available: Math.max(0, st.wallet.balance - st.wallet.locked), confidence, atrPct: +mctx.atrPct || 0 });
-    // [2026-06-23] REAL-money safety caps — clamp stake-fraction + leverage on a REAL account
-    // (testnet/demo unchanged). Defense layer for autonomous real trading: never risk the
-    // aggressive 25%/20x testnet geometry with real capital. env from serverAT's single source.
-    let _execEnv = null;
-    try { _execEnv = (_serverAT().resolveExecutionEnv(userId) || {}).env; } catch (_) { _execEnv = null; }
-    // [2026-06-23] REAL-money consent gate (fail-closed): never auto-trade real capital for a user
-    // who has not explicitly opted in. env resolution can throw → _execEnv null → not REAL → safe.
-    if (_execEnv === 'REAL' && st.realOptIn !== true) {
-        try { logger.info('ARES', `[consent] uid=${userId} REAL entry blocked — no real opt-in (fail-closed)`); } catch (_) { }
-        _saveState(userId, st);
-        return null;
-    }
-    // [2026-06-23] Daily-loss circuit breaker (REAL only) — pause new entries once the day's
-    // realized loss reaches startBalance × cap; auto-resumes next UTC day. Protective on real
-    // capital; testnet/demo unchanged (soak untouched).
-    if (_execEnv === 'REAL') {
-        const dl = _rollDailyWindow(st, now);
-        const cap = (dl.startBalance || st.wallet.balance || 0) * REAL_MAX_DAILY_LOSS_PCT;
-        if (cap > 0 && dl.lossUsd >= cap) {
-            try { logger.info('ARES', `[daily-loss] uid=${userId} REAL entry paused — day loss $${dl.lossUsd.toFixed(2)} ≥ cap $${cap.toFixed(2)}`); } catch (_) { }
-            _saveState(userId, st);
-            return null;
-        }
-    }
-    sizing = applyRealCaps(sizing, _execEnv, { balance: st.wallet.balance });
+    let sizing = aresSizing({ balance: _sizeBalance, available: _sizeAvail, confidence, atrPct: +mctx.atrPct || 0 });
+    // REAL-money safety caps — clamp stake-fraction + leverage off the real balance (testnet/demo
+    // unchanged). Never risk the aggressive 25%/20x testnet geometry with real capital.
+    sizing = applyRealCaps(sizing, _execEnv, { balance: _sizeBalance });
     if (sizing.capped) {
         try { logger.info('ARES', `[caps] uid=${userId} REAL caps applied: stake ${sizing.capsApplied.fromStake}→${sizing.stake}, lev ${sizing.capsApplied.fromLeverage}→${sizing.leverage}`); } catch (_) { }
     }
@@ -342,6 +392,8 @@ function getPublicState(userId) {
         realOptInTs: st.realOptInTs || null,
         killSwitch: st.killSwitch === true,
         dailyLoss: st.dailyLoss ? { day: st.dailyLoss.day, lossUsd: +(+st.dailyLoss.lossUsd || 0).toFixed(2) } : null,
+        // [2026-06-23] Live REAL exchange balance ARES would trade with (0 if not on real / not yet fetched).
+        realBalance: +(_realAvailable(userId) || 0).toFixed(2),
     };
 }
 
@@ -375,4 +427,5 @@ module.exports = {
     tick, onPositionClosed, fund, withdraw, getPublicState,
     setRealOptIn, getRealOptIn, setKillSwitch, getKillSwitch,
     _loadStateForTest: _loadState, _saveStateForTest: _saveState, _trajectoryForTest: _trajectory,
+    _setRealBalanceForTest, _resetRealBalanceForTest, _realAvailableForTest: _realAvailable,
 };

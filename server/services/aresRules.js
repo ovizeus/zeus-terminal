@@ -28,29 +28,44 @@ function _capNum(envVal, def, lo, hi) {
     if (!Number.isFinite(n) || n <= 0) return def;
     return Math.min(hi, Math.max(lo, n));
 }
-const REAL_MAX_STAKE_PCT = _capNum(process.env.ARES_REAL_MAX_STAKE_PCT, 0.02, 0.001, 0.10); // default 2% of balance
-const REAL_MAX_LEVERAGE = _capNum(process.env.ARES_REAL_MAX_LEVERAGE, 5, 1, 20);             // default 5x
+const REAL_MAX_STAKE_PCT = _capNum(process.env.ARES_REAL_MAX_STAKE_PCT, 0.02, 0.001, 0.10); // soft cap: 2% of balance
+const REAL_MAX_LEVERAGE = _capNum(process.env.ARES_REAL_MAX_LEVERAGE, 5, 1, 20);             // 5x
+// [2026-06-23] Small-account viability. On a tiny real account the 2% soft cap would size a trade
+// below the exchange minimum notional (e.g. $50 × 2% = $1) → ARES could never trade. So allow a
+// MIN-notional floor, but never let that floor exceed a HARD ceiling fraction of balance. Below
+// the ceiling-vs-min threshold the account is too small to trade at all (returns stake 0).
+const REAL_MIN_NOTIONAL = _capNum(process.env.ARES_REAL_MIN_NOTIONAL, 5, 1, 100);            // min placeable stake $
+const REAL_CEILING_PCT = _capNum(process.env.ARES_REAL_CEILING_PCT, 0.25, 0.05, 0.50);       // hard per-trade ceiling
 
 /**
  * Clamp ARES sizing for REAL accounts. PURE. Returns a NEW sizing object; never mutates input.
  * - env !== 'REAL' (TESTNET/DEMO/null) → returned unchanged (caps only apply to real money).
- * - env === 'REAL' → stake clamped to balance × REAL_MAX_STAKE_PCT, leverage clamped to REAL_MAX_LEVERAGE.
- * Adds `capped: true` + `capsApplied` detail when anything was reduced (telemetry/audit).
+ * - env === 'REAL' → leverage ≤ REAL_MAX_LEVERAGE; stake = soft-capped to balance × REAL_MAX_STAKE_PCT,
+ *   raised to REAL_MIN_NOTIONAL if below (so small accounts can still place a valid trade), but never
+ *   above the hard ceiling balance × REAL_CEILING_PCT. If even the ceiling < min notional → stake 0
+ *   (account too small to trade safely). Adds capped/capsApplied telemetry.
  */
 function applyRealCaps(sizing, env, ctx) {
     const s = sizing || {};
     if (env !== 'REAL') return { ...s, capped: false, capsApplied: null };
     const bal = Math.max(0, +(ctx && ctx.balance) || 0);
-    const maxStake = bal * REAL_MAX_STAKE_PCT;
     const inStake = +s.stake || 0;
     const inLev = +s.leverage || 0;
-    const stake = Math.round(Math.max(0, Math.min(inStake, maxStake)) * 100) / 100;
     const leverage = Math.max(1, Math.min(inLev, REAL_MAX_LEVERAGE));
-    const capped = stake < inStake - 1e-9 || leverage < inLev;
+    const ceiling = bal * REAL_CEILING_PCT;
+    let stake;
+    if (ceiling < REAL_MIN_NOTIONAL) {
+        stake = 0; // account too small for a viable, safely-bounded trade
+    } else {
+        const soft = Math.min(inStake, bal * REAL_MAX_STAKE_PCT);
+        stake = Math.min(Math.max(soft, REAL_MIN_NOTIONAL), ceiling);
+    }
+    stake = Math.round(stake * 100) / 100;
+    const capped = stake !== Math.round(inStake * 100) / 100 || leverage < inLev;
     return {
         ...s, stake, leverage, capped,
         capsApplied: capped
-            ? { maxStakePct: REAL_MAX_STAKE_PCT, maxLeverage: REAL_MAX_LEVERAGE, fromStake: inStake, fromLeverage: inLev }
+            ? { maxStakePct: REAL_MAX_STAKE_PCT, maxLeverage: REAL_MAX_LEVERAGE, minNotional: REAL_MIN_NOTIONAL, ceilingPct: REAL_CEILING_PCT, fromStake: inStake, fromLeverage: inLev }
             : null,
     };
 }
@@ -199,4 +214,4 @@ function computeAresEngineState(ctx) {
     return { id: 'DETERMINED' };
 }
 
-module.exports = { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState, applyRealCaps, REAL_MAX_STAKE_PCT, REAL_MAX_LEVERAGE };
+module.exports = { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState, applyRealCaps, REAL_MAX_STAKE_PCT, REAL_MAX_LEVERAGE, REAL_MIN_NOTIONAL, REAL_CEILING_PCT };
