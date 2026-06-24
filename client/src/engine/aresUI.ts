@@ -67,6 +67,12 @@ const w = window as any
      SURVIVAL, EXEC...) reads crisply over the busy neuron/constellation dot field instead of
      visually merging into it. paint-order=stroke draws the dark outline BEHIND the coloured fill. */
   #ares-core-svg text { paint-order:stroke;stroke:#060a12;stroke-width:1.1px;stroke-linejoin:round;stroke-linecap:round; }
+  /* [2026-06-23] De-duplicate brain labels. The legacy initAriaBrain writes static status labels
+     (ldot-* : VISION/POLICY/MEMORY/SURVIVAL/EXEC + parietal SEED/ASCENT/SOVEREIGN) into
+     #ares-core-svg, and the React <BrainDots> overlay renders the SAME labels (store-driven, live)
+     on top → text shown DOUBLE. BrainDots is the source of truth, so hide the legacy duplicates.
+     Lobe NAME labels (Frontal lobe …) have no ldot- id, so they stay. */
+  #ares-core-svg text[id^="ldot-"] { display:none !important; }
 
   /* ══ Cognitive Bar (sotto il brain) ══ */
   #ares-cog-bar { display:flex;align-items:center;gap:8px;margin:4px 12px 6px;z-index:2;position:relative; }
