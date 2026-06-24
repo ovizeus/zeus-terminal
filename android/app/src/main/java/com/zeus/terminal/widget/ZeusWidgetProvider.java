@@ -125,44 +125,49 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
         EXEC.execute(new Runnable() {
             @Override
             public void run() {
-                String btcPrice = "—", btcChg = "";
+                String btcPrice = "—", btcChg = "", btcHL = "24h  H —  L —";
                 String ethPrice = "—", ethChg = "";
                 String solPrice = "—", solChg = "";
-                float btcChgNum = 0f, ethChgNum = 0f, solChgNum = 0f;
+                String topMover = "🔥 —";
+                float btcChgNum = 0f, ethChgNum = 0f, solChgNum = 0f, topMoverNum = 0f;
                 try {
-                    String btcJson = httpGet("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT");
-                    JSONObject b = new JSONObject(btcJson);
-                    double bp = b.getDouble("lastPrice");
-                    double bc = b.getDouble("priceChangePercent");
-                    btcChgNum = (float) bc;
-                    btcPrice = "$" + formatPrice(bp);
-                    btcChg = (bc >= 0 ? "+" : "") + String.format("%.2f", bc) + "%";
-                } catch (Exception e) { Log.w(TAG, "BTC fetch failed", e); }
-                try {
-                    String ethJson = httpGet("https://api.binance.com/api/v3/ticker/24hr?symbol=ETHUSDT");
-                    JSONObject e2 = new JSONObject(ethJson);
-                    double ep = e2.getDouble("lastPrice");
-                    double ec = e2.getDouble("priceChangePercent");
-                    ethChgNum = (float) ec;
-                    ethPrice = "$" + formatPrice(ep);
-                    ethChg = (ec >= 0 ? "+" : "") + String.format("%.2f", ec) + "%";
-                } catch (Exception e) { Log.w(TAG, "ETH fetch failed", e); }
-                try {
-                    String solJson = httpGet("https://api.binance.com/api/v3/ticker/24hr?symbol=SOLUSDT");
-                    JSONObject s = new JSONObject(solJson);
-                    double sp = s.getDouble("lastPrice");
-                    double sc = s.getDouble("priceChangePercent");
-                    solChgNum = (float) sc;
-                    solPrice = "$" + formatPrice(sp);
-                    solChg = (sc >= 0 ? "+" : "") + String.format("%.2f", sc) + "%";
-                } catch (Exception e) { Log.w(TAG, "SOL fetch failed", e); }
+                    // [2026-06-24] ONE multi-symbol call → BTC/ETH/SOL prices + BTC 24h H/L +
+                    // the top gainer across a popular-coin basket (real Binance, no auth).
+                    String basket = "[\"BTCUSDT\",\"ETHUSDT\",\"SOLUSDT\",\"BNBUSDT\",\"XRPUSDT\",\"DOGEUSDT\",\"ADAUSDT\",\"AVAXUSDT\",\"LINKUSDT\",\"TRXUSDT\",\"DOTUSDT\",\"LTCUSDT\",\"NEARUSDT\",\"APTUSDT\",\"SUIUSDT\",\"INJUSDT\"]";
+                    String url = "https://api.binance.com/api/v3/ticker/24hr?symbols=" + java.net.URLEncoder.encode(basket, "UTF-8");
+                    org.json.JSONArray arr = new org.json.JSONArray(httpGet(url));
+                    double bestChg = -1e9; String bestSym = "";
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject o = arr.getJSONObject(i);
+                        String sym = o.getString("symbol");
+                        double price = o.getDouble("lastPrice");
+                        double chg = o.getDouble("priceChangePercent");
+                        if (chg > bestChg) { bestChg = chg; bestSym = sym; }
+                        if ("BTCUSDT".equals(sym)) {
+                            btcChgNum = (float) chg; btcPrice = "$" + formatPrice(price);
+                            btcChg = (chg >= 0 ? "+" : "") + String.format("%.2f", chg) + "%";
+                            btcHL = "24h  H $" + formatPrice(o.getDouble("highPrice")) + "  L $" + formatPrice(o.getDouble("lowPrice"));
+                        } else if ("ETHUSDT".equals(sym)) {
+                            ethChgNum = (float) chg; ethPrice = "$" + formatPrice(price);
+                            ethChg = (chg >= 0 ? "+" : "") + String.format("%.2f", chg) + "%";
+                        } else if ("SOLUSDT".equals(sym)) {
+                            solChgNum = (float) chg; solPrice = "$" + formatPrice(price);
+                            solChg = (chg >= 0 ? "+" : "") + String.format("%.2f", chg) + "%";
+                        }
+                    }
+                    if (!bestSym.isEmpty()) {
+                        topMoverNum = (float) bestChg;
+                        topMover = "🔥 " + bestSym.replace("USDT", "") + " " + (bestChg >= 0 ? "+" : "") + String.format("%.1f", bestChg) + "%";
+                    }
+                } catch (Exception e) { Log.w(TAG, "ticker fetch failed", e); }
 
                 final int UP = Color.parseColor("#00ff88");
                 final int DOWN = Color.parseColor("#ff3b6b");
-                final String fBtc = btcPrice, fBtcCh = btcChg;
+                final String fBtc = btcPrice, fBtcCh = btcChg, fBtcHL = btcHL;
                 final String fEth = ethPrice, fEthCh = ethChg;
                 final String fSol = solPrice, fSolCh = solChg;
-                final float fBtcN = btcChgNum, fEthN = ethChgNum, fSolN = solChgNum;
+                final String fTop = topMover;
+                final float fBtcN = btcChgNum, fEthN = ethChgNum, fSolN = solChgNum, fTopN = topMoverNum;
 
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override public void run() {
@@ -178,6 +183,9 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
                             v.setTextViewText(R.id.wSol, fSol);
                             v.setTextViewText(R.id.wSolChg, fSolCh);
                             v.setTextColor(R.id.wSolChg, fSolN >= 0 ? UP : DOWN);
+                            v.setTextViewText(R.id.wBtcHL, fBtcHL);
+                            v.setTextViewText(R.id.wTopMover, fTop);
+                            v.setTextColor(R.id.wTopMover, fTopN >= 0 ? UP : DOWN);
                         }
                         wireClicks(context, v);
                         mgr.updateAppWidget(id, v);
