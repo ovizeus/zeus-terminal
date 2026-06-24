@@ -337,6 +337,11 @@ function getPublicState(userId) {
         openPositions: _openAresPositions(userId).length,
         lastDecision: st.lastDecision,
         serverSide: true,
+        // [2026-06-23] Safety controls (read) for the opt-in/kill UI.
+        realOptIn: st.realOptIn === true,
+        realOptInTs: st.realOptInTs || null,
+        killSwitch: st.killSwitch === true,
+        dailyLoss: st.dailyLoss ? { day: st.dailyLoss.day, lossUsd: +(+st.dailyLoss.lossUsd || 0).toFixed(2) } : null,
     };
 }
 

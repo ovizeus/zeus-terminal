@@ -11,6 +11,7 @@ import { CognitiveBar } from './ares/CognitiveBar'
 import { StatsRow } from './ares/StatsRow'
 import { StageCol } from './ares/StageCol'
 import { WalletCol } from './ares/WalletCol'
+import { SafetyCol } from './ares/SafetyCol'
 import { ObjectivesCol } from './ares/ObjectivesCol'
 import { PositionsList } from './ares/PositionsList'
 import { BrainDots } from './ares/BrainDots'
@@ -277,6 +278,7 @@ export function ARESPanel() {
       <div id="ares-meta-row">
         <StageCol />
         <WalletCol />
+        <SafetyCol />
         <ObjectivesCol />
       </div>
 

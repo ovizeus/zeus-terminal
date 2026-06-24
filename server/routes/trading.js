@@ -980,6 +980,33 @@ router.get('/ares/state', (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ─── [2026-06-23] REAL-money consent toggle. Server-authoritative; user sets ONLY their own.
+// Enabling requires an explicit acknowledgment so it can never be a one-tap accident. This does
+// NOT enable real execution by itself — the protected _SRV_POS_REAL_ENABLED master switch still
+// gates everything. It only records that THIS user consents to ARES trading their real capital.
+router.post('/ares/real-optin', express.json(), (req, res) => {
+  try {
+    const serverAres = require('../services/serverAres');
+    const enabled = req.body.enabled === true;
+    if (enabled && req.body.ack !== true) {
+      return res.status(400).json({ ok: false, error: 'ACK_REQUIRED', detail: 'Enabling real autonomous trading requires explicit acknowledgment (ack:true).' });
+    }
+    const value = serverAres.setRealOptIn(req.user.id, enabled);
+    try { require('../services/database').auditLog(req.user.id, 'ARES_REAL_OPTIN', JSON.stringify({ enabled: value }), req.ip); } catch (_) {}
+    res.json({ ok: true, realOptIn: value });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ─── [2026-06-23] Persistent kill-switch toggle (emergency stop). Survives restart. ───
+router.post('/ares/kill', express.json(), (req, res) => {
+  try {
+    const serverAres = require('../services/serverAres');
+    const value = serverAres.setKillSwitch(req.user.id, req.body.enabled === true);
+    try { require('../services/database').auditLog(req.user.id, 'ARES_KILL_SWITCH', JSON.stringify({ enabled: value }), req.ip); } catch (_) {}
+    res.json({ ok: true, killSwitch: value });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ─── POST /api/user/telegram/test ─── Send a test message ───
 router.post('/user/telegram/test', async (req, res) => {
   const telegram = require('../services/telegram');

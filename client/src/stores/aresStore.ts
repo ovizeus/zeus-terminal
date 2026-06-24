@@ -60,6 +60,11 @@ interface AresStoreState {
    *  locked, so its own state is frozen). null until first server load. */
   srv: AresServerSnapshot | null
 
+  /** [2026-06-23] REAL-money safety controls (server-authoritative). realOptIn = this user
+   *  consents to ARES trading their REAL capital; killSwitch = persistent emergency stop. */
+  realOptIn: boolean
+  killSwitch: boolean
+
   /** [R28.2] UI slice — mirrors aresUI.ts DOM render output. */
   ui: AresStoreUI
 
@@ -78,6 +83,10 @@ interface AresStoreState {
   withdrawWallet: (amount: number) => void
   closeArePosition: (posId: string, live: boolean, entry: number) => void
   closeAllArePositions: () => void
+
+  /** [2026-06-23] Safety toggles — POST to /api/ares/{real-optin,kill} then re-pull. */
+  setRealOptIn: (enabled: boolean, ack: boolean) => void
+  setKillSwitch: (enabled: boolean) => void
 }
 
 // Module-scope debouncer — single shared instance across all callers.
@@ -103,6 +112,8 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
           available: +a.wallet.available || 0,
           realizedPnL: +a.wallet.realizedPnL || 0,
           fundedTotal: +a.wallet.fundedTotal || 0,
+          realOptIn: a.realOptIn === true,
+          killSwitch: a.killSwitch === true,
           serverSide: true,
           loaded: true,
           // [SERVER-ARES P3] Capture the live reasoning snapshot so the panel
@@ -143,6 +154,8 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   saving: false,
   serverSide: false,
   srv: null,
+  realOptIn: false,
+  killSwitch: false,
   ui: DEFAULT_ARES_UI,
 
   loadFromServer: async () => { _debouncedAresLoad!() },
@@ -215,6 +228,22 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
         setTimeout(() => { try { _aresRender(); getState().saveToServer() } catch (_) {} }, 200)
       }
     } catch (_) {}
+  },
+
+  setRealOptIn: (enabled, ack) => {
+    fetch('/api/ares/real-optin', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !!enabled, ack: !!ack }),
+    }).then(() => getState().loadFromServer()).catch(() => {})
+  },
+
+  setKillSwitch: (enabled) => {
+    fetch('/api/ares/kill', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !!enabled }),
+    }).then(() => getState().loadFromServer()).catch(() => {})
   },
 
   closeArePosition: (posId, live, entry) => {
