@@ -18,6 +18,43 @@ const LOSS_STREAK_BLOCK = 3;
 const REVENGE_COOLDOWN_MS = 10 * 60 * 1000;
 const TRADE_REGIMES = new Set(['TREND', 'TREND_UP', 'TREND_DOWN', 'BREAKOUT']);
 
+// [2026-06-23] REAL-money safety caps. On a REAL account ARES must NOT use the
+// aggressive testnet geometry (up to 25% of balance / 20x). These hard caps clamp
+// stake-fraction and leverage when env==='REAL'. Conservative defaults, overridable
+// via env vars. TESTNET/DEMO are unchanged (caps only bite on REAL). Fail-closed:
+// any unparseable override falls back to the conservative default.
+function _capNum(envVal, def, lo, hi) {
+    const n = Number(envVal);
+    if (!Number.isFinite(n) || n <= 0) return def;
+    return Math.min(hi, Math.max(lo, n));
+}
+const REAL_MAX_STAKE_PCT = _capNum(process.env.ARES_REAL_MAX_STAKE_PCT, 0.02, 0.001, 0.10); // default 2% of balance
+const REAL_MAX_LEVERAGE = _capNum(process.env.ARES_REAL_MAX_LEVERAGE, 5, 1, 20);             // default 5x
+
+/**
+ * Clamp ARES sizing for REAL accounts. PURE. Returns a NEW sizing object; never mutates input.
+ * - env !== 'REAL' (TESTNET/DEMO/null) → returned unchanged (caps only apply to real money).
+ * - env === 'REAL' → stake clamped to balance × REAL_MAX_STAKE_PCT, leverage clamped to REAL_MAX_LEVERAGE.
+ * Adds `capped: true` + `capsApplied` detail when anything was reduced (telemetry/audit).
+ */
+function applyRealCaps(sizing, env, ctx) {
+    const s = sizing || {};
+    if (env !== 'REAL') return { ...s, capped: false, capsApplied: null };
+    const bal = Math.max(0, +(ctx && ctx.balance) || 0);
+    const maxStake = bal * REAL_MAX_STAKE_PCT;
+    const inStake = +s.stake || 0;
+    const inLev = +s.leverage || 0;
+    const stake = Math.round(Math.max(0, Math.min(inStake, maxStake)) * 100) / 100;
+    const leverage = Math.max(1, Math.min(inLev, REAL_MAX_LEVERAGE));
+    const capped = stake < inStake - 1e-9 || leverage < inLev;
+    return {
+        ...s, stake, leverage, capped,
+        capsApplied: capped
+            ? { maxStakePct: REAL_MAX_STAKE_PCT, maxLeverage: REAL_MAX_LEVERAGE, fromStake: inStake, fromLeverage: inLev }
+            : null,
+    };
+}
+
 function _session(hourUtc) {
     if (hourUtc >= 1 && hourUtc < 8) return 'ASIA';
     if (hourUtc >= 7 && hourUtc < 12) return 'LONDON';
@@ -162,4 +199,4 @@ function computeAresEngineState(ctx) {
     return { id: 'DETERMINED' };
 }
 
-module.exports = { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState };
+module.exports = { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState, applyRealCaps, REAL_MAX_STAKE_PCT, REAL_MAX_LEVERAGE };

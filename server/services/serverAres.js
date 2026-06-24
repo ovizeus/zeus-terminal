@@ -19,7 +19,7 @@
 const logger = require('./logger');
 const db = require('./database');
 const MF = require('../migrationFlags');
-const { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState } = require('./aresRules');
+const { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState, applyRealCaps } = require('./aresRules');
 
 const SYMBOL = 'BTCUSDT';            // ARES is BTC-only (1:1 with client)
 const TARGET = 1000000;              // mission target
@@ -135,7 +135,16 @@ function tick(userId, mctx) {
     if (!decision.shouldTrade) { _saveState(userId, st); return null; }
 
     // ── GO: sizing + dispatch through serverAT ──
-    const sizing = aresSizing({ balance: st.wallet.balance, available: Math.max(0, st.wallet.balance - st.wallet.locked), confidence, atrPct: +mctx.atrPct || 0 });
+    let sizing = aresSizing({ balance: st.wallet.balance, available: Math.max(0, st.wallet.balance - st.wallet.locked), confidence, atrPct: +mctx.atrPct || 0 });
+    // [2026-06-23] REAL-money safety caps — clamp stake-fraction + leverage on a REAL account
+    // (testnet/demo unchanged). Defense layer for autonomous real trading: never risk the
+    // aggressive 25%/20x testnet geometry with real capital. env from serverAT's single source.
+    let _execEnv = null;
+    try { _execEnv = (_serverAT().resolveExecutionEnv(userId) || {}).env; } catch (_) { _execEnv = null; }
+    sizing = applyRealCaps(sizing, _execEnv, { balance: st.wallet.balance });
+    if (sizing.capped) {
+        try { logger.info('ARES', `[caps] uid=${userId} REAL caps applied: stake ${sizing.capsApplied.fromStake}→${sizing.stake}, lev ${sizing.capsApplied.fromLeverage}→${sizing.leverage}`); } catch (_) { }
+    }
     if (!Number.isFinite(sizing.stake) || sizing.stake < 5) { _saveState(userId, st); return null; }
 
     // Virtual wallet reserve FIRST (released on entry failure / close).

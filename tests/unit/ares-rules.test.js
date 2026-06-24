@@ -3,7 +3,49 @@
 // from client engine/aresDecision.ts + aresExecute.ts, with SERVER inputs
 // (regime taxonomy TREND/TREND_UP/TREND_DOWN/BREAKOUT/RANGE/SQUEEZE/VOLATILE,
 // entryScore = server confluence score, side from trendBias).
-const { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState } = require('../../server/services/aresRules');
+const { evaluateAres, aresSizing, computeAresConfidence, computeAresEngineState, applyRealCaps, REAL_MAX_STAKE_PCT, REAL_MAX_LEVERAGE } = require('../../server/services/aresRules');
+
+describe('applyRealCaps — REAL-money safety caps', () => {
+  // Aggressive testnet sizing that MUST be clamped on REAL.
+  const aggressive = { stake: 250, leverage: 20, slPct: 2.25, rr: 4 / 3 }; // 25% of a $1000 balance, 20x
+
+  test('REAL clamps stake to balance×max-pct and leverage to the cap', () => {
+    const out = applyRealCaps(aggressive, 'REAL', { balance: 1000 });
+    expect(out.stake).toBeLessThanOrEqual(1000 * REAL_MAX_STAKE_PCT + 1e-9);
+    expect(out.leverage).toBeLessThanOrEqual(REAL_MAX_LEVERAGE);
+    expect(out.capped).toBe(true);
+    expect(out.capsApplied).toMatchObject({ fromStake: 250, fromLeverage: 20 });
+  });
+
+  test('TESTNET is unchanged (caps only bite on REAL)', () => {
+    const out = applyRealCaps(aggressive, 'TESTNET', { balance: 1000 });
+    expect(out.stake).toBe(250);
+    expect(out.leverage).toBe(20);
+    expect(out.capped).toBe(false);
+  });
+
+  test('DEMO and null env are unchanged', () => {
+    expect(applyRealCaps(aggressive, 'DEMO', { balance: 1000 }).leverage).toBe(20);
+    expect(applyRealCaps(aggressive, null, { balance: 1000 }).stake).toBe(250);
+  });
+
+  test('REAL: already-conservative sizing passes through uncapped', () => {
+    const small = { stake: 10, leverage: 3, slPct: 2, rr: 4 / 3 }; // 1% of $1000, 3x — under caps
+    const out = applyRealCaps(small, 'REAL', { balance: 1000 });
+    expect(out.stake).toBe(10);
+    expect(out.leverage).toBe(3);
+    expect(out.capped).toBe(false);
+  });
+
+  test('defaults are conservative (≤10% stake, ≤20x) and pure (no mutation)', () => {
+    expect(REAL_MAX_STAKE_PCT).toBeLessThanOrEqual(0.10);
+    expect(REAL_MAX_LEVERAGE).toBeLessThanOrEqual(20);
+    const input = { stake: 250, leverage: 20 };
+    applyRealCaps(input, 'REAL', { balance: 1000 });
+    expect(input.stake).toBe(250); // input untouched
+    expect(input.leverage).toBe(20);
+  });
+});
 
 // A context where EVERY gate passes — each test flips ONE thing.
 const NOW = 1780850000000;

@@ -6728,6 +6728,7 @@ module.exports = {
     getFullState,
     _computeUserOwnership, // [SP2-9] pure ownership resolver for sync payload
     serverFullyOwnsEntries, // [SP2-b] full-ownership glue — used by trading.js order/place reject
+    resolveExecutionEnv: _resolveExecutionEnv, // [2026-06-23] read-only env resolver — ARES real-money caps consult this single source of truth
     isKillActive: (userId) => { try { return _uState(userId).killActive === true; } catch (_) { return false; } }, // [SERVER-ARES] light kill probe for ares rules
     // Mode control
     setMode,
