@@ -57,8 +57,8 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
         int minH = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 40);
 
         int layoutId;
-        if (minW >= 250 && minH >= 110) layoutId = R.layout.widget_large;
-        else if (minH >= 110) layoutId = R.layout.widget_medium;
+        if (minW >= 200 && minH >= 100) layoutId = R.layout.widget_large;
+        else if (minH >= 80) layoutId = R.layout.widget_medium;
         else layoutId = R.layout.widget_small;
 
         RemoteViews views = new RemoteViews(context.getPackageName(), layoutId);

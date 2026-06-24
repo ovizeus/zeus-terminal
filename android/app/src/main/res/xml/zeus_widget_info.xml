@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- [2026-06-24] Default to a LARGE placement (4x3) so the rich layout shows out of the box;
+     minWidth still allows shrinking down to the small (BTC-only) variant. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="110dp"
-    android:minHeight="40dp"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
     android:minResizeWidth="110dp"
     android:minResizeHeight="40dp"
-    android:targetCellWidth="2"
-    android:targetCellHeight="1"
-    android:maxResizeWidth="320dp"
-    android:maxResizeHeight="220dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:maxResizeWidth="360dp"
+    android:maxResizeHeight="320dp"
     android:updatePeriodMillis="1800000"
-    android:initialLayout="@layout/widget_medium"
-    android:previewLayout="@layout/widget_medium"
+    android:initialLayout="@layout/widget_large"
+    android:previewLayout="@layout/widget_large"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/zeus_widget_description" />
