@@ -23,7 +23,14 @@ function _applyLoadedTogglesToLiveState(): void {
       S?: { activeInds?: Record<string, boolean>; indicators?: Record<string, boolean> }
       USER_SETTINGS?: { indicators?: Record<string, boolean> }
     }
-    const inds = w.USER_SETTINGS && w.USER_SETTINGS.indicators
+    // [2026-06-24] Prefer the server-loaded settings.indicators (the active map now
+    // round-trips through the server). The legacy USER_SETTINGS.indicators path does
+    // not get populated from the server response, so on a fresh load (cache cleared /
+    // new device) the indicators would not apply. Fall back to USER_SETTINGS for safety.
+    const _storeInds = (useSettingsStore.getState().settings as unknown as { indicators?: Record<string, boolean> }).indicators
+    const inds = (_storeInds && typeof _storeInds === 'object')
+      ? _storeInds
+      : (w.USER_SETTINGS && w.USER_SETTINGS.indicators)
     if (!inds || typeof inds !== 'object') return
     if (w.S) {
       w.S.activeInds = { ...(w.S.activeInds || {}), ...inds }

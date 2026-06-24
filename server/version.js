@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.168',
-    build: 194,
+    version: '1.7.169',
+    build: 195,
     date: '2026-06-24',
     changelog: [
         'b194 v1.7.168 — fix: settings-save schema accepts indicators (closes the regression + the persistence). The settings validator (validate.js SETTINGS_SHAPE) rejected any unknown key with a 400, so once the b192 client started sending the indicators map, EVERY settings save was rejected and nothing persisted since b192. Added indicators: object to SETTINGS_SHAPE (and earlier to the trading.js whitelist). Now the active-indicator round-trip works end to end: toggle persists across reload, cache-clear and devices, and renders on load. No-apostrophe changelog.',
