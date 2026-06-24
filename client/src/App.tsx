@@ -3,6 +3,7 @@ import { LoginPage } from './components/auth/LoginPage'
 import { Header } from './components/layout/Header'
 import { PanelShell } from './components/layout/PanelShell'
 import { PinLockScreen } from './components/modals/PinLockScreen'
+import { ConfirmDialog } from './components/common/ConfirmDialog'
 import { SecurityNudgeModal } from './components/modals/SecurityNudgeModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useUiStore, useAuthStore } from './stores'
@@ -112,6 +113,7 @@ export function App() {
         <PanelShell />
         <PinLockScreen />
         <SecurityNudgeModal />
+        <ConfirmDialog />
       </div>
     </ErrorBoundary>
   )

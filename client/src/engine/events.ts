@@ -1,4 +1,5 @@
 import { atLog } from '../trading/autotrade'
+import { appConfirm } from '../components/common/confirmDialog'
 /**
  * Zeus Terminal — AT state + Predator + ConfirmClose (ported from public/js/core/events.js)
  *
@@ -150,16 +151,18 @@ function _resetCloseBtn(btn: HTMLElement): void {
 }
 
 function _handleConfirm(posId: string, btn: HTMLElement, callback: () => void): void {
-  if (_pendingClose[posId]) {
-    clearTimeout(_pendingClose[posId].timer)
-    delete _pendingClose[posId]
-    _resetCloseBtn(btn)
-    callback()
-  } else {
-    _applyPendingStyle(btn)
-    const timer = setTimeout(() => { delete _pendingClose[posId]; _resetCloseBtn(btn) }, 2500)
-    _pendingClose[posId] = { timer, btnRef: btn, callback }
-  }
+  // [2026-06-24] Dedicated app confirm modal (was a two-click button pattern) — matches the rest
+  // of Zeus. Any leftover pending two-click state is cleared first.
+  if (_pendingClose[posId]) { clearTimeout(_pendingClose[posId].timer); delete _pendingClose[posId]; _resetCloseBtn(btn) }
+  const isAll = posId === 'closeAllBtn' || /closeall/i.test(posId)
+  appConfirm({
+    title: isAll ? 'Close ALL positions?' : 'Close position?',
+    body: isAll
+      ? 'This closes EVERY open position on this account at market price.'
+      : 'This closes the position at market price.',
+    tone: 'danger',
+    confirmLabel: isAll ? 'CLOSE ALL' : 'CLOSE',
+  }).then((r) => { if (r.confirmed) callback() })
 }
 
 export function attachConfirmClose(btn: HTMLElement, callback: () => void): void {

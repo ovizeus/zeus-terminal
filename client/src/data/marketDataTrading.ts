@@ -22,6 +22,7 @@ import { onPositionOpened } from '../trading/positions'
 import { renderLivePositions } from './marketDataPositions'
 import { liveApiSyncState } from '../trading/liveApi'
 import { usePositionsStore } from '../stores/positionsStore'
+import { appConfirm } from '../components/common/confirmDialog'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 
 // ═══════════════════════════════════════════════════════
@@ -278,20 +279,12 @@ function _showManualPanel(): void { TP.demoOpen = true; const p = el('panelDemo'
 // CONFIRM DIALOG
 // ═══════════════════════════════════════════════════════
 export function _showConfirmDialog(title: string, message: string, cancelText: string, confirmText: string, onConfirm: () => void): void {
-  const old = document.getElementById('zeusConfirmOverlay'); if (old) old.remove()
-  const overlay = document.createElement('div'); overlay.id = 'zeusConfirmOverlay'
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px'
-  const safeTitle = escHtml(title)
-  const safeMsg = escHtml(message).replace(/\n/g, '<br>')
-  const safeCancelText = escHtml(cancelText)
-  const safeConfirmText = escHtml(confirmText)
+  // [2026-06-24] Delegate to the unified app confirm modal (.mover/.modal styled) so AutoTrade
+  // on/off, demo reset, and every other caller look like the rest of Zeus. tone=danger for
+  // live/real-money confirms.
   const isLive = confirmText.toLowerCase().includes('live') || confirmText.toLowerCase().includes('real')
-  const confirmColor = isLive ? 'var(--red-bright)' : 'var(--cyan)'; const confirmBg = isLive ? '#2a0000' : '#001a33'; const confirmBorder = isLive ? '#ff4444' : '#00aaff'
-  overlay.innerHTML = '<div style="background:#0a0a1a;border:1px solid ' + confirmBorder + '66;border-radius:8px;max-width:420px;width:100%;padding:24px;font-family:var(--ff,monospace)"><div style="font-size:14px;font-weight:700;color:' + confirmColor + ';margin-bottom:16px;letter-spacing:1px">' + safeTitle + '</div><div style="font-size:11px;color:#ccc;line-height:1.7;margin-bottom:24px">' + safeMsg + '</div><div style="display:flex;gap:12px;justify-content:flex-end"><button id="zeusConfirmCancel" style="padding:8px 20px;background:#1a1a2e;border:1px solid #333;color:#888;border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;letter-spacing:1px">' + safeCancelText + '</button><button id="zeusConfirmOk" style="padding:8px 20px;background:' + confirmBg + ';border:1px solid ' + confirmBorder + ';color:' + confirmColor + ';border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;font-weight:700;letter-spacing:1px">' + safeConfirmText + '</button></div></div>'
-  document.body.appendChild(overlay)
-  ;(document.getElementById('zeusConfirmCancel') as any).onclick = function () { overlay.remove() }
-  overlay.onclick = function (e: any) { if (e.target === overlay) overlay.remove() }
-  ;(document.getElementById('zeusConfirmOk') as any).onclick = function () { overlay.remove(); if (typeof onConfirm === 'function') onConfirm() }
+  appConfirm({ title, body: message, tone: isLive ? 'danger' : 'info', confirmLabel: confirmText, cancelLabel: cancelText })
+    .then((r) => { if (r.confirmed && typeof onConfirm === 'function') onConfirm() })
 }
 
 // 3-button variant for DSL-off flow: primary / secondary / cancel
@@ -325,9 +318,14 @@ export function _showConfirmDialog3(
 // ADD FUNDS / RESET DEMO
 // ═══════════════════════════════════════════════════════
 export function promptAddFunds(): void {
-  const amount = prompt('Enter amount to add to demo balance (USD):', '5000'); if (!amount) return
-  const num = parseFloat(amount); if (!num || num <= 0 || num > 1000000) { toast('Invalid amount', 3000, _ZI.w); return }
-  api.raw<any>('POST', '/api/at/demo/add-funds', { amount: num }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
+  // [2026-06-24] Dedicated in-app amount modal (was a raw browser prompt).
+  appConfirm({ title: 'Add Demo Funds', body: 'Add funds to your demo trading balance.', tone: 'info', confirmLabel: 'ADD FUNDS', amount: { label: 'Amount (USD)', placeholder: '5000', initial: '5000' } })
+    .then(function (r: any) {
+      if (!r.confirmed) return
+      const num = +r.amount
+      if (!num || num <= 0 || num > 1000000) { toast('Invalid amount', 3000, _ZI.w); return }
+      api.raw<any>('POST', '/api/at/demo/add-funds', { amount: num }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
+    })
 }
 
 export function promptResetDemo(): void {

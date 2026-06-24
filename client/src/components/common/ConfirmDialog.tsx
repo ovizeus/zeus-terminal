@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ModalOverlay, ModalHeader } from '../../modals/ModalOverlay'
-import { useAresConfirm } from './aresConfirm'
+import { ModalOverlay, ModalHeader } from '../modals/ModalOverlay'
+import { useConfirmDialog } from './confirmDialog'
 
-// [2026-06-24] Host for the ARES confirm/input modal (aresConfirm). Rendered once in ARESPanel.
-// Dedicated in-app box (matches the app .mover/.modal style) for ARES activate/off, REAL opt-in,
-// KILL, and wallet fund/withdraw — instead of the browser confirm/prompt.
-export function AresConfirmModal() {
-  const req = useAresConfirm((s) => s.req)
-  const settle = useAresConfirm((s) => s.settle)
+// [2026-06-24] Single app-wide host for appConfirm(). Mounted once at the App root so any code
+// (React or imperative) can open a dedicated, app-styled confirm/input box. Toned (danger/info),
+// optional numeric input for amounts.
+export function ConfirmDialog() {
+  const req = useConfirmDialog((s) => s.req)
+  const settle = useConfirmDialog((s) => s.settle)
   const [amt, setAmt] = useState('')
 
   useEffect(() => { setAmt((req && req.amount && req.amount.initial) || '') }, [req])
@@ -18,14 +18,11 @@ export function AresConfirmModal() {
   const amtNum = Number(amt)
   const amtValid = !needsAmount || (Number.isFinite(amtNum) && amtNum > 0)
 
-  const confirm = () => {
-    if (!amtValid) return
-    settle(true, needsAmount ? amtNum : undefined)
-  }
+  const confirm = () => { if (amtValid) settle(true, needsAmount ? amtNum : undefined) }
   const cancel = () => settle(false)
 
   return (
-    <ModalOverlay id="ares-confirm-mover" visible={!!req} onClose={cancel} maxWidth="400px" zIndex={9000}>
+    <ModalOverlay id="app-confirm-mover" visible={!!req} onClose={cancel} maxWidth="400px" zIndex={100000}>
       <ModalHeader title={(req && req.title) || ''} onClose={cancel} titleStyle={{ color: accent, letterSpacing: '1px' }} />
       <div style={{
         padding: '12px 16px 6px', fontFamily: 'monospace', fontSize: '12px',
@@ -40,7 +37,7 @@ export function AresConfirmModal() {
             {req!.amount!.label}
           </label>
           <input
-            id="ares-confirm-amount"
+            id="app-confirm-amount"
             type="number" inputMode="decimal" autoFocus
             value={amt}
             placeholder={req!.amount!.placeholder || ''}

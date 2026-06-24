@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react'
 import { useAresStore } from '../../../stores/aresStore'
-import { aresConfirm } from './aresConfirm'
+import { appConfirm } from '../../common/confirmDialog'
 
 /**
  * [2026-06-23] Safety column for ARES REAL-money autonomous trading:
@@ -20,14 +20,14 @@ export const SafetyCol = memo(function SafetyCol() {
 
   const toggleActive = useCallback(async () => {
     if (aresActive) {
-      const { confirmed } = await aresConfirm({
+      const { confirmed } = await appConfirm({
         title: 'Turn ARES OFF?', tone: 'info', confirmLabel: 'TURN OFF',
         body: 'ARES will stop trading this account. AutoTrade / Brain / ML become available again.',
       })
       if (confirmed) setAresActive(false)
       return
     }
-    const { confirmed } = await aresConfirm({
+    const { confirmed } = await appConfirm({
       title: 'Activate ARES', tone: 'info', confirmLabel: 'ACTIVATE ARES',
       body: 'While ARES is ON, only ARES trades this account.\n\nAutoTrade / Brain / ML are STOPPED and will NOT open positions — so the two engines never open conflicting positions on the same symbol.\n\nAutoTrade is turned OFF now and cannot be re-enabled until you turn ARES OFF.',
     })
@@ -36,14 +36,14 @@ export const SafetyCol = memo(function SafetyCol() {
 
   const toggleOptIn = useCallback(async () => {
     if (realOptIn) {
-      const { confirmed } = await aresConfirm({
+      const { confirmed } = await appConfirm({
         title: 'Disable REAL trading?', tone: 'normal', confirmLabel: 'DISABLE REAL',
         body: 'ARES will no longer trade your REAL exchange account.',
       })
       if (confirmed) setRealOptIn(false, false)
       return
     }
-    const { confirmed } = await aresConfirm({
+    const { confirmed } = await appConfirm({
       title: 'Enable REAL trading', tone: 'danger', confirmLabel: 'ENABLE REAL MONEY',
       body: 'ARES will open and close trades on your REAL exchange account WITHOUT asking each time, using its safety caps:\n  • max 2% of balance per trade\n  • max 5x leverage\n  • 6% daily-loss stop\n\nYou can stop it any time with the KILL button.',
     })
@@ -52,7 +52,7 @@ export const SafetyCol = memo(function SafetyCol() {
 
   const toggleKill = useCallback(async () => {
     if (killSwitch) { setKillSwitch(false); return } // re-enabling needs no confirm
-    const { confirmed } = await aresConfirm({
+    const { confirmed } = await appConfirm({
       title: '⛔ EMERGENCY KILL', tone: 'danger', confirmLabel: 'KILL ARES NOW',
       body: 'Hard-stop ARES immediately. It will place no new trades until you re-enable it. This persists across restarts.',
     })

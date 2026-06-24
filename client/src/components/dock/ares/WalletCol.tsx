@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react'
 import { useAresStore } from '../../../stores/aresStore'
-import { aresConfirm } from './aresConfirm'
+import { appConfirm } from '../../common/confirmDialog'
 
 /** Wallet column: balance, avail/locked, add/withdraw buttons. */
 export const WalletCol = memo(function WalletCol() {
@@ -11,7 +11,7 @@ export const WalletCol = memo(function WalletCol() {
   const onReal = realBalance > 0 // live exchange balance known → ARES trades real money
 
   const addFunds = useCallback(async () => {
-    const { confirmed, amount } = await aresConfirm({
+    const { confirmed, amount } = await appConfirm({
       title: 'Add funds to ARES', tone: 'info', confirmLabel: 'ADD FUNDS',
       body: onReal
         ? 'On a REAL account ARES trades your live exchange balance directly — this virtual amount is for testnet/demo tracking.'
@@ -22,7 +22,7 @@ export const WalletCol = memo(function WalletCol() {
   }, [fundWallet, onReal])
 
   const withdrawFunds = useCallback(async () => {
-    const { confirmed, amount } = await aresConfirm({
+    const { confirmed, amount } = await appConfirm({
       title: 'Withdraw from ARES', tone: 'normal', confirmLabel: 'WITHDRAW',
       body: 'Withdraw funds from the ARES wallet. Blocked while a position is open or an entry is in progress.',
       amount: { label: 'Amount ($)', placeholder: 'e.g. 50' },
