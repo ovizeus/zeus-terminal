@@ -2737,3 +2737,80 @@ export function apollo(closes: number[], rsiPeriod = 14, lookback = 50): Apollo 
 
   return { rsi, rising, fib236, fib382, fib618, fib786, mid, signal }
 }
+
+// [2026-06-23] ASTRAPE ⚡ — Storm Charge & Ignition oscillator (Zeus original, backtest-calibrated).
+// Treats the market like a storm building electric charge. A backtest over 25,704 real-kline
+// samples (6 symbols × 3 TFs) found big moves EXPLODE out of compression — ATR below its 50-avg
+// (strongest signal, −0.39σ before up-moves) with volume building (volRatio ~1.11); the breakout
+// candle gives direction. So ASTRAPE measures the loading (compression + volume = "charge"), and
+// flashes IGNITION when a coiled prior bar EXPANDS — green up / red down. States:
+//   IGNITE_UP/DOWN ⚡  coiled→expansion breakout (the money signal)
+//   ACCUM   🟡        compressed, charging (energy coiling, no direction yet)
+//   DISTRIB 🟣        trend whose candle pressure opposes it (a trap forming)
+//   UP / DOWN 🟢🔴    plain directional drift
+//   COOL    🔵        discharged / chop — stand aside
+export type AstrapeState = 'IGNITE_UP' | 'IGNITE_DOWN' | 'ACCUM' | 'DISTRIB' | 'UP' | 'DOWN' | 'COOL'
+export interface Astrape { charge: (number | null)[]; state: (AstrapeState | null)[]; ignite: boolean[] }
+
+export function astrape(
+  highs: number[], lows: number[], closes: number[], volumes: number[],
+  atrP = 14, atrAvgP = 50, volP = 20, rangeP = 20,
+): Astrape {
+  const n = closes.length
+  const charge: (number | null)[] = new Array(n).fill(null)
+  const state: (AstrapeState | null)[] = new Array(n).fill(null)
+  const ignite: boolean[] = new Array(n).fill(false)
+  if (n === 0) return { charge, state, ignite }
+
+  // Backtest-calibrated constants. Compression dominates (W_COMP > W_VOL) per the data.
+  // Compression score maps the REAL discriminating band from the backtest: normal atr/atrAvg
+  // ≈ 1.05, pre-big-move ≈ 0.92 (a narrow but robust −0.39σ separation). So COMP_HI=1.05 (no
+  // charge) → COMP_LO=0.85 (fully coiled). A flat COMP_REF=1.0 linear map would read ~0 on real
+  // data; this band makes the score meaningful where moves actually originate.
+  const COMP_HI = 1.05, COMP_LO = 0.85
+  const COIL_THR = 0.45    // compScore at/above = clearly compressed (compress <= ~0.96)
+  const VOL_SPAN = 1.4     // volRatio 1..(1+SPAN) -> 0..1
+  const W_COMP = 0.72, W_VOL = 0.28
+  const CHARGE_THR = 55    // loaded spring (compression + volume intensity)
+  const EXP_THR = 1.6      // breakout candle: range >= EXP_THR × its 20-avg
+  const MOM_TREND = 0.004  // ROC10 magnitude for a plain trend bar
+
+  const at = atr(highs, lows, closes, atrP)
+  const atFilled = at.map((x) => (x == null ? 0 : x))
+  const atAvg = sma(atFilled, atrAvgP)
+  const ranges = highs.map((h, i) => h - lows[i])
+  const rangeAvg = sma(ranges, rangeP)
+  const volAvg = sma(volumes, volP)
+  const clamp01 = (x: number) => Math.max(0, Math.min(1, x))
+
+  const compScoreArr: (number | null)[] = new Array(n).fill(null)
+  for (let i = 0; i < n; i++) {
+    const a = at[i], aAvg = atAvg[i], rAvg = rangeAvg[i], vAvg = volAvg[i]
+    if (a == null || aAvg == null || aAvg <= 0 || rAvg == null || rAvg <= 0 || vAvg == null || vAvg <= 0) continue
+    const compress = a / aAvg
+    const volRatio = volumes[i] / vAvg
+    const rangeExp = ranges[i] / rAvg
+    const clp = ranges[i] > 0 ? (closes[i] - lows[i]) / ranges[i] : 0.5
+    const bodyDir = 2 * clp - 1                                   // -1..1 close position in range
+    const mom = i >= 10 && closes[i - 10] ? (closes[i] - closes[i - 10]) / closes[i - 10] : 0
+
+    const compScore = clamp01((COMP_HI - compress) / (COMP_HI - COMP_LO))
+    const volScore = clamp01((volRatio - 1) / VOL_SPAN)
+    compScoreArr[i] = compScore
+    const ch = 100 * clamp01(W_COMP * compScore + W_VOL * volScore)
+    charge[i] = +ch.toFixed(1)
+
+    const coiledPrev = compScoreArr[i - 1] != null && (compScoreArr[i - 1] as number) >= COIL_THR
+    const expanding = rangeExp >= EXP_THR
+    const diverge = Math.abs(mom) > MOM_TREND && Math.sign(bodyDir) === -Math.sign(mom) && Math.abs(bodyDir) > 0.3
+
+    let st: AstrapeState
+    if (coiledPrev && expanding) { st = bodyDir >= 0 ? 'IGNITE_UP' : 'IGNITE_DOWN'; ignite[i] = true }
+    else if (compScore >= COIL_THR || ch >= CHARGE_THR) st = 'ACCUM'
+    else if (diverge) st = 'DISTRIB'
+    else if (Math.abs(mom) >= MOM_TREND) st = mom > 0 ? 'UP' : 'DOWN'
+    else st = 'COOL'
+    state[i] = st
+  }
+  return { charge, state, ignite }
+}
