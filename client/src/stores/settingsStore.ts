@@ -253,6 +253,19 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
       const w = window as unknown as ZeusWindowExt
       _projectAll(settings)
       const payload: Record<string, unknown> = { ...settings }
+      // [2026-06-24] Persist the ACTIVE-indicator map server-side. Which indicators
+      // are toggled ON lives canonically in legacy w.S.activeInds (togInd), and was
+      // never copied into settings.indicators — so it was localStorage-only and got
+      // lost on a cache-clear / new device (operator + Mirela saw "indicators don't
+      // persist/display"). Mirror the legacy `USER_SETTINGS.indicators = S.activeInds`
+      // here. Guard: never POST an empty map (boot-window) over a saved set.
+      try {
+        const _legacyS = (window as unknown as { S?: { activeInds?: Record<string, boolean> } }).S
+        const ai = _legacyS && _legacyS.activeInds
+        if (ai && typeof ai === 'object' && Object.keys(ai).length > 0) {
+          payload.indicators = { ...ai }
+        }
+      } catch (_) { /* defensive — never block the save */ }
       // 3. POST direct via userSettingsApi.save. keepalive:true preserves the
       //    beforeunload-survival semantics of the legacy _usPostRemote path.
       //    On success: feed _usApplyPostResponse so _usSettingsRemoteTs (inside
