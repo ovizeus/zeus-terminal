@@ -172,6 +172,28 @@ describe('ARES active toggle + mutual exclusion with AT', () => {
     });
 });
 
+describe('hardening — stale balance + withdraw race', () => {
+    test('fresh real balance is not flagged stale; very old balance IS stale', () => {
+        serverAres._setRealBalanceForTest(1, 500, 0);          // just now
+        expect(serverAres._realBalanceMetaForTest(1).stale).toBe(false);
+        serverAres._setRealBalanceForTest(1, 500, 5 * 60 * 1000); // 5 min old (> 2× 45s TTL)
+        const meta = serverAres._realBalanceMetaForTest(1);
+        expect(meta.stale).toBe(true);
+        expect(meta.avail).toBe(500); // still used (fail-safe), just flagged
+    });
+
+    test('withdraw is refused while an ARES entry is in flight', () => {
+        _dbStore.set(1, { balance: 500, locked: 0, realizedPnL: 0, fundedTotal: 500 });
+        serverAres._setEntryInFlightForTest(1, true);
+        const r = serverAres.withdraw(1, 50);
+        expect(r.ok).toBe(false);
+        expect(r.error).toMatch(/in progress/i);
+        serverAres._setEntryInFlightForTest(1, false);
+        const r2 = serverAres.withdraw(1, 50); // now allowed
+        expect(r2.ok).toBe(true);
+    });
+});
+
 describe('persistent kill-switch', () => {
     test('killSwitch=true blocks tick in any env (survives via state blob)', () => {
         _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });

@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react'
 import { useAresStore } from '../../../stores/aresStore'
+import { aresConfirm } from './aresConfirm'
 
 /**
  * [2026-06-23] Safety column for ARES REAL-money autonomous trading:
@@ -17,36 +18,45 @@ export const SafetyCol = memo(function SafetyCol() {
   const setKillSwitch = useAresStore((s) => s.setKillSwitch)
   const setAresActive = useAresStore((s) => s.setAresActive)
 
-  const toggleActive = useCallback(() => {
+  const toggleActive = useCallback(async () => {
     if (aresActive) {
-      setAresActive(false)
+      const { confirmed } = await aresConfirm({
+        title: 'Turn ARES OFF?', tone: 'info', confirmLabel: 'TURN OFF',
+        body: 'ARES will stop trading this account. AutoTrade / Brain / ML become available again.',
+      })
+      if (confirmed) setAresActive(false)
       return
     }
-    const ok = window.confirm(
-      'Activate ARES on this account?\n\n' +
-      'While ARES is ON, only ARES trades this account — AutoTrade / Brain / ML will be STOPPED and ' +
-      'will NOT open positions (so the two engines never open conflicting positions on the same symbol).\n\n' +
-      'AutoTrade is turned OFF now and cannot be re-enabled until you turn ARES OFF. Continue?'
-    )
-    if (ok) setAresActive(true)
+    const { confirmed } = await aresConfirm({
+      title: 'Activate ARES', tone: 'info', confirmLabel: 'ACTIVATE ARES',
+      body: 'While ARES is ON, only ARES trades this account.\n\nAutoTrade / Brain / ML are STOPPED and will NOT open positions — so the two engines never open conflicting positions on the same symbol.\n\nAutoTrade is turned OFF now and cannot be re-enabled until you turn ARES OFF.',
+    })
+    if (confirmed) setAresActive(true)
   }, [aresActive, setAresActive])
 
-  const toggleOptIn = useCallback(() => {
+  const toggleOptIn = useCallback(async () => {
     if (realOptIn) {
-      setRealOptIn(false, false)
+      const { confirmed } = await aresConfirm({
+        title: 'Disable REAL trading?', tone: 'normal', confirmLabel: 'DISABLE REAL',
+        body: 'ARES will no longer trade your REAL exchange account.',
+      })
+      if (confirmed) setRealOptIn(false, false)
       return
     }
-    const ok = window.confirm(
-      'Enable REAL autonomous trading for ARES?\n\n' +
-      'ARES will open and close trades on your REAL exchange account WITHOUT asking each time, ' +
-      'using its safety caps (max 2% of balance per trade, max 5x leverage, 6% daily-loss stop).\n\n' +
-      'You can stop it any time with the KILL button. Continue?'
-    )
-    if (ok) setRealOptIn(true, true)
+    const { confirmed } = await aresConfirm({
+      title: 'Enable REAL trading', tone: 'danger', confirmLabel: 'ENABLE REAL MONEY',
+      body: 'ARES will open and close trades on your REAL exchange account WITHOUT asking each time, using its safety caps:\n  • max 2% of balance per trade\n  • max 5x leverage\n  • 6% daily-loss stop\n\nYou can stop it any time with the KILL button.',
+    })
+    if (confirmed) setRealOptIn(true, true)
   }, [realOptIn, setRealOptIn])
 
-  const toggleKill = useCallback(() => {
-    setKillSwitch(!killSwitch)
+  const toggleKill = useCallback(async () => {
+    if (killSwitch) { setKillSwitch(false); return } // re-enabling needs no confirm
+    const { confirmed } = await aresConfirm({
+      title: '⛔ EMERGENCY KILL', tone: 'danger', confirmLabel: 'KILL ARES NOW',
+      body: 'Hard-stop ARES immediately. It will place no new trades until you re-enable it. This persists across restarts.',
+    })
+    if (confirmed) setKillSwitch(true)
   }, [killSwitch, setKillSwitch])
 
   return (

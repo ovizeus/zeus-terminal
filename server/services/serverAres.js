@@ -149,8 +149,24 @@ function _realAvailable(userId) {
     const c = _realBal.get(userId);
     return c && Number.isFinite(c.avail) ? c.avail : 0;
 }
-function _setRealBalanceForTest(userId, avail) { _realBal.set(userId, { avail: +avail || 0, ts: Date.now(), inflight: false }); }
+// [2026-06-24 HARDENING] Stale-balance visibility. The cache keeps the last-known balance when a
+// refresh fails (so ARES isn't blinded by one network blip), but a balance used for a REAL trade
+// that is much older than the TTL must be SURFACED — silently sizing off a 5-min-old balance is a
+// money-path hazard. STALE = older than 2× TTL.
+const REAL_BAL_STALE_MS = REAL_BAL_TTL_MS * 2;
+function _realBalanceMeta(userId) {
+    const c = _realBal.get(userId);
+    if (!c || !Number.isFinite(c.avail)) return { avail: 0, ageMs: null, stale: true, known: false };
+    const ageMs = Date.now() - (c.ts || 0);
+    return { avail: c.avail, ageMs, stale: ageMs > REAL_BAL_STALE_MS, known: c.ts > 0 };
+}
+// [2026-06-24 HARDENING] Entry-in-flight guard for the withdraw race. The wallet `locked` reserve
+// (set before dispatch) already blocks withdraw, but this explicit per-user flag closes the window
+// belt-and-suspenders and documents intent (also survives any future async refactor of the tick).
+const _entryInFlight = new Set();
+function _setRealBalanceForTest(userId, avail, ageMs) { _realBal.set(userId, { avail: +avail || 0, ts: Date.now() - (+ageMs || 0), inflight: false }); }
 function _resetRealBalanceForTest() { _realBal.clear(); }
+function _setEntryInFlightForTest(userId, on) { if (on) _entryInFlight.add(userId); else _entryInFlight.delete(userId); }
 
 // ── Tick — called from serverBrain's per-user BTCUSDT cycle ────────────────
 // mctx: { price, regime: {regime, confidence, trendBias}, confluenceScore,
@@ -207,11 +223,18 @@ function tick(userId, mctx) {
     let _sizeAvail = Math.max(0, st.wallet.balance - st.wallet.locked);
     if (_execEnv === 'REAL') {
         _refreshRealBalanceAsync(userId);
-        const realAvail = _realAvailable(userId);
+        const _bm = _realBalanceMeta(userId);
+        const realAvail = _bm.avail;
         if (!(realAvail > 0)) {
             try { logger.info('ARES', `[real-balance] uid=${userId} REAL entry skipped — exchange balance not known yet (fetching)`); } catch (_) { }
             _saveState(userId, st);
             return null;
+        }
+        // [2026-06-24 HARDENING] Surface a stale balance (kept from a failed/old refresh) — the
+        // entry still proceeds on the last-known value (better than blinding ARES on one blip), but
+        // the operator MUST see it. Loud so a persistently-stale balance is noticed in the logs.
+        if (_bm.stale) {
+            try { logger.warn('ARES', `[real-balance] uid=${userId} sizing off STALE balance $${realAvail} (age ${Math.round((_bm.ageMs || 0) / 1000)}s > ${Math.round(REAL_BAL_STALE_MS / 1000)}s) — exchange refresh lagging`); } catch (_) { }
         }
         _sizeBalance = realAvail;
         _sizeAvail = realAvail;
@@ -288,10 +311,13 @@ function tick(userId, mctx) {
     };
 
     let entry = null;
+    _entryInFlight.add(userId); // [2026-06-24 HARDENING] block withdraw across the dispatch window
     try {
         entry = _serverAT().processBrainDecision(aresDecision, stc, userId, sizing.stake);
     } catch (e) {
         logger.error('ARES', `entry dispatch failed uid=${userId}: ${e.message}`);
+    } finally {
+        _entryInFlight.delete(userId);
     }
     if (!entry) {
         // Entry refused/failed → release the reservation.
@@ -364,6 +390,10 @@ function fund(userId, amount) {
 function withdraw(userId, amount) {
     const v = +amount;
     if (!Number.isFinite(v) || v <= 0) return { ok: false, error: 'Invalid amount' };
+    // [2026-06-24 HARDENING] withdraw race — refuse while an ARES entry is mid-dispatch (the live
+    // order may be landing but not yet reflected in locked/positions). Belt-and-suspenders on top
+    // of the locked/open-position checks below.
+    if (_entryInFlight.has(userId)) return { ok: false, error: 'Entry in progress — try again in a moment' };
     const st = _loadState(userId);
     if (st.wallet.locked > 0 || _openAresPositions(userId).length > 0) return { ok: false, error: 'Open positions / locked funds' };
     if (v > st.wallet.balance) return { ok: false, error: 'Insufficient balance' };
@@ -405,6 +435,8 @@ function getPublicState(userId) {
         dailyLoss: st.dailyLoss ? { day: st.dailyLoss.day, lossUsd: +(+st.dailyLoss.lossUsd || 0).toFixed(2) } : null,
         // [2026-06-23] Live REAL exchange balance ARES would trade with (0 if not on real / not yet fetched).
         realBalance: +(_realAvailable(userId) || 0).toFixed(2),
+        // [2026-06-24 HARDENING] Stale-balance visibility for the UI.
+        realBalanceStale: _realBalanceMeta(userId).stale === true && _realAvailable(userId) > 0,
         // [2026-06-24] ARES active toggle (mutual exclusion with AT) for the UI.
         aresActive: st.aresActive === true,
     };
@@ -467,4 +499,5 @@ module.exports = {
     setRealOptIn, getRealOptIn, setKillSwitch, getKillSwitch, setAresActive, getAresActive,
     _loadStateForTest: _loadState, _saveStateForTest: _saveState, _trajectoryForTest: _trajectory,
     _setRealBalanceForTest, _resetRealBalanceForTest, _realAvailableForTest: _realAvailable,
+    _realBalanceMetaForTest: _realBalanceMeta, _setEntryInFlightForTest,
 };
