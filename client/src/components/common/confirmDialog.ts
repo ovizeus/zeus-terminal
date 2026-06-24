@@ -12,28 +12,32 @@ export interface ConfirmReq {
   cancelLabel?: string
   /** When present the modal shows a numeric input; confirm resolves with `amount`. */
   amount?: { label: string; placeholder?: string; initial?: string }
+  /** When present the modal shows a text input; confirm resolves with `text`. */
+  text?: { label: string; placeholder?: string; initial?: string; maxLength?: number }
 }
+
+type ConfirmResult = { confirmed: boolean; amount?: number; text?: string }
 
 interface ConfirmState {
   req: ConfirmReq | null
-  _resolve: ((r: { confirmed: boolean; amount?: number }) => void) | null
-  open: (req: ConfirmReq) => Promise<{ confirmed: boolean; amount?: number }>
-  settle: (confirmed: boolean, amount?: number) => void
+  _resolve: ((r: ConfirmResult) => void) | null
+  open: (req: ConfirmReq) => Promise<ConfirmResult>
+  settle: (confirmed: boolean, amount?: number, text?: string) => void
 }
 
 export const useConfirmDialog = create<ConfirmState>((set, get) => ({
   req: null,
   _resolve: null,
   open: (req) => new Promise((resolve) => set({ req, _resolve: resolve })),
-  settle: (confirmed, amount) => {
+  settle: (confirmed, amount, text) => {
     const r = get()._resolve
     set({ req: null, _resolve: null })
-    if (r) r({ confirmed, amount })
+    if (r) r({ confirmed, amount, text })
   },
 }))
 
 /** Imperative helper — open the app confirm modal and await the result. Works from React and
  *  plain TS (the legacy bridge / data layer) alike. */
-export function appConfirm(req: ConfirmReq): Promise<{ confirmed: boolean; amount?: number }> {
+export function appConfirm(req: ConfirmReq): Promise<ConfirmResult> {
   return useConfirmDialog.getState().open(req)
 }

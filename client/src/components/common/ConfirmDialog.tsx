@@ -9,16 +9,21 @@ export function ConfirmDialog() {
   const req = useConfirmDialog((s) => s.req)
   const settle = useConfirmDialog((s) => s.settle)
   const [amt, setAmt] = useState('')
+  const [txt, setTxt] = useState('')
 
-  useEffect(() => { setAmt((req && req.amount && req.amount.initial) || '') }, [req])
+  useEffect(() => {
+    setAmt((req && req.amount && req.amount.initial) || '')
+    setTxt((req && req.text && req.text.initial) || '')
+  }, [req])
 
   const tone = (req && req.tone) || 'normal'
   const accent = tone === 'danger' ? '#ff5b6e' : tone === 'info' ? '#00d9ff' : '#00ff88'
   const needsAmount = !!(req && req.amount)
+  const needsText = !!(req && req.text)
   const amtNum = Number(amt)
   const amtValid = !needsAmount || (Number.isFinite(amtNum) && amtNum > 0)
 
-  const confirm = () => { if (amtValid) settle(true, needsAmount ? amtNum : undefined) }
+  const confirm = () => { if (amtValid) settle(true, needsAmount ? amtNum : undefined, needsText ? txt : undefined) }
   const cancel = () => settle(false)
 
   return (
@@ -46,6 +51,28 @@ export function ConfirmDialog() {
             style={{
               width: '100%', boxSizing: 'border-box', background: 'rgba(0,0,0,0.35)',
               border: '1px solid rgba(0,217,255,0.35)', color: '#00d9ff', borderRadius: '3px',
+              fontFamily: 'monospace', fontSize: '14px', padding: '7px 9px', letterSpacing: '1px',
+            }}
+          />
+        </div>
+      )}
+
+      {needsText && (
+        <div style={{ padding: '4px 16px 8px' }}>
+          <label style={{ display: 'block', fontFamily: 'monospace', fontSize: '10px', color: 'rgba(255,255,255,0.45)', letterSpacing: '1px', marginBottom: '3px' }}>
+            {req!.text!.label}
+          </label>
+          <input
+            id="app-confirm-text"
+            type="text" autoFocus
+            value={txt}
+            maxLength={req!.text!.maxLength || 80}
+            placeholder={req!.text!.placeholder || ''}
+            onChange={(e) => setTxt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') confirm() }}
+            style={{
+              width: '100%', boxSizing: 'border-box', background: 'rgba(0,0,0,0.35)',
+              border: `1px solid ${accent}59`, color: accent, borderRadius: '3px',
               fontFamily: 'monospace', fontSize: '14px', padding: '7px 9px', letterSpacing: '1px',
             }}
           />
