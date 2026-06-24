@@ -81,3 +81,4 @@ data/zeus.db.*
 data/*_stale_*.json
 
 scripts/offsite-backup.conf
+KEYS-BACKUP.txt
