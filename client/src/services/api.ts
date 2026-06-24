@@ -141,6 +141,24 @@ export const settingsApi = {
   push: (data: UserContextData) => api.post('/api/sync/user-context', data),
 }
 
+// ── User profile (flip-header) ──
+export interface ProfileFields { id?: number; display_name?: string | null; username?: string | null; avatar?: string | null; accent_color?: string | null; tagline?: string | null }
+export interface ProfileResp { ok: boolean; profile?: ProfileFields; error?: string }
+
+async function _profileFetch(method: string, body?: unknown): Promise<ProfileResp> {
+  try {
+    const res = await fetch('/api/profile', { method, headers: HEADERS, credentials: 'same-origin', body: body !== undefined ? JSON.stringify(body) : undefined })
+    const data = await res.json().catch(() => ({} as ProfileResp))
+    if (!res.ok) return { ok: false, error: (data && (data as ProfileResp).error) || ('HTTP ' + res.status) }
+    return data as ProfileResp
+  } catch (e) { return { ok: false, error: String((e as Error)?.message || e) } }
+}
+
+export const profileApi = {
+  get: () => _profileFetch('GET'),
+  save: (profile: ProfileFields) => _profileFetch('POST', { profile }),
+}
+
 // ── State Sync ──
 
 import type { ServerSnapshot, SyncStatePush } from '../types'
