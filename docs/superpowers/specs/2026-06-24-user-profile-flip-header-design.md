@@ -17,7 +17,10 @@ untouched — it is simply the "front" of the flip; the profile is the "back".
 - Click `⚡ZEUS` → the header does a 3D flip (rotateX, "over the top", ~0.5s) → the **profile panel** appears.
 - **Profile panel** = same visual style as the header (so it never looks out of place). Where the
   Zeus logo was, the user's **avatar + "upload photo"** appears; beside it the username/name/tagline,
-  plus an accent-colour pick and a **Save**. Everything is editable inline, right there.
+  plus an accent-colour pick.
+- **Editing each field** opens a clean dedicated input dialog (reuse the existing `appConfirm` input
+  modal): tap a field (name / @username / tagline) or the avatar → a box opens → type → **OK/confirm**
+  → it saves. Username uniqueness is checked server-side before confirm succeeds.
 - Click the **avatar** → flips back to the normal header.
 - It is a panel (not a one-line bar), so there is room for all fields.
 
@@ -33,7 +36,7 @@ untouched — it is simply the "front" of the flip; the profile is the "back".
 
 | Field | Notes |
 |---|---|
-| `avatar` | User uploads a photo; cropped square + resized to ~128px in the browser; stored small (base64) in the DB. Fallback when unset: a coloured circle with initials. |
+| `avatar` | User uploads a photo; the browser **re-encodes it through a canvas** (draw → re-export as clean PNG/JPEG), cropped square + resized to ~128px. The canvas re-encode keeps ONLY pixels and discards everything else attached to the file (EXIF/metadata, any embedded script, "polyglot" malware-in-image), so the uploaded image is sterile. Stored small (base64) in the DB. Fallback when unset: a coloured circle with initials. |
 | `display_name` | Free text, short (e.g. "Ovi ⚡"). |
 | `username` | Unique handle, shown as `@name`. Validated (allowed chars, length), uniqueness checked server-side. |
 | `accent_color` | A colour the user picks; shows on the avatar ring / name. |
@@ -66,8 +69,11 @@ Explicitly **out of scope (YAGNI):** trader-stats badge (operator declined).
 ## Security / privacy
 
 - Only public fields are ever exposed to other users; email and account data stay private.
-- Avatar upload is validated (image MIME, hard size cap after resize) — base64 in DB, so no path
-  traversal / no new file endpoint.
+- **Avatar "virus" defence (operator concern):** the browser re-encodes the image through a canvas
+  before upload, which strips EXIF/metadata and any embedded payload (malware-in-image / polyglot
+  files cannot survive a pixels-only re-export). Server then validates it is a real image (magic
+  bytes, not just extension), enforces a hard byte-size cap AND a max-dimension cap, and only accepts
+  PNG/JPEG/WebP. Base64 in DB, so no filesystem path / no new file-serving endpoint to attack.
 - Username validated (charset + length) and unique; reserved/admin-impersonating handles rejected.
 
 ## Components (Phase 1)
@@ -94,3 +100,8 @@ Explicitly **out of scope (YAGNI):** trader-stats badge (operator declined).
 - **Phase 1:** everything above — profile + flip + edit + the user's own display. Ship this first.
 - **Phase 2 (later, its own plan):** social surfaces (leaderboard/admin/support avatars, OMEGA greeting
   by name) reusing the public-profile read endpoint.
+- **Phase 3 (future, its own spec — operator idea):** referral system. Each user gets a unique referral
+  code (e.g. `ZEUS-OVI-7K2`); new sign-ups using it are linked to the inviter ("invited by X"). Ties
+  naturally into Zeus's existing invite/approval flow. Benefits to be decided by the operator (ideas:
+  an "Inviter" badge + invite count on the profile, faster/auto approval for invited users, or a small
+  feature unlock). Kept separate so the profile MVP ships clean first.
