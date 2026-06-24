@@ -508,10 +508,11 @@ In `client/src/app.css` (keep the header's existing height — measure it; the f
 .flip-header .flip-back  { position: absolute; inset: 0; transform: rotateX(180deg); }
 .flip-header.is-flipped .flip-front { transform: rotateX(-180deg); }
 .flip-header.is-flipped .flip-back  { transform: rotateX(0deg); }
-/* [wow] luxe gold-neon light sweep during the flip */
-.flip-header::after { content:''; position:absolute; inset:0; pointer-events:none; opacity:0; background:linear-gradient(105deg, transparent 30%, rgba(240,192,64,.35) 50%, transparent 70%); }
-.flip-header.is-flipping::after { animation: zeusFlipSweep .55s ease-out; }
-@keyframes zeusFlipSweep { 0%{opacity:0; transform:translateX(-60%)} 40%{opacity:1} 100%{opacity:0; transform:translateX(60%)} }
+/* [wow — operator chose #4 GLASS-SHINE] crystal/glass shimmer sweep during the flip */
+.flip-header::after { content:''; position:absolute; inset:0; pointer-events:none; opacity:0; mix-blend-mode:screen;
+  background:linear-gradient(115deg, transparent 38%, rgba(255,255,255,.10) 46%, rgba(255,255,255,.55) 50%, rgba(255,255,255,.10) 54%, transparent 62%); }
+.flip-header.is-flipping::after { animation: zeusGlassShine .6s ease-out; }
+@keyframes zeusGlassShine { 0%{opacity:0; transform:translateX(-70%) skewX(-12deg)} 35%{opacity:1} 100%{opacity:0; transform:translateX(70%) skewX(-12deg)} }
 ```
 
 (Toggle `is-flipping` for ~600ms in FlipHeader on each flip to fire the sweep.)
@@ -574,7 +575,9 @@ Expected: 0 errors, `✓ built`.
 
 ## The "wow" effect (operator: pick / confirm)
 
-Default in this plan: a **luxe gold-neon light-sweep** that streaks across the bar during the 0.55s flip (Task 8 CSS). Tunable / alternatives to confirm with the operator: (a) a few **mini green/red trading-candle sparks** that rise during the flip, (b) a **lightning ⚡ arc** along the top edge, (c) a subtle **glass-shine** only. Recommendation: gold sweep + 3-4 candle sparks for the "trading + luxury" feel — cheap, GPU-friendly, no perf risk. **Confirm the exact effect before Task 8.**
+**Operator chose #4 — GLASS-SHINE (crystal/glass shimmer).** Implemented in Task 8 CSS: a translucent
+white highlight sweeps diagonally across the bar during the 0.6s flip (`mix-blend-mode: screen`, skewed),
+like light catching glass. Elegant, GPU-friendly, zero perf risk. Tunable later if desired.
 
 ---
 
