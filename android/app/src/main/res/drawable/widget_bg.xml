@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- [2026-06-24] Gaming widget background — deep purple-black gradient + neon magenta edge. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <gradient
         android:angle="135"
-        android:startColor="#0a1510"
-        android:centerColor="#0d1d16"
-        android:endColor="#0a1510"
+        android:startColor="#0b0414"
+        android:centerColor="#160a26"
+        android:endColor="#08030f"
         android:type="linear" />
-    <stroke android:width="1dp" android:color="#5522e27a" />
-    <corners android:radius="20dp" />
+    <stroke android:width="1dp" android:color="#66ff2e9a" />
+    <corners android:radius="22dp" />
 </shape>

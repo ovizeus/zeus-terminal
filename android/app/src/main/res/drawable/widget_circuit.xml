@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- [2026-06-24] Faint neon circuit-board traces, layered behind the widget content (low alpha
+     via the ImageView). Stroked right-angle paths + node pads, in green / magenta / cyan. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp"
+    android:height="130dp"
+    android:viewportWidth="240"
+    android:viewportHeight="130">
+
+    <!-- horizontal/vertical green traces -->
+    <path android:strokeColor="#3a00ff88" android:strokeWidth="1.4"
+        android:pathData="M0,24 L40,24 L52,36 L120,36 M150,36 L210,36 L222,24 L240,24" />
+    <path android:strokeColor="#3a00ff88" android:strokeWidth="1.4"
+        android:pathData="M0,104 L60,104 L72,92 L130,92 M160,92 L240,92" />
+    <path android:strokeColor="#2effffff" android:strokeWidth="1.0"
+        android:pathData="M30,0 L30,24 M210,36 L210,70 L196,84 L196,130" />
+
+    <!-- magenta accent traces -->
+    <path android:strokeColor="#42ff2e9a" android:strokeWidth="1.4"
+        android:pathData="M0,64 L24,64 L36,52 L96,52 M120,52 L180,52 L192,64 L240,64" />
+    <path android:strokeColor="#33ff2e9a" android:strokeWidth="1.0"
+        android:pathData="M72,92 L72,118 M132,36 L132,8 M60,104 L60,130" />
+
+    <!-- cyan thin traces -->
+    <path android:strokeColor="#2a00e5ff" android:strokeWidth="1.0"
+        android:pathData="M96,52 L108,64 L108,92 M150,36 L150,16 L240,16" />
+
+    <!-- node pads -->
+    <path android:fillColor="#5500ff88" android:pathData="M28,21 h6 v6 h-6 z" />
+    <path android:fillColor="#55ff2e9a" android:pathData="M93,49 h6 v6 h-6 z" />
+    <path android:fillColor="#4400e5ff" android:pathData="M147,33 h6 v6 h-6 z" />
+    <path android:fillColor="#5500ff88" android:pathData="M189,61 h6 v6 h-6 z" />
+    <path android:fillColor="#44ff2e9a" android:pathData="M69,89 h6 v6 h-6 z" />
+    <path android:fillColor="#4400ff88" android:pathData="M157,89 h6 v6 h-6 z" />
+    <path android:fillColor="#3300e5ff" android:pathData="M105,89 h6 v6 h-6 z" />
+</vector>

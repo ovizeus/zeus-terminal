@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- [2026-06-24] Neon gradient divider — green → magenta → cyan, gaming. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <size android:height="1dp" />
-    <solid android:color="#3322e27a" />
+    <gradient
+        android:startColor="#0000ff88"
+        android:centerColor="#88ff2e9a"
+        android:endColor="#0000e5ff"
+        android:type="linear" />
 </shape>

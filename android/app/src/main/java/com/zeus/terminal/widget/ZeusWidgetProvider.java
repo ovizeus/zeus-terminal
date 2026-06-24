@@ -80,8 +80,8 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
         int brainScore = prefs.getInt("brainScore", 0);
         long ts = prefs.getLong("snapshotTs", 0L);
 
-        int cGreen = Color.parseColor("#22e27a");
-        int cRed = Color.parseColor("#ff4d6d");
+        int cGreen = Color.parseColor("#00ff88");
+        int cRed = Color.parseColor("#ff3b6b");
         int cDim = Color.parseColor("#6b7a88");
         int cNeutral = Color.parseColor("#aab8c8");
 
@@ -127,7 +127,8 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
             public void run() {
                 String btcPrice = "—", btcChg = "";
                 String ethPrice = "—", ethChg = "";
-                float btcChgNum = 0f, ethChgNum = 0f;
+                String solPrice = "—", solChg = "";
+                float btcChgNum = 0f, ethChgNum = 0f, solChgNum = 0f;
                 try {
                     String btcJson = httpGet("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT");
                     JSONObject b = new JSONObject(btcJson);
@@ -146,10 +147,22 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
                     ethPrice = "$" + formatPrice(ep);
                     ethChg = (ec >= 0 ? "+" : "") + String.format("%.2f", ec) + "%";
                 } catch (Exception e) { Log.w(TAG, "ETH fetch failed", e); }
+                try {
+                    String solJson = httpGet("https://api.binance.com/api/v3/ticker/24hr?symbol=SOLUSDT");
+                    JSONObject s = new JSONObject(solJson);
+                    double sp = s.getDouble("lastPrice");
+                    double sc = s.getDouble("priceChangePercent");
+                    solChgNum = (float) sc;
+                    solPrice = "$" + formatPrice(sp);
+                    solChg = (sc >= 0 ? "+" : "") + String.format("%.2f", sc) + "%";
+                } catch (Exception e) { Log.w(TAG, "SOL fetch failed", e); }
 
+                final int UP = Color.parseColor("#00ff88");
+                final int DOWN = Color.parseColor("#ff3b6b");
                 final String fBtc = btcPrice, fBtcCh = btcChg;
                 final String fEth = ethPrice, fEthCh = ethChg;
-                final float fBtcN = btcChgNum, fEthN = ethChgNum;
+                final String fSol = solPrice, fSolCh = solChg;
+                final float fBtcN = btcChgNum, fEthN = ethChgNum, fSolN = solChgNum;
 
                 new Handler(Looper.getMainLooper()).post(new Runnable() {
                     @Override public void run() {
@@ -157,11 +170,14 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
                         applySnapshot(context, v, layoutId);
                         v.setTextViewText(R.id.wBtc, fBtc);
                         v.setTextViewText(R.id.wBtcChg, fBtcCh);
-                        v.setTextColor(R.id.wBtcChg, fBtcN >= 0 ? Color.parseColor("#22e27a") : Color.parseColor("#ff4d6d"));
+                        v.setTextColor(R.id.wBtcChg, fBtcN >= 0 ? UP : DOWN);
                         if (layoutId == R.layout.widget_large) {
                             v.setTextViewText(R.id.wEth, fEth);
                             v.setTextViewText(R.id.wEthChg, fEthCh);
-                            v.setTextColor(R.id.wEthChg, fEthN >= 0 ? Color.parseColor("#22e27a") : Color.parseColor("#ff4d6d"));
+                            v.setTextColor(R.id.wEthChg, fEthN >= 0 ? UP : DOWN);
+                            v.setTextViewText(R.id.wSol, fSol);
+                            v.setTextViewText(R.id.wSolChg, fSolCh);
+                            v.setTextColor(R.id.wSolChg, fSolN >= 0 ? UP : DOWN);
                         }
                         wireClicks(context, v);
                         mgr.updateAppWidget(id, v);
