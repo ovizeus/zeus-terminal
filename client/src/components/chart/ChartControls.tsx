@@ -626,6 +626,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'plutus',   ico: '💰', name: 'PLUTUS',           desc: 'Smart-money footprint — effort vs result (Zeus original)', hasGenericSettings: true },
   { id: 'helios',   ico: '☀️', name: 'HELIOS',           desc: 'Regime oracle — Hurst trending vs mean-revert (Zeus original)', hasGenericSettings: true },
   { id: 'hyperion', ico: '🌅', name: 'HYPERION',         desc: 'Dual-line TSI momentum oscillator — green-top / red-bottom intensifying glow (Zeus original)', hasGenericSettings: true },
+  { id: 'astrape', ico: '⚡', name: 'ASTRAPE',           desc: 'Storm Charge & Ignition — multi-colour charge histogram; ⚡ flashes big moves BEFORE they break (backtest-calibrated). Amber=accumulation, green up / red down, purple=distribution (Zeus original)', hasGenericSettings: true },
   { id: 'metis', ico: '🟢', name: 'METIS', desc: 'Traders Dynamic Index — RSI green/red/yellow lines + volatility bands + signals + bar colouring (Zeus original)', hasGenericSettings: true },
   { id: 'eunomia', ico: '📊', name: 'EUNOMIA',          desc: 'RSX-NRP — smoothed RSI, slope-coloured line + green/yellow/red momentum strip (Zeus original)', hasGenericSettings: true },
   { id: 'apollo', ico: '☀️', name: 'APOLLO', desc: 'Variety RSI + Fibonacci Auto-Channel — gradient bar colouring + S/L signals (Zeus original)', hasGenericSettings: true },
