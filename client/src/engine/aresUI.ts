@@ -63,6 +63,10 @@ const w = window as any
   /* ══ Neural Brain Core ══ */
   #ares-core-wrap { display:flex;justify-content:center;align-items:center;padding:4px 0 0;position:relative;z-index:2; }
   #ares-core-svg { width:100%;max-width:480px;height:auto;display:block;overflow:visible; }
+  /* [2026-06-23] Dark halo behind brain labels so the lobe / status text (VISION, MEMORY, POLICY,
+     SURVIVAL, EXEC...) reads crisply over the busy neuron/constellation dot field instead of
+     visually merging into it. paint-order=stroke draws the dark outline BEHIND the coloured fill. */
+  #ares-core-svg text { paint-order:stroke;stroke:#060a12;stroke-width:1.1px;stroke-linejoin:round;stroke-linecap:round; }
 
   /* ══ Cognitive Bar (sotto il brain) ══ */
   #ares-cog-bar { display:flex;align-items:center;gap:8px;margin:4px 12px 6px;z-index:2;position:relative; }

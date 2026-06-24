@@ -6,6 +6,8 @@ export const WalletCol = memo(function WalletCol() {
   const wallet = useAresStore((s) => s.ui.wallet)
   const fundWallet = useAresStore((s) => s.fundWallet)
   const withdrawWallet = useAresStore((s) => s.withdrawWallet)
+  const realBalance = useAresStore((s) => s.realBalance)
+  const onReal = realBalance > 0 // live exchange balance known → ARES trades real money
 
   const addFunds = useCallback(() => {
     const amt = prompt('Add funds ($):')
@@ -33,16 +35,18 @@ export const WalletCol = memo(function WalletCol() {
       borderRight: '1px solid rgba(0,150,255,0.12)',
       padding: '0 8px',
     }}>
-      <div className="ares-meta-title" style={{ textAlign: 'center' }}>WALLET</div>
+      <div className="ares-meta-title" style={{ textAlign: 'center' }}>{onReal ? 'WALLET · REAL' : 'WALLET'}</div>
       <div
         id="ares-wallet-balance"
+        title={onReal ? 'Live balance read from the exchange (real account)' : 'Virtual wallet (testnet/demo)'}
         style={{
           fontFamily: 'monospace', fontSize: '11px', fontWeight: 700,
-          color: wallet.balance > 0 ? '#00ff88' : 'rgba(255,255,255,0.25)',
+          color: onReal ? '#00e5ff' : (wallet.balance > 0 ? '#00ff88' : 'rgba(255,255,255,0.25)'),
           letterSpacing: '1px',
         }}
       >
-        {fmt(wallet.balance)}
+        {onReal ? fmt(realBalance) : fmt(wallet.balance)}
+        {onReal && <span style={{ fontSize: '8px', color: '#00e5ff99', marginLeft: '4px', letterSpacing: '1px' }}>EXCHANGE</span>}
       </div>
       <div id="ares-wallet-avail" style={{ fontFamily: 'monospace', fontSize: '11px', color: '#6a9a7a', marginTop: '1px' }}>
         Avail: <span id="ares-wallet-avail-val">{fmt0(wallet.available)}</span>

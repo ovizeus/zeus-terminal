@@ -64,6 +64,8 @@ interface AresStoreState {
    *  consents to ARES trading their REAL capital; killSwitch = persistent emergency stop. */
   realOptIn: boolean
   killSwitch: boolean
+  /** [2026-06-23] Live REAL exchange available balance ARES trades with (0 if not real / unknown). */
+  realBalance: number
 
   /** [R28.2] UI slice — mirrors aresUI.ts DOM render output. */
   ui: AresStoreUI
@@ -114,6 +116,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
           fundedTotal: +a.wallet.fundedTotal || 0,
           realOptIn: a.realOptIn === true,
           killSwitch: a.killSwitch === true,
+          realBalance: +a.realBalance || 0,
           serverSide: true,
           loaded: true,
           // [SERVER-ARES P3] Capture the live reasoning snapshot so the panel
@@ -156,6 +159,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   srv: null,
   realOptIn: false,
   killSwitch: false,
+  realBalance: 0,
   ui: DEFAULT_ARES_UI,
 
   loadFromServer: async () => { _debouncedAresLoad!() },
