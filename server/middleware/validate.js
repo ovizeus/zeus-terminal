@@ -202,4 +202,22 @@ function validateSettingsBody(req, res, next) {
   return next();
 }
 
-module.exports = { validateOrderBody, validateCancelBody, validateLeverageBody, validateSettingsBody };
+// ─── Profile fields validator (flip-header profile) ───
+const PROFILE_USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
+const PROFILE_HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const PROFILE_AVATAR_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+const PROFILE_AVATAR_MAX_LEN = 300000; // ~220KB decoded — generous for a 128px image
+
+function validateProfileFields(p) {
+  if (!p || typeof p !== 'object') return { ok: false, error: 'body' };
+  if (p.display_name != null && (typeof p.display_name !== 'string' || p.display_name.length > 40)) return { ok: false, error: 'display_name' };
+  if (p.username != null && p.username !== '' && !PROFILE_USERNAME_RE.test(p.username)) return { ok: false, error: 'username' };
+  if (p.accent_color != null && p.accent_color !== '' && !PROFILE_HEX_RE.test(p.accent_color)) return { ok: false, error: 'accent_color' };
+  if (p.tagline != null && (typeof p.tagline !== 'string' || p.tagline.length > 80)) return { ok: false, error: 'tagline' };
+  if (p.avatar != null && p.avatar !== '') {
+    if (typeof p.avatar !== 'string' || p.avatar.length > PROFILE_AVATAR_MAX_LEN || !PROFILE_AVATAR_RE.test(p.avatar)) return { ok: false, error: 'avatar' };
+  }
+  return { ok: true };
+}
+
+module.exports = { validateOrderBody, validateCancelBody, validateLeverageBody, validateSettingsBody, validateProfileFields };
