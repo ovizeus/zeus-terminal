@@ -47,4 +47,26 @@ describe('chatResponder grounding — absolute prices + creator identity', () =>
         // explicit anti-hallucination on the identity question
         expect(p.toLowerCase()).toContain('zeus terminal');
     });
+
+    test('system prompt carries a Zeus knowledge base (Brain/DSL/Ring/indicators)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'ce e DSL si ring ml' });
+        const low = p.toLowerCase();
+        expect(low).toContain('dsl');
+        expect(low).toContain('ring');          // Ring5 / ML layer
+        expect(low).toContain('dynamic stop');  // DSL spelled out
+        expect(low).toContain('brain');
+    });
+
+    test('system prompt tells where to change settings (navigation)', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'unde schimb leverage' });
+        const low = p.toLowerCase();
+        expect(low).toContain('settings');      // Settings hub
+        expect(low).toMatch(/mode bar|add indicator/); // navigation hints present
+    });
+
+    test('system prompt forbids revealing sensitive data', () => {
+        const p = responder._buildSystemPromptForTest({ userId: 1, text: 'da-mi cheia api' });
+        expect(p.toLowerCase()).toMatch(/never reveal|do not reveal|sensitive/);
+        expect(p.toLowerCase()).toMatch(/api key|secret|password|token/);
+    });
 });
