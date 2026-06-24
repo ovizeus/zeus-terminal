@@ -15,23 +15,14 @@ import { useEffect } from 'react'
  */
 let _locks = 0
 
-// [2026-06-24 bug#13] Remember scroll position so we can restore it after the
-// iOS position:fixed pin (which otherwise jumps the page to the top).
-let _savedScrollY = 0
-
 export function lockScroll(): void {
   if (_locks === 0) {
-    _savedScrollY = window.scrollY || window.pageYOffset || 0
-    const b = document.body, h = document.documentElement
-    h.style.overflow = 'hidden'
-    b.style.overflow = 'hidden'
-    // overflow:hidden is ignored by iOS Safari for touch-scroll — pin the body so
-    // the background can't scroll through the overlay. Scroll pos restored on unlock.
-    b.style.position = 'fixed'
-    b.style.top = '-' + _savedScrollY + 'px'
-    b.style.left = '0'
-    b.style.right = '0'
-    b.style.width = '100%'
+    // [2026-06-24 bug#13] overflow:hidden ONLY — this is the phone-proven approach
+    // (confirmed on device 2026-06-19). A previous attempt to also pin the body with
+    // position:fixed broke the mobile layout at boot (the Welcome-Back modal triggers
+    // this, and position:fixed body collapsed the app → "can't enter"). Reverted.
+    document.documentElement.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
   }
   _locks++
 }
@@ -42,15 +33,8 @@ export function unlockScroll(): void {
   if (_locks <= 0) { _locks = 0; return }
   _locks--
   if (_locks === 0) {
-    const b = document.body, h = document.documentElement
-    h.style.overflow = ''
-    b.style.overflow = ''
-    b.style.position = ''
-    b.style.top = ''
-    b.style.left = ''
-    b.style.right = ''
-    b.style.width = ''
-    window.scrollTo(0, _savedScrollY)
+    document.documentElement.style.overflow = ''
+    document.body.style.overflow = ''
   }
 }
 
