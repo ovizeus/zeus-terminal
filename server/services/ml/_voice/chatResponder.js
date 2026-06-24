@@ -1197,7 +1197,7 @@ function _buildLLMContext(params) {
         positions: [],
         engineMode: 'demo',
         recentDecisions: [],
-        market: { gainers: [], losers: [], volume: [], btcDelta24h: null, ethDelta24h: null, breadth: null },
+        market: { gainers: [], losers: [], volume: [], btcDelta24h: null, ethDelta24h: null, btcPrice: null, ethPrice: null, solPrice: null, breadth: null },
         symbolDeep: null,
         // [Day 33 #2] Operator-stated preferences ("remember that I prefer tight SL")
         traderProfile: _getTraderProfile(userId).map(p => p.text),
@@ -1255,6 +1255,17 @@ function _buildLLMContext(params) {
     const eth = marketRadar.getSymbolFromSnapshot('ETHUSDT');
     if (btc) ctx.market.btcDelta24h = btc.priceChangePercent24h;
     if (eth) ctx.market.ethDelta24h = eth.priceChangePercent24h;
+    // [2026-06-23] ABSOLUTE prices from serverState (the always-fresh live market feed) so the
+    // LLM headline carries the real price and never invents one from stale training data (operator
+    // saw "BTC is 34k"). Falls back to the radar snapshot price, then null. serverState stays
+    // fresh even when the radar is empty (e.g. during a Binance rate-ban).
+    {
+        const ss = _getServerState();
+        const pxOf = (sym) => { try { const s = ss && ss.getSnapshotForSymbol(sym); return s && s.price > 0 ? s.price : null; } catch (_) { return null; } };
+        ctx.market.btcPrice = pxOf('BTCUSDT') || (btc && btc.price) || null;
+        ctx.market.ethPrice = pxOf('ETHUSDT') || (eth && eth.price) || null;
+        ctx.market.solPrice = pxOf('SOLUSDT') || null;
+    }
     if (vSnap) {
         const universe30 = marketRadar.getTopSnapshot({ kind: 'volume', limit: 30 });
         if (universe30) {
@@ -1354,8 +1365,10 @@ function _buildSystemPrompt(params) {
     const breadth = ctx.market.breadth
         ? `${ctx.market.breadth.greenCount}/${ctx.market.breadth.totalCount} green, avg ${_fmtPct(ctx.market.breadth.avgPct24h)}`
         : 'n/a';
+    const _px = (p) => (p == null ? 'n/a' : (p >= 1 ? '$' + Number(p).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '$' + Number(p).toFixed(6)));
     const persona = [
-        "You are Omega — operator's personal trading assistant inside Zeus Terminal.",
+        "You are Omega — the operator's personal trading assistant inside Zeus Terminal.",
+        "IDENTITY: you were created/built by the operator (the founder and builder of Zeus Terminal) — you live inside Zeus Terminal as its trading voice. If asked who made/created you or what you are, say exactly that: the operator built you as Omega inside Zeus Terminal. NEVER say 'a team of developers', 'OpenAI', 'a company', or that you don't know your creator.",
         "PERSONA: trader-friend, direct, opinionated. Speak like a buddy in the trenches, not a corporate chatbot.",
         "RESPONSE STYLE: max 3 sentences. Lead with the read in the first sentence. No preamble. No hedging filler (no 'I think', 'maybe', 'as Omega', 'possibly').",
         langDirective,
@@ -1390,7 +1403,8 @@ function _buildSystemPrompt(params) {
         `  Recent decisions (last 5min): ${_formatDecisionsBlock(ctx.recentDecisions)}`,
         '',
         'MARKET (top-N from Binance USDT perps, 24h):',
-        `  BTC: ${ctx.market.btcDelta24h != null ? _fmtPct(ctx.market.btcDelta24h) : 'n/a'}, ETH: ${ctx.market.ethDelta24h != null ? _fmtPct(ctx.market.ethDelta24h) : 'n/a'}`,
+        `  BTC: ${_px(ctx.market.btcPrice)}${ctx.market.btcDelta24h != null ? ` (${_fmtPct(ctx.market.btcDelta24h)} 24h)` : ''}, ETH: ${_px(ctx.market.ethPrice)}${ctx.market.ethDelta24h != null ? ` (${_fmtPct(ctx.market.ethDelta24h)})` : ''}${ctx.market.solPrice != null ? `, SOL: ${_px(ctx.market.solPrice)}` : ''}`,
+        `  (These are the LIVE prices — use them; do NOT state any other BTC/ETH/SOL price.)`,
         `  Breadth (top 30): ${breadth}`,
         `  Top gainers: ${_formatSymList(ctx.market.gainers, 'pct')}`,
         `  Top losers: ${_formatSymList(ctx.market.losers, 'pct')}`,
