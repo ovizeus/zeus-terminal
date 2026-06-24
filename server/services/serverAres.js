@@ -39,6 +39,11 @@ function _defaultState() {
         engine: { tradeHistory: [], consecutiveLoss: 0, consecutiveWin: 0, lastLossTs: 0, lastTradeTs: 0, winRate10: 0, totalTrades: 0, totalWins: 0, totalLosses: 0 },
         mission: { startBalance: null, startTs: null },
         lastDecision: null,
+        // [2026-06-23] REAL-money consent (server-authoritative). ARES will NOT place a REAL
+        // autonomous entry unless realOptIn === true. Default false = fail-closed. Set only via
+        // setRealOptIn() (server side); stripped from any client sync (see _stripDangerousKeys).
+        realOptIn: false,
+        realOptInTs: null,
     };
 }
 
@@ -141,6 +146,13 @@ function tick(userId, mctx) {
     // aggressive 25%/20x testnet geometry with real capital. env from serverAT's single source.
     let _execEnv = null;
     try { _execEnv = (_serverAT().resolveExecutionEnv(userId) || {}).env; } catch (_) { _execEnv = null; }
+    // [2026-06-23] REAL-money consent gate (fail-closed): never auto-trade real capital for a user
+    // who has not explicitly opted in. env resolution can throw → _execEnv null → not REAL → safe.
+    if (_execEnv === 'REAL' && st.realOptIn !== true) {
+        try { logger.info('ARES', `[consent] uid=${userId} REAL entry blocked — no real opt-in (fail-closed)`); } catch (_) { }
+        _saveState(userId, st);
+        return null;
+    }
     sizing = applyRealCaps(sizing, _execEnv, { balance: st.wallet.balance });
     if (sizing.capped) {
         try { logger.info('ARES', `[caps] uid=${userId} REAL caps applied: stake ${sizing.capsApplied.fromStake}→${sizing.stake}, lev ${sizing.capsApplied.fromLeverage}→${sizing.leverage}`); } catch (_) { }
@@ -283,7 +295,22 @@ function getPublicState(userId) {
     };
 }
 
+// [2026-06-23] REAL-money consent — server-authoritative setter/getter. The ONLY way realOptIn
+// flips true; an operator/user endpoint or admin action calls setRealOptIn. Never set by client sync.
+function setRealOptIn(userId, value, now) {
+    const st = _loadState(userId);
+    st.realOptIn = value === true;
+    st.realOptInTs = st.realOptIn ? (Number.isFinite(+now) ? +now : Date.now()) : null;
+    _saveState(userId, st);
+    try { logger.info('ARES', `[consent] uid=${userId} realOptIn → ${st.realOptIn}`); } catch (_) { }
+    return st.realOptIn;
+}
+function getRealOptIn(userId) {
+    try { return _loadState(userId).realOptIn === true; } catch (_) { return false; }
+}
+
 module.exports = {
     tick, onPositionClosed, fund, withdraw, getPublicState,
+    setRealOptIn, getRealOptIn,
     _loadStateForTest: _loadState, _saveStateForTest: _saveState, _trajectoryForTest: _trajectory,
 };

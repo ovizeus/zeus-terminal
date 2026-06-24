@@ -16,6 +16,7 @@ const _atMock = {
     getOpenPositions: jest.fn(() => []),
     processBrainDecision: jest.fn(() => ({ seq: 4242 })),
     isKillActive: jest.fn(() => false),
+    resolveExecutionEnv: jest.fn(() => ({ env: 'TESTNET' })),
 };
 jest.mock('../../server/services/serverAT', () => _atMock);
 
@@ -51,6 +52,42 @@ beforeEach(() => {
     _atMock.getOpenPositions.mockReturnValue([]);
     _atMock.processBrainDecision.mockClear();
     _atMock.processBrainDecision.mockReturnValue({ seq: 4242 });
+    _atMock.resolveExecutionEnv.mockReturnValue({ env: 'TESTNET' });
+});
+
+describe('REAL-money consent gate (fail-closed)', () => {
+    const _fund = () => _dbStore.set(1, { balance: 655, locked: 0, realizedPnL: 0, fundedTotal: 46905 });
+
+    test('REAL env without opt-in BLOCKS the entry', () => {
+        _fund();
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        expect(serverAres.tick(1, GO_MCTX)).toBeNull();
+        expect(_atMock.processBrainDecision).not.toHaveBeenCalled();
+    });
+
+    test('REAL env WITH explicit opt-in dispatches', () => {
+        _fund();
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+        expect(serverAres.setRealOptIn(1, true)).toBe(true); // loads funded state, preserves balance
+        const entry = serverAres.tick(1, GO_MCTX);
+        expect(entry).not.toBeNull();
+        expect(_atMock.processBrainDecision).toHaveBeenCalledTimes(1);
+    });
+
+    test('TESTNET dispatches without opt-in (consent only gates REAL)', () => {
+        _fund();
+        _atMock.resolveExecutionEnv.mockReturnValue({ env: 'TESTNET' });
+        expect(serverAres.tick(1, GO_MCTX)).not.toBeNull();
+        expect(_atMock.processBrainDecision).toHaveBeenCalledTimes(1);
+    });
+
+    test('setRealOptIn / getRealOptIn roundtrip + revoke', () => {
+        expect(serverAres.getRealOptIn(1)).toBe(false); // default fail-closed
+        serverAres.setRealOptIn(1, true);
+        expect(serverAres.getRealOptIn(1)).toBe(true);
+        serverAres.setRealOptIn(1, false);
+        expect(serverAres.getRealOptIn(1)).toBe(false);
+    });
 });
 
 describe('state seed/migration', () => {
