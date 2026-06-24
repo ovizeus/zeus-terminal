@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.167',
-    build: 193,
+    version: '1.7.168',
+    build: 194,
     date: '2026-06-24',
     changelog: [
+        'b194 v1.7.168 — fix: settings-save schema accepts indicators (closes the regression + the persistence). The settings validator (validate.js SETTINGS_SHAPE) rejected any unknown key with a 400, so once the b192 client started sending the indicators map, EVERY settings save was rejected and nothing persisted since b192. Added indicators: object to SETTINGS_SHAPE (and earlier to the trading.js whitelist). Now the active-indicator round-trip works end to end: toggle persists across reload, cache-clear and devices, and renders on load. No-apostrophe changelog.',
         'b193 v1.7.167 — fix: server settings whitelist now includes indicators 2026-06-24. The b192 client change started sending the active-indicator map, but POST /api/user/settings whitelisted only indSettings (params), not indicators (the on/off map), so the server silently dropped it. Added indicators to the allowlist (trading.js). Together with b192 the round-trip is closed: toggling an indicator now persists across reloads, cache-clears and devices, and renders on load. No-apostrophe changelog.',
         'b192 v1.7.166 — fix: active indicators now persist server-side 2026-06-24. Which indicators are toggled ON lived only in legacy w.S.activeInds (localStorage), never copied into the synced settings, so it was lost on a cache-clear or a new device (operator + second user saw indicators not persisting / not displaying after clearing the PWA cache for b191). saveToServer now mirrors the active-indicator map into payload.indicators (guarded against an empty boot-time map clobbering a saved set); the existing load path applies server indicators to the chart. The lost lists could not be recovered (they were localStorage-only) but re-toggling now persists across reloads, cache-clears and devices. No-apostrophe changelog.',
         'b191 v1.7.165 — HOTFIX: revert bug#13 scroll-lock body position:fixed 2026-06-24. The b190 iOS scroll-lock change pinned the body with position:fixed while a modal is open; on mobile this collapsed the layout — and since the Welcome-Back modal opens at boot, the app appeared frozen/blank (could not enter the app), which also broke the indicator-select modal (toggles did not register, so indicators did not persist). Reverted scroll-lock to the phone-proven overflow-hidden-only approach (kept the negative ref-count guard). The other 12 b190 fixes are unchanged. Operators must hard-refresh or clear the PWA cache once to pick up the new bundle.',

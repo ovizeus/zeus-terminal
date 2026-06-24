@@ -153,7 +153,7 @@ const SETTINGS_SHAPE = {
   mscanSyms: 'array',
   // objects (nested blobs — null also acceptable)
   candleColors: 'object', heatmapSettings: 'object',
-  indSettings: 'object', liqSettings: 'object', llvSettings: 'object',
+  indSettings: 'object', indicators: 'object', liqSettings: 'object', llvSettings: 'object',
   zsSettings: 'object', srSettings: 'object', alertSettings: 'object',
   manualLive: 'object', manualTestnet: 'object', dslSettings: 'object',
   // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace — nested { live, demo }
