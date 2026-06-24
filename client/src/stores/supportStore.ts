@@ -36,8 +36,11 @@ export const useSupportStore = create<SupportStore>((set) => ({
     if (data.sender === 'admin') {
       set((s) => {
         const exists = s.thread.some((m) => m.id === data.id)
+        // [2026-06-24 bug#14] On a duplicate WS broadcast (same id), don't re-append
+        // AND don't re-bump unread — the old code inflated userUnread on every dup.
+        if (exists) return s
         return {
-          thread: exists ? s.thread : [...s.thread, data],
+          thread: [...s.thread, data],
           userUnread: s.userUnread + 1,
         }
       })

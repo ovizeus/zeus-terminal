@@ -160,13 +160,25 @@ export async function startLegacyBridge(): Promise<BridgeState> {
   if (!w.mainChart) {
     console.log('[BOOT] Waiting for zeus:chartReady...')
     await new Promise<void>((resolve) => {
-      const onReady = () => { window.removeEventListener('zeus:chartReady', onReady); resolve() }
+      // [2026-06-24 bug#7] Resolve the INSTANT the chart exists (poll backup), not only
+      // on the event — zeus:chartReady can fire before this listener attaches on a fast
+      // device, and the hard 10s cap left slow devices booting with a null chart (blank
+      // chart + silent downstream failures). Poll + event + a longer 20s safety cap.
+      let done = false
+      const onReady = () => finish()
+      const poll = setInterval(() => { if (w.mainChart) finish() }, 300)
+      function finish() {
+        if (done) return
+        done = true
+        window.removeEventListener('zeus:chartReady', onReady)
+        clearInterval(poll)
+        resolve()
+      }
       window.addEventListener('zeus:chartReady', onReady)
       setTimeout(() => {
-        window.removeEventListener('zeus:chartReady', onReady)
-        if (!w.mainChart) console.warn('[BOOT] Chart not ready after 10s — proceeding anyway')
-        resolve()
-      }, 10_000)
+        if (!w.mainChart) console.warn('[BOOT] Chart not ready after 20s — proceeding anyway')
+        finish()
+      }, 20_000)
     })
     console.log('[BOOT] Chart ready — mainChart:', !!w.mainChart)
   } else {

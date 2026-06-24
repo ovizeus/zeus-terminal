@@ -1983,8 +1983,11 @@ export function renderATPositions(): void {
     // second, matching the exchange). Falls back to the periodically-synced server pos.pnl only when
     // no live price yet. Supersedes the 2026-05-18 "prefer server pnl" band-aid (local was lastPrice
     // then; -44 local vs -26 Binance on ETH) — that drift is fixed by markPrice.
-    const pnl = resolveDisplayPnlLive(_hasLivePrice, pos.mode === 'live' || pos.fromExchange, pos.pnl, _localPnl)
-    const pnlPct = (w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00')
+    const _pnlRaw = resolveDisplayPnlLive(_hasLivePrice, pos.mode === 'live' || pos.fromExchange, pos.pnl, _localPnl)
+    // [2026-06-24 bug#4] Guard against NaN/Infinity reaching the UI (malformed pos.pnl/size → "NaN%"/"$NaN").
+    const pnl = Number.isFinite(_pnlRaw) ? _pnlRaw : 0
+    const _pnlPctRaw = w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100) : 0
+    const pnlPct = (Number.isFinite(_pnlPctRaw) ? _pnlPctRaw : 0).toFixed(2)
     const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))
     const safeSide = escHtml(pos.side)
     const posMode = (pos.mode || pos._serverMode || 'demo')

@@ -109,9 +109,19 @@ export async function startApp(): Promise<void> {
   const _earlyRestored = w.ZState.restore()
   if (_earlyRestored) console.log('[startApp] State restored immediately at boot — positions in TP before Phase 1')
 
-  // [2026-06-13] Keep in sync with server/version.js on each deploy (manual, same
-  // as the server file). Was stale at v1.2.1 while the app was v1.7.102.
-  w.BUILD = w.BUILD || { name: 'Zeus Terminal', version: 'v1.7.102 (b128)', features: ['ServerAT', 'DSL', 'Brain', 'ARES', 'Reconciliation', 'ZLOG'], ts: Date.now() }
+  // [2026-06-24 bug#1] Version now comes from the server (/api/version) so it can
+  // never go stale again. The literal below is just a pre-fetch fallback.
+  w.BUILD = w.BUILD || { name: 'Zeus Terminal', version: 'v1.7.164 (b190)', features: ['ServerAT', 'DSL', 'Brain', 'ARES', 'Reconciliation', 'ZLOG'], ts: Date.now() }
+  try {
+    fetch('/api/version', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(v => {
+        if (v && v.version) {
+          w.BUILD = Object.assign({}, w.BUILD, { version: 'v' + v.version + ' (b' + v.build + ')', build: v.build, date: v.date })
+          try { if (typeof w._renderBuildInfo === 'function') w._renderBuildInfo() } catch (_) { /* non-blocking */ }
+        }
+      }).catch(() => { /* offline — keep fallback */ })
+  } catch (_) { /* non-blocking */ }
   console.log('[startApp] boot sequence starting | __wsGen=', w.__wsGen)
 
   _pinCheckLock()

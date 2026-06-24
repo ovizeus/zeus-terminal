@@ -1249,7 +1249,7 @@ router.post('/change-email/confirm', async (req, res) => {
             JWT_SECRET,
             { expiresIn: JWT_EXPIRY } // [SC-02] use constant instead of hardcoded
         );
-        _setAuthCookie(res, newToken);
+        _setAuthCookie(res, newToken, user.id); // [bug#3] refresh zeus_uid companion cookie too
 
         // Notify old email about the change
         const _oldMailer = _getMailer();

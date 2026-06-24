@@ -485,19 +485,48 @@ export function closeM(id: string): void { const e = el(id); if (e) { e.style.di
 // removed, zero memory bookkeeping.
 const _modalDragAttached: WeakSet<Element> = new WeakSet()
 
+// [2026-06-24 bug#8] ONE shared document-level move/up listener for ALL modals.
+// The old code added a fresh mousemove + mouseup to `document` per header on every
+// _initModalDrag() call (fires on each panel open / symbol switch / remount), so the
+// document accumulated N×2 listeners firing on every pixel of cursor movement → lag.
+// Now the per-header mousedown just sets `_drag`; the global handlers (bound once) use it.
+let _drag: { modal: any; hdr: any; ox: number; oy: number; mx: number; my: number } | null = null
+let _dragDocBound = false
+
+function _bindDragDoc(): void {
+  if (_dragDocBound) return
+  _dragDocBound = true
+  document.addEventListener('mousemove', function (e: any) {
+    if (!_drag) return
+    const d = _drag
+    let nx = d.ox + (e.clientX - d.mx), ny = d.oy + (e.clientY - d.my)
+    const mw = d.modal.offsetWidth, mh = d.modal.offsetHeight
+    const vw = window.innerWidth, vh = window.innerHeight
+    nx = Math.max(0, Math.min(nx, vw - mw)); ny = Math.max(0, Math.min(ny, vh - mh))
+    d.modal.style.left = nx + 'px'; d.modal.style.top = ny + 'px'; d.modal.style.transform = 'none'
+  })
+  document.addEventListener('mouseup', function () {
+    if (_drag) { _drag.hdr.style.cursor = 'grab'; _drag = null }
+  })
+}
+
 export function _initModalDrag(): void {
+  _bindDragDoc()
   document.querySelectorAll('.mover').forEach(function (ov: any) {
     const modal = ov.querySelector('.modal'); const hdr = ov.querySelector('.mhdr')
     if (!modal || !hdr) return
-    // [PERF-4] Skip if drag handlers already attached to this header
+    // [PERF-4] Skip if drag handler already attached to this header
     if (_modalDragAttached.has(hdr)) return
     _modalDragAttached.add(hdr)
     hdr.style.cursor = 'grab'
-    let ox = 0, oy = 0, mx = 0, my = 0, dragging = false
-    function onDown(e: any) { if (e.target.closest('.mclose')) return; dragging = true; const r = modal.getBoundingClientRect(); ox = r.left; oy = r.top; mx = e.clientX; my = e.clientY; modal.style.position = 'fixed'; modal.style.left = ox + 'px'; modal.style.top = oy + 'px'; modal.style.margin = '0'; hdr.style.cursor = 'grabbing'; e.preventDefault() }
-    function onMove(e: any) { if (!dragging) return; let nx = ox + (e.clientX - mx), ny = oy + (e.clientY - my); const mw = modal.offsetWidth, mh = modal.offsetHeight; const vw = window.innerWidth, vh = window.innerHeight; nx = Math.max(0, Math.min(nx, vw - mw)); ny = Math.max(0, Math.min(ny, vh - mh)); modal.style.left = nx + 'px'; modal.style.top = ny + 'px'; modal.style.transform = 'none' }
-    function onUp() { if (dragging) { dragging = false; hdr.style.cursor = 'grab' } }
-    hdr.addEventListener('mousedown', onDown); document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
+    hdr.addEventListener('mousedown', function (e: any) {
+      if (e.target.closest('.mclose')) return
+      const r = modal.getBoundingClientRect()
+      modal.style.position = 'fixed'; modal.style.left = r.left + 'px'; modal.style.top = r.top + 'px'; modal.style.margin = '0'
+      hdr.style.cursor = 'grabbing'
+      _drag = { modal, hdr, ox: r.left, oy: r.top, mx: e.clientX, my: e.clientY }
+      e.preventDefault()
+    })
   })
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initModalDrag)

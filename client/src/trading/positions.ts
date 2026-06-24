@@ -47,10 +47,10 @@ export function onPositionOpened(pos: any, source: any): void {
       ...(w.TP.livePositions || [])
     ].filter((p: any) => !p.closed)
     if (typeof renderDSLWidget === 'function') {
-      try { renderDSLWidget(activePosns) } catch (_) { }
+      try { renderDSLWidget(activePosns) } catch (e) { console.warn('[positions] renderDSLWidget error:', e) }
     }
     if (typeof renderBrainCockpit === 'function') {
-      try { setTimeout(renderBrainCockpit, 0) } catch (_) { }
+      try { setTimeout(renderBrainCockpit, 0) } catch (e) { console.warn('[positions] renderBrainCockpit error:', e) }
     }
     atLog('info', '[DSL] DSL attached: ' + (pos.sym || '?') + ' ' + (pos.side || '?') + ' @$' + (pos.entry || '?') + ' [' + (source || '?') + ']')
     aubBBSnapshot('DSL_ATTACH', { sym: pos.sym, side: pos.side, source })

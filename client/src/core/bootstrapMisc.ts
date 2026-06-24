@@ -92,6 +92,12 @@ export async function pinUnlock(): Promise<void> {
       setMsg('PIN not configured'); _pinMarkUnlocked(); setVis(false)
     } else if (d.error === 'session_invalid') {
       setMsg('Session expired \u2014 re-authenticate')
+    } else if (d.error === 'pin_rate_limited') {
+      // [2026-06-24 bug#5] Surface the exponential lockout instead of a misleading "Incorrect PIN".
+      const _mins = Math.ceil((Number(d.retryAfterMs) || 0) / 60000)
+      setMsg(_mins > 0 ? ('Too many attempts \u2014 locked ' + _mins + ' min') : 'Too many attempts \u2014 try again later')
+      inp.value = ''
+      setShake(true); setTimeout(() => setShake(false), 500)
     } else {
       setMsg('Incorrect PIN!'); inp.value = ''; inp.focus()
       setShake(true); setTimeout(() => setShake(false), 500)
@@ -170,7 +176,7 @@ export async function _pinUpdateUI(): Promise<void> {
   if (remBtn) (remBtn as HTMLElement).style.display = isSet ? '' : 'none'
   // [BATCH3-S] Current PIN field is visible only when a PIN is already set.
   if (curRow) (curRow as HTMLElement).style.display = isSet ? '' : 'none'
-  if (inpLbl) inpLbl.textContent = isSet ? 'New PIN (4–8 cifre/litere)' : 'PIN (4–8 cifre/litere)'
+  if (inpLbl) inpLbl.textContent = isSet ? 'New PIN (4–8 digits/letters)' : 'PIN (4–8 digits/letters)'
 }
 
 // ===== BUILD INFO =====

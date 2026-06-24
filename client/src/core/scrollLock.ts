@@ -15,20 +15,42 @@ import { useEffect } from 'react'
  */
 let _locks = 0
 
+// [2026-06-24 bug#13] Remember scroll position so we can restore it after the
+// iOS position:fixed pin (which otherwise jumps the page to the top).
+let _savedScrollY = 0
+
 export function lockScroll(): void {
   if (_locks === 0) {
-    document.documentElement.style.overflow = 'hidden'
-    document.body.style.overflow = 'hidden'
+    _savedScrollY = window.scrollY || window.pageYOffset || 0
+    const b = document.body, h = document.documentElement
+    h.style.overflow = 'hidden'
+    b.style.overflow = 'hidden'
+    // overflow:hidden is ignored by iOS Safari for touch-scroll — pin the body so
+    // the background can't scroll through the overlay. Scroll pos restored on unlock.
+    b.style.position = 'fixed'
+    b.style.top = '-' + _savedScrollY + 'px'
+    b.style.left = '0'
+    b.style.right = '0'
+    b.style.width = '100%'
   }
   _locks++
 }
 
 export function unlockScroll(): void {
-  if (_locks === 0) return
+  // [2026-06-24 bug#13] Guard against negative counts from out-of-order React
+  // cleanup (error boundaries / Suspense remounts) — never go below 0.
+  if (_locks <= 0) { _locks = 0; return }
   _locks--
   if (_locks === 0) {
-    document.documentElement.style.overflow = ''
-    document.body.style.overflow = ''
+    const b = document.body, h = document.documentElement
+    h.style.overflow = ''
+    b.style.overflow = ''
+    b.style.position = ''
+    b.style.top = ''
+    b.style.left = ''
+    b.style.right = ''
+    b.style.width = ''
+    window.scrollTo(0, _savedScrollY)
   }
 }
 

@@ -50,6 +50,7 @@ export function QuotaIndicator() {
   const [snap, setSnap] = useState<DiagSnapshot | null>(null)
   const lastLevel = useRef<string>('green')
   const lastSchedRejected = useRef<number>(0)
+  const schedSeeded = useRef<boolean>(false)
 
   useEffect(() => {
     let cancelled = false
@@ -87,10 +88,16 @@ export function QuotaIndicator() {
         const sched = data.schedulerStats
         if (sched) {
           const totalRejected = Object.values(sched.byLane || {}).reduce((s, v) => s + ((v as LaneStats).rejected || 0), 0)
-          if (totalRejected > lastSchedRejected.current && lastSchedRejected.current === 0) {
+          // [2026-06-24 bug#11] Seed on the first poll so the backpressure that already
+          // exists at cold-start boot doesn't fire an (annoying, non-actionable) toast.
+          // After seeding, re-alert on ANY genuine new increase (not only the 0→N edge).
+          if (!schedSeeded.current) {
+            schedSeeded.current = true
+          } else if (totalRejected > lastSchedRejected.current) {
+            const delta = totalRejected - lastSchedRejected.current
             const reasons = sched.byReason || {}
             const reasonStr = Object.entries(reasons).map(([k, v]) => `${k}:${v}`).join(' ')
-            toast(`Scheduler backpressure: ${totalRejected} rejected (${reasonStr})`, 4000)
+            toast(`Scheduler backpressure: +${delta} rejected (${reasonStr})`, 4000)
           }
           lastSchedRejected.current = totalRejected
         }

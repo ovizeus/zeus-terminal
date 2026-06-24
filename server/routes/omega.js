@@ -460,7 +460,12 @@ router.post('/chat', express.json(), async (req, res) => {
 
     // [Sub-C.1 T8] Reply redact (high-precision) BEFORE persist + return
     const replyRedact = redactPipeline.redact(reply, { mode: 'reply' });
-    const safeReply = replyRedact.redactedText;
+    // [2026-06-24 bug#10] Never persist/return a blank reply (LLM timeout, over-redaction,
+    // empty responder output) — would show empty "Omega" bubbles + bump unread for nothing.
+    let safeReply = replyRedact.redactedText;
+    if (!safeReply || !String(safeReply).trim()) {
+        safeReply = "I didn't catch that — could you rephrase?";
+    }
     if (replyRedact.redactionCount > 0 && typeof logger !== 'undefined' && logger && logger.info) {
         logger.info('OMEGA', `[chat] reply redacted ${replyRedact.redactionCount} substrings uid=${userId}`);
     }

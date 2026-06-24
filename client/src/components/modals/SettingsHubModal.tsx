@@ -27,7 +27,7 @@ const SUPPORT_CATEGORIES = [
 function _supportMailto(subj: string): string {
   let diag = ''
   try {
-    const ver = (w.BUILD && w.BUILD.version) || 'v1.7.102'
+    const ver = (w.BUILD && w.BUILD.version) || 'v1.7.164'
     const sym = (w.S && w.S.symbol) || '—'
     const env = w._resolvedEnv || (w.S && w.S.mode) || '—'
     diag = [
@@ -210,7 +210,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
             <input type="password" id="pinCurrent" placeholder="Current PIN" maxLength={8} style={pinInp} autoComplete="off" />
           </div>
           <div className="mrow" style={{marginBottom:'6px'}}>
-            <span className="mlbl" id="pinInputLabel">PIN (4–8 cifre/litere)</span>
+            <span className="mlbl" id="pinInputLabel">PIN (4–8 digits/letters)</span>
             <input type="password" id="pinInput" placeholder="Enter PIN" maxLength={8} style={pinInp} autoComplete="off" />
           </div>
           <div className="mrow" style={{marginBottom:'6px'}}>
@@ -348,7 +348,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           Max 400 entries · dedup 2s · export without server.
         </div>
         <div className="msec">BUILD INFO</div>
-        <div id="hub-build-info" style={{fontSize:'8px',color:'#7fa0b0',lineHeight:'1.8'}}>Zeus Terminal v1.7.102 · build 128 · 2026-06-11</div>
+        <div id="hub-build-info" style={{fontSize:'8px',color:'#7fa0b0',lineHeight:'1.8'}}>{'Zeus Terminal ' + ((w.BUILD && w.BUILD.version) || 'v1.7.164') + ((w.BUILD && w.BUILD.date) ? ' · ' + w.BUILD.date : '')}</div>
       </div>
 
       {/* ══ OMEGA — Sub-A chat persistence + Sub-C.1 long-term memory ══ */}
