@@ -21,6 +21,7 @@ import { aubRefreshAll } from '../../engine/aub'
 import { _actfeedRender, _renderDlog } from '../../core/bootstrapError'
 import { _cmdSetOpen, _cmdRender, _fetchExposure } from '../../core/bootstrapPanels'
 import { _srRenderStats } from '../../core/config'
+import { useScrollLock } from '../../core/scrollLock'
 // ── Dock page panels (1:1 from old Zeus strips → page views) ──
 import { AnalysisSections } from '../analysis/AnalysisSections'
 import { AutoTradePanel } from '../dock/AutoTradePanel'
@@ -120,20 +121,17 @@ export function PanelShell() {
 
   const openModal = useUiStore((s) => s.openModal)
 
-  // Lock body scroll when a dock panel is open — prevents background scroll
-  // behind the fixed overlay (.zpv). Without this, touch events on the panel
-  // can propagate to body, displacing main page scroll position. On close,
-  // the page appears "half black" because it scrolled past content.
-  // [2026-06-13] Also lock for modal overlays (search palette, decision log, the
-  // missed/session/regime/performance/compare sub-views, etc.) — without this their
-  // touch scroll displaced the page and on close it stayed 'half black'.
-  useEffect(() => {
-    if (dockActive || activeModal) {
-      const prev = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      return () => { document.body.style.overflow = prev }
-    }
-  }, [dockActive, activeModal])
+  // Lock background scroll when a dock panel OR any full-screen modal/panel is open
+  // (search palette, decision log, the missed/session/regime/performance/compare sub-views,
+  // the admin Control Center, etc.). Prevents touch-scroll from passing through the fixed
+  // overlay to the page behind it and stranding it scrolled past content ("black at the
+  // bottom" until scrolled back to the top).
+  // [2026-06-26 ROOT-CAUSE FIX] The old version set body.style.overflow only. On mobile the
+  // real document scroller is <html> (documentElement), which stayed overflow:auto and kept
+  // scrolling behind the panel — so the symptom persisted for admin and every activeModal panel.
+  // useScrollLock locks BOTH html and body (ref-counted), so it composes with the ModalOverlay
+  // and ChartControls locks instead of fighting them.
+  useScrollLock(!!(dockActive || activeModal))
 
   // ── Listen for legacy JS requesting modal open/close ──
   useEffect(() => {
