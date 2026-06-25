@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Icon } from '../layout/icons'
 
 import type { AdminUser } from '../../services/api'
 import { useAuthStore } from '../../stores'
@@ -335,6 +336,9 @@ export function LoginPage() {
   const [regEmail, setRegEmail] = useState('')
   const [regPassword, setRegPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  // [2026-06-25] Referral code on signup — auto-filled from ?ref=… or typed manually; live-checked.
+  const [regRef, setRegRef] = useState('')
+  const [refInviter, setRefInviter] = useState<string | null>(null)
   const [registerErrorMsg, setRegisterErrorMsg] = useState('')
   const [showPendingMsg, setShowPendingMsg] = useState(false)
   const [registerBtnText, setRegisterBtnText] = useState('Request an Invite')
@@ -342,6 +346,26 @@ export function LoginPage() {
   // termsVersion (GDPR Art. 7). Without these the register POST returns 400
   // and no user could ever register. Checkbox gates the submit.
   const [termsAccepted, setTermsAccepted] = useState(false)
+
+  // [2026-06-25] Auto-fill the referral code from ?ref=… (URL) or a previously captured one.
+  useEffect(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('ref')
+      const r = fromUrl || localStorage.getItem('zeus_ref') || ''
+      if (r) setRegRef(r.toUpperCase())
+    } catch (_) { /* ignore */ }
+  }, [])
+  // Live-check the code: show who invited you (public name only). Debounced.
+  useEffect(() => {
+    const code = regRef.trim()
+    if (!code) { setRefInviter(null); return }
+    const t = setTimeout(() => {
+      fetch('/auth/check-ref?code=' + encodeURIComponent(code), { credentials: 'same-origin' })
+        .then(r => r.json()).then(d => setRefInviter(d && d.valid ? (d.inviter || 'a ZEUS trader') : null))
+        .catch(() => setRefInviter(null))
+    }, 400)
+    return () => clearTimeout(t)
+  }, [regRef])
 
   // Admin panel
   const [adminStatus, _setAdminStatus] = useState('')
@@ -597,8 +621,8 @@ export function LoginPage() {
           // [Task 1A 2026-05-28] GDPR Art. 7 consent record — required by server
           termsAcceptedAt: new Date().toISOString(),
           termsVersion: TERMS_VERSION,
-          // [2026-06-25] referral attribution — code from ?ref=… (captured on load) or the URL
-          ref: (() => { try { return localStorage.getItem('zeus_ref') || new URLSearchParams(window.location.search).get('ref') || undefined } catch (_) { return undefined } })(),
+          // [2026-06-25] referral attribution — the code shown in the form (auto-filled or typed)
+          ref: regRef.trim() || undefined,
         }),
       })
       const data = await res.json()
@@ -780,6 +804,17 @@ export function LoginPage() {
                   <input type="password" id="confirmPassword" placeholder="Repeat password" autoComplete="new-password" ref={regConfirmRef} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
                   <PwEye inputRef={regConfirmRef} />
                 </div>
+                <label>Referral code <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span></label>
+                <input type="text" id="regRef" placeholder="ZEUS-XXXXXX" autoComplete="off" value={regRef}
+                  onChange={e => setRegRef(e.target.value.toUpperCase())}
+                  style={{ letterSpacing: '1px', textTransform: 'uppercase' }} />
+                {refInviter ? (
+                  <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#00e676', margin: '-4px 0 8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Icon name="gift" size={13} color="#00e676" /> Invited by <strong>{refInviter}</strong>
+                  </div>
+                ) : regRef.trim() ? (
+                  <div style={{ fontFamily: 'monospace', fontSize: '11px', color: 'rgba(255,255,255,0.4)', margin: '-4px 0 8px' }}>Checking code…</div>
+                ) : null}
                 <label className="terms-consent">
                   <input
                     type="checkbox"

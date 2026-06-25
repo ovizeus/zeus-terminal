@@ -257,6 +257,22 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// ─── GET /auth/check-ref — public: validate a referral code + show the inviter's public name ───
+// Pre-auth (signup form). Returns ONLY the inviter's public display name — never email or id.
+router.get('/check-ref', (req, res) => {
+    try {
+        const code = req.query.code;
+        if (!code || typeof code !== 'string' || code.length > 24) return res.json({ ok: true, valid: false });
+        const inviter = db.findUserByReferralCode(code);
+        if (!inviter) return res.json({ ok: true, valid: false });
+        const p = db.getUserProfileById(inviter.id) || {};
+        const name = p.display_name || (p.username ? '@' + p.username : 'a ZEUS trader');
+        res.json({ ok: true, valid: true, inviter: name });
+    } catch (_) {
+        res.json({ ok: true, valid: false });
+    }
+});
+
 // ─── POST /auth/login — Step 1: verify password, send 2FA code ───
 router.post('/login', async (req, res) => {
     try {
