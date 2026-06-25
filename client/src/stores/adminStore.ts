@@ -19,6 +19,13 @@ export interface AdminUser {
   approved: boolean
   bannedUntil?: string | null
   createdAt?: string
+  // [2026-06-26] Installed native APK version (null until the app reports it on boot).
+  appVersion?: {
+    code: number
+    name?: string | null
+    platform?: string | null
+    at?: string | null
+  } | null
   exchange?: {
     connected: boolean
     exchange?: string

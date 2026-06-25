@@ -1201,6 +1201,9 @@ app.use('/api/leaderboard', require('./server/routes/leaderboard'));
 // [2026-06-25] Referral (Phase 3) — own code + joined count.
 app.use('/api/referral', require('./server/routes/referral'));
 
+// [2026-06-26] App version reporting — native app POSTs its installed APK version.
+app.use('/api/app', require('./server/routes/appVersion'));
+
 // ─── Per-User Context Sync (cross-device preferences) ───
 const userContextRoutes = require('./server/routes/userContext');
 app.use('/api/sync', userContextRoutes);

@@ -25,6 +25,15 @@ export function AppUpdateChecker() {
     ;(async () => {
       try {
         const cur = await up.getCurrentVersion()
+        // [2026-06-26] Report the installed APK version so the admin can see who runs what / who is behind.
+        // Fire-and-forget — never blocks the update check. The global fetch patch adds the CSRF header.
+        try {
+          void fetch('/api/app/version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ versionCode: cur.versionCode, versionName: cur.versionName, platform: 'android' }),
+          })
+        } catch (_) { /* ignore */ }
         const res = await fetch('/app-version.json?nc=' + Date.now(), { cache: 'no-store' })
         const lat = (await res.json()) as Latest
         if (alive && lat && typeof lat.versionCode === 'number' && lat.url && lat.versionCode > (cur.versionCode || 0)) {

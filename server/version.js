@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.190',
-    build: 216,
-    date: '2026-06-24',
+    version: '1.7.191',
+    build: 217,
+    date: '2026-06-26',
     changelog: [
+        'b217 v1.7.191 — feature: app version reporting 2026-06-26. The native Android app already reads its installed APK versionCode on boot to compare against the published one (for the self-update banner); it now also reports that version to the server so the admin can see which build each user runs and who is behind. Pure web, no APK rebuild needed — works for everyone on 1.7.16+. New POST /api/app/version (auth, validated and clamped input) stores app_version_code, name, platform plus a timestamp on the user row (migration 415). The admin Users list shows a per-user version chip: green when on the latest published build, amber with up-old when behind, grey when not reported yet (a web user or an old APK without the updater). Also added a permanent public short link zeus-terminal.com/app that always serves the latest APK (the web app stays at /app/). Built TDD: 6 jest (db round-trip plus input validation) green, tsc clean. No-apostrophe changelog.',
         'b198 v1.7.172 — feature: user profile via a 3D flip header (Phase 1, preview). Click the Zeus logo and the top header flips over to a profile panel where you set a photo, display name, unique @username, accent colour and a tagline; tap the avatar to flip back. The photo is re-encoded in the browser before upload so it is sterile (no embedded payload). The trading header stays untouched (it is just the front of the flip). Server: new /api/profile route + users-table profile columns, public reads never expose email. Glass-shine sweep on flip. Built TDD server and client. No apostrophes in changelog.',
         'b197 v1.7.171 — change: removed the Welcome-back-Commander splash on app entry per operator request. It was a cosmetic daily-summary panel (balance, PnL, trades, win rate, positions, AT, brain) shown 2.5s after boot and after PIN unlock; the same stats live in the app, so it only added a dismiss step on launch. _showWelcomeModal now early-returns, which disables both the boot and PIN-unlock triggers. Reversible. Client-only. No-apostrophe changelog.',
         'b196 v1.7.170 — fix: Aroon sub-pane no longer drags behind the candles 2026-06-24. Aroon Up/Down lines only have points after the period warmup, so the pane time-axis did not reach the latest candle and the pane lagged behind the chart. Added a full-width 50 mid line (a point at every candle) that anchors the pane across the whole chart, the same pattern HYPERION and METIS use. Client-only. No-apostrophe changelog.',

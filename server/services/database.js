@@ -10257,6 +10257,15 @@ migrate('414_backfill_indicators_from_indsettings', () => {
     db.exec("UPDATE user_settings SET data = json_set(data, '$.indicators', json(json_extract(data, '$.indSettings'))) WHERE json_type(data, '$.indSettings') = 'object' AND json_extract(data, '$.indicators') IS NULL");
 });
 
+migrate('415_users_app_version', () => {
+    // [2026-06-26] App version reporting. The native Android app reports its installed APK
+    // versionCode/Name on boot so the admin can see who is on the latest build and who is behind.
+    db.exec("ALTER TABLE users ADD COLUMN app_version_code INTEGER DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN app_version_name TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN app_platform TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN app_version_at TEXT DEFAULT NULL");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -10270,10 +10279,12 @@ const _stmts = {
     findUserByReferralCode: db.prepare("SELECT id, referral_code FROM users WHERE referral_code=?"),
     setReferredBy: db.prepare("UPDATE users SET referred_by=? WHERE id=? AND referred_by IS NULL"),
     countReferrals: db.prepare("SELECT COUNT(*) AS cnt FROM users WHERE referred_by=?"),
+    setAppVersion: db.prepare("UPDATE users SET app_version_code=?, app_version_name=?, app_platform=?, app_version_at=datetime('now') WHERE id=?"),
+    getAppVersion: db.prepare("SELECT app_version_code, app_version_name, app_platform, app_version_at FROM users WHERE id=?"),
     countUsers: db.prepare('SELECT COUNT(*) as cnt FROM users'),
     insertUser: db.prepare('INSERT INTO users (email, password_hash, role, approved) VALUES (?, ?, ?, ?)'),
     setUserTermsConsent: db.prepare("UPDATE users SET terms_accepted_at = ?, terms_version = ?, updated_at = datetime('now') WHERE id = ?"),
-    listUsers: db.prepare('SELECT id, email, role, approved, status, created_at FROM users ORDER BY created_at'),
+    listUsers: db.prepare('SELECT id, email, role, approved, status, created_at, app_version_code, app_version_name, app_platform, app_version_at FROM users ORDER BY created_at'),
     approveUser: db.prepare("UPDATE users SET approved = 1, updated_at = datetime('now') WHERE email = ?"),
     deleteUser: db.prepare('DELETE FROM users WHERE email = ? AND role != ?'),
     updatePassword: db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?"),
@@ -10523,6 +10534,15 @@ function setLastActiveAt(userId, ts) {
 function getLastActiveAt(userId) {
     const row = _stmts.getLastActiveAt.get(userId);
     return row ? row.last_active_at : null;
+}
+
+// [2026-06-26] App version reporting — store / read the native APK version a user runs.
+function setAppVersion(userId, versionCode, versionName, platform) {
+    return _stmts.setAppVersion.run(versionCode, versionName, platform, userId);
+}
+
+function getAppVersion(userId) {
+    return _stmts.getAppVersion.get(userId) || null;
 }
 
 function updateEmail(userId, newEmail) {
@@ -11552,6 +11572,8 @@ module.exports = {
     setUserProfile,
     getUserProfileById,
     findUserByUsername,
+    setAppVersion,
+    getAppVersion,
     getOrCreateReferralCode,
     findUserByReferralCode,
     setReferredBy,

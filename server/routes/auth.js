@@ -549,7 +549,14 @@ router.get('/admin/users', (req, res) => {
             approved: !!u.approved,
             status: u.status || 'active',
             bannedUntil: u.banned_until || null,
-            createdAt: u.created_at
+            createdAt: u.created_at,
+            // [2026-06-26] Installed native APK version (null until the app reports it on boot).
+            appVersion: u.app_version_code ? {
+                code: u.app_version_code,
+                name: u.app_version_name || null,
+                platform: u.app_platform || null,
+                at: u.app_version_at || null
+            } : null
         }));
 
         // Enrich with exchange connection info

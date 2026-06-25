@@ -12,6 +12,7 @@ interface AdminUser {
   approved: boolean
   createdAt?: string
   bannedUntil?: string
+  appVersion?: { code: number; name?: string | null; platform?: string | null; at?: string | null } | null
   exchange?: { connected: boolean; mode: string; lastVerified?: string }
 }
 
@@ -76,6 +77,26 @@ function ExBadge({ u }: { u: AdminUser }) {
   )
 }
 
+// [2026-06-26] Installed APK version per user. Green = on latest, amber = behind, grey = not reported
+// (web user, or an old APK without the self-updater). `latest` is the published versionCode.
+function VersionBadge({ u, latest }: { u: AdminUser; latest: number | null }) {
+  const av = u.appVersion
+  if (!av || !av.code) {
+    return (
+      <span className="adm-badge" style={{ fontSize: 8, background: '#33333344', color: '#556', borderColor: '#333' }}>📱 —</span>
+    )
+  }
+  const label = av.name ? 'v' + av.name : 'build ' + av.code
+  const behind = latest != null && av.code < latest
+  const c = behind ? '#f0c040' : '#00ff88'
+  return (
+    <span className="adm-badge" style={{ fontSize: 8, background: c + '22', color: c, borderColor: c + '44' }}
+      title={av.at ? 'Reported: ' + new Date(av.at + 'Z').toLocaleString('ro-RO') : undefined}>
+      📱 {label} {behind ? '⬆ old' : '✓'}
+    </span>
+  )
+}
+
 export function AdminModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState<'users' | 'audit'>('users')
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -86,6 +107,8 @@ export function AdminModal({ visible, onClose }: Props) {
   const [auditError, setAuditError] = useState('')
   const [search, setSearch] = useState('')
   const [banMenuOpen, setBanMenuOpen] = useState<string | null>(null)
+  // [2026-06-26] Published APK versionCode — to flag users running an older build.
+  const [latestVer, setLatestVer] = useState<number | null>(null)
 
   const loadUsers = useCallback(() => {
     setUsersLoading(true)
@@ -134,6 +157,11 @@ export function AdminModal({ visible, onClose }: Props) {
       loadUsers()
       setTab('users')
       setSearch('')
+      // [2026-06-26] fetch the published APK versionCode to flag users on older builds
+      fetch('/app-version.json?nc=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.json())
+        .then(j => { if (j && typeof j.versionCode === 'number') setLatestVer(j.versionCode) })
+        .catch(() => { /* badge falls back to neutral */ })
     }
   }, [visible, loadUsers])
 
@@ -255,6 +283,7 @@ export function AdminModal({ visible, onClose }: Props) {
                             <span style={{ color: '#eee', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220, display: 'inline-block' }}>{u.email}</span>
                             <StatusBadge u={u} />
                             <ExBadge u={u} />
+                            <VersionBadge u={u} latest={latestVer} />
                           </div>
                           <div style={{ fontSize: 9, color: '#445', marginTop: 3 }}>
                             Registered: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('ro-RO') : '?'}
