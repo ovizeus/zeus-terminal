@@ -243,6 +243,14 @@ const _ML_DSL_LOSSSIDE_SHADOW = (process.env.ML_DSL_LOSSSIDE_SHADOW || 'false') 
 // OFF; enable via env + reload. Fail-closed: errors never disturb the existing SL/TP/DSL checks.
 const _ML_DSL_LOSSSIDE_ACTIVE = (process.env.ML_DSL_LOSSSIDE_ACTIVE || 'false') === 'true';
 
+// [ML-DSL-FULL 2026-06-26] Master flag for "ML-DSL Drive owns the exit": DSL activates AT ENTRY
+// with an ML loss-cap (mlDslPolicy.initialCap), ML owns the pivots continuously and makes the
+// reversal-exit call, the brain stops choosing DSL modes, and the UI swaps the mode/AUTO controls
+// for a read-only cockpit. ONE code path across DEMO/TESTNET/REAL (gated on this flag, NOT on env);
+// REAL stays inert until live keys + opt-in and behind the existing real-money seatbelts. Default
+// OFF → zero behaviour change until flipped. Fail-closed: errors fall back to the existing DSL path.
+const _ML_DSL_FULL_CONTROL = (process.env.ML_DSL_FULL_CONTROL || 'false') === 'true';
+
 // ── Safety invariant: mutual exclusion ──
 // [Phase 2 S1.C] Two enforcement modes:
 //   1. _validateMutex(f)  — pure check, returns {ok,violations[]}. No mutation.
@@ -407,6 +415,7 @@ module.exports = {
     get ML_DSL_LEARN_ENABLED() { return _ML_DSL_LEARN_ENABLED; },
     get ML_DSL_LOSSSIDE_SHADOW() { return _ML_DSL_LOSSSIDE_SHADOW; },
     get ML_DSL_LOSSSIDE_ACTIVE() { return _ML_DSL_LOSSSIDE_ACTIVE; },
+    get ML_DSL_FULL_CONTROL() { return _ML_DSL_FULL_CONTROL; },
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     get CHART_BACKFILL_ENABLED() { return flags.CHART_BACKFILL_ENABLED; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.

@@ -45,4 +45,21 @@ function decide(f) {
     action, reason,
   };
 }
-module.exports = { decide };
+// initialCap(f) — the ML loss-cap placed at ENTRY (active-from-entry DSL). Unlike decide()
+// this runs before any momentum data exists, so it sizes the initial stop purely from
+// volatility + regime + trend-alignment: ATR-scaled, wider in trends/high-vol, TIGHTER on
+// counter-trend trades (cut a bad bet fast), looser with-trend (don't whipsaw a good one).
+// Returns a stop distance as % of entry. Pure; clamped to a sane band. Fail-safe on bad input.
+const CAP_ATR_MULT = 1.5; // stop ~1.5 ATR from entry baseline
+function initialCap(f) {
+  f = f || {};
+  const atrPct = clamp(Number.isFinite(f.atrPct) ? f.atrPct : 1.0, 0.05, 20);
+  const regimeW = REGIME_W[String(f.regime || '').toUpperCase()] || 1.0;
+  // counter-trend → tighter leash; with-trend → more room; unknown → neutral
+  const trendW = f.withTrend === false ? 0.7 : (f.withTrend === true ? 1.2 : 1.0);
+  const capPct = clamp(atrPct * CAP_ATR_MULT * regimeW * trendW, 0.3, 4.0);
+  const posture = capPct <= 0.9 ? 'TIGHT' : (capPct >= 1.8 ? 'WIDE' : 'NORMAL');
+  return { capPct, posture };
+}
+
+module.exports = { decide, initialCap };
