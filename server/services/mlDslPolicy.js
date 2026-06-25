@@ -45,21 +45,27 @@ function decide(f) {
     action, reason,
   };
 }
-// initialCap(f) — the ML loss-cap placed at ENTRY (active-from-entry DSL). Unlike decide()
-// this runs before any momentum data exists, so it sizes the initial stop purely from
-// volatility + regime + trend-alignment: ATR-scaled, wider in trends/high-vol, TIGHTER on
-// counter-trend trades (cut a bad bet fast), looser with-trend (don't whipsaw a good one).
-// Returns a stop distance as % of entry. Pure; clamped to a sane band. Fail-safe on bad input.
-const CAP_ATR_MULT = 1.5; // stop ~1.5 ATR from entry baseline
+// initialCap(f) — the ML loss-cap placed at ENTRY (active-from-entry DSL). Runs before any
+// momentum data exists, so it sizes the initial stop as a FRACTION of the brain's hard-SL
+// distance (which is already ATR/regime-aware). The fraction is ALWAYS < 1 → the cap is
+// guaranteed TIGHTER than the exchange hard SL (the whole point: cut early, never bleed the
+// full hard SL). Asymmetric: counter-trend = tighter (cut a bad bet fast), with-trend = more
+// room (don't whipsaw a good one); ranging/squeeze tighter than trending. Pure; fail-safe.
+// f: { hardSlPct, regime, withTrend, side }. Returns { capPct, posture, frac }.
+const _REGIME_FRAC = {
+  TREND: 0.75, TREND_UP: 0.75, TREND_DOWN: 0.75, BREAKOUT: 0.70, EXPANSION: 0.70,
+  RANGE: 0.55, SQUEEZE: 0.55, VOLATILE: 0.80, CHAOS: 0.80,
+};
 function initialCap(f) {
   f = f || {};
-  const atrPct = clamp(Number.isFinite(f.atrPct) ? f.atrPct : 1.0, 0.05, 20);
-  const regimeW = REGIME_W[String(f.regime || '').toUpperCase()] || 1.0;
-  // counter-trend → tighter leash; with-trend → more room; unknown → neutral
-  const trendW = f.withTrend === false ? 0.7 : (f.withTrend === true ? 1.2 : 1.0);
-  const capPct = clamp(atrPct * CAP_ATR_MULT * regimeW * trendW, 0.3, 4.0);
-  const posture = capPct <= 0.9 ? 'TIGHT' : (capPct >= 1.8 ? 'WIDE' : 'NORMAL');
-  return { capPct, posture };
+  const hardSlPct = clamp(Number.isFinite(f.hardSlPct) && f.hardSlPct > 0 ? f.hardSlPct : 1.5, 0.2, 20);
+  const regimeFrac = _REGIME_FRAC[String(f.regime || '').toUpperCase()] || 0.65;
+  // counter-trend → tighter; with-trend → a bit more room; unknown → neutral
+  const trendW = f.withTrend === false ? 0.70 : (f.withTrend === true ? 1.10 : 1.0);
+  const frac = clamp(regimeFrac * trendW, 0.30, 0.90); // strictly < 1 → tighter than the hard SL
+  const capPct = clamp(hardSlPct * frac, 0.15, hardSlPct * 0.95); // never reaches the hard SL
+  const posture = frac <= 0.55 ? 'TIGHT' : (frac >= 0.80 ? 'WIDE' : 'NORMAL');
+  return { capPct, posture, frac };
 }
 
 module.exports = { decide, initialCap };

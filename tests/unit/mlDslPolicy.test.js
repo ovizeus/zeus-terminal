@@ -31,35 +31,35 @@ describe('mlDslPolicy.decide', () => {
   });
 });
 
-describe('mlDslPolicy.initialCap (entry loss-cap, active-from-entry DSL)', () => {
-  const c = { atrPct: 1.0, regime: 'TREND', withTrend: true, side: 'LONG' };
-  test('counter-trend gets a TIGHTER cap than with-trend (same vol/regime)', () => {
+describe('mlDslPolicy.initialCap (entry loss-cap as a fraction of the hard SL)', () => {
+  const c = { hardSlPct: 1.5, regime: 'TREND', withTrend: true, side: 'LONG' };
+  test('the cap is ALWAYS tighter than the hard SL (never looser)', () => {
+    for (const regime of ['TREND', 'RANGE', 'VOLATILE', 'BREAKOUT']) {
+      for (const withTrend of [true, false]) {
+        const r = initialCap({ ...c, regime, withTrend });
+        expect(r.capPct).toBeLessThan(c.hardSlPct);
+      }
+    }
+  });
+  test('counter-trend gets a TIGHTER cap than with-trend (same hard SL/regime)', () => {
     const withT = initialCap({ ...c, withTrend: true });
     const against = initialCap({ ...c, withTrend: false });
     expect(against.capPct).toBeLessThan(withT.capPct);
   });
-  test('higher volatility (atrPct) widens the cap', () => {
-    const lo = initialCap({ ...c, atrPct: 0.5 });
-    const hi = initialCap({ ...c, atrPct: 2.0 });
-    expect(hi.capPct).toBeGreaterThan(lo.capPct);
+  test('a wider hard SL yields a wider cap (cap scales with the SL distance)', () => {
+    const tight = initialCap({ ...c, hardSlPct: 1.0 });
+    const wide = initialCap({ ...c, hardSlPct: 3.0 });
+    expect(wide.capPct).toBeGreaterThan(tight.capPct);
   });
-  test('a ranging regime caps tighter than a trending regime (same vol)', () => {
+  test('a ranging regime caps tighter than a trending regime (same hard SL)', () => {
     const trend = initialCap({ ...c, regime: 'TREND' });
     const range = initialCap({ ...c, regime: 'RANGE' });
     expect(range.capPct).toBeLessThan(trend.capPct);
   });
-  test('cap is always finite and clamped to a sane band [0.3, 4.0]', () => {
-    for (const atr of [0.01, 1, 99]) {
-      const r = initialCap({ ...c, atrPct: atr });
-      expect(Number.isFinite(r.capPct)).toBe(true);
-      expect(r.capPct).toBeGreaterThanOrEqual(0.3);
-      expect(r.capPct).toBeLessThanOrEqual(4.0);
-    }
-  });
-  test('fail-safe on bad/missing input → a finite default cap', () => {
+  test('fail-safe on bad/missing input → a finite cap below a sane default hard SL', () => {
     const r = initialCap({});
     expect(Number.isFinite(r.capPct)).toBe(true);
-    expect(r.capPct).toBeGreaterThanOrEqual(0.3);
+    expect(r.capPct).toBeGreaterThan(0);
     expect(['TIGHT', 'NORMAL', 'WIDE']).toContain(r.posture);
   });
 });

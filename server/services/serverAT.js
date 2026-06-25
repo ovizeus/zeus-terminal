@@ -1600,7 +1600,26 @@ function processBrainDecision(decision, stc, userId, userIntent) {
 
     // ── Attach DSL (skipped when DSL engine is OFF for this user) ──
     if (entry.dslParams) {
-        serverDSL.attach(entry, entry.dslParams);
+        if (MF.ML_DSL_FULL_CONTROL) {
+            // [ML-DSL-FULL P1] DSL active FROM ENTRY with an ML loss-cap (a fraction of the hard SL),
+            // computed from THIS position's own context (regime/side) — never a global setting, so
+            // demo/testnet/real positions never cross. The exchange hard SL stays as the second net.
+            // Fail-closed: any error falls back to the proven profit-gated attach.
+            try {
+                const _r = String(entry.regime || '').toUpperCase();
+                const _withTrend = (entry.side === 'LONG' && _r.includes('UP')) ? true
+                    : (entry.side === 'SHORT' && _r.includes('DOWN')) ? true
+                    : (_r.includes('RANGE') || _r.includes('SQUEEZE')) ? false : undefined;
+                const _cap = mlDslPolicy.initialCap({ hardSlPct: entry.slPct, regime: entry.regime, withTrend: _withTrend, side: entry.side });
+                serverDSL.attachActive(entry, entry.dslParams, _cap.capPct);
+                logger.info('AT_ENGINE', `[${entry.seq}] ML-DSL FULL: DSL ACTIVE@entry cap=${_cap.capPct.toFixed(2)}% (${_cap.posture}) env=${entry.env} hardSL%=${entry.slPct}`);
+            } catch (e) {
+                logger.warn('AT_ENGINE', `[${entry.seq}] ML-DSL attachActive failed → fallback attach: ${e && e.message}`);
+                serverDSL.attach(entry, entry.dslParams);
+            }
+        } else {
+            serverDSL.attach(entry, entry.dslParams);
+        }
     } else {
         logger.info('AT_ENGINE', `[${entry.seq}] AT entry registered with DSL OFF — no DSL attach`);
     }
