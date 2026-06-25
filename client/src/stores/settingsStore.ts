@@ -274,6 +274,11 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
         const ai = _legacyS && _legacyS.activeInds
         if (ai && typeof ai === 'object' && Object.keys(ai).length > 0) {
           payload.indicators = { ...ai }
+          // [2026-06-25] Keep the legacy indSettings active-map in sync with the live set. The legacy
+          // _usApply reads indSettings (via the USER_SETTINGS projection) and re-applies it on every
+          // boot; if it stayed stale here, it would OVERWRITE the user's toggles on reload ("change
+          // indicators -> they reset to the old set"). Writing both keeps every reader consistent.
+          ;(payload as unknown as { indSettings?: Record<string, boolean> }).indSettings = { ...ai }
         }
       } catch (_) { /* defensive — never block the save */ }
       // 3. POST direct via userSettingsApi.save. keepalive:true preserves the
@@ -458,7 +463,12 @@ function _projectToLegacy(settings: SettingsPayload): void {
   if (settings.chartTz !== undefined) ch.tz = (settings.chartTz == null ? null : Number(settings.chartTz))
   if (settings.candleColors !== undefined) ch.colors = settings.candleColors
   if (settings.heatmapSettings !== undefined) ch.heatmap = settings.heatmapSettings
-  if (settings.indSettings !== undefined) us.indicators = settings.indSettings
+  // [2026-06-25] Feed the legacy USER_SETTINGS.indicators (which _usApply re-applies on boot) from the
+  // CANONICAL active map `settings.indicators`, falling back to the legacy `settings.indSettings`. Using
+  // the stale indSettings here made _usApply overwrite the user's toggles on reload (indicators reset).
+  const _settingsInd = (settings as unknown as { indicators?: Record<string, boolean> }).indicators
+  if (_settingsInd !== undefined) us.indicators = _settingsInd
+  else if (settings.indSettings !== undefined) us.indicators = settings.indSettings
   if (settings.alertSettings !== undefined) us.alerts = settings.alertSettings
   if (settings.profile !== undefined) us.profile = settings.profile
   if (settings.bmMode !== undefined) us.bmMode = settings.bmMode
