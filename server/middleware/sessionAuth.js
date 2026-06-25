@@ -73,6 +73,8 @@ function createSessionAuth(jwtSecret) {
             '/css/',
             '/js/',
             '/download/',
+            // [2026-06-26] APK self-update version manifest — public (non-sensitive version info).
+            '/app-version.json',
             // [ZT-AUD-#15] Allow unauthenticated client error reports (so a
             // crash on the login page itself can still be logged).
             '/api/client-error',
