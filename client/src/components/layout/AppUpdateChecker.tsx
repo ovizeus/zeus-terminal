@@ -26,11 +26,14 @@ export function AppUpdateChecker() {
       try {
         const cur = await up.getCurrentVersion()
         // [2026-06-26] Report the installed APK version so the admin can see who runs what / who is behind.
-        // Fire-and-forget — never blocks the update check. The global fetch patch adds the CSRF header.
+        // Fire-and-forget — never blocks the update check. This runs on mount, BEFORE the global fetch
+        // patch installs, so we must set the CSRF header (X-Zeus-Request) ourselves — otherwise every
+        // report is rejected with 403 (which is exactly what happened: 14 reports all 403, nothing stored).
         try {
           void fetch('/api/app/version', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
             body: JSON.stringify({ versionCode: cur.versionCode, versionName: cur.versionName, platform: 'android' }),
           })
         } catch (_) { /* ignore */ }

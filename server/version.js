@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.194',
-    build: 220,
+    version: '1.7.195',
+    build: 221,
     date: '2026-06-26',
     changelog: [
+        'b221 v1.7.195 — fix: app version reporting was rejected with 403 (CSRF) so no version ever stored 2026-06-26. The reporter runs on app mount, before the global fetch patch that adds the X-Zeus-Request CSRF header installs, so every report POST to /api/app/version was rejected with 403 (confirmed: 14 reports from the phone, all 403, nothing saved — the version that briefly showed was test data). Set the X-Zeus-Request header and same-origin credentials on the report fetch itself so it no longer depends on the patch. Now the phone reports its version and the admin Users column fills in. No-apostrophe changelog.',
         'b220 v1.7.194 — fix: admin user-detail drawer was unreachable under the phone status bar 2026-06-26. On a phone the admin Users drawer opened with its header (and the close button) tucked under the status bar / notch, so it could not be closed (the box looked stuck at the very top). The drawer is a fixed top:0 layer and the app is edge-to-edge (viewport-fit=cover); the .zac admin root already padded for the safe-area but the drawer did not. Added padding-top and padding-bottom env(safe-area-inset) to the drawer so its header and close button clear the status bar, matching the rest of the app. CSS only. No-apostrophe changelog.',
         'b219 v1.7.193 — fix: App version chip renders identically on every device 2026-06-26. The b218 chip used a phone emoji plus check/arrow glyphs; on some Android WebViews the phone emoji fell back to a missing-glyph tofu box (a white vertical block) at every row. Replaced all emoji/glyphs with a plain coloured CSS dot plus text (green dot = on latest, amber dot with old = behind, grey dash = not reported), so it looks the same everywhere with no font dependency. No-apostrophe changelog.',
         'b218 v1.7.192 — App version column lands in the real admin Users table 2026-06-26. The b217 version chip was first added to a legacy admin modal; the live admin panel is the Control Center, so the per-user version chip now renders in its Users table (a new App version column between API and Registered): green when on the latest published build, amber with up-old when behind, grey dash when not reported yet. Verified live in the running app (green, amber and grey states all confirmed). Also a cache bump so the rebuilt bundle propagates cleanly. No-apostrophe changelog.',
