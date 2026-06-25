@@ -183,6 +183,11 @@ app.use('/auth', authRoutes);
 // [SRV-POS] Shadow report — pre-auth (diagnostic endpoint, localhost-safe)
 app.use('/api/srv-pos', require('./server/routes/srvPos'));
 
+// [2026-06-26] Public short link for the Android APK — zeus-terminal.com/app always serves the latest
+// build. Pre-auth (anyone can get the app). The web app itself lives at /app/ (trailing slash) and is
+// untouched. Exact-match route, so it never catches /app/<anything>.
+app.get('/app', (req, res) => res.redirect(302, '/download/zeus-terminal.apk'));
+
 // ─── Session Auth (protects everything below) ───
 app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] prefer config source
 
@@ -1307,7 +1312,7 @@ app.get('/legacy/{*rest}', (req, res) => {
 });
 
 // ─── React app at /app/ (kept for backwards compat) ───
-app.get('/app', (req, res) => res.redirect('/app/'));
+// NOTE: bare /app is now the public APK short link (registered before sessionAuth above).
 // Asset-looking requests must 404, not fall back to index.html — otherwise the
 // browser sees text/html for a missing .js/.css and rejects it under strict
 // MIME checks (cached old bundle hashes after a redeploy).
