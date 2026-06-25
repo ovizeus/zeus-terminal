@@ -139,6 +139,46 @@ function attach(position, params, savedProgress) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// attachActive(position, params, capPct) — [ML-DSL-FULL Phase 1]
+// Attach DSL ALREADY ACTIVE (Phase 2) at entry, with the initial stop (pivotLeft)
+// set to the ML loss-cap (capPct % from entry) instead of waiting for a profit gate.
+// The cap is clamped to never be LOOSER than the exchange hard SL (originalSL): the
+// tighter of the two wins. Pivots then trail/ratchet exactly as the normal active DSL.
+// ══════════════════════════════════════════════════════════════════
+function attachActive(position, params, capPct) {
+    const id = String(position.seq);
+    const p = _sanitizeParams(params || DSL_DEFAULTS);
+    const isLong = position.side === 'LONG';
+    const cap = (Number.isFinite(capPct) && capPct > 0) ? capPct : p.pivotLeftPct;
+
+    // ML loss-cap stop from entry
+    let pivotLeft = isLong ? position.price * (1 - cap / 100) : position.price * (1 + cap / 100);
+    // Never looser than the exchange hard SL — keep the tighter of (ML cap, hard SL).
+    if (position.sl != null && Number.isFinite(position.sl) && position.sl > 0) {
+        pivotLeft = isLong ? Math.max(pivotLeft, position.sl) : Math.min(pivotLeft, position.sl);
+    }
+    const pivotRight = isLong ? position.price * (1 + p.pivotRightPct / 100) : position.price * (1 - p.pivotRightPct / 100);
+    let impulseVal = isLong ? pivotRight * (1 + p.impulseVPct / 100) : pivotRight * (1 - p.impulseVPct / 100);
+    pivotLeft = _safePrice(pivotLeft, position.sl || position.price);
+    impulseVal = _safePrice(impulseVal, pivotRight);
+
+    const state = {
+        id, userId: position.userId || null, symbol: position.symbol, side: position.side,
+        exchange: position.exchange || null,
+        entry: position.price, originalSL: position.sl, originalTP: position.tp,
+        currentSL: pivotLeft, params: p,
+        active: true, activationPrice: position.price, progress: 100,
+        pivotLeft, pivotRight, impulseVal, yellowLine: position.price,
+        impulseTriggered: false, ttpArmed: false, ttpPeak: null, log: [], phaseChanges: 0,
+        mlCapPct: cap, mlActiveFromEntry: true,
+    };
+    state.log.push({ ts: Date.now(), msg: `ACTIVE@entry cap=${cap.toFixed(2)}% PL=$${pivotLeft.toFixed(2)} PR=$${pivotRight.toFixed(2)}` });
+    _states.set(id, state);
+    logger.info('DSL', `[S${id}] ⚡ ACTIVE-from-entry ${position.side} ${position.symbol} @ $${position.price.toFixed(2)} | cap ${cap.toFixed(2)}% | PL $${pivotLeft.toFixed(2)} (hard SL $${(position.sl || 0).toFixed(2)})`);
+    return state;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // tick(posId, price) — run one DSL brain cycle for a position
 // Returns { currentSL, plExit, ttpExit, phase, changed }
 //   plExit = true → Pivot Left hit, close position
@@ -571,6 +611,7 @@ function simulateMlPath(posMeta, samples) {
 
 module.exports = {
     attach,
+    attachActive,
     tick,
     detach,
     getState,
