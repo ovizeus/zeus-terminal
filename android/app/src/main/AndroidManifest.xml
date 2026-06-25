@@ -59,4 +59,6 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- [2026-06-26] save the referral image to the Gallery on Android <=9 (API 29+ uses scoped MediaStore, no permission) -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- [2026-06-26] in-app self-update: launch the package installer for the downloaded APK -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>

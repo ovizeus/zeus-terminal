@@ -5,6 +5,7 @@ import { useProfileStore } from './stores/profileStore'
 import { PanelShell } from './components/layout/PanelShell'
 import { PinLockScreen } from './components/modals/PinLockScreen'
 import { ConfirmDialog } from './components/common/ConfirmDialog'
+import { AppUpdateChecker } from './components/layout/AppUpdateChecker'
 import { SecurityNudgeModal } from './components/modals/SecurityNudgeModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useUiStore, useAuthStore } from './stores'
@@ -122,6 +123,7 @@ export function App() {
         <PinLockScreen />
         <SecurityNudgeModal />
         <ConfirmDialog />
+        <AppUpdateChecker />
       </div>
     </ErrorBoundary>
   )
