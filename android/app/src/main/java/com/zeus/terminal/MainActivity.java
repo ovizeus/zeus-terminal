@@ -7,6 +7,7 @@ import com.getcapacitor.BridgeActivity;
 import com.capacitorjs.plugins.app.AppPlugin;
 import com.zeus.terminal.biometric.ZeusBiometricPlugin;
 import com.zeus.terminal.widget.ZeusWidgetPlugin;
+import com.zeus.terminal.share.ZeusSharePlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -20,6 +21,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppPlugin.class);
         registerPlugin(ZeusWidgetPlugin.class);
         registerPlugin(ZeusBiometricPlugin.class);
+        registerPlugin(ZeusSharePlugin.class);
         super.onCreate(savedInstanceState);
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);

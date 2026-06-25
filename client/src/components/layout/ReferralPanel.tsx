@@ -72,6 +72,7 @@ export function ReferralPanel() {
   const [promoErr, setPromoErr] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [viewer, setViewer] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
 
   const link = code ? `${APP_ORIGIN}/login.html?ref=${encodeURIComponent(code)}` : APP_ORIGIN
   const text = code ? `Join me on ZEUS Terminal — AI trading terminal. Use my code ${code}:` : 'Join me on ZEUS Terminal:'
@@ -110,11 +111,27 @@ export function ReferralPanel() {
     // files not shareable on this browser → at least share the link
     try { await n.share({ title: 'ZEUS Terminal', text, url: link }); return true } catch (_) { return true }
   }
-  const shareImage = async () => { if (!promo) return; if (!(await nativeShareImage())) setViewer(true) }
+  // The Capacitor APK's WebView can't use navigator.share / <a download> / long-press, so route to the
+  // native ZeusShare plugin (Android share sheet + save to Gallery). null in a normal browser.
+  const getNativeShare = (): { shareImage: (o: unknown) => Promise<unknown>; saveImage: (o: unknown) => Promise<unknown> } | null => {
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { ZeusShare?: { shareImage: (o: unknown) => Promise<unknown>; saveImage: (o: unknown) => Promise<unknown> } } } }).Capacitor
+    if (cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.ZeusShare) return cap.Plugins.ZeusShare
+    return null
+  }
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2200) }
+
+  const shareImage = async () => {
+    if (!promo) return
+    const ns = getNativeShare()
+    if (ns) { try { await ns.shareImage({ data: promo, text }); return } catch (_) { /* fall through to browser */ } }
+    if (!(await nativeShareImage())) setViewer(true)
+  }
   const downloadImage = async () => {
     if (!promo) return
+    const ns = getNativeShare()
+    if (ns) { try { await ns.saveImage({ data: promo }); flash('Saved to Gallery'); return } catch (e) { flash('Save failed: ' + String((e as { message?: string })?.message || e).slice(0, 40)) } }
     if (!IS_MOBILE) { try { if (downloadBlob(dataUrlToBlob(promo), 'zeus-invite.png')) return } catch (_) { /* fall through */ } }
-    // mobile: the native share sheet saves to Gallery; fall back to the long-press viewer
+    // browser mobile: the native share sheet saves to Gallery; fall back to the long-press viewer
     if (!(await nativeShareImage())) setViewer(true)
   }
   const copyLink = async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch (_) { /* ignore */ } }
@@ -156,6 +173,8 @@ export function ReferralPanel() {
           <Icon name="download" size={14} /> SAVE IMAGE
         </button>
       </div>
+
+      {toast ? <div style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, color: /fail/i.test(toast) ? '#ff5b6e' : '#00e676', textAlign: 'center', marginTop: '8px' }}>{toast}</div> : null}
 
       <div style={{ fontFamily: 'monospace', fontSize: '9px', color: 'rgba(255,255,255,0.35)', marginTop: '8px', lineHeight: 1.5 }}>
         Share your link or the promo image (QR + Zeus logo). Friends who join with your code get a bonus — and so do you.
