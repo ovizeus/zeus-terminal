@@ -21,8 +21,16 @@ export function UsersSection() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [tempPasswordShow, setTempPasswordShow] = useState<{ email: string; pw: string } | null>(null)
   const [tab, setTab] = useState<'users' | 'leaderboard'>('users')
+  // [2026-06-26] Published APK versionCode — to flag users running an older build.
+  const [latestVer, setLatestVer] = useState<number | null>(null)
 
   useEffect(() => { if (users.length === 0 && !usersLoading) loadUsers() }, [])
+  useEffect(() => {
+    fetch('/app-version.json?nc=' + Date.now(), { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => { if (j && typeof j.versionCode === 'number') setLatestVer(j.versionCode) })
+      .catch(() => { /* badge falls back to neutral */ })
+  }, [])
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -180,6 +188,7 @@ export function UsersSection() {
                   <th>Role</th>
                   <th>Status</th>
                   <th>API / Mode</th>
+                  <th>App version</th>
                   <th>Registered</th>
                   <th style={{ width: 220, textAlign: 'right' }}>Actions</th>
                 </tr>
@@ -189,6 +198,7 @@ export function UsersSection() {
                   <UserRow
                     key={u.id}
                     u={u}
+                    latestVer={latestVer}
                     selected={selected.has(u.id)}
                     onToggleSelect={() => toggleSel(u.id)}
                     onOpen={() => setSelectedUser(u.id)}
@@ -259,11 +269,28 @@ export function UsersSection() {
   )
 }
 
+// [2026-06-26] Per-user installed APK version. Green = on the latest published build, amber = behind,
+// grey dash = not reported yet (a web user, or an old APK without the self-updater).
+function VersionCell({ u, latestVer }: { u: AdminUser; latestVer: number | null }) {
+  const av = u.appVersion
+  if (!av || !av.code) return <span style={{ color: 'var(--ac-fg-mute)', fontSize: 10 }}>📱 —</span>
+  const label = av.name ? 'v' + av.name : 'build ' + av.code
+  const behind = latestVer != null && av.code < latestVer
+  const color = behind ? '#f0c040' : '#00ff88'
+  return (
+    <span style={{ color, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}
+      title={av.at ? 'Reported: ' + new Date(av.at + 'Z').toLocaleString('ro-RO') : undefined}>
+      📱 {label} {behind ? '⬆ old' : '✓'}
+    </span>
+  )
+}
+
 function UserRow({
-  u, selected, onToggleSelect, onOpen, onBlock, onUnblock, onBanPicker, banPickerOpen, onPickBan, onUnban,
+  u, latestVer, selected, onToggleSelect, onOpen, onBlock, onUnblock, onBanPicker, banPickerOpen, onPickBan, onUnban,
   onApprove, onReject, onDelete, onForceLogout, onSuspend, onResetPassword,
 }: {
   u: AdminUser
+  latestVer: number | null
   selected: boolean
   onToggleSelect: () => void
   onOpen: () => void
@@ -307,6 +334,7 @@ function UserRow({
         </div>
       </td>
       <td><ApiBadge u={u} /></td>
+      <td><VersionCell u={u} latestVer={latestVer} /></td>
       <td style={{ fontSize: 10, color: 'var(--ac-fg-dim)' }}>{fmtDate(u.createdAt)}</td>
       <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
         <div style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
