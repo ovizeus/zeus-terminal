@@ -83,7 +83,7 @@ function VersionBadge({ u, latest }: { u: AdminUser; latest: number | null }) {
   const av = u.appVersion
   if (!av || !av.code) {
     return (
-      <span className="adm-badge" style={{ fontSize: 8, background: '#33333344', color: '#556', borderColor: '#333' }}>📱 —</span>
+      <span className="adm-badge" style={{ fontSize: 8, background: '#33333344', color: '#556', borderColor: '#333' }}>—</span>
     )
   }
   const label = av.name ? 'v' + av.name : 'build ' + av.code
@@ -92,7 +92,7 @@ function VersionBadge({ u, latest }: { u: AdminUser; latest: number | null }) {
   return (
     <span className="adm-badge" style={{ fontSize: 8, background: c + '22', color: c, borderColor: c + '44' }}
       title={av.at ? 'Reported: ' + new Date(av.at + 'Z').toLocaleString('ro-RO') : undefined}>
-      📱 {label} {behind ? '⬆ old' : '✓'}
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: c, display: 'inline-block', marginRight: 3 }} />{label}{behind ? ' old' : ''}
     </span>
   )
 }

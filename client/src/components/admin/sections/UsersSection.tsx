@@ -269,18 +269,20 @@ export function UsersSection() {
   )
 }
 
-// [2026-06-26] Per-user installed APK version. Green = on the latest published build, amber = behind,
-// grey dash = not reported yet (a web user, or an old APK without the self-updater).
+// [2026-06-26] Per-user installed APK version. Green dot = on the latest published build, amber dot =
+// behind, grey dash = not reported yet (a web user, or an old APK without the self-updater).
+// Uses a CSS dot (not an emoji) so it renders identically on every device/WebView.
 function VersionCell({ u, latestVer }: { u: AdminUser; latestVer: number | null }) {
   const av = u.appVersion
-  if (!av || !av.code) return <span style={{ color: 'var(--ac-fg-mute)', fontSize: 10 }}>📱 —</span>
+  if (!av || !av.code) return <span style={{ color: 'var(--ac-fg-mute)', fontSize: 11 }}>—</span>
   const label = av.name ? 'v' + av.name : 'build ' + av.code
   const behind = latestVer != null && av.code < latestVer
   const color = behind ? '#f0c040' : '#00ff88'
   return (
-    <span style={{ color, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}
       title={av.at ? 'Reported: ' + new Date(av.at + 'Z').toLocaleString('ro-RO') : undefined}>
-      📱 {label} {behind ? '⬆ old' : '✓'}
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flex: 'none' }} />
+      {label}{behind ? ' · old' : ''}
     </span>
   )
 }
