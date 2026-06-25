@@ -184,9 +184,12 @@ app.use('/auth', authRoutes);
 app.use('/api/srv-pos', require('./server/routes/srvPos'));
 
 // [2026-06-26] Public short link for the Android APK — zeus-terminal.com/app always serves the latest
-// build. Pre-auth (anyone can get the app). The web app itself lives at /app/ (trailing slash) and is
-// untouched. Exact-match route, so it never catches /app/<anything>.
-app.get('/app', (req, res) => res.redirect(302, '/download/zeus-terminal.apk'));
+// build. Pre-auth (anyone can get the app). EXACT /app only (req.path check) — /app/ and everything
+// below it fall through to the auth-gated web app, untouched.
+app.get('/app', (req, res, next) => {
+  if (req.path === '/app') return res.redirect(302, '/download/zeus-terminal.apk');
+  return next();
+});
 
 // ─── Session Auth (protects everything below) ───
 app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] prefer config source
