@@ -27,10 +27,13 @@ function _applyLoadedTogglesToLiveState(): void {
     // round-trips through the server). The legacy USER_SETTINGS.indicators path does
     // not get populated from the server response, so on a fresh load (cache cleared /
     // new device) the indicators would not apply. Fall back to USER_SETTINGS for safety.
-    const _storeInds = (useSettingsStore.getState().settings as unknown as { indicators?: Record<string, boolean> }).indicators
-    const inds = (_storeInds && typeof _storeInds === 'object')
-      ? _storeInds
-      : (w.USER_SETTINGS && w.USER_SETTINGS.indicators)
+    const _st = useSettingsStore.getState().settings as unknown as { indicators?: Record<string, boolean>; indSettings?: Record<string, boolean> }
+    const _pick = (o?: Record<string, boolean> | null) => (o && typeof o === 'object' && Object.keys(o).length > 0) ? o : null
+    // [2026-06-25] Prefer the new server indicators map; fall back to the legacy USER_SETTINGS map;
+    // and finally to indSettings (the legacy persistent boolean active-map). Users whose data predates
+    // the `indicators` key keep their active indicators in indSettings — without this fallback they
+    // loaded but never rendered ("activated but not displayed"). Works the same for every user/format.
+    const inds = _pick(_st.indicators) || _pick(w.USER_SETTINGS && w.USER_SETTINGS.indicators) || _pick(_st.indSettings)
     if (!inds || typeof inds !== 'object') return
     if (w.S) {
       w.S.activeInds = { ...(w.S.activeInds || {}), ...inds }

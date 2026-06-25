@@ -10247,6 +10247,16 @@ migrate('413_users_referral', () => {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code) WHERE referral_code IS NOT NULL");
 });
 
+migrate('414_backfill_indicators_from_indsettings', () => {
+    // [2026-06-25] Indicator persistence reached ONLY users who re-saved after the b192-b195 fix
+    // (it added a new settings.indicators active-map key written on save). Existing users still had
+    // only the legacy `indSettings` boolean active-map and no `indicators` key, so their active
+    // indicators loaded but did not render ("activated but not displayed"). Backfill: copy each
+    // user's indSettings (their real active map) into `indicators` where the key is missing. This
+    // puts every user in the same (working) shape. Faithful copy of the boolean map — no over-enable.
+    db.exec("UPDATE user_settings SET data = json_set(data, '$.indicators', json(json_extract(data, '$.indSettings'))) WHERE json_type(data, '$.indSettings') = 'object' AND json_extract(data, '$.indicators') IS NULL");
+});
+
 // ─── User methods ───
 
 const _stmts = {
