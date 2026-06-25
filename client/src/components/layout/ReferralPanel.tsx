@@ -43,7 +43,8 @@ export function ReferralPanel() {
   const [busy, setBusy] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  const link = code ? `${APP_ORIGIN}/?ref=${encodeURIComponent(code)}` : APP_ORIGIN
+  // Land directly on the signup page so the ?ref survives (the root redirect drops query params).
+  const link = code ? `${APP_ORIGIN}/login.html?ref=${encodeURIComponent(code)}` : APP_ORIGIN
   const text = code ? `Join me on ZEUS Terminal — AI trading terminal. Use my code ${code}:` : 'Join me on ZEUS Terminal:'
 
   useEffect(() => { referralApi.get().then((r) => { if (r.ok) { setCode(r.code || ''); setJoined(r.joined || 0) } }) }, [])

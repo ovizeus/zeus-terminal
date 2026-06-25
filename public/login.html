@@ -1042,6 +1042,9 @@
                             <input type="password" id="confirmPassword" placeholder="Repeat password" autocomplete="new-password">
                             <button type="button" class="pw-eye" onclick="togglePwVis(this)" tabindex="-1" aria-label="Show password"></button>
                         </div>
+                        <label>Referral code <span style="opacity:.5;font-weight:400">(optional)</span></label>
+                        <input type="text" id="regRef" placeholder="ZEUS-XXXXXX" autocomplete="off" style="letter-spacing:1px;text-transform:uppercase">
+                        <div id="regRefHint" style="font-family:monospace;font-size:11px;margin:-4px 0 8px;min-height:14px"></div>
                         <div class="consent-row">
                             <input type="checkbox" id="termsConsent" required>
                             <label for="termsConsent">
@@ -1688,10 +1691,12 @@
 
             btn.disabled = true; btn.textContent = '...';
             try {
+                var _refEl = document.getElementById('regRef');
+                var _ref = _refEl && _refEl.value.trim() ? _refEl.value.trim() : undefined;
                 const res = await fetch('/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, termsAcceptedAt, termsVersion })
+                    body: JSON.stringify({ email, password, termsAcceptedAt, termsVersion, ref: _ref })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -1706,6 +1711,36 @@
                 btn.disabled = !(consentEl && consentEl.checked);
             }
         });
+
+        /* ─── Referral code: auto-fill from ?ref + live inviter check ─── */
+        (function () {
+            var refEl = document.getElementById('regRef');
+            var hintEl = document.getElementById('regRefHint');
+            if (!refEl || !hintEl) return;
+            try {
+                var fromUrl = new URLSearchParams(window.location.search).get('ref');
+                var r = fromUrl || localStorage.getItem('zeus_ref') || '';
+                if (fromUrl) { try { localStorage.setItem('zeus_ref', fromUrl); } catch (_) {} }
+                if (r) refEl.value = r.toUpperCase();
+            } catch (_) {}
+            var t = null;
+            var GIFT_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00e676" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M20 12v10H4V12"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
+            function esc(s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+            function check() {
+                var code = refEl.value.trim();
+                if (!code) { hintEl.textContent = ''; return; }
+                hintEl.style.color = 'rgba(255,255,255,0.4)'; hintEl.textContent = 'Checking code…';
+                fetch('/auth/check-ref?code=' + encodeURIComponent(code), { credentials: 'same-origin' })
+                    .then(function (res) { return res.json(); })
+                    .then(function (d) {
+                        if (d && d.valid) { hintEl.style.color = '#00e676'; hintEl.innerHTML = GIFT_SVG + ' Invited by <strong>' + esc(d.inviter || 'a ZEUS trader') + '</strong>'; }
+                        else { hintEl.style.color = 'rgba(255,255,255,0.4)'; hintEl.textContent = 'Code not found (you can still sign up).'; }
+                    })
+                    .catch(function () { hintEl.textContent = ''; });
+            }
+            refEl.addEventListener('input', function () { refEl.value = refEl.value.toUpperCase(); if (t) clearTimeout(t); t = setTimeout(check, 400); });
+            if (refEl.value.trim()) check();
+        })();
 
         /* ─── Admin Panel ─── */
         async function checkAdmin() {
