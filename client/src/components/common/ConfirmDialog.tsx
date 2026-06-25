@@ -27,7 +27,7 @@ export function ConfirmDialog() {
   const cancel = () => settle(false)
 
   return (
-    <ModalOverlay id="app-confirm-mover" visible={!!req} onClose={cancel} maxWidth="400px" zIndex={100000}>
+    <ModalOverlay id="app-confirm-mover" visible={!!req} onClose={cancel} maxWidth="400px" zIndex={1000000}>
       <ModalHeader title={(req && req.title) || ''} onClose={cancel} titleStyle={{ color: accent, letterSpacing: '1px' }} />
       <div style={{
         padding: '12px 16px 6px', fontFamily: 'monospace', fontSize: '12px',

@@ -8055,3 +8055,12 @@ select option {
 /* [2026-06-24] bare profile gear — just the wheel, no box; spins on hover/press */
 .profile-gear svg { transition: transform .45s cubic-bezier(.4,0,.2,1); }
 .profile-gear:hover svg, .profile-gear:active svg { transform: rotate(90deg); }
+
+/* [2026-06-25] Profile settings + edit dialogs — frosted "fog" backdrop so whatever is behind
+   (the app, or the settings menu under an edit dialog) shows blurred, opening cleanly on top. */
+#profile-settings-mover, #profile-subview-mover, #app-confirm-mover { backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+/* settings drill-down: tapping a menu title slides its sub-panel in over the menu */
+.pset-view { animation: psetIn .22s cubic-bezier(.3,0,.2,1); }
+@keyframes psetIn { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
+.pset-row { transition: background .15s ease; }
+.pset-row:hover, .pset-row:active { background: rgba(255,255,255,0.05); }
