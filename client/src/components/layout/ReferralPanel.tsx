@@ -10,8 +10,20 @@ import { Icon } from './icons'
 // in the browser with ?ref=<code> so the signup is attributed to you.
 const APP_ORIGIN = 'https://zeus-terminal.com'
 
+// Same-origin assets only — do NOT set crossOrigin (it forces CORS mode and, without ACAO headers,
+// taints the canvas so toDataURL throws / the logo silently fails to draw).
 function loadImg(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => resolve(i); i.onerror = reject; i.src = src })
+  return new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = src })
+}
+async function getBlob(dataUrl: string): Promise<Blob> { return (await fetch(dataUrl)).blob() }
+function downloadBlob(blob: Blob, name: string): boolean {
+  try {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = name; a.rel = 'noopener'
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 8000)
+    return true
+  } catch (_) { return false }
 }
 async function buildPromoImage(link: string, code: string, accent: string): Promise<string> {
   const qrUrl = await QRCode.toDataURL(link, { margin: 1, width: 360, color: { dark: '#0a0a0a', light: '#ffffff' } })
@@ -29,10 +41,6 @@ async function buildPromoImage(link: string, code: string, accent: string): Prom
   ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '19px monospace'; ctx.fillText('Scan to join with my code', W / 2, 728)
   return cv.toDataURL('image/png')
 }
-function downloadDataUrl(dataUrl: string, name: string) {
-  const a = document.createElement('a'); a.href = dataUrl; a.download = name; document.body.appendChild(a); a.click(); a.remove()
-}
-
 export function ReferralPanel() {
   const profile = useProfileStore((s) => s.profile)
   const accent = profile.accent_color || '#f0c040'
@@ -68,13 +76,21 @@ export function ReferralPanel() {
 
   const shareImage = async () => {
     if (!promo) return
-    try {
-      const blob = await (await fetch(promo)).blob()
-      const file = new File([blob], 'zeus-invite.png', { type: 'image/png' })
-      const n = navigator as Navigator & { share?: (d: unknown) => Promise<void>; canShare?: (d: unknown) => boolean }
-      if (n.canShare && n.canShare({ files: [file] }) && n.share) { await n.share({ files: [file], text, title: 'ZEUS Terminal' }); return }
-    } catch (_) { /* fall through */ }
-    downloadDataUrl(promo, 'zeus-invite.png')
+    let blob: Blob
+    try { blob = await getBlob(promo) } catch (_) { window.open(promo, '_blank', 'noopener'); return }
+    const file = new File([blob], 'zeus-invite.png', { type: 'image/png' })
+    const n = navigator as Navigator & { share?: (d: unknown) => Promise<void>; canShare?: (d: unknown) => boolean }
+    if (n.share && n.canShare && n.canShare({ files: [file] })) {
+      try { await n.share({ files: [file], text, title: 'ZEUS Terminal' }) } catch (_) { /* user cancelled — no-op */ }
+      return
+    }
+    // share-with-files not supported on this browser → download instead
+    if (!downloadBlob(blob, 'zeus-invite.png')) window.open(promo, '_blank', 'noopener')
+  }
+  const downloadImage = async () => {
+    if (!promo) return
+    try { const blob = await getBlob(promo); if (!downloadBlob(blob, 'zeus-invite.png')) window.open(promo, '_blank', 'noopener') }
+    catch (_) { window.open(promo, '_blank', 'noopener') }
   }
   const copyLink = async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch (_) { /* ignore */ } }
 
@@ -110,7 +126,7 @@ export function ReferralPanel() {
         <button onClick={shareImage} disabled={!promo} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700, color: '#00e676', background: 'rgba(0,230,118,0.14)', border: '1px solid #00e67688', borderRadius: '5px', padding: '9px', cursor: 'pointer' }}>
           <Icon name="image" size={14} color="#00e676" /> SHARE IMAGE
         </button>
-        <button onClick={() => promo && downloadDataUrl(promo, 'zeus-invite.png')} disabled={!promo} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '5px', padding: '9px', cursor: 'pointer' }}>
+        <button onClick={downloadImage} disabled={!promo} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontFamily: 'monospace', fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '5px', padding: '9px', cursor: 'pointer' }}>
           <Icon name="download" size={14} /> DOWNLOAD
         </button>
       </div>
