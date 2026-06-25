@@ -2814,3 +2814,151 @@ export function astrape(
   }
   return { charge, state, ignite }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// PHOEBE ⚡ — "Quantum Resonance Engine" (Zeus original, screenshot-faithful).
+// A 3-in-1 instrument: (1) a lower RESONANCE oscillator sub-pane (-100..100,
+// gradient heatmap), (2) on-chart order-blocks + support/resistance/equilibrium
+// + Buy/Sell signals + active Entry/TP/SL, (3) a multi-timeframe matrix readout.
+// All values are real Zeus computations (EMA-resonance, ATR risk, RSI momentum,
+// resampled MTF). Named for Phoebe, Titaness of the Delphic oracle.
+// ═══════════════════════════════════════════════════════════════
+export type PhoebeState = 'SURGE_UP' | 'UP' | 'NEUTRAL' | 'DOWN' | 'SURGE_DOWN'
+export interface PhoebeTfRow { tf: string; trend: 'BULL' | 'BEAR' | 'FLAT'; momentum: number }
+export interface PhoebeBlock { startIndex: number; top: number; bottom: number; kind: 'bull' | 'bear' }
+export interface PhoebeSignal { index: number; dir: 'long' | 'short' }
+export interface Phoebe {
+  resonance: (number | null)[]
+  state: (PhoebeState | null)[]
+  blocks: PhoebeBlock[]
+  support: number | null
+  resistance: number | null
+  equilibrium: number | null
+  signals: PhoebeSignal[]
+  trade: { dir: 'long' | 'short'; entry: number; tp: number; sl: number; entryIndex: number } | null
+  mtf: PhoebeTfRow[]
+  panel: {
+    instResonance: number
+    marketType: 'Trending' | 'Ranging'
+    volumeBalance: number
+    latestSignal: 'Buy' | 'Sell' | 'None'
+    signalAgeBars: number
+    currentMomentum: number
+    lastTrigger: string
+    overallTrend: 'BULL' | 'BEAR' | 'FLAT'
+  }
+}
+
+export function phoebe(
+  highs: number[], lows: number[], closes: number[], volumes: number[],
+  fastP = 12, slowP = 34, smoothP = 8, atrP = 14,
+): Phoebe {
+  const n = closes.length
+  const efast = ema(closes, Math.max(2, Math.min(fastP, Math.max(2, n - 1))))
+  const eslow = ema(closes, Math.max(3, Math.min(slowP, Math.max(3, n - 1))))
+  const a = atr(highs, lows, closes, Math.max(2, Math.min(atrP, Math.max(2, n - 1))))
+
+  // ── RESONANCE: ATR-scaled fast/slow distance, tanh-squashed to [-100,100], EMA-smoothed ──
+  const resonance: (number | null)[] = new Array(n).fill(null)
+  const k = 2 / (smoothP + 1)
+  let prev: number | null = null
+  for (let i = 0; i < n; i++) {
+    const ef = efast[i], es = eslow[i], av = a[i]
+    if (ef == null || es == null || av == null || av === 0) { resonance[i] = null; continue }
+    const raw = Math.tanh((ef - es) / (av * 2)) * 100
+    prev = prev == null ? raw : prev + k * (raw - prev)
+    resonance[i] = Math.max(-100, Math.min(100, prev))
+  }
+
+  // ── STATE per bar (drives sub-pane colour bands) ──
+  const state: (PhoebeState | null)[] = resonance.map(v => {
+    if (v == null) return null
+    if (v >= 55) return 'SURGE_UP'
+    if (v >= 15) return 'UP'
+    if (v > -15) return 'NEUTRAL'
+    if (v > -55) return 'DOWN'
+    return 'SURGE_DOWN'
+  })
+
+  // ── SIGNALS: zero-line crosses of the resonance ──
+  const signals: PhoebeSignal[] = []
+  for (let i = 1; i < n; i++) {
+    const p = resonance[i - 1], c = resonance[i]
+    if (p == null || c == null) continue
+    if (p <= 0 && c > 0) signals.push({ index: i, dir: 'long' })
+    else if (p >= 0 && c < 0) signals.push({ index: i, dir: 'short' })
+  }
+
+  // ── SUPPORT / RESISTANCE / EQUILIBRIUM from the recent swing window ──
+  const lookback = Math.min(n, 60)
+  let hi = -Infinity, lo = Infinity
+  for (let i = Math.max(0, n - lookback); i < n; i++) {
+    if (highs[i] > hi) hi = highs[i]
+    if (lows[i] < lo) lo = lows[i]
+  }
+  const resistance = isFinite(hi) ? hi : null
+  const support = isFinite(lo) ? lo : null
+  const equilibrium = (resistance != null && support != null) ? (resistance + support) / 2 : null
+
+  // ── ORDER BLOCKS: a demand zone above support, a supply zone below resistance ──
+  const blocks: PhoebeBlock[] = []
+  const av0 = (a[n - 1] ?? (closes[n - 1] || 1) * 0.01) as number
+  const startIdx = Math.max(0, n - lookback)
+  if (support != null) blocks.push({ startIndex: startIdx, top: support + av0 * 0.7, bottom: support - av0 * 0.2, kind: 'bull' })
+  if (resistance != null) blocks.push({ startIndex: startIdx, top: resistance + av0 * 0.2, bottom: resistance - av0 * 0.7, kind: 'bear' })
+
+  // ── ACTIVE TRADE: latest signal → ATR-based TP (2R) / SL (1R) ──
+  let trade: Phoebe['trade'] = null
+  if (signals.length) {
+    const sig = signals[signals.length - 1]
+    const entry = closes[sig.index]
+    const av = (a[sig.index] ?? av0) as number
+    trade = sig.dir === 'long'
+      ? { dir: 'long', entry, tp: entry + av * 2, sl: entry - av, entryIndex: sig.index }
+      : { dir: 'short', entry, tp: entry - av * 2, sl: entry + av, entryIndex: sig.index }
+  }
+
+  // ── MULTI-TIMEFRAME MATRIX: resample base bars into higher TF cells ──
+  const tfDefs = [{ tf: '1m', m: 1 }, { tf: '5m', m: 5 }, { tf: '15m', m: 15 }, { tf: '30m', m: 30 }, { tf: '1H', m: 60 }, { tf: '4H', m: 240 }]
+  const mtf: PhoebeTfRow[] = tfDefs.map(d => {
+    const step = Math.max(1, Math.round(d.m / tfDefs[0].m))
+    const agg: number[] = []
+    for (let i = 0; i < n; i += step) agg.push(closes[Math.min(n - 1, i + step - 1)])
+    if (agg.length < 6) {
+      const e1 = efast[n - 1], e2 = eslow[n - 1]
+      const tr = (e1 != null && e2 != null) ? (e1 > e2 ? 'BULL' : e1 < e2 ? 'BEAR' : 'FLAT') : 'FLAT'
+      return { tf: d.tf, trend: tr as PhoebeTfRow['trend'], momentum: 50 }
+    }
+    const ef = ema(agg, Math.min(8, agg.length - 1)), es = ema(agg, Math.min(21, agg.length - 1))
+    const m = agg.length - 1
+    const trend: PhoebeTfRow['trend'] = (ef[m] != null && es[m] != null)
+      ? ((ef[m] as number) > (es[m] as number) ? 'BULL' : (ef[m] as number) < (es[m] as number) ? 'BEAR' : 'FLAT') : 'FLAT'
+    const rs = _rsi(agg, Math.min(14, agg.length - 1))
+    const momentum = Math.round(Math.max(0, Math.min(100, rs[rs.length - 1] ?? 50)))
+    return { tf: d.tf, trend, momentum }
+  })
+
+  // ── PANEL summaries ──
+  let lastRes = 0
+  for (let i = n - 1; i >= 0; i--) { if (resonance[i] != null) { lastRes = resonance[i] as number; break } }
+  const bulls = mtf.filter(r => r.trend === 'BULL').length
+  const bears = mtf.filter(r => r.trend === 'BEAR').length
+  const overallTrend: 'BULL' | 'BEAR' | 'FLAT' = bulls > bears ? 'BULL' : bears > bulls ? 'BEAR' : 'FLAT'
+  const spread = (efast[n - 1] != null && eslow[n - 1] != null && a[n - 1] != null && (a[n - 1] as number) > 0)
+    ? Math.abs((efast[n - 1] as number) - (eslow[n - 1] as number)) / (a[n - 1] as number) : 0
+  const marketType: 'Trending' | 'Ranging' = spread > 0.8 ? 'Trending' : 'Ranging'
+  let upv = 0, dnv = 0
+  for (let i = Math.max(1, n - lookback); i < n; i++) { if (closes[i] >= closes[i - 1]) upv += volumes[i] || 0; else dnv += volumes[i] || 0 }
+  const volTot = upv + dnv
+  const volumeBalance = volTot ? Math.round((upv - dnv) / volTot * 100) : 0
+  const latestSignal: 'Buy' | 'Sell' | 'None' = signals.length ? (signals[signals.length - 1].dir === 'long' ? 'Buy' : 'Sell') : 'None'
+  const signalAgeBars = signals.length ? n - 1 - signals[signals.length - 1].index : -1
+  const currentMomentum = Math.round((lastRes + 100) / 2)
+  const lastTrigger = latestSignal === 'None' ? 'No setup' : (latestSignal === 'Buy' ? 'Bullish cross' : 'Bearish cross')
+  const instResonance = Math.round(Math.abs(lastRes))
+
+  return {
+    resonance, state, blocks, support, resistance, equilibrium, signals, trade, mtf,
+    panel: { instResonance, marketType, volumeBalance, latestSignal, signalAgeBars, currentMomentum, lastTrigger, overallTrend },
+  }
+}

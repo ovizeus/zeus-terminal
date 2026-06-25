@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus, orion, phoenix, nephele, morpheus, daimon } from '../indicatorCalc'
+import { sma, wma, hma, ema, atr, keltner, donchian, parabolicSAR, adx, williamsR, roc, cmf, awesomeOscillator, vwma, aroon, trix, ultimateOscillator, choppiness, keraunos, aether, marketStructure, nemesis, pythia, plutus, helios, hermes, charon, atlas, eos, pantheon, aegis, selene, kratos, prometheus, mnemosyne, themis, erebus, anemoi, cerberus, proteus, typhon, styx, geras, ouranos, hades, athena, echo, kairos, tyche, nyx, olympus, gaia, ananke, psyche, hubris, okeanos, aurora, argus, orion, phoenix, nephele, morpheus, daimon, phoebe } from '../indicatorCalc'
 
 describe('sma', () => {
   it('rolling mean with null warm-up', () => {
@@ -996,5 +996,54 @@ describe('parabolicSAR', () => {
     expect(isUp[4]).toBe(true)          // still up near the peak
     expect(isUp[isUp.length - 1]).toBe(false) // flipped down by the end
     expect(Number.isFinite(sar[sar.length - 1] as number)).toBe(true)
+  })
+})
+
+describe('phoebe', () => {
+  function series(n: number, dir: number, start = 100) {
+    const h: number[] = [], l: number[] = [], c: number[] = [], v: number[] = []
+    let p = start
+    for (let i = 0; i < n; i++) {
+      p += dir * (0.5 + (i % 3) * 0.1)
+      c.push(p); h.push(p + 0.3); l.push(p - 0.3); v.push(1000 + (i % 5) * 100)
+    }
+    return { h, l, c, v }
+  }
+  it('resonance is aligned to closes and bounded -100..100', () => {
+    const { h, l, c, v } = series(120, +1)
+    const r = phoebe(h, l, c, v)
+    expect(r.resonance.length).toBe(c.length)
+    for (const x of r.resonance) { if (x != null) { expect(x).toBeGreaterThanOrEqual(-100); expect(x).toBeLessThanOrEqual(100) } }
+  })
+  it('resonance is positive in a sustained uptrend and negative in a downtrend', () => {
+    const up = phoebe(...Object.values(series(160, +1)) as [number[], number[], number[], number[]])
+    const dn = phoebe(...Object.values(series(160, -1, 300)) as [number[], number[], number[], number[]])
+    const lastUp = up.resonance.filter(x => x != null).slice(-1)[0] as number
+    const lastDn = dn.resonance.filter(x => x != null).slice(-1)[0] as number
+    expect(lastUp).toBeGreaterThan(0)
+    expect(lastDn).toBeLessThan(0)
+  })
+  it('mtf returns rows with a valid trend and a 0..100 momentum', () => {
+    const { h, l, c, v } = series(300, +1)
+    const r = phoebe(h, l, c, v)
+    expect(r.mtf.length).toBeGreaterThan(0)
+    for (const row of r.mtf) {
+      expect(['BULL', 'BEAR', 'FLAT']).toContain(row.trend)
+      expect(row.momentum).toBeGreaterThanOrEqual(0)
+      expect(row.momentum).toBeLessThanOrEqual(100)
+    }
+  })
+  it('panel exposes a market type and a defined latest signal', () => {
+    const { h, l, c, v } = series(200, +1)
+    const r = phoebe(h, l, c, v)
+    expect(['Trending', 'Ranging']).toContain(r.panel.marketType)
+    expect(['Buy', 'Sell', 'None']).toContain(r.panel.latestSignal)
+    expect(r.support).not.toBeNull()
+    expect(r.resistance).not.toBeNull()
+  })
+  it('is null-safe on too-short input', () => {
+    const r = phoebe([1, 2], [0, 1], [1, 2], [10, 10])
+    expect(r.resonance.length).toBe(2)
+    expect(Array.isArray(r.mtf)).toBe(true)
   })
 })

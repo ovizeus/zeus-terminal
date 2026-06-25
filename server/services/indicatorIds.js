@@ -13,6 +13,6 @@ const INDICATOR_IDS = new Set([
   'erebus', 'anemoi', 'cerberus', 'proteus', 'typhon', 'styx', 'geras', 'ouranos', 'hades', 'athena',
   'echo', 'kairos', 'tyche', 'nyx', 'olympus', 'dolos', 'gaia', 'ananke', 'psyche', 'hubris', 'okeanos',
   'aurora', 'argus', 'orion', 'phoenix', 'nephele', 'morpheus', 'harmonia', 'daimon',
-  'astrape',
+  'astrape', 'phoebe',
 ]);
 module.exports = { INDICATOR_IDS };

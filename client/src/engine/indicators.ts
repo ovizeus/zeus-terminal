@@ -10,7 +10,7 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT, astrape as _calcASTRAPE } from './indicatorCalc'
+import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT, astrape as _calcASTRAPE, phoebe as _calcPHOEBE } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
@@ -351,6 +351,9 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'astrape':
       { const ax2 = document.getElementById('astrapeChart'); if (ax2) ax2.style.display = show ? '' : 'none'; if (show) initAstrapeChart() }
+      break
+    case 'phoebe':
+      { const px2 = document.getElementById('phoebeChart'); if (px2) px2.style.display = show ? '' : 'none'; if (show) initPhoebeChart(); else if (w._phoebeHud) w._phoebeHud.style.display = 'none' }
       break
     case 'metis':
       { const mtx = document.getElementById('metisChart'); if (mtx) mtx.style.display = show ? '' : 'none' }
@@ -990,7 +993,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, w._astrapeChart, w._eunomiaChart, w._metisChart, w._kronosChart, w._mentorChart, w._apolloChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, w._astrapeChart, w._phoebeChart, w._eunomiaChart, w._metisChart, w._kronosChart, w._mentorChart, w._apolloChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -3536,6 +3539,7 @@ export function updateDaimon(): void {
 export function _indRenderHook(): void {
   if (w.S.activeInds.bb) updateBB()
   if (w.S.activeInds.astrape && w._astrapeInited) updateAstrape()
+  if (w.S.activeInds.phoebe && w._phoebeInited) updatePhoebe()
   if (w.S.activeInds.ichimoku) updateIchimoku()
   if (w.S.activeInds.fib) updateFib()
   if (w.S.activeInds.pivot) updatePivot()
@@ -4025,4 +4029,121 @@ export function updateDeepDive(): void {
       console.warn('[DeepDive] updateDeepDive error:', err)
     }
   }, 500)
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHOEBE ⚡ — Quantum Resonance Engine. Lower heatmap sub-pane (resonance
+// -100..100, gradient red→pink→purple→green→cyan) + on-chart order blocks,
+// support/resistance/equilibrium, Buy/Sell markers, active Entry/TP/SL, and a
+// floating multi-timeframe matrix panel. Real Zeus values, screenshot-faithful.
+// ═══════════════════════════════════════════════════════════════
+function _phoebeColor(v: number): string {
+  const stops: Array<[number, [number, number, number]]> = [
+    [-100, [255, 51, 85]], [-50, [255, 77, 184]], [0, [124, 77, 255]], [50, [38, 255, 154]], [100, [0, 229, 255]],
+  ]
+  const x = Math.max(-100, Math.min(100, v))
+  let i = 0
+  while (i < stops.length - 1 && x > stops[i + 1][0]) i++
+  const [x0, c0] = stops[i], [x1, c1] = stops[Math.min(i + 1, stops.length - 1)]
+  const t = x1 === x0 ? 0 : (x - x0) / (x1 - x0)
+  const ch = (a: number, b: number) => Math.round(a + (b - a) * t)
+  return `rgb(${ch(c0[0], c1[0])},${ch(c0[1], c1[1])},${ch(c0[2], c1[2])})`
+}
+
+export function initPhoebeChart(): void {
+  if (w._phoebeInited && w._phoebeChart) { updatePhoebe(); return }
+  w._phoebeChart = _createSubChart('phoebeChart', 110)
+  if (!w._phoebeChart) return
+  w._phoebeHistS = w._phoebeChart.addHistogramSeries({ priceFormat: { type: 'price', precision: 0, minMove: 1 }, priceLineVisible: false, lastValueVisible: true })
+  w._phoebeZeroS = w._phoebeChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  if (w.mainChart && !w._phoebeOverlayInited) {
+    const ob = (color: string) => w.mainChart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+    w.phoebeBullTopS = ob('rgba(38,255,154,0.5)'); w.phoebeBullBotS = ob('rgba(38,255,154,0.5)')
+    w.phoebeBearTopS = ob('rgba(255,82,119,0.5)'); w.phoebeBearBotS = ob('rgba(255,82,119,0.5)')
+    w.phoebeResS = w.mainChart.addLineSeries({ color: 'rgba(255,82,119,0.85)', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'Resistance' })
+    w.phoebeSupS = w.mainChart.addLineSeries({ color: 'rgba(38,255,154,0.85)', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'Support' })
+    w.phoebeEqS = w.mainChart.addLineSeries({ color: 'rgba(124,77,255,0.7)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'Equilibrium' })
+    w.phoebeEntryS = w.mainChart.addLineSeries({ color: '#f0c040', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'Entry' })
+    w.phoebeTpS = w.mainChart.addLineSeries({ color: '#26ff9a', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'TP' })
+    w.phoebeSlS = w.mainChart.addLineSeries({ color: '#ff5277', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: true, title: 'SL' })
+    w.phoebeMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+    w._phoebeOverlayInited = true
+  }
+  w._phoebeInited = true
+  updatePhoebe()
+}
+
+export function updatePhoebe(): void {
+  if (!w._phoebeInited || !w._phoebeHistS || !w.S.klines.length) return
+  const k = w.S.klines, s = w.IND_SETTINGS.phoebe || {}
+  const r = _calcPHOEBE(
+    k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), k.map((b: any) => b.volume),
+    Math.round(s.fastP) || 12, Math.round(s.slowP) || 34, Math.round(s.smoothP) || 8, Math.round(s.atrP) || 14,
+  )
+  const bars: any[] = [], zero: any[] = []
+  for (let i = 0; i < r.resonance.length; i++) {
+    if (!k[i]) continue
+    if (r.resonance[i] != null) bars.push({ time: k[i].time, value: r.resonance[i], color: _phoebeColor(r.resonance[i] as number) })
+    zero.push({ time: k[i].time, value: 0 })
+  }
+  try { w._phoebeHistS.setData(bars); w._phoebeZeroS.setData(zero) } catch (_) { }
+  if (w._phoebeOverlayInited) {
+    const t1 = k[k.length - 1].time
+    const drawZone = (topS: any, botS: any, blk: any) => {
+      if (blk && k[blk.startIndex]) { const t0 = k[blk.startIndex].time; topS.setData([{ time: t0, value: blk.top }, { time: t1, value: blk.top }]); botS.setData([{ time: t0, value: blk.bottom }, { time: t1, value: blk.bottom }]) }
+      else { topS.setData([]); botS.setData([]) }
+    }
+    drawZone(w.phoebeBullTopS, w.phoebeBullBotS, r.blocks.find((b: any) => b.kind === 'bull'))
+    drawZone(w.phoebeBearTopS, w.phoebeBearBotS, r.blocks.find((b: any) => b.kind === 'bear'))
+    const i0 = Math.max(0, k.length - 60)
+    const lvl = (sx: any, val: any) => { if (val != null && k[i0]) sx.setData([{ time: k[i0].time, value: val }, { time: t1, value: val }]); else sx.setData([]) }
+    lvl(w.phoebeResS, r.resistance); lvl(w.phoebeSupS, r.support); lvl(w.phoebeEqS, r.equilibrium)
+    if (r.trade && k[r.trade.entryIndex]) {
+      const t0 = k[r.trade.entryIndex].time
+      w.phoebeEntryS.setData([{ time: t0, value: r.trade.entry }, { time: t1, value: r.trade.entry }])
+      w.phoebeTpS.setData([{ time: t0, value: r.trade.tp }, { time: t1, value: r.trade.tp }])
+      w.phoebeSlS.setData([{ time: t0, value: r.trade.sl }, { time: t1, value: r.trade.sl }])
+    } else { w.phoebeEntryS.setData([]); w.phoebeTpS.setData([]); w.phoebeSlS.setData([]) }
+    const marks = r.signals.slice(-12).map((sig: any) => ({
+      time: k[sig.index] && k[sig.index].time, position: sig.dir === 'long' ? 'belowBar' : 'aboveBar',
+      shape: sig.dir === 'long' ? 'arrowUp' : 'arrowDown', color: sig.dir === 'long' ? '#26ff9a' : '#ff5277',
+      text: sig.dir === 'long' ? 'Buy' : 'Sell',
+    })).filter((m: any) => m.time)
+    try { w.phoebeMarkS.setData(k.map((b: any) => ({ time: b.time, value: b.close }))); w.phoebeMarkS.setMarkers(marks) } catch (_) { }
+  }
+  initPhoebeHud()
+  if (w._phoebeHud) w._phoebeHud.innerHTML = _phoebeHudHtml(r)
+  _syncSubChartsToMain()
+}
+
+export function initPhoebeHud(): void {
+  const mc = document.getElementById('mc')
+  if (!mc) return
+  if (w._phoebeHud) { if (w._phoebeHud.parentElement !== mc) { try { mc.appendChild(w._phoebeHud) } catch (_) { } } w._phoebeHud.style.display = ''; return }
+  try { if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative' } catch (_) { }
+  const hud = document.createElement('div')
+  hud.id = 'phoebeHud'
+  hud.className = 'phoebe-hud'
+  hud.style.cssText = 'position:absolute;top:8px;right:8px;z-index:6;width:174px;max-width:52%;background:linear-gradient(160deg,rgba(22,17,44,0.95),rgba(11,13,26,0.95));border:1px solid rgba(124,77,255,0.55);border-radius:8px;padding:8px 9px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:9px;line-height:1.55;color:#c9d4e6;box-shadow:0 6px 22px rgba(0,0,0,0.55);pointer-events:none;backdrop-filter:blur(3px)'
+  mc.appendChild(hud)
+  w._phoebeHud = hud
+}
+
+function _phoebeHudHtml(r: any): string {
+  const p = r.panel
+  const badge = (t: string) => t === 'BULL' ? '<span style="color:#06140d;background:#26ff9a;border-radius:3px;padding:0 4px;font-weight:700">BULL</span>'
+    : t === 'BEAR' ? '<span style="color:#fff;background:#ff5277;border-radius:3px;padding:0 4px;font-weight:700">BEAR</span>'
+    : '<span style="color:#0a0a0a;background:#90a4ae;border-radius:3px;padding:0 4px;font-weight:700">FLAT</span>'
+  const rows = r.mtf.map((m: any) => {
+    const mc = m.momentum >= 55 ? '#26ff9a' : m.momentum <= 45 ? '#ff5277' : '#f0c040'
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:5px;margin:1px 0"><span style="color:#7a86a8;width:26px">${m.tf}</span>${badge(m.trend)}<span style="flex:1;text-align:right;color:${mc};font-weight:700">${m.momentum}%</span></div>`
+  }).join('')
+  const sigCol = p.latestSignal === 'Buy' ? '#26ff9a' : p.latestSignal === 'Sell' ? '#ff5277' : '#90a4ae'
+  const sep = (t: string) => `<div style="color:#6b7799;font-size:8px;letter-spacing:1.5px;border-top:1px solid #ffffff14;margin-top:5px;padding-top:4px">${t}</div>`
+  const kv = (key: string, val: string, col: string) => `<div style="display:flex;justify-content:space-between"><span style="color:#7a86a8">${key}</span><span style="color:${col};font-weight:700">${val}</span></div>`
+  const head = `<div style="font-weight:700;letter-spacing:2px;color:#b388ff;text-align:center">⚡ PHOEBE</div><div style="color:#5d6b8a;font-size:8px;letter-spacing:1.5px;text-align:center;margin-bottom:4px">QUANTUM RESONANCE</div>`
+  const matrix = `<div style="color:#6b7799;font-size:8px;letter-spacing:1.5px;border-bottom:1px solid #ffffff14;padding-bottom:2px;margin-bottom:2px">MTF MATRIX</div>${rows}`
+  const core = sep('CORE &amp; RISK') + kv('Resonance', String(p.instResonance), '#b388ff') + kv('Market', p.marketType, '#c9d4e6') + kv('Vol Balance', (p.volumeBalance > 0 ? '+' : '') + p.volumeBalance + '%', p.volumeBalance >= 0 ? '#26ff9a' : '#ff5277')
+  const sig = sep('SIGNAL') + kv('Latest', p.latestSignal, sigCol) + kv('Age', p.signalAgeBars < 0 ? '—' : p.signalAgeBars + ' bars', '#c9d4e6') + kv('Momentum', p.currentMomentum + '%', '#f0c040') + kv('Trigger', p.lastTrigger, '#c9d4e6') + `<div style="display:flex;justify-content:space-between;margin-top:1px"><span style="color:#7a86a8">Bias</span>${badge(p.overallTrend)}</div>`
+  return head + matrix + core + sig
 }
