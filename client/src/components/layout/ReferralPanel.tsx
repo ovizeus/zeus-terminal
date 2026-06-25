@@ -97,21 +97,25 @@ export function ReferralPanel() {
     { name: 'share', label: 'More', color: accent, go: async () => { const n = navigator as Navigator & { share?: (d: unknown) => Promise<void> }; if (n.share) { try { await n.share({ title: 'ZEUS Terminal', text, url: link }) } catch (_) { /* cancelled */ } } else { open(`https://wa.me/?text=${enc(text + ' ' + link)}`) } } },
   ]
 
-  // Native file-share (the system sheet has Save / WhatsApp / everything). Returns true if it ran.
+  // Native share sheet (the Android sheet has Save image / Gallery / WhatsApp / everything).
+  // The system sheet is the reliable path on phones. Returns true if a share was started.
   const nativeShareImage = async (): Promise<boolean> => {
     if (!promo) return false
+    const n = navigator as Navigator & { share?: (d: unknown) => Promise<void>; canShare?: (d: unknown) => boolean }
+    if (!n.share) return false
     try {
       const file = new File([dataUrlToBlob(promo)], 'zeus-invite.png', { type: 'image/png' })
-      const n = navigator as Navigator & { share?: (d: unknown) => Promise<void>; canShare?: (d: unknown) => boolean }
-      if (n.share && n.canShare && n.canShare({ files: [file] })) { await n.share({ files: [file], text, title: 'ZEUS Terminal' }); return true }
-    } catch (_) { return true /* sheet opened then cancelled — treat as handled */ }
-    return false
+      if (!n.canShare || n.canShare({ files: [file] })) { await n.share({ files: [file], text, title: 'ZEUS Terminal' }); return true }
+    } catch (_) { return true /* sheet opened then cancelled — handled */ }
+    // files not shareable on this browser → at least share the link
+    try { await n.share({ title: 'ZEUS Terminal', text, url: link }); return true } catch (_) { return true }
   }
   const shareImage = async () => { if (!promo) return; if (!(await nativeShareImage())) setViewer(true) }
-  const downloadImage = () => {
+  const downloadImage = async () => {
     if (!promo) return
-    if (!IS_MOBILE) { try { if (downloadBlob(dataUrlToBlob(promo), 'zeus-invite.png')) return } catch (_) { /* fall to viewer */ } }
-    setViewer(true) // mobile: long-press in the viewer always works
+    if (!IS_MOBILE) { try { if (downloadBlob(dataUrlToBlob(promo), 'zeus-invite.png')) return } catch (_) { /* fall through */ } }
+    // mobile: the native share sheet saves to Gallery; fall back to the long-press viewer
+    if (!(await nativeShareImage())) setViewer(true)
   }
   const copyLink = async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch (_) { /* ignore */ } }
 
@@ -157,18 +161,19 @@ export function ReferralPanel() {
         Share your link or the promo image (QR + Zeus logo). Friends who join with your code get a bonus — and so do you.
       </div>
 
-      {/* full-screen viewer — long-press the image to Save or Share (works on any phone) */}
+      {/* full-screen viewer — SHARE (native sheet) or long-press the image. Uses onPointerUp +
+          NO backdrop-filter (a fixed overlay with backdrop-filter breaks tap hit-testing on Android). */}
       {viewer && promo && createPortal(
-        <div onClick={() => setViewer(false)} style={{ position: 'fixed', inset: 0, zIndex: 2000001, background: 'rgba(0,0,0,0.94)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '20px', boxSizing: 'border-box', WebkitBackdropFilter: 'blur(2px)', backdropFilter: 'blur(2px)' }}>
+        <div onPointerUp={() => setViewer(false)} style={{ position: 'fixed', inset: 0, zIndex: 2000001, background: 'rgba(0,0,0,0.96)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '20px', boxSizing: 'border-box', touchAction: 'manipulation' }}>
           <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#fff', textAlign: 'center' }}>
-            Long-press the image to <strong style={{ color: accent }}>Save</strong> or <strong style={{ color: accent }}>Share</strong> it
+            Tap <strong style={{ color: accent }}>SHARE</strong>, or long-press the image to Save it
           </div>
-          <img src={promo} alt="invite" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '92%', maxHeight: '64vh', borderRadius: '10px', border: `2px solid ${accent}`, boxShadow: `0 0 26px ${accent}66` }} />
+          <img src={promo} alt="invite" onPointerUp={(e) => e.stopPropagation()} style={{ maxWidth: '92%', maxHeight: '62vh', borderRadius: '10px', border: `2px solid ${accent}`, boxShadow: `0 0 26px ${accent}66`, WebkitTouchCallout: 'default', touchAction: 'manipulation' }} />
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={(e) => { e.stopPropagation(); nativeShareImage() }} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'monospace', fontSize: '12px', fontWeight: 700, color: '#0a0a0a', background: accent, border: 'none', borderRadius: '6px', padding: '10px 18px', cursor: 'pointer' }}>
-              <Icon name="share" size={14} color="#0a0a0a" /> SHARE
+            <button onPointerUp={(e) => { e.stopPropagation(); nativeShareImage() }} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: '#0a0a0a', background: accent, border: 'none', borderRadius: '6px', padding: '12px 22px', cursor: 'pointer' }}>
+              <Icon name="share" size={15} color="#0a0a0a" /> SHARE
             </button>
-            <button onClick={() => setViewer(false)} style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 700, color: 'rgba(255,255,255,0.8)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', padding: '10px 18px', cursor: 'pointer' }}>CLOSE</button>
+            <button onPointerUp={(e) => { e.stopPropagation(); setViewer(false) }} style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '6px', padding: '12px 22px', cursor: 'pointer' }}>CLOSE</button>
           </div>
         </div>,
         document.body
