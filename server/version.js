@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.185',
-    build: 211,
+    version: '1.7.186',
+    build: 212,
     date: '2026-06-24',
     changelog: [
         'b198 v1.7.172 — feature: user profile via a 3D flip header (Phase 1, preview). Click the Zeus logo and the top header flips over to a profile panel where you set a photo, display name, unique @username, accent colour and a tagline; tap the avatar to flip back. The photo is re-encoded in the browser before upload so it is sterile (no embedded payload). The trading header stays untouched (it is just the front of the flip). Server: new /api/profile route + users-table profile columns, public reads never expose email. Glass-shine sweep on flip. Built TDD server and client. No apostrophes in changelog.',
