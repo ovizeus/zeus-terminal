@@ -32,6 +32,11 @@ export function App() {
     checkAuth()
   }, [checkAuth])
 
+  // [2026-06-25] Capture a referral code from ?ref=… so it survives until the user registers.
+  useEffect(() => {
+    try { const r = new URLSearchParams(window.location.search).get('ref'); if (r) localStorage.setItem('zeus_ref', r) } catch (_) { /* ignore */ }
+  }, [])
+
   // Apply theme to <html>
   useEffect(() => {
     if (theme === 'native') document.documentElement.removeAttribute('data-theme')

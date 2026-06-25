@@ -1190,6 +1190,9 @@ app.use('/api/profile', require('./server/routes/profile'));
 // [2026-06-24] User-facing leaderboard (Phase 2) — public ranking, no sensitive fields.
 app.use('/api/leaderboard', require('./server/routes/leaderboard'));
 
+// [2026-06-25] Referral (Phase 3) — own code + joined count.
+app.use('/api/referral', require('./server/routes/referral'));
+
 // ─── Per-User Context Sync (cross-device preferences) ───
 const userContextRoutes = require('./server/routes/userContext');
 app.use('/api/sync', userContextRoutes);

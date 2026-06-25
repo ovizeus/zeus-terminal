@@ -8,6 +8,7 @@ import { appConfirm } from '../common/confirmDialog'
 import { ModalOverlay, ModalHeader } from '../modals/ModalOverlay'
 import { LeaderboardPanel } from './LeaderboardPanel'
 import { ReferralPanel } from './ReferralPanel'
+import { Icon } from './icons'
 
 // [2026-06-25] Profile settings — a clean MENU of titles. Tapping a title opens its sub-panel OVER
 // the menu, with the menu blurred behind (frosted backdrop). All editing lives in the EDIT PROFILE
@@ -21,11 +22,11 @@ const ACCENTS = [
 ]
 type View = 'menu' | 'edit' | 'accent' | 'leaderboard' | 'referral' | 'account'
 const MENU: { key: View; icon: string; title: string; sub: string }[] = [
-  { key: 'edit', icon: '✏️', title: 'EDIT PROFILE', sub: 'Photo, name, @username, tagline' },
-  { key: 'accent', icon: '🎨', title: 'ACCENT COLOUR', sub: 'Your personal colour' },
-  { key: 'leaderboard', icon: '🏆', title: 'LEADERBOARD', sub: 'Live ranking by PnL' },
-  { key: 'referral', icon: '🎁', title: 'REFERRAL', sub: 'Invite friends, both get a bonus' },
-  { key: 'account', icon: '👤', title: 'ACCOUNT', sub: 'Your account details' },
+  { key: 'edit', icon: 'edit', title: 'EDIT PROFILE', sub: 'Photo, name, @username, tagline' },
+  { key: 'accent', icon: 'palette', title: 'ACCENT COLOUR', sub: 'Your personal colour' },
+  { key: 'leaderboard', icon: 'trophy', title: 'LEADERBOARD', sub: 'Live ranking by PnL' },
+  { key: 'referral', icon: 'gift', title: 'REFERRAL', sub: 'Invite friends, both get a bonus' },
+  { key: 'account', icon: 'user', title: 'ACCOUNT', sub: 'Your account details' },
 ]
 
 export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -76,7 +77,7 @@ export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={onFile} />
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
             <img src={avatarSrc} alt="avatar" style={{ width: '54px', height: '54px', borderRadius: '50%', objectFit: 'cover', border: `2px solid ${accent}`, filter: `drop-shadow(0 0 6px ${accent}) drop-shadow(0 0 13px ${accent}cc)`, flex: 'none' }} />
-            <button onClick={() => fileRef.current?.click()} style={{ ...editBtn, fontSize: '10px', padding: '8px 13px' }}>📷 CHANGE PHOTO</button>
+            <button onClick={() => fileRef.current?.click()} style={{ ...editBtn, fontSize: '10px', padding: '8px 13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Icon name="camera" size={13} color={accent} /> CHANGE PHOTO</button>
           </div>
           <div style={row}><div style={{ minWidth: 0 }}><div style={fieldLbl}>DISPLAY NAME</div><div style={fieldVal}>{name || '— not set'}</div></div><button onClick={editName} style={editBtn}>CHANGE</button></div>
           <div style={row}><div style={{ minWidth: 0 }}><div style={fieldLbl}>USERNAME</div><div style={fieldVal}>{profile.username ? '@' + profile.username : '— not set'}</div></div><button onClick={editUsername} style={editBtn}>CHANGE</button></div>
@@ -119,7 +120,7 @@ export function ProfileSettingsModal({ open, onClose }: { open: boolean; onClose
           {MENU.map((m) => (
             <button key={m.key} className="pset-row" onClick={() => setView(m.key)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', background: 'transparent', border: 'none', borderRadius: '7px', padding: '11px 10px', cursor: 'pointer', textAlign: 'left' }}>
-              <span style={{ fontSize: '17px', flex: 'none' }}>{m.icon}</span>
+              <span style={{ flex: 'none', display: 'flex' }}><Icon name={m.icon} size={18} color={accent} /></span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontFamily: 'monospace', fontSize: '12px', letterSpacing: '1px', color: '#fff', fontWeight: 700 }}>{m.title}</span>
                 <span style={{ display: 'block', fontFamily: 'monospace', fontSize: '9px', color: 'rgba(255,255,255,0.4)' }}>{m.sub}</span>

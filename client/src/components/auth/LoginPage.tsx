@@ -597,6 +597,8 @@ export function LoginPage() {
           // [Task 1A 2026-05-28] GDPR Art. 7 consent record — required by server
           termsAcceptedAt: new Date().toISOString(),
           termsVersion: TERMS_VERSION,
+          // [2026-06-25] referral attribution — code from ?ref=… (captured on load) or the URL
+          ref: (() => { try { return localStorage.getItem('zeus_ref') || new URLSearchParams(window.location.search).get('ref') || undefined } catch (_) { return undefined } })(),
         }),
       })
       const data = await res.json()

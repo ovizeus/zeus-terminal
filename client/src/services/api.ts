@@ -174,6 +174,19 @@ export const leaderboardApi = {
   },
 }
 
+// ── Referral (Phase 3) ──
+export interface ReferralResp { ok: boolean; code?: string; joined?: number; error?: string }
+export const referralApi = {
+  get: async (): Promise<ReferralResp> => {
+    try {
+      const res = await fetch('/api/referral', { headers: HEADERS, credentials: 'same-origin' })
+      const data = await res.json().catch(() => ({} as ReferralResp))
+      if (!res.ok) return { ok: false, error: (data as ReferralResp).error || ('HTTP ' + res.status) }
+      return data as ReferralResp
+    } catch (e) { return { ok: false, error: String((e as Error)?.message || e) } }
+  },
+}
+
 // ── State Sync ──
 
 import type { ServerSnapshot, SyncStatePush } from '../types'

@@ -10240,6 +10240,13 @@ migrate('412_users_profile', () => {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
 });
 
+migrate('413_users_referral', () => {
+    // [2026-06-25] Referral: a unique per-user code + who invited each user.
+    db.exec("ALTER TABLE users ADD COLUMN referral_code TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN referred_by INTEGER DEFAULT NULL");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code) WHERE referral_code IS NOT NULL");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -10248,6 +10255,11 @@ const _stmts = {
     setUserProfile: db.prepare("UPDATE users SET display_name=?, username=?, avatar=?, accent_color=?, tagline=?, updated_at=datetime('now') WHERE id=?"),
     getUserProfileById: db.prepare("SELECT id, display_name, username, avatar, accent_color, tagline FROM users WHERE id=?"),
     findUserByUsername: db.prepare("SELECT id, username FROM users WHERE LOWER(username)=LOWER(?)"),
+    getReferralCode: db.prepare("SELECT referral_code FROM users WHERE id=?"),
+    setReferralCode: db.prepare("UPDATE users SET referral_code=? WHERE id=?"),
+    findUserByReferralCode: db.prepare("SELECT id, referral_code FROM users WHERE referral_code=?"),
+    setReferredBy: db.prepare("UPDATE users SET referred_by=? WHERE id=? AND referred_by IS NULL"),
+    countReferrals: db.prepare("SELECT COUNT(*) AS cnt FROM users WHERE referred_by=?"),
     countUsers: db.prepare('SELECT COUNT(*) as cnt FROM users'),
     insertUser: db.prepare('INSERT INTO users (email, password_hash, role, approved) VALUES (?, ?, ?, ?)'),
     setUserTermsConsent: db.prepare("UPDATE users SET terms_accepted_at = ?, terms_version = ?, updated_at = datetime('now') WHERE id = ?"),
@@ -10415,6 +10427,35 @@ function getUserProfileById(id) {
 }
 function findUserByUsername(u) {
     return (u ? _stmts.findUserByUsername.get(u) : null) || null;
+}
+
+// ─── Referral ───
+function _genReferralCode() {
+    const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars (0/O, 1/I/L)
+    let s = '';
+    for (let i = 0; i < 6; i++) s += A[Math.floor(Math.random() * A.length)];
+    return 'ZEUS-' + s;
+}
+function getOrCreateReferralCode(userId) {
+    const cur = _stmts.getReferralCode.get(userId);
+    if (cur && cur.referral_code) return cur.referral_code;
+    for (let i = 0; i < 25; i++) {
+        const code = _genReferralCode();
+        try { _stmts.setReferralCode.run(code, userId); return code; }
+        catch (_) { /* unique collision — retry with a new code */ }
+    }
+    return null;
+}
+function findUserByReferralCode(code) {
+    return (code ? _stmts.findUserByReferralCode.get(String(code).trim().toUpperCase()) : null) || null;
+}
+function setReferredBy(userId, inviterId) {
+    if (!userId || !inviterId || userId === inviterId) return;
+    return _stmts.setReferredBy.run(inviterId, userId);
+}
+function countReferrals(inviterId) {
+    const r = inviterId ? _stmts.countReferrals.get(inviterId) : null;
+    return r ? r.cnt : 0;
 }
 
 function countUsers() {
@@ -11501,6 +11542,10 @@ module.exports = {
     setUserProfile,
     getUserProfileById,
     findUserByUsername,
+    getOrCreateReferralCode,
+    findUserByReferralCode,
+    setReferredBy,
+    countReferrals,
     countUsers,
     createUser,
     setUserTermsConsent,

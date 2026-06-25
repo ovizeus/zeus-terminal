@@ -225,6 +225,15 @@ router.post('/register', async (req, res) => {
         const userId = db.createUser(normalEmail, hash, role, isFirst);
         db.addPasswordHistory(userId, hash);
 
+        // [2026-06-25] Referral — attribute the inviter if the signup used a valid ref code.
+        try {
+            const ref = req.body && req.body.ref;
+            if (ref && typeof ref === 'string') {
+                const inviter = db.findUserByReferralCode(ref);
+                if (inviter && inviter.id !== userId) { db.setReferredBy(userId, inviter.id); db.auditLog(userId, 'REFERRED_SIGNUP', { inviter: inviter.id, ref: String(ref).slice(0, 20) }, req.ip); }
+            }
+        } catch (_) { /* best-effort, never block registration */ }
+
         // [LEGAL-1] Persist consent record (GDPR Art. 7 — demonstrability)
         try { db.setUserTermsConsent(userId, termsAcceptedAt, termsVersion); } catch (_) { /* best-effort */ }
 

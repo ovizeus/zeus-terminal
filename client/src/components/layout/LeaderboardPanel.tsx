@@ -11,13 +11,13 @@ const empty: React.CSSProperties = { fontFamily: 'monospace', fontSize: '10px', 
 
 function PodiumSpot({ row }: { row: LeaderboardRow }) {
   const place = row.rank
-  const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'
   const ring = place === 1 ? '#ffd700' : place === 2 ? '#c0c8d0' : '#cd7f32'
   const size = place === 1 ? 62 : 48
   const ac = row.accent || ring
+  const badge = place === 1 ? 26 : 22
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flex: 1, order: place === 2 ? 0 : place === 1 ? 1 : 2, paddingBottom: place === 1 ? '0' : '8px' }}>
-      <div style={{ fontSize: place === 1 ? '20px' : '16px' }}>{medal}</div>
+      <div style={{ width: badge, height: badge, borderRadius: '50%', background: ring, color: '#0a0a0a', fontFamily: 'monospace', fontWeight: 700, fontSize: place === 1 ? '14px' : '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 8px ${ring}aa` }}>{place}</div>
       <img src={avatarOf(row)} alt={row.name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: `2px solid ${ring}`, filter: `drop-shadow(0 0 6px ${ac}) drop-shadow(0 0 13px ${ac}cc)` }} />
       <div style={{ fontFamily: 'monospace', fontSize: '10px', fontWeight: 700, color: row.isYou ? ac : '#fff', maxWidth: '82px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{row.name}{row.isYou ? ' ★' : ''}</div>
       <div style={{ fontFamily: 'monospace', fontSize: '10px', fontWeight: 700, color: row.netPnl >= 0 ? '#00e676' : '#ff5b6e' }}>{fmtPnl(row.netPnl)}</div>
