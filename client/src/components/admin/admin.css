@@ -361,6 +361,11 @@
   z-index: 9601;
   display: flex; flex-direction: column;
   animation: zacSlide .2s cubic-bezier(.3,.8,.4,1);
+  /* [2026-06-26] The phone status bar / notch overlays content at top:0 (the app is edge-to-edge,
+     viewport-fit=cover). Without this the drawer header — and its close button — sat under the
+     status bar and was unreachable. Match the safe-area padding the .zac root already applies. */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 @keyframes zacSlide { from { transform: translateX(100%); } to { transform: none; } }
 .zac-drawer-header {
