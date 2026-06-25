@@ -15,7 +15,15 @@ const APP_ORIGIN = 'https://zeus-terminal.com'
 function loadImg(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = src })
 }
-async function getBlob(dataUrl: string): Promise<Blob> { return (await fetch(dataUrl)).blob() }
+// CSP blocks fetch() of data: URLs, so decode the data URL to a Blob with atob (no fetch).
+function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',')
+  const mime = (dataUrl.slice(0, comma).match(/data:([^;]+)/) || [])[1] || 'image/png'
+  const bin = atob(dataUrl.slice(comma + 1))
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return new Blob([arr], { type: mime })
+}
 function downloadBlob(blob: Blob, name: string): boolean {
   try {
     const url = URL.createObjectURL(blob)
@@ -77,7 +85,7 @@ export function ReferralPanel() {
   const shareImage = async () => {
     if (!promo) return
     let blob: Blob
-    try { blob = await getBlob(promo) } catch (_) { window.open(promo, '_blank', 'noopener'); return }
+    try { blob = dataUrlToBlob(promo) } catch (_) { window.open(promo, '_blank', 'noopener'); return }
     const file = new File([blob], 'zeus-invite.png', { type: 'image/png' })
     const n = navigator as Navigator & { share?: (d: unknown) => Promise<void>; canShare?: (d: unknown) => boolean }
     if (n.share && n.canShare && n.canShare({ files: [file] })) {
@@ -87,9 +95,9 @@ export function ReferralPanel() {
     // share-with-files not supported on this browser → download instead
     if (!downloadBlob(blob, 'zeus-invite.png')) window.open(promo, '_blank', 'noopener')
   }
-  const downloadImage = async () => {
+  const downloadImage = () => {
     if (!promo) return
-    try { const blob = await getBlob(promo); if (!downloadBlob(blob, 'zeus-invite.png')) window.open(promo, '_blank', 'noopener') }
+    try { if (!downloadBlob(dataUrlToBlob(promo), 'zeus-invite.png')) window.open(promo, '_blank', 'noopener') }
     catch (_) { window.open(promo, '_blank', 'noopener') }
   }
   const copyLink = async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch (_) { /* ignore */ } }
