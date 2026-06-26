@@ -36,10 +36,9 @@
 2. **Bybit proof-first** — dovedește Bybit întâi (e CEX, aproape gata) ca plasă de rezervă rapidă, înainte de efortul mare Hyperliquid.
 3. **ML-DSL Faza 2 (measurement real)** — `simulateMlPath` conduce DSL live pe testnet, după ce edge-ul ML e dovedit cu date reale.
 4. **Demo în fundal** — demo să tradeze în paralel cu live (nu doar engine=demo). Probabil în SP2.
-5. **Roadmap server-autonomy „telefon închis" (S8-S12 / SP1-SP3) — TABLOU COMPLET, ca să nu se piardă:**
-   - ✅ **GATA (S2-S8 / SP1-SP2):** validare + shadow-parity + cutover testnet. Serverul tradează SINGUR pe DEMO + TESTNET fără telefon. Calea de execuție REAL e construită (`_SRV_POS_REAL_ENABLED=true`) dar **inertă** (0 chei LIVE).
-   - ✅ **S9 reflection-blocking — GATA (b240 2026-06-26):** blocarea era deja implementată (serverBrain respinge intrarea pe `proceed:false`); am adăugat alertă Telegram (Telegram E configurat → ajunge la operator) + audit `REFLECTION_BLOCKED`; **rata măsurată 13.5%** (fix în ținta 10-20%, zero tuning necesar). Blocările sunt vizibile și în „gândurile" brain-ului (mesajul „second-guessed", UI existentă). ML refinements = majoritate gata (vezi monitoring #13; rămân doar #2/#3 opționale).
-   - 📊 **Garduri de dovadă înainte de real:** P&L testnet verde 2-3 săpt (monitoring #2, acum NU verde) + SP1.5 sizing-parity proof (#13).
+5. **Roadmap server-autonomy „telefon închis" (S8-S12 / SP1-SP3) — ce-a RĂMAS până la REAL:**
+   - ✅ **Făcut până la S9** (SP1-SP2 cutover testnet + S9 reflection-blocking) — serverul tradează singur pe DEMO+TESTNET, reflection blochează deciziile proaste; calea REAL construită dar **inertă** (0 chei LIVE). *Detaliile în secțiunea FĂCUTE.*
+   - 📊 **Garduri de dovadă înainte de real:** P&L testnet verde 2-3 săpt (monitoring #2, acum NU verde) + SP1.5 sizing-parity proof.
    - 🔴 **S10 — Flip LIVE uid=1 (decizia + cheile TALE):** conectezi chei LIVE (MultiExchange UI) + pre-flight safety + aprinzi `SERVER_BRAIN`+`SERVER_AT`=true pe live → primul trade pe bani reali condus de server → soak live 14 zile (SL 100%, PnL rezonabil, zero incidente).
    - ⚪ **S11 — Rollout global:** toți userii, în trepte 25%→50%→100% (DUPĂ ce uid=1 real e dovedit 14z). Infra multi-user + scale-monitoring.
    - ⚪ **S12 — Cleanup client:** ștergi codul client de execuție (serverul = singurul executor). Ultimul pas, opțional.
