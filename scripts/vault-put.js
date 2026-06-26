@@ -29,7 +29,9 @@ function main() {
     process.exit(1);
   }
   const note = arg('--note') || '';
-  const content = arg('--content') || '';
+  let content = arg('--content') || '';
+  const contentFile = arg('--content-file');
+  if (contentFile) { try { content = fs.readFileSync(contentFile, 'utf8'); } catch (e) { console.error('[vault-put] --content-file read failed: ' + e.message); process.exit(4); } }
   const filePath = arg('--file');
 
   const db = require('../server/services/database');
