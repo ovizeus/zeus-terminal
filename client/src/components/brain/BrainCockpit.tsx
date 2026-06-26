@@ -222,6 +222,19 @@ function ReceiptBlock() {
 export const BrainCockpit = memo(function BrainCockpit() {
   const particlesRef = useRef<HTMLDivElement>(null)
 
+  // [ML-DSL-FULL P3b] When ML-DSL Drive owns the exit, the manual DSL mode buttons are
+  // overridden by the ML and would mislead — replace them with a read-only "ML FULL" badge.
+  // Reuses the existing /api/dsldrive/state (it returns fullControl). Default OFF → modes shown.
+  const [mlFull, setMlFull] = useState(false)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/dsldrive/state', { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((j) => { if (alive && j && j.ok) setMlFull(!!j.fullControl) })
+      .catch(() => { /* default: keep the manual mode buttons */ })
+    return () => { alive = false }
+  }, [])
+
   // Spawn particles on mount
   useEffect(() => {
     const el = particlesRef.current
@@ -272,11 +285,17 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <button id="prof-defensive" className="znc-pbtn" onClick={() => (window as any).setProfile?.('defensive')}>DEF</button>
         <div className="znc-sep"></div>
         <span className="znc-lbl">DSL:</span>
-        <button id="dsl-swing" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>
-        <button id="dsl-atr" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
-        <button id="dsl-defensive" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('defensive')}>DEF</button>
-        <button id="dsl-tp" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('tp')}>TP</button>
-        <button id="dsl-fast" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
+        {mlFull ? (
+          <span id="dsl-mlfull" className="znc-dbtn" style={{ color: '#b388ff', fontWeight: 700, cursor: 'default', borderColor: '#7c4dff55' }} title="ML-DSL Drive owns the stop — modes are auto-controlled">🧠 ML FULL · auto</span>
+        ) : (
+          <>
+            <button id="dsl-swing" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>
+            <button id="dsl-atr" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
+            <button id="dsl-defensive" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('defensive')}>DEF</button>
+            <button id="dsl-tp" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('tp')}>TP</button>
+            <button id="dsl-fast" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
+          </>
+        )}
       </div>
 
       {/* PROTECT BANNER */}
