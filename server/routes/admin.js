@@ -256,4 +256,102 @@ router.delete('/uploads/:id', _requireAuth, _requireAdmin, (req, res) => {
     catch (e) { return res.status(500).json({ ok: false, error: 'delete failed' }); }
 });
 
+// ─── Zero-knowledge Vault ────────────────────────────────────────────────────
+// All admin-gated. The server only ever stores ciphertext + the wrapped private
+// key; the vault password never reaches the server, so a session/server breach
+// cannot read items. Encrypted file blobs live on disk (data/vault).
+const _VAULT_DIR = require('path').join(__dirname, '..', '..', 'data', 'vault');
+const _VAULT_MAX = 200 * 1024 * 1024; // 200MB per encrypted file blob
+function _ensureVaultDir() { const fs = require('fs'); if (!fs.existsSync(_VAULT_DIR)) fs.mkdirSync(_VAULT_DIR, { recursive: true }); }
+function _vaultId(id) { return /^[0-9]{1,18}$/.test(String(id || '')) ? parseInt(id, 10) : null; }
+
+// POST /api/admin/vault/setup — one-time: store public key + wrapped private key.
+// Refuses if a vault already exists (re-key would orphan existing items).
+router.post('/vault/setup', _requireAuth, _requireAdmin, (req, res) => {
+    const db = require('../services/database');
+    if (db.getVaultKeys(req.user.id)) return res.status(409).json({ ok: false, error: 'VAULT_EXISTS', detail: 'A vault already exists for this account.' });
+    const b = req.body || {};
+    if (!b.publicKey || !b.wrappedPriv || !b.salt || !b.iv) return res.status(400).json({ ok: false, error: 'missing key material' });
+    try {
+        db.saveVaultKeys(req.user.id, { publicKey: b.publicKey, wrappedPriv: b.wrappedPriv, salt: b.salt, iv: b.iv, kdfIters: b.kdfIters });
+        return res.json({ ok: true });
+    } catch (e) { return res.status(500).json({ ok: false, error: 'setup failed' }); }
+});
+
+// GET /api/admin/vault/meta — does a vault exist + its public key (safe to expose).
+router.get('/vault/meta', _requireAuth, _requireAdmin, (req, res) => {
+    const k = require('../services/database').getVaultKeys(req.user.id);
+    return res.json({ ok: true, hasVault: !!k, publicKey: k ? k.public_key : null });
+});
+
+// GET /api/admin/vault/key — the WRAPPED private key + KDF params, for the operator
+// to unlock client-side. Ciphertext; useless without the vault password.
+router.get('/vault/key', _requireAuth, _requireAdmin, (req, res) => {
+    const k = require('../services/database').getVaultKeys(req.user.id);
+    if (!k) return res.status(404).json({ ok: false, error: 'no vault' });
+    return res.json({ ok: true, wrappedPriv: k.wrapped_priv, salt: k.salt, iv: k.iv, kdfIters: k.kdf_iters });
+});
+
+// GET /api/admin/vault/items — metadata + encrypted parts (client decrypts to render).
+router.get('/vault/items', _requireAuth, _requireAdmin, (req, res) => {
+    try { return res.json({ ok: true, items: require('../services/database').listVaultItems(req.user.id) }); }
+    catch (e) { return res.status(500).json({ ok: false, error: 'list failed' }); }
+});
+
+// POST /api/admin/vault/items — add an item. Multipart (formidable): fields carry
+// the client-encrypted parts; an optional 'file' field is the already-encrypted blob.
+router.post('/vault/items', _requireAuth, _requireAdmin, (req, res) => {
+    const db = require('../services/database');
+    if (!db.getVaultKeys(req.user.id)) return res.status(409).json({ ok: false, error: 'no vault — set one up first' });
+    try {
+        _ensureVaultDir();
+        const fs = require('fs');
+        const { IncomingForm } = require('formidable');
+        const form = new IncomingForm({ maxFileSize: _VAULT_MAX, multiples: false, uploadDir: _VAULT_DIR, keepExtensions: false });
+        form.parse(req, (err, fields, files) => {
+            if (err) return res.status(400).json({ ok: false, error: err.message || 'upload failed' });
+            const f = (n) => Array.isArray(fields[n]) ? fields[n][0] : fields[n];
+            const type = String(f('type') || 'note');
+            if (!f('encKey') || !f('metaIv') || !f('metaCt')) return res.status(400).json({ ok: false, error: 'missing encrypted metadata' });
+            let filePath = null, fileIv = null, size = 0;
+            const up = files && (Array.isArray(files.file) ? files.file[0] : files.file);
+            if (type === 'file') {
+                if (!up || !up.filepath) return res.status(400).json({ ok: false, error: 'file blob required for type=file' });
+                if (!f('fileIv')) { try { fs.unlinkSync(up.filepath); } catch (_) { /* */ } return res.status(400).json({ ok: false, error: 'fileIv required' }); }
+                const stored = `${Date.now()}_${Math.floor(parseInt(req.user.id, 10))}.enc`;
+                const dest = require('path').join(_VAULT_DIR, stored);
+                fs.renameSync(up.filepath, dest);
+                filePath = dest; fileIv = String(f('fileIv')); size = up.size || 0;
+            } else if (up && up.filepath) { try { fs.unlinkSync(up.filepath); } catch (_) { /* */ } }
+            const id = db.insertVaultItem(req.user.id, {
+                category: f('category') || 'Other', type,
+                encKey: f('encKey'), metaIv: f('metaIv'), metaCt: f('metaCt'),
+                fileIv, filePath, size, addedBy: 'operator',
+            });
+            return res.json({ ok: true, id: Number(id) });
+        });
+    } catch (e) { return res.status(500).json({ ok: false, error: 'add failed' }); }
+});
+
+// GET /api/admin/vault/items/:id/file — stream the encrypted file blob (client decrypts).
+router.get('/vault/items/:id/file', _requireAuth, _requireAdmin, (req, res) => {
+    const id = _vaultId(req.params.id); if (id === null) return res.status(400).end();
+    const it = require('../services/database').getVaultItem(id, req.user.id);
+    const fs = require('fs');
+    if (!it || it.type !== 'file' || !it.file_path || !fs.existsSync(it.file_path)) return res.status(404).end();
+    res.setHeader('Content-Type', 'application/octet-stream');
+    return fs.createReadStream(it.file_path).pipe(res);
+});
+
+// DELETE /api/admin/vault/items/:id — operator removes (UI confirms). Drops the blob too.
+router.delete('/vault/items/:id', _requireAuth, _requireAdmin, (req, res) => {
+    const id = _vaultId(req.params.id); if (id === null) return res.status(400).json({ ok: false, error: 'bad id' });
+    const db = require('../services/database');
+    const it = db.getVaultItem(id, req.user.id);
+    if (!it) return res.status(404).json({ ok: false, error: 'not found' });
+    if (it.file_path) { try { require('fs').unlinkSync(it.file_path); } catch (_) { /* */ } }
+    db.deleteVaultItem(id, req.user.id);
+    return res.json({ ok: true });
+});
+
 module.exports = router;
