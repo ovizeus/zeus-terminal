@@ -11,6 +11,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
+  { id: 'book', label: 'Book of All', icon: '▤', group: 'overview' },
   { id: 'dashboard', label: 'Dashboard', icon: '◉', group: 'overview' },
   { id: 'users', label: 'Users', icon: '◐', group: 'people' },
   { id: 'audit', label: 'Audit Log', icon: '☰', group: 'people' },

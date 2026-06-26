@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 export type AdminSection =
+  | 'book'
   | 'dashboard'
   | 'users'
   | 'audit'
