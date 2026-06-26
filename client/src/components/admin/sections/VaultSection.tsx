@@ -132,9 +132,20 @@ export function VaultSection() {
       if (!r.ok) throw new Error('Download eșuat')
       const encBlob = new Uint8Array(await r.arrayBuffer())
       const plain = await decryptFile(it.aesKey, it.fileIv!, encBlob)
-      const url = URL.createObjectURL(new Blob([plain as unknown as BlobPart]))
-      const a = document.createElement('a'); a.href = url; a.download = it.fileName || it.name; a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 4000)
+      // Guess a sane MIME from the file name so mobile browsers open/save it nicely.
+      const fn = it.fileName || it.name
+      const extMime: Record<string, string> = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain', csv: 'text/csv', json: 'application/json', zip: 'application/zip', gz: 'application/gzip', apk: 'application/vnd.android.package-archive' }
+      const ext = (fn.split('.').pop() || '').toLowerCase()
+      const url = URL.createObjectURL(new Blob([plain as unknown as BlobPart], { type: extMime[ext] || 'application/octet-stream' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fn
+      a.rel = 'noopener'
+      a.target = '_blank' // mobile: if download is blocked, at least open it (then save/share)
+      a.style.display = 'none'
+      document.body.appendChild(a) // some browsers (incl. mobile) ignore click() if not in the DOM
+      a.click()
+      setTimeout(() => { try { document.body.removeChild(a) } catch (_) { /* */ } ; URL.revokeObjectURL(url) }, 8000)
     } catch (e: any) { setError(String(e.message || e)) } finally { setBusy(false) }
   }
 
