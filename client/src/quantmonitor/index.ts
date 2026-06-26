@@ -12,7 +12,6 @@ import { fetchBTCDominance, fetchStablecoins } from '../data/btcDominance'
 import { fetchWeeklyKlines, fetchDailyKlines, calcS2F, calcLogRegression, calcMarketCycle } from '../data/onChainMetrics'
 import { connectOKXLiq, disconnectOKXLiq } from '../data/okxLiqWS'
 import { renderFrame } from './render/frame'
-import { initParticles, destroyParticles } from './particles/canvas'
 import { loadLiqSnapshot, startLiqPersist, stopLiqPersist, saveLiqSnapshot } from './persistence/liqPersist'
 
 const w = window as any
@@ -107,7 +106,7 @@ function startRenderLoop(screenId: string): void {
   intervals.push(renderIv)
 }
 
-export async function init(screenId: string, canvasId: string): Promise<void> {
+export async function init(screenId: string, _canvasId?: string): Promise<void> {
   _destroyed = false
   qmLog('SYS', 'ZeuS Quantitative Monitor V2.0.0')
   qmLog('SYS', 'Initializing engines...')
@@ -180,8 +179,7 @@ export async function init(screenId: string, canvasId: string): Promise<void> {
   // Start render loop
   startRenderLoop(screenId)
 
-  // Start particles
-  initParticles(canvasId)
+  // [2026-06-26] Liquidation-direction particles removed (green-flood flicker source).
 
   // [BUG5.5.3] Throttled save every 10s + flush on beforeunload/pagehide
   startLiqPersist()
@@ -198,7 +196,6 @@ export function destroy(): void {
   if (renderIv) { clearInterval(renderIv); renderIv = null }
   if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0 }
   disconnectOKXLiq()
-  destroyParticles()
   // [PERF-2] Remove zeus:liq + zeus:okxLiq listeners to prevent zombie
   // accumulation across init/destroy cycles
   if (_liqHandler) {

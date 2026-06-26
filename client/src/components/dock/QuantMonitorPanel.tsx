@@ -16,7 +16,7 @@ export function QuantMonitorPanel() {
     // CDN edge could return 404 for the chunk even when it existed on the
     // origin. Added bundle cost: ~25 KB gzipped, acceptable for reliability.
     let destroyed = false
-    qmInit('qm-screen', 'qm-particles').catch((e: any) => console.warn('[QM] init error:', e))
+    qmInit('qm-screen').catch((e: any) => console.warn('[QM] init error:', e))
 
     return () => {
       destroyed = true
@@ -41,10 +41,8 @@ export function QuantMonitorPanel() {
       }}>
         <span className="dg">Initializing ZeuS Quantitative Monitor...</span>
       </div>
-      <canvas id="qm-particles" style={{
-        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-        pointerEvents: 'none', zIndex: 100,
-      }} />
+      {/* [2026-06-26] Liquidation-direction particle overlay REMOVED — the green/red
+          rising/falling "lights" were the source of the green-flood flicker; gone for good. */}
       {/* Scanline overlay effect */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,

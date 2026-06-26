@@ -1,17 +1,16 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-06-26 · build b234 v1.7.208
+> **Ultima actualizare:** 2026-06-26 · build b235 v1.7.209
 
 ---
 
 ## BUGS — nerezolvate
 
 1. **Binance „Position side cannot be changed"** — intrări blocate intermitent (~3/zi, doar testnet uid=1). Diag SYMBOL_READY_DIAG e LIVE de azi (~11:30); **încă 0 capturi** (ultima eroare 07:27, înainte de deploy — n-a mai apărut). *De verificat:* la următoarea apariție `grep SYMBOL_READY_DIAG` → cod brut → fix idempotent. (pre-existent, fail-safe, zero bani pierduți)
-2. **Quantitative Monitor pâlpâie verde** („instalație de Crăciun") — canvas particule dimensionat 1×1 la init → inundă verde. Fix propus (lazy-resize), AȘTEAPTĂ GO.
-3. **Offsite backup picat** — rclone NU mai e configurat (config lipsește pt user zeus) + ultimul backup local din 24 iun → local = singura copie ȘI veche. DE REPARAT (cere destinație: re-auth Google Drive sau alt cloud).
-4. **Findings securitate (MEDIU, gated pe acces repo)** — keystore în git + parolă slabă, backup creds 644, CSP unsafe-inline, `audit?userId` admin. Reparațiile AȘTEAPTĂ GO (nimic reparat încă).
-5. **Arhivare tăcută → orfan pe bursă** — o poziție arhivată tăcut în `at_closed` lasă un orfan pe bursă (recon o re-adoptă lev1). Guard PASIV livrat (loghează WARN+stack la următoarea apariție), DAR cauza rădăcină (call-site-ul de arhivare tăcută) NU e izolată. *De urmărit:* `grep AT_ARCHIVE_GUARD` în loguri.
+2. **Offsite backup picat** — rclone NU mai e configurat (config lipsește pt user zeus) + ultimul backup local din 24 iun → local = singura copie ȘI veche. DE REPARAT (cere destinație: re-auth Google Drive sau alt cloud).
+3. **Findings securitate (MEDIU, gated pe acces repo)** — keystore în git + parolă slabă, backup creds 644, CSP unsafe-inline, `audit?userId` admin. Reparațiile AȘTEAPTĂ GO (nimic reparat încă).
+4. **Arhivare tăcută → orfan pe bursă** — o poziție arhivată tăcut în `at_closed` lasă un orfan pe bursă (recon o re-adoptă lev1). Guard PASIV livrat (loghează WARN+stack la următoarea apariție), DAR cauza rădăcină (call-site-ul de arhivare tăcută) NU e izolată. *De urmărit:* `grep AT_ARCHIVE_GUARD` în loguri.
 
 ---
 
