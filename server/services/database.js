@@ -383,6 +383,31 @@ migrate('017_ares_state', () => {
     `);
 });
 
+migrate('416_ares_journal', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ares_journal (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            symbol        TEXT NOT NULL DEFAULT 'BTCUSDT',
+            side          TEXT NOT NULL,
+            entry_price   REAL,
+            exit_price    REAL,
+            leverage      REAL,
+            notional      REAL,
+            confidence    REAL,
+            pnl           REAL,
+            fees          REAL,
+            reason        TEXT,
+            regime        TEXT,
+            session       TEXT,
+            opened_at     INTEGER,
+            closed_at     INTEGER NOT NULL,
+            decision_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ares_journal_user ON ares_journal(user_id, closed_at DESC);
+    `);
+});
+
 migrate('018_pwd_temp_meta', () => {
     db.exec("ALTER TABLE users ADD COLUMN pwd_temp_expires_at TEXT DEFAULT NULL");
     db.exec("ALTER TABLE users ADD COLUMN pwd_must_change INTEGER NOT NULL DEFAULT 0");
@@ -10388,6 +10413,10 @@ const _stmts = {
     // ARES state (per-user, UPSERT)
     aresGet: db.prepare('SELECT data FROM ares_state WHERE user_id = ?'),
     aresUpsert: db.prepare("INSERT INTO ares_state (user_id, data, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
+    aresJournalInsert: db.prepare(`INSERT INTO ares_journal
+        (user_id, symbol, side, entry_price, exit_price, leverage, notional, confidence, pnl, fees, reason, regime, session, opened_at, closed_at, decision_json)
+        VALUES (@user_id, @symbol, @side, @entry_price, @exit_price, @leverage, @notional, @confidence, @pnl, @fees, @reason, @regime, @session, @opened_at, @closed_at, @decision_json)`),
+    aresJournalList: db.prepare('SELECT * FROM ares_journal WHERE user_id = ? ORDER BY closed_at DESC, id DESC LIMIT ? OFFSET ?'),
     // User context data (per-user per-section, Phase 8)
     ctxGet: db.prepare('SELECT data FROM user_ctx_data WHERE user_id = ? AND section = ?'),
     ctxGetAll: db.prepare('SELECT section, data, updated_at FROM user_ctx_data WHERE user_id = ?'),
@@ -11720,6 +11749,33 @@ module.exports = {
     },
     saveAresState: (userId, data) => {
         _stmts.aresUpsert.run(userId, JSON.stringify(data));
+    },
+    // ARES ML journal (per-trade dataset; server-side so it survives phone-closed)
+    insertAresJournal: (userId, row) => {
+        const num = (v) => (v == null || v === '' || !Number.isFinite(+v)) ? null : +v;
+        _stmts.aresJournalInsert.run({
+            user_id: userId,
+            symbol: row.symbol || 'BTCUSDT',
+            side: row.side || 'LONG',
+            entry_price: num(row.entry_price),
+            exit_price: num(row.exit_price),
+            leverage: num(row.leverage),
+            notional: num(row.notional),
+            confidence: num(row.confidence),
+            pnl: num(row.pnl),
+            fees: num(row.fees),
+            reason: row.reason != null ? String(row.reason) : null,
+            regime: row.regime != null ? String(row.regime) : null,
+            session: row.session != null ? String(row.session) : null,
+            opened_at: num(row.opened_at),
+            closed_at: Number.isFinite(+row.closed_at) ? +row.closed_at : Date.now(),
+            decision_json: row.decision_json != null ? String(row.decision_json) : null,
+        });
+    },
+    getAresJournal: (userId, opts) => {
+        const limit = Math.min(500, Math.max(1, (opts && +opts.limit) || 50));
+        const offset = Math.max(0, (opts && +opts.offset) || 0);
+        return _stmts.aresJournalList.all(userId, limit, offset);
     },
     // User context data (per-user per-section, Phase 8)
     getCtxSection: (userId, section) => {

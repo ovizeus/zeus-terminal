@@ -95,6 +95,32 @@ function _saveState(userId, st) {
     try { db.saveAresState(userId, st); } catch (e) { logger.error('ARES', `state save failed uid=${userId}: ${e.message}`); }
 }
 
+// ── ML journal entry context ──────────────────────────────────────────────
+// Persist the entry decision context per-seq in ares_state so the close hook
+// can journal it (survives a restart between open and close). Pruned to 24h.
+function _pruneOpenCtx(st) {
+    if (!st || !st.openCtx) return;
+    const cutoff = Date.now() - 24 * 3600 * 1000;
+    for (const k of Object.keys(st.openCtx)) {
+        if (((st.openCtx[k] && st.openCtx[k]._ts) || 0) < cutoff) delete st.openCtx[k];
+    }
+}
+function _recordEntryContext(userId, seq, ctx) {
+    try {
+        const st = _loadState(userId);
+        st.openCtx = st.openCtx || {};
+        st.openCtx[String(seq)] = Object.assign({}, ctx, { _ts: Date.now() });
+        _pruneOpenCtx(st);
+        _saveState(userId, st);
+    } catch (_) { /* journal context is best-effort, never block trading */ }
+}
+function _sessionName(h) {
+    const x = +h;
+    if (x >= 7 && x < 13) return 'LONDON';
+    if (x >= 13 && x < 21) return 'NY';
+    return 'ASIA';
+}
+
 // ── Mission trajectory (port of _calcTrajectory) ───────────────────────────
 function _trajectory(st, now) {
     const bal = st.wallet.balance;
@@ -331,6 +357,15 @@ function tick(userId, mctx) {
     st3.engine.lastTradeTs = now;
     st3.lastDecision = Object.assign({}, st3.lastDecision, { executedSeq: entry.seq, stake: sizing.stake, leverage: sizing.leverage });
     _saveState(userId, st3);
+    // ML journal: stash the entry decision context keyed by seq for the close hook.
+    _recordEntryContext(userId, entry.seq, {
+        side: decision.side, entryPrice: +mctx.price, leverage: sizing.leverage,
+        notional: sizing.stake * sizing.leverage, confidence,
+        entryScore: +mctx.confluenceScore || 0,
+        regime: mctx.regime ? mctx.regime.regime : 'UNKNOWN',
+        session: new Date(now).getUTCHours(),
+        reasons: decision.reasons.slice(0, 6), openedAt: now,
+    });
     logger.info('ARES', `[ARES OPEN] uid=${userId} ${decision.side} ${SYMBOL} seq=${entry.seq} stake=$${sizing.stake} lev=${sizing.leverage}x conf=${confidence}`);
     try { require('./audit').record('ARES_ENTRY', { userId, seq: entry.seq, side: decision.side, stake: sizing.stake, leverage: sizing.leverage, confidence }, 'SERVER_ARES'); } catch (_) { }
     return entry;
@@ -369,6 +404,28 @@ function onPositionClosed(pos) {
         const wins = eng.tradeHistory.filter(Boolean).length;
         eng.winRate10 = eng.tradeHistory.length > 0 ? Math.round(wins / eng.tradeHistory.length * 100) : 0;
         _saveState(pos.userId, st);
+        // ── ML journal row (server-side dataset; survives phone-closed) ──
+        try {
+            const ec = (st.openCtx && st.openCtx[String(pos.seq)]) || null;
+            db.insertAresJournal(pos.userId, {
+                symbol: pos.symbol || SYMBOL,
+                side: pos.side || (ec && ec.side) || 'LONG',
+                entry_price: ec ? ec.entryPrice : (+pos.entryPrice || null),
+                exit_price: Number.isFinite(+pos.markPrice) ? +pos.markPrice : (+pos.closePrice || null),
+                leverage: ec ? ec.leverage : (+pos.lev || null),
+                notional: ec ? ec.notional : (((+pos.size || 0) * (+pos.lev || 0)) || null),
+                confidence: ec ? ec.confidence : null,
+                pnl: net,
+                fees,
+                reason: pos.closeReason || null,
+                regime: ec ? ec.regime : null,
+                session: ec ? _sessionName(ec.session) : null,
+                opened_at: ec ? ec.openedAt : (+pos.openedAt || null),
+                closed_at: Date.now(),
+                decision_json: ec ? JSON.stringify({ reasons: ec.reasons, entryScore: ec.entryScore }) : null,
+            });
+            if (st.openCtx && st.openCtx[String(pos.seq)]) { delete st.openCtx[String(pos.seq)]; _saveState(pos.userId, st); }
+        } catch (e) { try { logger.error('ARES', `journal write failed seq=${pos.seq}: ${e.message}`); } catch (_) { } }
         logger.info('ARES', `[ARES CLOSE] uid=${pos.userId} seq=${pos.seq} net=$${net.toFixed(2)} balance=$${st.wallet.balance.toFixed(2)} wr10=${eng.winRate10}%`);
         try { require('./audit').record('ARES_CLOSE', { userId: pos.userId, seq: pos.seq, net: +net.toFixed(2), balance: +st.wallet.balance.toFixed(2) }, 'SERVER_ARES'); } catch (_) { }
     } catch (e) {
@@ -495,7 +552,7 @@ function getAresActive(userId) {
 }
 
 module.exports = {
-    tick, onPositionClosed, fund, withdraw, getPublicState,
+    tick, onPositionClosed, fund, withdraw, getPublicState, _recordEntryContext,
     setRealOptIn, getRealOptIn, setKillSwitch, getKillSwitch, setAresActive, getAresActive,
     _loadStateForTest: _loadState, _saveStateForTest: _saveState, _trajectoryForTest: _trajectory,
     _setRealBalanceForTest, _resetRealBalanceForTest, _realAvailableForTest: _realAvailable,
