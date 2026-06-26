@@ -6,11 +6,16 @@ name: Test
 # /api/health), so it could never have worked — and we never used it. CI is now
 # just a fast, deterministic sanity gate on the core money-path logic.
 
+# Auto-triggers (push/pull_request) DISABLED 2026-06-26: GitHub stopped
+# provisioning ANY hosted runner for this account (the job fails in ~2s with an
+# empty runner_name and zero steps, regardless of the runs-on label) — an
+# Actions billing / enablement issue at the GitHub ACCOUNT level, not the
+# workflow. Until that is resolved in GitHub Settings (Billing + repo Actions),
+# every push produced a red email for nothing. Left as workflow_dispatch so it
+# can still be run manually once the account issue is fixed; then restore the
+# push/pull_request triggers.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
