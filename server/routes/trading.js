@@ -982,6 +982,16 @@ router.get('/ares/state', (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// ─── GET /api/ares/journal ─── ARES trade journal (ML dataset), self-scoped ───
+router.get('/ares/journal', (req, res) => {
+  try {
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const journal = require('../services/database').getAresJournal(req.user.id, { limit, offset });
+    res.json({ ok: true, journal });
+  } catch (e) { res.status(500).json({ ok: false, error: 'journal read failed' }); }
+});
+
 // ─── [2026-06-23] REAL-money consent toggle. Server-authoritative; user sets ONLY their own.
 // Enabling requires an explicit acknowledgment so it can never be a one-tap accident. This does
 // NOT enable real execution by itself — the protected _SRV_POS_REAL_ENABLED master switch still
