@@ -106,7 +106,7 @@ export function BookSection() {
 
   useEffect(() => {
     let alive = true
-    fetch('/auth/admin/book', { credentials: 'same-origin' })
+    fetch('/api/admin/book', { credentials: 'same-origin' })
       .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then((d) => { if (!alive) return; setMarkdown(d.markdown || ''); setUpdatedAt(d.updatedAt || null) })
       .catch((e) => { if (alive) setError(String(e.message || e)) })

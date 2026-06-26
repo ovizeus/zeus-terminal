@@ -811,23 +811,10 @@ router.get('/admin/health', (req, res) => {
     res.json({ ok: true, health });
 });
 
-// ─── ADMIN: GET /auth/admin/book — "Book of All" personal monitor (markdown) ───
-// Read-only render of docs/BOOK_OF_ALL.md, maintained by the assistant. Admin-only.
-router.get('/admin/book', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
-    try {
-        const fs = require('fs');
-        const bookPath = require('path').join(__dirname, '..', '..', 'docs', 'BOOK_OF_ALL.md');
-        if (!fs.existsSync(bookPath)) {
-            return res.json({ ok: true, markdown: '# 📖 Book of All\n\n_(carte goală — încă nimic de monitorizat)_', updatedAt: null });
-        }
-        const markdown = fs.readFileSync(bookPath, 'utf8');
-        const updatedAt = fs.statSync(bookPath).mtime.toISOString();
-        res.json({ ok: true, markdown, updatedAt });
-    } catch (e) {
-        res.status(500).json({ ok: false, error: 'Could not read book' });
-    }
-});
+// NOTE: the "Book of All" endpoint moved to GET /api/admin/book (server/routes/
+// admin.js). It must NOT live under /auth/ — that location carries the nginx
+// login brute-force rate-limit (zone=zeus_auth 10r/m burst 5) which returned 503
+// on the book fetch when the admin panel fired several /auth/admin/* calls.
 
 // ─── ADMIN: GET /auth/admin/users/:id — user detail ───
 router.get('/admin/users/:id', (req, res) => {

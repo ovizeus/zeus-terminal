@@ -137,4 +137,22 @@ router.get('/leaderboard', _requireAuth, _requireAdmin, async (req, res) => {
     }
 });
 
+// GET /api/admin/book — "Book of All" personal monitor (markdown).
+// Lives under /api/admin (NOT /auth/) so it is NOT subject to the nginx login
+// brute-force rate-limit (zone=zeus_auth 10r/m) that returns 503 on bursts.
+router.get('/book', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        const fs = require('fs');
+        const bookPath = require('path').join(__dirname, '..', '..', 'docs', 'BOOK_OF_ALL.md');
+        if (!fs.existsSync(bookPath)) {
+            return res.json({ ok: true, markdown: '# Book of All\n\n_(carte goală — încă nimic de monitorizat)_', updatedAt: null });
+        }
+        const markdown = fs.readFileSync(bookPath, 'utf8');
+        const updatedAt = fs.statSync(bookPath).mtime.toISOString();
+        return res.json({ ok: true, markdown, updatedAt });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: 'Could not read book' });
+    }
+});
+
 module.exports = router;
