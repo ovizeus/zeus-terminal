@@ -21,7 +21,7 @@
 3. **DSL_ML_CUT = 0** — tăierea pe reversal n-a tras încă. De urmărit: dacă rămâne 0 mult timp, poate pragul de confirmare e prea strict (ca Lever B).
 4. **P&L testnet track (cron 23:58)** — ultima linie din log e goală. *De verificat:* cronul chiar produce date noi (nu e mort).
 5. **Lever B Smart Loss-Cut** — live testnet, 0 tăieri (puține poziții deschise). De monitorizat când crește volumul.
-6. **Bybit — ZERO rulaje reale.** Cod matur dar nedovedit. *De făcut:* soak Bybit pe un user de test separat (așteaptă cheie testnet Bybit + GO).
+6. **Bybit — SOAK PORNIT pe Mirela (uid=2), 2026-06-26.** Cheie testnet copiată de la uid=1 (criptare globală, cont activ), `BYBIT_DRY_RUN_ONLY`=OFF, Mirela = cutover user → serverul tradează Bybit testnet pe contul ei ($75.625 fake, cheie verificată live). **uid=1 Binance soak NEATINS.** `BYBIT_LIVE_ENABLED`=OFF (zero bani reali). *De urmărit:* (a) primele ordine Bybit chiar EXECUTĂ (e prima oară — cod nedovedit până azi), (b) gap-ul **polling** (Bybit n-are WS privat nativ → fills prin polling, log `[USERDATA] skip uid=2 ... Binance-only`), (c) câteva zile P&L + orfani. *Reversibil:* `BYBIT_DRY_RUN_ONLY`=ON + scot uid=2 din `data/sp2_cutover_users.json` + reload.
 7. **Chei LIVE pentru REAL ML-DSL** — când decizi tu (via MultiExchange UI). Atunci ML-DSL moștenește pe real automat; primele trade-uri reale MICI + vegheate (testnet ≠ real).
 8. **Verificări vizuale restante de la tine:** kill-switch overlay (pe laptop), jurnal manual „jos" (după hard-refresh), widget Android gaming (cere rebuild + reinstall APK pe telefon).
 9. **Radar top300 / OI la următorul ban Binance** — de verificat că banda trece pe sursa Bybit (fix livrat, neconfirmat la ban real).
