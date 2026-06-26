@@ -82,3 +82,4 @@ data/*_stale_*.json
 
 scripts/offsite-backup.conf
 KEYS-BACKUP.txt
+data/book_uploads/

@@ -12,6 +12,7 @@
 3. **Quantitative Monitor pâlpâie verde** („instalație de Crăciun") — canvas particule dimensionat 1×1 la init → inundă verde. Fix propus (lazy-resize), AȘTEAPTĂ GO.
 4. **Offsite backup picat** — rclone gdrive quota 403 (din 23-24 iun) → backup-ul local e singura copie. DE REPARAT (reconfigurat remote sau alt destinație).
 5. **Findings securitate (MEDIU, gated pe acces repo)** — keystore în git + parolă slabă, backup creds 644, CSP unsafe-inline, `audit?userId` admin. Reparațiile AȘTEAPTĂ GO (nimic reparat încă).
+6. **Arhivare tăcută → orfan pe bursă** — o poziție arhivată tăcut în `at_closed` lasă un orfan pe bursă (recon o re-adoptă lev1). Guard PASIV livrat (loghează WARN+stack la următoarea apariție), DAR cauza rădăcină (call-site-ul de arhivare tăcută) NU e izolată. *De urmărit:* `grep AT_ARCHIVE_GUARD` în loguri.
 
 ---
 
@@ -26,6 +27,7 @@
 7. **Chei LIVE pentru REAL ML-DSL** — când decizi tu (via MultiExchange UI). Atunci ML-DSL moștenește pe real automat; primele trade-uri reale MICI + vegheate (testnet ≠ real).
 8. **Verificări vizuale restante de la tine:** kill-switch overlay (pe laptop), jurnal manual „jos" (după hard-refresh), widget Android gaming (cere rebuild + reinstall APK pe telefon).
 9. **Radar top300 / OI la următorul ban Binance** — de verificat că banda trece pe sursa Bybit (fix livrat, neconfirmat la ban real).
+10. **„Margin insufficient" testnet** — unele fill-uri AT pe uid=1 sunt blocate fiindcă contul testnet Binance e mic. Limitare de cont, nu bug — de urmărit dacă strânge prea mult volumul de soak.
 
 ---
 

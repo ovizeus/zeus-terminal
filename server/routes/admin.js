@@ -155,4 +155,105 @@ router.get('/book', _requireAuth, _requireAdmin, (req, res) => {
     }
 });
 
+// ─── Uploads ("Book" attachments) — operator uploads screenshots + docs, the
+// assistant reads them off disk to fix things, the operator deletes them after.
+// Admin-only, under /api/admin (NOT /auth, which is rate-limited). Stored on disk
+// as <epochMs>__<safeName> so the upload time + ordering come from the filename.
+const _UPLOAD_DIR = require('path').join(__dirname, '..', '..', 'data', 'book_uploads');
+const _ALLOWED_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf', 'txt', 'csv', 'log', 'md', 'json']);
+const _IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+const _MAX_UPLOAD = 15 * 1024 * 1024; // 15MB
+const _ID_RE = /^[0-9]{10,16}__[A-Za-z0-9._-]+$/;
+
+function _ensureUploadDir() {
+    const fs = require('fs');
+    if (!fs.existsSync(_UPLOAD_DIR)) fs.mkdirSync(_UPLOAD_DIR, { recursive: true });
+}
+function _safeName(name) {
+    return String(name || 'file').replace(/[^A-Za-z0-9._-]/g, '_').replace(/_+/g, '_').slice(-60) || 'file';
+}
+function _extOf(name) { return require('path').extname(String(name || '')).toLowerCase().slice(1); }
+// Resolve a request :id to a real path inside the upload dir, or null (traversal-safe).
+function _resolveUpload(id) {
+    if (!_ID_RE.test(String(id || ''))) return null;
+    const path = require('path');
+    const full = path.join(_UPLOAD_DIR, id);
+    if (path.dirname(full) !== _UPLOAD_DIR) return null;
+    return full;
+}
+function _contentType(ext) {
+    return ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+        pdf: 'application/pdf', txt: 'text/plain; charset=utf-8', csv: 'text/csv; charset=utf-8',
+        log: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8', json: 'application/json' })[ext] || 'application/octet-stream';
+}
+
+// POST /api/admin/uploads — multipart, one or more files
+router.post('/uploads', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        _ensureUploadDir();
+        const fs = require('fs');
+        const { IncomingForm } = require('formidable');
+        const form = new IncomingForm({ maxFileSize: _MAX_UPLOAD, multiples: true, uploadDir: _UPLOAD_DIR, keepExtensions: true });
+        form.parse(req, (err, fields, files) => {
+            if (err) return res.status(400).json({ ok: false, error: err.message || 'upload failed' });
+            const list = [];
+            for (const key of Object.keys(files || {})) {
+                const arr = Array.isArray(files[key]) ? files[key] : [files[key]];
+                for (const f of arr) {
+                    if (!f || !f.filepath) continue;
+                    const ext = _extOf(f.originalFilename);
+                    if (!_ALLOWED_EXT.has(ext)) { try { fs.unlinkSync(f.filepath); } catch (_) { /* */ } continue; }
+                    const stored = `${Date.now()}__${_safeName(f.originalFilename)}`;
+                    const dest = require('path').join(_UPLOAD_DIR, stored);
+                    try { fs.renameSync(f.filepath, dest); list.push(stored); }
+                    catch (_) { try { fs.unlinkSync(f.filepath); } catch (_) { /* */ } }
+                }
+            }
+            if (!list.length) return res.status(400).json({ ok: false, error: 'No valid files (allowed: images, pdf, txt, csv, log, md, json; max 15MB)' });
+            return res.json({ ok: true, uploaded: list.length });
+        });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: 'upload error' });
+    }
+});
+
+// GET /api/admin/uploads — list, newest first
+router.get('/uploads', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        _ensureUploadDir();
+        const fs = require('fs');
+        const items = fs.readdirSync(_UPLOAD_DIR)
+            .filter((n) => _ID_RE.test(n))
+            .map((n) => {
+                const at = parseInt(n.split('__')[0], 10);
+                const name = n.split('__').slice(1).join('__');
+                let size = 0; try { size = fs.statSync(require('path').join(_UPLOAD_DIR, n)).size; } catch (_) { /* */ }
+                return { id: n, name, uploadedAt: at, size, kind: _IMG_EXT.has(_extOf(name)) ? 'image' : 'doc', ext: _extOf(name) };
+            })
+            .sort((a, b) => b.uploadedAt - a.uploadedAt);
+        return res.json({ ok: true, items });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: 'list error' });
+    }
+});
+
+// GET /api/admin/uploads/:id/raw — serve the file inline (cookie auth on img/iframe)
+router.get('/uploads/:id/raw', _requireAuth, _requireAdmin, (req, res) => {
+    const full = _resolveUpload(req.params.id);
+    const fs = require('fs');
+    if (!full || !fs.existsSync(full)) return res.status(404).end();
+    res.setHeader('Content-Type', _contentType(_extOf(req.params.id)));
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    return fs.createReadStream(full).pipe(res);
+});
+
+// DELETE /api/admin/uploads/:id — operator removes after the fix
+router.delete('/uploads/:id', _requireAuth, _requireAdmin, (req, res) => {
+    const full = _resolveUpload(req.params.id);
+    const fs = require('fs');
+    if (!full || !fs.existsSync(full)) return res.status(404).json({ ok: false, error: 'not found' });
+    try { fs.unlinkSync(full); return res.json({ ok: true }); }
+    catch (e) { return res.status(500).json({ ok: false, error: 'delete failed' }); }
+});
+
 module.exports = router;
