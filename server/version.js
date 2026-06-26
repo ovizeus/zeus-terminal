@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.213',
-    build: 239,
+    version: '1.7.214',
+    build: 240,
     date: '2026-06-26',
     changelog: [
+        'b240 v1.7.214 — S9: the brain now alerts the operator when it blocks its own trade 2026-06-26. Reflection (the brain second-guessing a trade before opening it) already blocked entries when it had high-severity concerns; this adds the missing operator surfacing — an auditable REFLECTION_BLOCKED event plus a throttled Telegram alert (at most once per symbol and direction every ten minutes) so it never spams. Measured the current block rate at 13.5 percent of trade-attempts, right inside the 10-20 percent target, so no tuning was needed. No-apostrophe changelog.',
         'b239 v1.7.213 — Vault Save triggers the native share directly instead of gating on canShare 2026-06-26. In the phone app (a Capacitor WebView) canShare with files can return false even though navigator.share works, so the previous build skipped share and fell through to a blob download that does nothing in a WebView — tapping Save looked like it did nothing. Now it calls navigator.share directly (native Save to Files / share sheet); on desktop it falls back to a classic download plus an open-in-tab last resort. No-apostrophe changelog.',
         'b238 v1.7.212 — Vault file save now works on the phone app via the native share sheet 2026-06-26. A blob download triggered by a click does not work inside a WebView or app (the previous attempt did nothing on the phone), but the Web Share API does — so the Save button now hands the decrypted file to the native share sheet (Save to Files, send to cloud or stick, etc.), which is exactly the share the operator asked for; it falls back to a classic download on desktop browsers. The button is relabelled Save. No-apostrophe changelog.',
         'b237 v1.7.211 — fix: Vault file download did not work on phones 2026-06-26. The decrypted blob link was clicked without being attached to the document, which several browsers (notably mobile) ignore, so nothing happened. The download now appends the link to the DOM before clicking and removes it after, sets a proper MIME type guessed from the file name (so a PDF opens as a PDF), and uses target blank so that if a browser blocks the direct download it at least opens the file to save or share. Server side was already correct (the encrypted blob streams fine). No-apostrophe changelog.',
