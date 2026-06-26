@@ -408,6 +408,40 @@ migrate('416_ares_journal', () => {
     `);
 });
 
+// [VAULT 2026-06-26] Zero-knowledge vault. vault_keys holds the public key
+// (plaintext) + the wrapped (encrypted) private key — the vault password never
+// reaches the server. vault_items hold ciphertext only; the server can never read
+// item names/notes/content. category is plaintext (compartment grouping); the
+// item name/note/content live INSIDE the encrypted payload (meta_ct / file blob).
+migrate('417_vault', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS vault_keys (
+            user_id      INTEGER PRIMARY KEY,
+            public_key   TEXT NOT NULL,
+            wrapped_priv TEXT NOT NULL,
+            salt         TEXT NOT NULL,
+            iv           TEXT NOT NULL,
+            kdf_iters    INTEGER NOT NULL DEFAULT 210000,
+            created_at   INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS vault_items (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL,
+            category   TEXT NOT NULL DEFAULT 'Other',
+            type       TEXT NOT NULL,
+            enc_key    TEXT NOT NULL,
+            meta_iv    TEXT NOT NULL,
+            meta_ct    TEXT NOT NULL,
+            file_iv    TEXT,
+            file_path  TEXT,
+            size       INTEGER NOT NULL DEFAULT 0,
+            added_by   TEXT NOT NULL DEFAULT 'operator',
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_vault_items_user ON vault_items(user_id, category, created_at DESC);
+    `);
+});
+
 migrate('018_pwd_temp_meta', () => {
     db.exec("ALTER TABLE users ADD COLUMN pwd_temp_expires_at TEXT DEFAULT NULL");
     db.exec("ALTER TABLE users ADD COLUMN pwd_must_change INTEGER NOT NULL DEFAULT 0");
@@ -10417,6 +10451,15 @@ const _stmts = {
         (user_id, symbol, side, entry_price, exit_price, leverage, notional, confidence, pnl, fees, reason, regime, session, opened_at, closed_at, decision_json)
         VALUES (@user_id, @symbol, @side, @entry_price, @exit_price, @leverage, @notional, @confidence, @pnl, @fees, @reason, @regime, @session, @opened_at, @closed_at, @decision_json)`),
     aresJournalList: db.prepare('SELECT * FROM ares_journal WHERE user_id = ? ORDER BY closed_at DESC, id DESC LIMIT ? OFFSET ?'),
+    vaultKeysGet: db.prepare('SELECT public_key, wrapped_priv, salt, iv, kdf_iters FROM vault_keys WHERE user_id = ?'),
+    vaultKeysUpsert: db.prepare(`INSERT INTO vault_keys (user_id, public_key, wrapped_priv, salt, iv, kdf_iters, created_at)
+        VALUES (@user_id, @public_key, @wrapped_priv, @salt, @iv, @kdf_iters, @created_at)
+        ON CONFLICT(user_id) DO UPDATE SET public_key=excluded.public_key, wrapped_priv=excluded.wrapped_priv, salt=excluded.salt, iv=excluded.iv, kdf_iters=excluded.kdf_iters, created_at=excluded.created_at`),
+    vaultItemInsert: db.prepare(`INSERT INTO vault_items (user_id, category, type, enc_key, meta_iv, meta_ct, file_iv, file_path, size, added_by, created_at)
+        VALUES (@user_id, @category, @type, @enc_key, @meta_iv, @meta_ct, @file_iv, @file_path, @size, @added_by, @created_at)`),
+    vaultItemList: db.prepare('SELECT id, category, type, enc_key, meta_iv, meta_ct, file_iv, size, added_by, created_at FROM vault_items WHERE user_id = ? ORDER BY category ASC, created_at DESC, id DESC'),
+    vaultItemGet: db.prepare('SELECT * FROM vault_items WHERE id = ? AND user_id = ?'),
+    vaultItemDelete: db.prepare('DELETE FROM vault_items WHERE id = ? AND user_id = ?'),
     // User context data (per-user per-section, Phase 8)
     ctxGet: db.prepare('SELECT data FROM user_ctx_data WHERE user_id = ? AND section = ?'),
     ctxGetAll: db.prepare('SELECT section, data, updated_at FROM user_ctx_data WHERE user_id = ?'),
@@ -11777,6 +11820,27 @@ module.exports = {
         const offset = Math.max(0, (opts && +opts.offset) || 0);
         return _stmts.aresJournalList.all(userId, limit, offset);
     },
+    // ── Zero-knowledge vault ──
+    getVaultKeys: (userId) => _stmts.vaultKeysGet.get(userId) || null,
+    saveVaultKeys: (userId, k) => {
+        _stmts.vaultKeysUpsert.run({
+            user_id: userId, public_key: String(k.publicKey), wrapped_priv: String(k.wrappedPriv),
+            salt: String(k.salt), iv: String(k.iv), kdf_iters: Math.max(100000, +k.kdfIters || 210000),
+            created_at: Date.now(),
+        });
+    },
+    insertVaultItem: (userId, it) => {
+        const info = _stmts.vaultItemInsert.run({
+            user_id: userId, category: String(it.category || 'Other').slice(0, 60), type: String(it.type || 'note'),
+            enc_key: String(it.encKey), meta_iv: String(it.metaIv), meta_ct: String(it.metaCt),
+            file_iv: it.fileIv != null ? String(it.fileIv) : null, file_path: it.filePath != null ? String(it.filePath) : null,
+            size: Math.max(0, +it.size || 0), added_by: String(it.addedBy || 'operator'), created_at: Date.now(),
+        });
+        return info.lastInsertRowid;
+    },
+    listVaultItems: (userId) => _stmts.vaultItemList.all(userId),
+    getVaultItem: (id, userId) => _stmts.vaultItemGet.get(id, userId) || null,
+    deleteVaultItem: (id, userId) => _stmts.vaultItemDelete.run(id, userId).changes > 0,
     // User context data (per-user per-section, Phase 8)
     getCtxSection: (userId, section) => {
         const row = _stmts.ctxGet.get(userId, section);
