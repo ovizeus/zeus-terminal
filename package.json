@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "jest --forceExit --detectOpenHandles",
+    "test:ci": "jest --forceExit --runInBand tests/unit/mlDslPolicy.test.js tests/unit/ares-rules.test.js tests/unit/ares-journal.test.js tests/unit/server-ares.test.js tests/unit/ares-source-tag.test.js tests/unit/server/services/dslActiveEntry.test.js tests/unit/serverDslSimulate.test.js tests/unit/serverDSL-activation-floor.test.js",
     "test:watch": "jest --watch --forceExit",
     "test:coverage": "jest --forceExit --coverage",
     "audit:check": "npm audit --omit=dev --audit-level=high"
