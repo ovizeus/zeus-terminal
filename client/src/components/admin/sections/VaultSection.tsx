@@ -132,18 +132,25 @@ export function VaultSection() {
       if (!r.ok) throw new Error('Download eșuat')
       const encBlob = new Uint8Array(await r.arrayBuffer())
       const plain = await decryptFile(it.aesKey, it.fileIv!, encBlob)
-      // Guess a sane MIME from the file name so mobile browsers open/save it nicely.
       const fn = it.fileName || it.name
-      const extMime: Record<string, string> = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain', csv: 'text/csv', json: 'application/json', zip: 'application/zip', gz: 'application/gzip', apk: 'application/vnd.android.package-archive' }
-      const ext = (fn.split('.').pop() || '').toLowerCase()
-      const url = URL.createObjectURL(new Blob([plain as unknown as BlobPart], { type: extMime[ext] || 'application/octet-stream' }))
+      const extMime: Record<string, string> = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain', csv: 'text/csv', json: 'application/json', zip: 'application/zip', gz: 'application/gzip', tar: 'application/x-tar', apk: 'application/vnd.android.package-archive' }
+      const mime = extMime[(fn.split('.').pop() || '').toLowerCase()] || 'application/octet-stream'
+      // MOBILE / APP first: the native share sheet (Save to Files, send to cloud,
+      // etc.). Blob downloads via a click() do not work in a WebView/app, but the
+      // Web Share API does — and it is exactly what the operator wanted (share).
+      const nav = navigator as any
+      try {
+        const file = new File([plain as unknown as BlobPart], fn, { type: mime })
+        if (nav.canShare && nav.canShare({ files: [file] })) {
+          try { await nav.share({ files: [file], title: fn }) } catch (_) { /* user cancelled — fine */ }
+          return
+        }
+      } catch (_) { /* File ctor unsupported → fall through to classic download */ }
+      // DESKTOP browser: classic download (link attached to the DOM so click() fires).
+      const url = URL.createObjectURL(new Blob([plain as unknown as BlobPart], { type: mime }))
       const a = document.createElement('a')
-      a.href = url
-      a.download = fn
-      a.rel = 'noopener'
-      a.target = '_blank' // mobile: if download is blocked, at least open it (then save/share)
-      a.style.display = 'none'
-      document.body.appendChild(a) // some browsers (incl. mobile) ignore click() if not in the DOM
+      a.href = url; a.download = fn; a.rel = 'noopener'; a.style.display = 'none'
+      document.body.appendChild(a)
       a.click()
       setTimeout(() => { try { document.body.removeChild(a) } catch (_) { /* */ } ; URL.revokeObjectURL(url) }, 8000)
     } catch (e: any) { setError(String(e.message || e)) } finally { setBusy(false) }
@@ -250,7 +257,7 @@ export function VaultSection() {
                 <div style={{ color: '#5f6678', fontSize: 10.5, marginTop: 3 }}>{it.addedBy === 'assistant' ? 'pus de asistent' : 'al tău'} · {fmtDate(it.createdAt)}{it.type === 'file' ? ` · ${fmtSize(it.size)}` : ''}</div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                {it.type === 'file' && <button onClick={() => downloadFile(it)} style={{ ...btn('rgba(79,209,255,0.14)'), color: '#4fd1ff', padding: '4px 10px', fontSize: 11.5 }}>Download</button>}
+                {it.type === 'file' && <button onClick={() => downloadFile(it)} style={{ ...btn('rgba(79,209,255,0.14)'), color: '#4fd1ff', padding: '4px 10px', fontSize: 11.5 }}>Salvează</button>}
                 {it.type !== 'file' && <button onClick={() => copySecret(it)} style={{ ...btn('rgba(159,230,196,0.12)'), color: '#9fe6c4', padding: '4px 10px', fontSize: 11.5 }}>Copy</button>}
                 <button onClick={() => del(it)} style={{ ...btn('rgba(255,92,122,0.12)'), color: '#ff5c7a', padding: '4px 10px', fontSize: 11.5 }}>Șterge</button>
               </div>
