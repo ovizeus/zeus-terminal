@@ -72,7 +72,12 @@ interface AresStoreState {
   /** [R28.2] UI slice — mirrors aresUI.ts DOM render output. */
   ui: AresStoreUI
 
+  /** [ARES JOURNAL 2026-06-26] Server-side ML trade journal rows (newest first),
+   *  fetched from /api/ares/journal when serverSide. Empty until loaded. */
+  journal: any[]
+
   loadFromServer: () => Promise<void>
+  loadJournal: () => Promise<void>
   saveToServer: () => Promise<void>
   patch: (partial: Partial<AresStoreState>) => void
 
@@ -137,6 +142,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
         // thought stream. loadFromServer runs ~8s, so render here for ~8s-fresh
         // server reasoning in the panel.
         try { _aresRender() } catch (_) {}
+        try { void getState().loadJournal() } catch (_) {}
         return
       }
     } catch (_) { /* endpoint absent on old servers — fall through to legacy */ }
@@ -167,8 +173,16 @@ export const useAresStore = create<AresStoreState>()((set, getState) => {
   realBalance: 0,
   aresActive: false,
   ui: DEFAULT_ARES_UI,
+  journal: [],
 
   loadFromServer: async () => { _debouncedAresLoad!() },
+
+  loadJournal: async () => {
+    try {
+      const d = await api.raw<{ ok: boolean; journal?: any[] }>('GET', '/api/ares/journal?limit=50')
+      if (d && d.ok && Array.isArray(d.journal)) set({ journal: d.journal })
+    } catch (_) { /* non-fatal — journal is observational */ }
+  },
 
   saveToServer: async () => {
     const s = getState()
