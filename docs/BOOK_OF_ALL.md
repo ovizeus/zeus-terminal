@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-06-26 · build b236 v1.7.210
+> **Ultima actualizare:** 2026-06-26 · build b240 v1.7.214
 
 ---
 
@@ -28,12 +28,6 @@
 10. **„Margin insufficient" testnet** — unele fill-uri AT pe uid=1 sunt blocate fiindcă contul testnet Binance e mic. Limitare de cont, nu bug — de urmărit dacă strânge prea mult volumul de soak.
 11. **CI GitHub Actions roșu — CAUZĂ REALĂ = BILLING cont GitHub (de rezolvat de tine)** — workflow-ul pică în 2s cu `runner_name=""` + zero pași, indiferent de etichetă (testat ubuntu-22.04 + ubuntu-latest): **GitHub nu alocă NICIUN runner** pe cont = problemă de billing/Actions la nivel de cont, NU din cod. Dovedit via API public Actions. Am **oprit rularea automată** (commit d5853e99, `on: workflow_dispatch` — gata emailurile roșii); deploy-ul e manual oricum. *Ca să reactivezi CI:* GitHub → Settings → Billing (+ repo Settings → Actions), apoi restaurezi trigger-ele `push`/`pull_request`. (Restul curățat: deploy-job stricat scos, `test:ci` cu 107 teste core gata pt când merge.)
 12. **Vault — confirmă DOWNLOAD-ul pe Chrome desktop** — seiful zero-knowledge LIVRAT + DOVEDIT LIVE (creare+descuiere+adăugare merg, confirmate de operator; înăuntru: backup FULL 394MB + .env + chei exchange + keystore + link-uri APK). Rămâne să confirmi o dată **download-ul unui fișier pe Chrome DESKTOP** (în app/WebView download-ul de blob nu merge → folosim share nativ; fișierele mari le iei de pe Chrome). ⚠️ Uiți parola seifului = pierdut definitiv (zero-knowledge).
-13. **ML pre-REAL refinements — GATA (verificat 2026-06-26).** ✅ #1 teste attribution/phantom, ✅ #4 soak-scripts (s7-sanity/soak-track/sp1-check), ✅ #6 drawdown auto-halt (`ddAssess.locked`), ✅ #5 `/api/admin/ml/stage-promote` (construit b240, audit `ML_STAGE_PROMOTE`).
-    - **CE-A RĂMAS = 2 OPȚIONALE low-value (decizie: amânate, nu merită efortul acum):**
-      - **#2 rafinare digest-lookup** — aproximarea `ORDER BY DESC LIMIT 1` (serverAT:2644) funcționează deja; rafinarea = a lega digest-ul exact de poziție. Nuanță, nu blocant.
-      - **#3 `evaluatePerformance` cron** — funcția nici nu există; era amânat „până se adună metrici". De făcut doar dacă vrem evaluare automată post-decizie.
-    - *(Separat: CSP 4-faze în `docs/CSP-MIGRATION-PLAN.md`, leagă de bug securitate #3.)*
-
 ---
 
 ## PLANS — pe viitor
@@ -50,6 +44,19 @@
    - ⚪ **S11 — Rollout global:** toți userii, în trepte 25%→50%→100% (DUPĂ ce uid=1 real e dovedit 14z). Infra multi-user + scale-monitoring.
    - ⚪ **S12 — Cleanup client:** ștergi codul client de execuție (serverul = singurul executor). Ultimul pas, opțional.
    - *Sursă:* `docs/superpowers/plans/2026-05-28-s8-s12-server-autonomy.md` + specs SP1/SP2. (Planul S8-S12 din 28 mai = re-etichetat SP1/SP2/SP3.)
+
+---
+
+## ✅ FĂCUTE recent — ce-am livrat (arhivă, ca să vezi progresul)
+
+> Aici cobor ce-i GATA + verificat, ca lista de sus să rămână doar activ. Git/changelog au detaliul complet.
+
+**2026-06-26:**
+- **S9 reflection-blocking** (b240) — brain-ul respinge singur deciziile proaste; am adăugat alertă Telegram + audit `REFLECTION_BLOCKED`; rată 13.5% (în ținta 10-20%, zero tuning). Efectul se vede pe Telegram + „gândurile" brain-ului.
+- **ML pre-REAL refinements** (b240) — #5 endpoint `/api/admin/ml/stage-promote` construit; #1 teste / #4 soak-scripts / #6 drawdown-halt confirmate deja gata. *Rămase opționale (amânate deliberat, low-value):* #2 rafinare digest-lookup, #3 `evaluatePerformance` cron.
+- **Vault zero-knowledge** (b236-b240) — seif criptat creat + umplut: backup FULL 394MB (DB+.env+restore) + .env + chei exchange + keystore + link-uri APK; streaming-encrypt pt fișiere mari. *(Confirmarea download-ului pe Chrome = monitoring #12, încă activă.)*
+- **Book of All + roadmap** — roadmap server-autonomy S8-S12/SP1-SP3 capturat complet în Plans; 12 docuri vechi de audit scanate (toate închise/istorice).
+- **Fix-uri UI** — chart gol la schimbare de simbol REPARAT (b234, try/catch per-indicator); particulele verzi QM scoase de tot (b235).
 
 ---
 
