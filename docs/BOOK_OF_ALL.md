@@ -7,7 +7,7 @@
 
 ## BUGS — nerezolvate
 
-1. **Binance „Position side cannot be changed"** — intrări blocate intermitent (~3/zi, doar testnet uid=1). Diag SYMBOL_READY_DIAG e LIVE de azi. *De verificat:* la următoarea apariție citesc codul brut → fix idempotent. (pre-existent, fail-safe, zero bani pierduți)
+1. **Binance „Position side cannot be changed"** — intrări blocate intermitent (~3/zi, doar testnet uid=1). Diag SYMBOL_READY_DIAG e LIVE de azi (~11:30); **încă 0 capturi** (ultima eroare 07:27, înainte de deploy — n-a mai apărut). *De verificat:* la următoarea apariție `grep SYMBOL_READY_DIAG` → cod brut → fix idempotent. (pre-existent, fail-safe, zero bani pierduți)
 2. **Chart gol la schimbare simbol** cu indicatori noi activi — cauza știută (`_indRenderHook` fără try/catch golește tot la o eroare). Fix agreat, AȘTEAPTĂ GO de la tine (cod chart sensibil).
 3. **Quantitative Monitor pâlpâie verde** („instalație de Crăciun") — canvas particule dimensionat 1×1 la init → inundă verde. Fix propus (lazy-resize), AȘTEAPTĂ GO.
 4. **Offsite backup picat** — rclone gdrive quota 403 (din 23-24 iun) → backup-ul local e singura copie. DE REPARAT (reconfigurat remote sau alt destinație).
@@ -19,7 +19,8 @@
 ## TO MAKE / MONITORING — de făcut & de urmărit
 
 1. **Soak ML-DSL Full Control** — flag APRINS, urmăresc poziții preluate + reversal-cuts + P&L. *Status azi:* 34 poziții luate, net ≈ +810, ZERO poziție ML a atins hard SL (scurgerea oprită). De monitorizat zilnic.
-2. **Brain/AT flip la REAL — NU e gata.** Singurul gard rămas = P&L testnet verde 2-3 săptămâni. Acum NU e verde. *De verificat:* track-ul P&L testnet săptămânal înainte de orice flip.
+2. **Brain/AT flip la REAL — NU e gata.** Mutarea server-side e DEJA făcută (SP1+SP2): pe DEMO + TESTNET serverul decide, deschide, gestionează exituri/SL/DSL singur (merge cu telefonul închis). Gate-ul de execuție REAL e ON dar **inert** (uid=1 testnet, zero chei LIVE). Rămâne: (a) gard P&L testnet verde 2-3 săpt (acum NU verde), (b) SP1.5 sizing-parity proof, (c) flip `SERVER_BRAIN`+`SERVER_AT`=true pe live (SP3) + chei LIVE + GO. *De verificat:* track P&L testnet săptămânal.
+11. **ARES server-side (faze 2-4) neimplementat** — singura bucată reală de cod de trading încă pe CLIENT (decizia + execuția ARES; `serverAresDecision/Execution/Wallet/Positions.js` nu există). Separat de AT principal (BTCUSDT, autonom), amânat post-SP2. *De decis:* dacă/când îl mutăm.
 3. **DSL_ML_CUT = 0** — tăierea pe reversal n-a tras încă. De urmărit: dacă rămâne 0 mult timp, poate pragul de confirmare e prea strict (ca Lever B).
 4. **P&L testnet track (cron 23:58)** — ultima linie din log e goală. *De verificat:* cronul chiar produce date noi (nu e mort).
 5. **Lever B Smart Loss-Cut** — live testnet, 0 tăieri (puține poziții deschise). De monitorizat când crește volumul.
