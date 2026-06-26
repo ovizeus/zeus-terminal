@@ -286,7 +286,18 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <div className="znc-sep"></div>
         <span className="znc-lbl">DSL:</span>
         {mlFull ? (
-          <span id="dsl-mlfull" className="znc-dbtn" style={{ color: '#c4a5ff', fontWeight: 700, fontSize: '12px', padding: '4px 14px', letterSpacing: '0.4px', cursor: 'default', borderColor: '#7c4dff88', background: 'linear-gradient(180deg,#7c4dff22,#7c4dff10)', borderRadius: '6px', boxShadow: '0 0 8px #7c4dff33' }} title="ML-DSL Drive owns the stop — modes are auto-controlled">🤖 ML FULL · auto</span>
+          <span id="dsl-mlfull" className="znc-dbtn" style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', color: '#c8acff', fontWeight: 700, fontSize: '13px', padding: '6px 20px', letterSpacing: '0.6px', cursor: 'default', borderColor: '#7c4dffaa', background: 'linear-gradient(180deg,#7c4dff2e,#7c4dff14)', borderRadius: '7px', boxShadow: '0 0 12px #7c4dff44' }} title="ML-DSL Drive owns the stop — modes are auto-controlled">
+            <svg viewBox="0 0 16 16" width="16" height="16" style={{ flex: 'none' }}>
+              <g fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+                <circle cx="8" cy="8" r="2.4" />
+                <path d="M8 8 L3.7 4.7 M8 8 L12.3 4.7 M8 8 L8 13.4" />
+              </g>
+              <circle cx="3.7" cy="4.7" r="1.45" fill="currentColor" />
+              <circle cx="12.3" cy="4.7" r="1.45" fill="currentColor" />
+              <circle cx="8" cy="13.4" r="1.45" fill="currentColor" />
+            </svg>
+            ML FULL · auto
+          </span>
         ) : (
           <>
             <button id="dsl-swing" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>
