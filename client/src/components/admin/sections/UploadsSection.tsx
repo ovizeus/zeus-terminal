@@ -56,7 +56,7 @@ export function UploadsSection() {
     <div style={{ maxWidth: 920, margin: '0 auto', padding: '8px 4px 60px' }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, color: '#fff', margin: '0 0 4px' }}>Uploads</h1>
       <div style={{ color: '#8a93a8', fontSize: 13, marginBottom: 16 }}>
-        Urcă capturi sau documente (imagini, PDF, txt, csv, log, md, json — max 15MB). Le analizez, apoi le ștergi tu după ce-i reparat.
+        Urcă capturi sau documente (imagini, PDF, txt, csv, log, md, json — max 200MB). Le analizez, apoi le ștergi tu după ce-i reparat.
       </div>
 
       {/* Dropzone + upload button */}

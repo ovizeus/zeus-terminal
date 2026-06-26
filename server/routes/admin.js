@@ -162,7 +162,7 @@ router.get('/book', _requireAuth, _requireAdmin, (req, res) => {
 const _UPLOAD_DIR = require('path').join(__dirname, '..', '..', 'data', 'book_uploads');
 const _ALLOWED_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf', 'txt', 'csv', 'log', 'md', 'json']);
 const _IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
-const _MAX_UPLOAD = 15 * 1024 * 1024; // 15MB
+const _MAX_UPLOAD = 200 * 1024 * 1024; // 200MB (operator deletes after review)
 const _ID_RE = /^[0-9]{10,16}__[A-Za-z0-9._-]+$/;
 
 function _ensureUploadDir() {
@@ -209,7 +209,7 @@ router.post('/uploads', _requireAuth, _requireAdmin, (req, res) => {
                     catch (_) { try { fs.unlinkSync(f.filepath); } catch (_) { /* */ } }
                 }
             }
-            if (!list.length) return res.status(400).json({ ok: false, error: 'No valid files (allowed: images, pdf, txt, csv, log, md, json; max 15MB)' });
+            if (!list.length) return res.status(400).json({ ok: false, error: 'No valid files (allowed: images, pdf, txt, csv, log, md, json; max 200MB)' });
             return res.json({ ok: true, uploaded: list.length });
         });
     } catch (e) {
