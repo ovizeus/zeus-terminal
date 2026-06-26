@@ -608,11 +608,23 @@ async function closePosition(uid, params, creds) {
 }
 
 async function ensureSymbolReady(uid, params, creds) {
-    // Set leverage
-    const levResp = await sendSignedRequest('POST', '/fapi/v1/leverage', {
-        symbol: params.symbol, leverage: params.leverage, recvWindow: 5000,
-    }, creds);
+    // Set leverage. sendSignedRequest THROWS on Binance error codes, so a leverage
+    // failure normally unwinds out of here uncaught — making serverAT blame
+    // "Leverage/symbol-ready" even when the real culprit is the margin call below.
+    // DIAG (2026-06-26): log which call + the raw Binance code so we can finally
+    // identify the intermittent "Position side cannot be changed if there exists
+    // open orders" entry-block. Behaviour preserved (re-throw / same returns).
+    let levResp;
+    try {
+        levResp = await sendSignedRequest('POST', '/fapi/v1/leverage', {
+            symbol: params.symbol, leverage: params.leverage, recvWindow: 5000,
+        }, creds);
+    } catch (levErr) {
+        try { require('./logger').warn('SYMBOL_READY_DIAG', `[${params.symbol}] LEVERAGE threw rawCode=${levErr && levErr.code} msg=${levErr && levErr.message}`); } catch (_) { /* never let diag break the path */ }
+        throw levErr;
+    }
     if (levResp && levResp.code && levResp.code < 0) {
+        try { require('./logger').warn('SYMBOL_READY_DIAG', `[${params.symbol}] LEVERAGE returned rawCode=${levResp.code} msg=${levResp.msg}`); } catch (_) { /* */ }
         return { ok: false, error: canonicalErrors.translateBinance(levResp), rawExchange: 'binance' };
     }
 
@@ -628,10 +640,12 @@ async function ensureSymbolReady(uid, params, creds) {
             symbol: params.symbol, marginType: marginMode, recvWindow: 5000,
         }, creds);
         if (marginResp && marginResp.code && marginResp.code < 0 && marginResp.code !== -4046) {
+            try { require('./logger').warn('SYMBOL_READY_DIAG', `[${params.symbol}] MARGIN_TYPE returned rawCode=${marginResp.code} msg=${marginResp.msg}`); } catch (_) { /* */ }
             return { ok: false, error: canonicalErrors.translateBinance(marginResp), rawExchange: 'binance' };
         }
     } catch (marginErr) {
         if (!marginErr || marginErr.code !== -4046) {
+            try { require('./logger').warn('SYMBOL_READY_DIAG', `[${params.symbol}] MARGIN_TYPE threw rawCode=${marginErr && marginErr.code} msg=${marginErr && marginErr.message}`); } catch (_) { /* */ }
             return {
                 ok: false,
                 error: canonicalErrors.translateBinance({ code: marginErr && marginErr.code, msg: marginErr && marginErr.message }),
