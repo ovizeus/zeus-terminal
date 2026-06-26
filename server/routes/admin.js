@@ -354,4 +354,18 @@ router.delete('/vault/items/:id', _requireAuth, _requireAdmin, (req, res) => {
     return res.json({ ok: true });
 });
 
+// POST /api/admin/ml/stage-promote — operator signs off advancing the ML soak
+// stage (e.g. S8→S9). Records an auditable promotion event (was: manual flag flip
+// + chat confirmation, no audit trail). The flag flip itself stays a deliberate
+// manual/protected action — this only records the sign-off.
+router.post('/ml/stage-promote', _requireAuth, _requireAdmin, (req, res) => {
+    const stage = parseInt(req.body && req.body.stage, 10);
+    if (!Number.isFinite(stage) || stage < 1 || stage > 12) return res.status(400).json({ ok: false, error: 'stage 1-12 required' });
+    const note = String((req.body && req.body.note) || '').slice(0, 500);
+    try {
+        require('../services/audit').record('ML_STAGE_PROMOTE', { stage, note, by: req.user.id, ts: Date.now() }, 'ADMIN');
+        return res.json({ ok: true, stage, note });
+    } catch (e) { return res.status(500).json({ ok: false, error: 'promote failed' }); }
+});
+
 module.exports = router;
