@@ -19,7 +19,7 @@ const path = require('path');
 
 function arg(name) { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : null; }
 
-function main() {
+async function main() {
   const userId = parseInt(process.argv[2], 10);
   const category = process.argv[3];
   const type = process.argv[4];        // 'note' | 'secret' | 'link' | 'file'
@@ -55,17 +55,26 @@ function main() {
   if (type === 'file') {
     if (!filePath || !fs.existsSync(filePath)) { console.error('[vault-put] --file required + must exist for type=file'); process.exit(3); }
     meta.fileName = path.basename(filePath);
-    const bytes = fs.readFileSync(filePath);
+    size = fs.statSync(filePath).size;
     const iv = crypto.randomBytes(12);
+    fileIv = iv.toString('base64');
     const c = crypto.createCipheriv('aes-256-gcm', aesKey, iv);
-    const blob = Buffer.concat([c.update(bytes), c.final(), c.getAuthTag()]);
     const dir = path.join(__dirname, '..', 'data', 'vault');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     storedPath = path.join(dir, `${Date.now()}_${userId}.enc`);
-    fs.writeFileSync(storedPath, blob);
+    // STREAMING encrypt — bounded memory, safe for multi-GB files. Output =
+    // ciphertext stream then the 16-byte GCM tag appended (client expects ct||tag).
+    await new Promise((resolve, reject) => {
+      const input = fs.createReadStream(filePath);
+      const output = fs.createWriteStream(storedPath);
+      input.on('error', reject);
+      output.on('error', reject);
+      output.on('finish', resolve);
+      c.on('error', reject);
+      c.on('end', () => { output.end(c.getAuthTag()); });
+      input.pipe(c).pipe(output, { end: false });
+    });
     fs.chmodSync(storedPath, 0o600);
-    fileIv = iv.toString('base64');
-    size = bytes.length;
   } else {
     meta.content = content;
   }
@@ -77,4 +86,4 @@ function main() {
   console.log(`[vault-put] ✅ added item id=${id} (${type} "${name}" in ${category}${size ? ', ' + (size / 1048576).toFixed(1) + 'MB' : ''}) for uid=${userId}`);
   process.exit(0);
 }
-main();
+main().catch(e => { console.error("[vault-put] FATAL: " + e.message); process.exit(9); });
