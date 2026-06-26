@@ -28,7 +28,7 @@
 8. **Verificări vizuale restante de la tine:** kill-switch overlay (pe laptop), jurnal manual „jos" (după hard-refresh), widget Android gaming (cere rebuild + reinstall APK pe telefon).
 9. **Radar top300 / OI la următorul ban Binance** — de verificat că banda trece pe sursa Bybit (fix livrat, neconfirmat la ban real).
 10. **„Margin insufficient" testnet** — unele fill-uri AT pe uid=1 sunt blocate fiindcă contul testnet Binance e mic. Limitare de cont, nu bug — de urmărit dacă strânge prea mult volumul de soak.
-11. **CI GitHub Actions reparat (53de16bb) — DE CONFIRMAT** — workflow-ul „Test" rula toată suita (552 fișiere, incl. e2e/live) → roșu de >1 lună; nu conta (deployăm manual). Am restrâns la `npm run test:ci` (107 teste core verzi local) + scos deploy-job-ul stricat (path `/root` greșit, app la `/opt`). *De verificat:* următorul email GitHub să fie VERDE; dacă tot roșu → cauza e `npm ci` pe runner (atunci am nevoie de logul CI / token).
+11. **CI GitHub Actions roșu — CAUZĂ REALĂ = BILLING cont GitHub (de rezolvat de tine)** — workflow-ul pică în 2s cu `runner_name=""` + zero pași, indiferent de etichetă (testat ubuntu-22.04 + ubuntu-latest): **GitHub nu alocă NICIUN runner** pe cont = problemă de billing/Actions la nivel de cont, NU din cod. Dovedit via API public Actions. Am **oprit rularea automată** (commit d5853e99, `on: workflow_dispatch` — gata emailurile roșii); deploy-ul e manual oricum. *Ca să reactivezi CI:* GitHub → Settings → Billing (+ repo Settings → Actions), apoi restaurezi trigger-ele `push`/`pull_request`. (Restul curățat: deploy-job stricat scos, `test:ci` cu 107 teste core gata pt când merge.)
 
 ---
 
