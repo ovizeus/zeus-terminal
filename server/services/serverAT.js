@@ -3380,9 +3380,61 @@ function onPriceUpdate(symbol, price, exchange) {
         // [TL-04] Skip positions where live entry is still in-flight on Binance
         if (pos._livePending) continue;
 
+        // ── [ML-DSL-FULL P2] Continuous ML pivot control + reversal-exit ──
+        // When the flag is ON and this position runs an active-from-entry ML DSL, the ML policy
+        // retunes the live pivot widths each ~1s and, on a CONFIRMED reversal (2 sustained EXIT
+        // ticks), cuts the position immediately (DSL_ML_CUT) instead of riding to the hard SL.
+        // Momentum/ATR mirror the SHADOW block below. Fail-closed: any error leaves the proven
+        // DSL/SL path untouched. Per-position (each carries its own env/regime) — never global.
+        let _mlForcedExit = false;
+        if (MF.ML_DSL_FULL_CONTROL) {
+            try {
+                const _ds = serverDSL.getState(pos.seq);
+                if (_ds && _ds.active && _ds.mlActiveFromEntry) {
+                    const _nowC = Date.now();
+                    if (_nowC - (pos._mlCtrlLast || 0) >= 1000) {
+                        pos._mlCtrlLast = _nowC;
+                        let _momC = 0;
+                        let _atrC = Number.isFinite(pos.slPct) && pos.slPct > 0 ? pos.slPct : 1.0;
+                        try {
+                            const _snapC = require('./serverState').getSnapshotForSymbol(pos.symbol);
+                            const _indC = _snapC && _snapC.indicators;
+                            if (_indC) {
+                                if (Number.isFinite(+_indC.atr) && +_indC.atr > 0 && price > 0) _atrC = (+_indC.atr / price) * 100;
+                                if (Number.isFinite(+_indC.rsi)) {
+                                    const _rsiC = Math.max(-1, Math.min(1, (+_indC.rsi - 50) / 50));
+                                    const _macdC = _indC.macdDir === 'bull' ? 1 : _indC.macdDir === 'bear' ? -1 : 0;
+                                    const _stC = _indC.stDir === 'bull' ? 1 : _indC.stDir === 'bear' ? -1 : 0;
+                                    const _bullC = Math.max(-1, Math.min(1, 0.5 * _rsiC + 0.3 * _macdC + 0.2 * _stC));
+                                    _momC = pos.side === 'SHORT' ? -_bullC : _bullC;
+                                }
+                            }
+                        } catch (_) { /* indicators not ready → neutral */ }
+                        const _featC = mlDslShadow.buildFeatures(pos, price, { momentum: _momC, atrPct: _atrC, regime: pos.regime, progress: _ds.progress });
+                        const _rawC = mlDslPolicy.decide(_featC);
+                        const _safeC = dslSafety.clamp(_rawC, { side: pos.side, entry: pos.price, price, originalSL: pos.originalSL || pos.sl, maxLossPct: 1.5 });
+                        serverDSL.applyMlParams(pos.seq, _safeC);   // ML retunes the live pivots
+                        const _conf = mlDslPolicy.confirmExit(pos._mlExitConfirm, _safeC.action, _safeC.forcedExit);
+                        pos._mlExitConfirm = _conf.count;
+                        if (_conf.exit) _mlForcedExit = true;   // confirmed reversal (2 sustained ticks)
+                    }
+                }
+            } catch (_) { /* fail-closed — ML control never disturbs SL/TP/DSL */ }
+        }
+
         // ── DSL tick ──
         const dsl = serverDSL.tick(pos.seq, price);
         const effectiveSL = dsl.currentSL > 0 ? dsl.currentSL : pos.sl;
+
+        // [ML-DSL-FULL P2] Confirmed ML reversal → cut now (through the same close path, tagged DSL_ML_CUT)
+        if (_mlForcedExit) {
+            const mlPnl = pos.side === 'LONG'
+                ? (price - pos.price) / pos.price * pos.size * pos.lev
+                : (pos.price - price) / pos.price * pos.size * pos.lev;
+            logger.info('AT_ENGINE', `[${pos.seq}] ML-DSL reversal-cut @$${price} (confirmed) → DSL_ML_CUT`);
+            _closePosition(i, pos, 'DSL_ML_CUT', price, +mlPnl.toFixed(2));
+            continue;
+        }
 
         // DSL Pivot Left exit
         if (dsl.plExit) {

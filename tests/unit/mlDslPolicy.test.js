@@ -1,4 +1,4 @@
-const { decide, initialCap } = require('../../server/services/mlDslPolicy');
+const { decide, initialCap, confirmExit } = require('../../server/services/mlDslPolicy');
 const base = { side: 'LONG', entry: 100, price: 102, mfePct: 2, maePct: 0.3, momentum: 0, atrPct: 1.0, regime: 'TREND', secsInTrade: 120, progress: 50 };
 
 describe('mlDslPolicy.decide', () => {
@@ -61,5 +61,29 @@ describe('mlDslPolicy.initialCap (entry loss-cap as a fraction of the hard SL)',
     expect(Number.isFinite(r.capPct)).toBe(true);
     expect(r.capPct).toBeGreaterThan(0);
     expect(['TIGHT', 'NORMAL', 'WIDE']).toContain(r.posture);
+  });
+});
+
+describe('mlDslPolicy.confirmExit (anti-whipsaw reversal gate)', () => {
+  test('a single EXIT signal does NOT trigger a cut (needs confirmation)', () => {
+    const r = confirmExit(0, 'EXIT', false);
+    expect(r.exit).toBe(false);
+    expect(r.count).toBe(1);
+  });
+  test('two consecutive EXIT signals trigger the cut', () => {
+    const a = confirmExit(0, 'EXIT', false);
+    const b = confirmExit(a.count, 'EXIT', false);
+    expect(b.exit).toBe(true);
+  });
+  test('a non-EXIT signal in between RESETS the counter', () => {
+    const a = confirmExit(0, 'EXIT', false);
+    const b = confirmExit(a.count, 'HOLD', false);
+    expect(b.count).toBe(0);
+    expect(b.exit).toBe(false);
+  });
+  test('forcedExit (safety clamp) counts as an exit signal', () => {
+    const a = confirmExit(0, 'HOLD', true);
+    const b = confirmExit(a.count, 'HOLD', true);
+    expect(b.exit).toBe(true);
   });
 });

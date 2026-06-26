@@ -68,4 +68,14 @@ function initialCap(f) {
   return { capPct, posture, frac };
 }
 
-module.exports = { decide, initialCap };
+// confirmExit(prevCount, action, forcedExit, need) — anti-whipsaw gate for the live reversal-cut.
+// Only signals an exit after `need` (default 2) CONSECUTIVE EXIT/forcedExit decisions; any other
+// action resets the counter. Prevents a single adverse tick from cutting a trade that recovers.
+function confirmExit(prevCount, action, forcedExit, need) {
+  need = Number.isFinite(need) && need > 0 ? need : 2;
+  const isExit = action === 'EXIT' || forcedExit === true;
+  const count = isExit ? (Number.isFinite(prevCount) ? prevCount : 0) + 1 : 0;
+  return { count, exit: count >= need };
+}
+
+module.exports = { decide, initialCap, confirmExit };
