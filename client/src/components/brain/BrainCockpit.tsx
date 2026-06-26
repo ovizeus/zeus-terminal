@@ -286,7 +286,7 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <div className="znc-sep"></div>
         <span className="znc-lbl">DSL:</span>
         {mlFull ? (
-          <span id="dsl-mlfull" className="znc-dbtn" style={{ color: '#b388ff', fontWeight: 700, cursor: 'default', borderColor: '#7c4dff55' }} title="ML-DSL Drive owns the stop — modes are auto-controlled">🧠 ML FULL · auto</span>
+          <span id="dsl-mlfull" className="znc-dbtn" style={{ color: '#c4a5ff', fontWeight: 700, fontSize: '12px', padding: '4px 14px', letterSpacing: '0.4px', cursor: 'default', borderColor: '#7c4dff88', background: 'linear-gradient(180deg,#7c4dff22,#7c4dff10)', borderRadius: '6px', boxShadow: '0 0 8px #7c4dff33' }} title="ML-DSL Drive owns the stop — modes are auto-controlled">🤖 ML FULL · auto</span>
         ) : (
           <>
             <button id="dsl-swing" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>

@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.200',
-    build: 226,
+    version: '1.7.201',
+    build: 227,
     date: '2026-06-26',
     changelog: [
         'b226 v1.7.200 — ML-DSL Full Control Phase 3b: the manual DSL mode buttons retire under full control 2026-06-26. When ML_DSL_FULL_CONTROL is ON the ML owns the stop, so the brain cockpit DSL mode buttons (SWING/ATR/DEF/TP/FAST) would mislead — they are replaced by a read-only ML FULL auto badge (the flag is read from the existing /api/dsldrive/state, default OFF keeps the manual buttons). The buttons were already functionally inert under full control; this removes the confusion. UI only, flag-gated. No-apostrophe changelog.',
