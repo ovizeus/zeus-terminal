@@ -135,24 +135,26 @@ export function VaultSection() {
       const fn = it.fileName || it.name
       const extMime: Record<string, string> = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', txt: 'text/plain', csv: 'text/csv', json: 'application/json', zip: 'application/zip', gz: 'application/gzip', tar: 'application/x-tar', apk: 'application/vnd.android.package-archive' }
       const mime = extMime[(fn.split('.').pop() || '').toLowerCase()] || 'application/octet-stream'
-      // MOBILE / APP first: the native share sheet (Save to Files, send to cloud,
-      // etc.). Blob downloads via a click() do not work in a WebView/app, but the
-      // Web Share API does — and it is exactly what the operator wanted (share).
+      // MOBILE / APP first: the native share sheet (Save to Files, cloud, stick).
+      // Do NOT gate on canShare({files}) — some WebViews return false there even
+      // though navigator.share works; just try it directly (this IS the operator
+      // requested "share"). Blob downloads via click() are no-ops inside a WebView.
       const nav = navigator as any
-      try {
-        const file = new File([plain as unknown as BlobPart], fn, { type: mime })
-        if (nav.canShare && nav.canShare({ files: [file] })) {
-          try { await nav.share({ files: [file], title: fn }) } catch (_) { /* user cancelled — fine */ }
-          return
-        }
-      } catch (_) { /* File ctor unsupported → fall through to classic download */ }
+      let file: File | null = null
+      try { file = new File([plain as unknown as BlobPart], fn, { type: mime }) } catch (_) { file = null }
+      if (file && typeof nav.share === 'function') {
+        try { await nav.share({ files: [file], title: fn }); return }
+        catch (e: any) { if (e && e.name === 'AbortError') return /* user cancelled */ /* else fall through */ }
+      }
       // DESKTOP browser: classic download (link attached to the DOM so click() fires).
       const url = URL.createObjectURL(new Blob([plain as unknown as BlobPart], { type: mime }))
       const a = document.createElement('a')
       a.href = url; a.download = fn; a.rel = 'noopener'; a.style.display = 'none'
       document.body.appendChild(a)
       a.click()
-      setTimeout(() => { try { document.body.removeChild(a) } catch (_) { /* */ } ; URL.revokeObjectURL(url) }, 8000)
+      // WebView last resort: also try to open it (a PDF viewer can then save it).
+      setTimeout(() => { try { window.open(url, '_blank') } catch (_) { /* */ } }, 400)
+      setTimeout(() => { try { document.body.removeChild(a) } catch (_) { /* */ } ; URL.revokeObjectURL(url) }, 9000)
     } catch (e: any) { setError(String(e.message || e)) } finally { setBusy(false) }
   }
 
