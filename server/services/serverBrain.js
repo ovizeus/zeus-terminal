@@ -1281,6 +1281,14 @@ function _runCycle() {
                             contextJson: JSON.stringify({ concerns: questioning.concerns.map(c => c.type) })
                         });
                         serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
+                        // [S9 2026-06-26] Surface the self-block to the operator: an auditable
+                        // REFLECTION_BLOCKED event + a throttled Telegram alert.
+                        try { require('./audit').record('REFLECTION_BLOCKED', { userId, symbol: snap.symbol, dir: fusion.dir, confidence: fusion.confidence, concerns: questioning.concerns.map(c => c.type) }, 'SERVER_BRAIN'); } catch (_) { /* */ }
+                        try {
+                            if (serverReflection.shouldAlert(`${userId}:${snap.symbol}:${fusion.dir}`, Date.now())) {
+                                telegram.sendToUser(userId, serverReflection.buildReflectionAlert(snap.symbol, fusion.dir, questioning.concerns));
+                            }
+                        } catch (_) { /* */ }
                         _logDecision('BLOCKED', 'reflection', decision, {
                             concerns: questioning.concerns.map(c => c.type),
                         });

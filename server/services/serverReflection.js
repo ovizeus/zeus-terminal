@@ -841,11 +841,28 @@ function seedFromHistory(userIdArg, limit) {
     }
 }
 
+// [S9 2026-06-26] Operator-facing alert when the brain blocks its own entry —
+// a short Telegram message + a per-symbol/dir throttle so we never spam.
+const _alertThrottle = new Map(); // key → last alert ts
+const ALERT_WINDOW_MS = 10 * 60 * 1000;
+function shouldAlert(key, now) {
+    const last = _alertThrottle.get(key);
+    if (last !== undefined && now - last < ALERT_WINDOW_MS) return false;
+    _alertThrottle.set(key, now);
+    return true;
+}
+function _resetAlertThrottle() { _alertThrottle.clear(); }
+function buildReflectionAlert(symbol, dir, concerns) {
+    const types = (concerns || []).map((c) => c && c.type).filter(Boolean).join(', ') || 'reflection';
+    return `🧠 Brain blocked ${dir} ${symbol} — second-guessed: ${types}`;
+}
+
 module.exports = {
     start,
     stop,
     reflectOnTrade,
     questionEntry,
+    buildReflectionAlert, shouldAlert, _resetAlertThrottle,
     trackSkippedTrade,
     evaluateSkipped,
     updateCalibration,
