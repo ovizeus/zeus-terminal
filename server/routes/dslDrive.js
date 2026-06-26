@@ -7,6 +7,8 @@ const express = require('express');
 const router = express.Router();
 const mlDslShadow = require('../services/mlDslShadow');
 const serverAT = require('../services/serverAT');
+const serverDSL = require('../services/serverDSL');
+const MF = require('../migrationFlags');
 const { db } = require('../services/database');
 
 router.get('/state', (req, res) => {
@@ -14,18 +16,35 @@ router.get('/state', (req, res) => {
     const uid = req.user && req.user.id;
     const proposals = mlDslShadow.snapshot();
     const open = (uid && serverAT.getOpenPositions ? serverAT.getOpenPositions(uid) : []) || [];
-    const rows = open.map((p) => ({
-      seq: p.seq, symbol: p.symbol, side: p.side,
-      exchange: p.exchange || null, mode: p.mode || null,
-      entry: p.price, sl: p.sl,
-      ml: proposals[String(p.seq)] || null,
-      dsl: p.dsl ? {
-        phase: p.dsl.phase, active: !!p.dsl.active,
-        progress: Number(p.dsl.progress) || 0,
-        activationPrice: p.dsl.activationPrice, currentSL: p.dsl.currentSL,
-      } : null,
-    }));
-    res.json({ ok: true, mode: 'SHADOW', positions: rows, ts: Date.now() });
+    const full = !!MF.ML_DSL_FULL_CONTROL;
+    const rows = open.map((p) => {
+      // [ML-DSL-FULL P3] live cockpit data — read-only, from the position's own DSL state
+      let cockpit = null;
+      try {
+        const st = serverDSL.getState ? serverDSL.getState(p.seq) : null;
+        if (st && st.mlActiveFromEntry) {
+          cockpit = {
+            capPct: st.mlCapPct, pivotLeft: st.pivotLeft, pivotRight: st.pivotRight,
+            plPct: st.params ? st.params.pivotLeftPct : null,
+            prPct: st.params ? st.params.pivotRightPct : null,
+            action: p._mlAction || 'HOLD',
+          };
+        }
+      } catch (_) { /* read-only — never fail the panel */ }
+      return {
+        seq: p.seq, symbol: p.symbol, side: p.side,
+        exchange: p.exchange || null, mode: p.mode || null,
+        entry: p.price, sl: p.sl,
+        ml: proposals[String(p.seq)] || null,
+        cockpit,
+        dsl: p.dsl ? {
+          phase: p.dsl.phase, active: !!p.dsl.active,
+          progress: Number(p.dsl.progress) || 0,
+          activationPrice: p.dsl.activationPrice, currentSL: p.dsl.currentSL,
+        } : null,
+      };
+    });
+    res.json({ ok: true, mode: full ? 'FULL' : 'SHADOW', fullControl: full, positions: rows, ts: Date.now() });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

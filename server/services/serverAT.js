@@ -3414,6 +3414,7 @@ function onPriceUpdate(symbol, price, exchange) {
                         const _rawC = mlDslPolicy.decide(_featC);
                         const _safeC = dslSafety.clamp(_rawC, { side: pos.side, entry: pos.price, price, originalSL: pos.originalSL || pos.sl, maxLossPct: 1.5 });
                         serverDSL.applyMlParams(pos.seq, _safeC);   // ML retunes the live pivots
+                        pos._mlAction = _safeC.action;   // [P3 cockpit] surface the live ML action read-only
                         const _conf = mlDslPolicy.confirmExit(pos._mlExitConfirm, _safeC.action, _safeC.forcedExit);
                         pos._mlExitConfirm = _conf.count;
                         if (_conf.exit) _mlForcedExit = true;   // confirmed reversal (2 sustained ticks)

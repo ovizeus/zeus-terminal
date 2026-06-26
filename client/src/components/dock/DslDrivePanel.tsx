@@ -12,6 +12,7 @@ type DriveRow = {
   seq: number; symbol: string; side: string
   exchange: string | null; mode: string | null
   entry: number; sl: number; ml: MlProposal
+  cockpit?: { capPct: number; pivotLeft: number; pivotRight: number; plPct: number | null; prPct: number | null; action: string } | null
   dsl: { phase: string; active: boolean; progress: number; activationPrice: number; currentSL: number } | null
 }
 type DriveState = { ok: boolean; mode: string; positions: DriveRow[]; ts: number }
@@ -126,6 +127,12 @@ export function DslDrivePanel() {
                 </div>
               )
             ) : <div className="dsldrive-arm dsldrive-arm-off">○ DSL not attached</div>}
+            {p.cockpit ? (
+              <div className="dsldrive-act" style={{ color: actionColor(p.cockpit.action), fontWeight: 700 }}>
+                🧠 ML FULL · cap {Number(p.cockpit.capPct || 0).toFixed(2)}% · {p.cockpit.action}
+                <div className="dsldrive-row" style={{ fontWeight: 400 }}>stop {fmt(p.cockpit.pivotLeft)} · trail {pct(p.cockpit.plPct || 0)}</div>
+              </div>
+            ) : null}
             {ml ? (
               <>
                 <div className="dsldrive-act" style={{ color: actionColor(ml.mlAction) }}>
