@@ -20,7 +20,6 @@
 
 1. **Soak ML-DSL Full Control** — flag APRINS, urmăresc poziții preluate + reversal-cuts + P&L. *Status azi:* 34 poziții luate, net ≈ +810, ZERO poziție ML a atins hard SL (scurgerea oprită). De monitorizat zilnic.
 2. **Brain/AT flip la REAL — NU e gata.** Mutarea server-side e DEJA făcută (SP1+SP2): pe DEMO + TESTNET serverul decide, deschide, gestionează exituri/SL/DSL singur (merge cu telefonul închis). Gate-ul de execuție REAL e ON dar **inert** (uid=1 testnet, zero chei LIVE). Rămâne: (a) gard P&L testnet verde 2-3 săpt (acum NU verde), (b) SP1.5 sizing-parity proof, (c) flip `SERVER_BRAIN`+`SERVER_AT`=true pe live (SP3) + chei LIVE + GO. *De verificat:* track P&L testnet săptămânal.
-11. **ARES server-side (faze 2-4) neimplementat** — singura bucată reală de cod de trading încă pe CLIENT (decizia + execuția ARES; `serverAresDecision/Execution/Wallet/Positions.js` nu există). Separat de AT principal (BTCUSDT, autonom), amânat post-SP2. *De decis:* dacă/când îl mutăm.
 3. **DSL_ML_CUT = 0** — tăierea pe reversal n-a tras încă. De urmărit: dacă rămâne 0 mult timp, poate pragul de confirmare e prea strict (ca Lever B).
 4. **P&L testnet track (cron 23:58)** — ultima linie din log e goală. *De verificat:* cronul chiar produce date noi (nu e mort).
 5. **Lever B Smart Loss-Cut** — live testnet, 0 tăieri (puține poziții deschise). De monitorizat când crește volumul.
