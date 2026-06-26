@@ -28,6 +28,7 @@
 8. **Verificări vizuale restante de la tine:** kill-switch overlay (pe laptop), jurnal manual „jos" (după hard-refresh), widget Android gaming (cere rebuild + reinstall APK pe telefon).
 9. **Radar top300 / OI la următorul ban Binance** — de verificat că banda trece pe sursa Bybit (fix livrat, neconfirmat la ban real).
 10. **„Margin insufficient" testnet** — unele fill-uri AT pe uid=1 sunt blocate fiindcă contul testnet Binance e mic. Limitare de cont, nu bug — de urmărit dacă strânge prea mult volumul de soak.
+11. **CI GitHub Actions reparat (53de16bb) — DE CONFIRMAT** — workflow-ul „Test" rula toată suita (552 fișiere, incl. e2e/live) → roșu de >1 lună; nu conta (deployăm manual). Am restrâns la `npm run test:ci` (107 teste core verzi local) + scos deploy-job-ul stricat (path `/root` greșit, app la `/opt`). *De verificat:* următorul email GitHub să fie VERDE; dacă tot roșu → cauza e `npm ci` pe runner (atunci am nevoie de logul CI / token).
 
 ---
 
