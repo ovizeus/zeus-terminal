@@ -45,3 +45,31 @@ describe('serverDSL.attachActive (active-from-entry ML loss-cap)', () => {
     expect(r.plExit).toBe(true);
   });
 });
+
+describe('serverDSL.applyMlParams (ML live pivot control)', () => {
+  afterEach(() => { for (const id of [201, 202, 203] ) { try { dsl.detach(id); } catch (_) { /* */ } } });
+
+  test('updates the live pivot widths used by subsequent ticks', () => {
+    dsl.attachActive(pos({ seq: 201, price: 100, sl: 95 }), null, 2.0);
+    const ok = dsl.applyMlParams(201, { plPct: 0.5, prPct: 0.6, ivPct: 0.3 });
+    expect(ok).toBe(true);
+    const st = dsl.getState(201);
+    expect(st.params.pivotLeftPct).toBeCloseTo(0.5, 5);
+    expect(st.params.pivotRightPct).toBeCloseTo(0.6, 5);
+    expect(st.params.impulseVPct).toBeCloseTo(0.3, 5);
+  });
+
+  test('sanitizes out-of-range params (never NaN / negative / huge)', () => {
+    dsl.attachActive(pos({ seq: 202, price: 100, sl: 95 }), null, 2.0);
+    dsl.applyMlParams(202, { plPct: -5, prPct: NaN, ivPct: 9999 });
+    const st = dsl.getState(202);
+    expect(Number.isFinite(st.params.pivotLeftPct)).toBe(true);
+    expect(st.params.pivotLeftPct).toBeGreaterThan(0);
+    expect(st.params.pivotRightPct).toBeGreaterThan(0);
+    expect(st.params.impulseVPct).toBeLessThanOrEqual(100);
+  });
+
+  test('returns false for an unknown position (fail-safe)', () => {
+    expect(dsl.applyMlParams(99999, { plPct: 0.5 })).toBe(false);
+  });
+});

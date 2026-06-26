@@ -179,6 +179,25 @@ function attachActive(position, params, capPct) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// applyMlParams(posId, mlParams) — [ML-DSL-FULL Phase 2]
+// Let the ML policy retune the live pivot WIDTHS mid-trade (continuous control).
+// mlParams = { plPct, prPct, ivPct } (mlDslPolicy.decide output, already dslSafety-clamped).
+// Sanitized + clamped here too (defence-in-depth). Only the widths change — the current
+// pivot LEVELS still move via tick()'s monotonic ratchet, so this never loosens a live stop.
+// ══════════════════════════════════════════════════════════════════
+function applyMlParams(posId, mlParams) {
+    const s = _states.get(String(posId));
+    if (!s || !mlParams) return false;
+    s.params = _sanitizeParams({
+        openDslPct: s.params.openDslPct,
+        pivotLeftPct: Number.isFinite(mlParams.plPct) ? mlParams.plPct : s.params.pivotLeftPct,
+        pivotRightPct: Number.isFinite(mlParams.prPct) ? mlParams.prPct : s.params.pivotRightPct,
+        impulseVPct: Number.isFinite(mlParams.ivPct) ? mlParams.ivPct : s.params.impulseVPct,
+    });
+    return true;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // tick(posId, price) — run one DSL brain cycle for a position
 // Returns { currentSL, plExit, ttpExit, phase, changed }
 //   plExit = true → Pivot Left hit, close position
@@ -389,6 +408,10 @@ function getState(posId) {
         logCount: s.log.length,
         lastLog: s.log.length > 0 ? s.log[s.log.length - 1].msg : null,
         lastTickTs: s.lastTickTs || 0, // [ZT-AUD-008] freshness timestamp
+        // [ML-DSL-FULL P2/P3] live pivot widths + ML-cap context for the read-only DSL Drive cockpit
+        params: s.params,
+        mlCapPct: s.mlCapPct != null ? s.mlCapPct : null,
+        mlActiveFromEntry: !!s.mlActiveFromEntry,
     };
 }
 
@@ -612,6 +635,7 @@ function simulateMlPath(posMeta, samples) {
 module.exports = {
     attach,
     attachActive,
+    applyMlParams,
     tick,
     detach,
     getState,
