@@ -4,6 +4,7 @@
 // Signal scanner, Deep Dive narrative generator
 
 import { api } from '../services/api'
+import { terminator as _terminatorCalc } from './indicatorCalc'
 import { fmtTime, fmtDate, fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
 import { sendAlert } from '../data/marketDataWS'
 import { liveApiSyncState } from '../trading/liveApi'
@@ -203,6 +204,10 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'st':
       if (w.stS) w.stS.applyOptions({ visible: show })
+      break
+    case 'terminator':
+      if (show) { initTerminatorSeries(); updateTerminator() }
+      else removeTerminatorSeries()
       break
     case 'bb':
       if (show) initBBSeries()
@@ -3546,6 +3551,9 @@ export function _indRenderHook(): void {
       try { console.warn('[indRender] indicator failed:', (fn && (fn as { name?: string }).name) || '?', (e as { message?: string }) && (e as { message?: string }).message) } catch (_) { /* never let the guard itself throw */ }
     }
   }
+  // [2026-10-07] TERMINATOR — inside the isolated hook so a throw here can
+  // never blank the rest of the chart.
+  if (w.S.activeInds.terminator) safe(updateTerminator)
   if (w.S.activeInds.bb) safe(updateBB)
   if (w.S.activeInds.astrape && w._astrapeInited) safe(updateAstrape)
   if (w.S.activeInds.phoebe && w._phoebeInited) safe(updatePhoebe)
@@ -4155,4 +4163,89 @@ function _phoebeHudHtml(r: any): string {
   const core = sep('CORE &amp; RISK') + kv('Resonance', String(p.instResonance), '#b388ff') + kv('Market', p.marketType, '#c9d4e6') + kv('Vol Balance', (p.volumeBalance > 0 ? '+' : '') + p.volumeBalance + '%', p.volumeBalance >= 0 ? '#26ff9a' : '#ff5277')
   const sig = sep('SIGNAL') + kv('Latest', p.latestSignal, sigCol) + kv('Age', p.signalAgeBars < 0 ? '—' : p.signalAgeBars + ' bars', '#c9d4e6') + kv('Momentum', p.currentMomentum + '%', '#f0c040') + kv('Trigger', p.lastTrigger, '#c9d4e6') + `<div style="display:flex;justify-content:space-between;margin-top:1px"><span style="color:#7a86a8">Bias</span>${badge(p.overallTrend)}</div>`
   return head + matrix + core + sig
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TERMINATOR — ATR trailing-stop staircase (operator request 2026-10-07)
+// ═══════════════════════════════════════════════════════════════
+// Built from the two screenshots the operator uploaded. The colours are not
+// guessed: they were sampled from the images themselves (the dominant pure
+// green and magenta clusters inside the chart area, after masking out the
+// TikTok UI) and agreed across both frames — #05E17F and #E547FC.
+//
+// A line series cannot change colour mid-series, so the staircase is drawn as
+// two series (bull/bear) that hand over at each flip, with a one-bar overlap so
+// the jump at the flip is continuous rather than a gap — this is what produces
+// the stepped band in the screenshots. The dashed series carries the level of
+// the most recent flip. Flip markers go on the indicator's OWN series, never on
+// the main candle series, so they cannot clobber trade markers.
+//
+// Everything is computed from the real klines in w.S — no synthetic data.
+export const TERMINATOR_UP = '#05E17F'
+export const TERMINATOR_DN = '#E547FC'
+
+export function initTerminatorSeries(): void {
+  if (w._termUpS || !w.mainChart) return
+  w._termUpS = w.mainChart.addLineSeries({
+    color: TERMINATOR_UP, lineWidth: 2, priceLineVisible: false, lastValueVisible: true,
+    lineStyle: 0, crosshairMarkerVisible: false,
+  })
+  w._termDnS = w.mainChart.addLineSeries({
+    color: TERMINATOR_DN, lineWidth: 2, priceLineVisible: false, lastValueVisible: true,
+    lineStyle: 0, crosshairMarkerVisible: false,
+  })
+  w._termLvlS = w.mainChart.addLineSeries({
+    color: '#8aa0b8', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+    lineStyle: 2, crosshairMarkerVisible: false,
+  })
+}
+
+export function removeTerminatorSeries(): void {
+  for (const k of ['_termUpS', '_termDnS', '_termLvlS']) {
+    try { if (w[k] && w.mainChart) w.mainChart.removeSeries(w[k]) } catch (_) { /* */ }
+    w[k] = null
+  }
+}
+
+export function updateTerminator(): void {
+  if (!w.mainChart || !w.S || !w.S.klines || !w.S.klines.length) return
+  initTerminatorSeries()
+  const kl = w.S.klines
+  const highs = kl.map((k: any) => k.high)
+  const lows = kl.map((k: any) => k.low)
+  const closes = kl.map((k: any) => k.close)
+  const cfg = (w.IND_SETTINGS && w.IND_SETTINGS.terminator) || {}
+  const period = Math.max(1, Math.round(cfg.period || 10))
+  const mult = cfg.mult > 0 ? cfg.mult : 3
+
+  const t = _terminatorCalc(highs, lows, closes, period, mult)
+
+  const up: any[] = [], dn: any[] = [], lvl: any[] = [], markers: any[] = []
+  for (let i = 0; i < kl.length; i++) {
+    const time = kl[i].time
+    const v = t.line[i]
+    if (v == null) continue
+    const bull = t.trend[i] === 1
+    // One-bar overlap at a flip so the two series join instead of leaving a gap.
+    const joining = t.flip[i]
+    up.push({ time, value: bull || joining ? v : null })
+    dn.push({ time, value: !bull || joining ? v : null })
+    if (t.flipLevel[i] != null) lvl.push({ time, value: t.flipLevel[i] })
+    if (t.flip[i]) {
+      markers.push({
+        time,
+        position: bull ? 'belowBar' : 'aboveBar',
+        color: bull ? TERMINATOR_UP : TERMINATOR_DN,
+        shape: 'square',
+        text: bull ? 'LONG' : 'SHORT',
+      })
+    }
+  }
+  const strip = (arr: any[]) => arr.filter((p) => p.value != null)
+  try {
+    w._termUpS.setData(strip(up))
+    w._termDnS.setData(strip(dn))
+    w._termLvlS.setData(lvl)
+    w._termUpS.setMarkers(markers)
+  } catch (_) { /* chart may be mid-rebuild */ }
 }

@@ -2962,3 +2962,88 @@ export function phoebe(
     panel: { instResonance, marketType, volumeBalance, latestSignal, signalAgeBars, currentMomentum, lastTrigger, overallTrend },
   }
 }
+
+// [2026-10-07] TERMINATOR — ATR trailing-stop band (Zeus build of the indicator
+// in the two screenshots the operator uploaded).
+//
+// What the screenshots show, and what this reproduces: a STEPPED line that only
+// ever moves WITH the trend — it sits below price while bullish and above while
+// bearish, and holds its level whenever price pulls back, which is what gives
+// the staircase look. Price closing through it flips the trend, the line jumps
+// to the other side of price, and that bar is marked.
+//
+// Mechanically this is the SuperTrend construction: a band at hl2 ± mult×ATR,
+// ratcheted so the active side never loosens within a trend.
+//   line      the active stop level — the staircase that gets drawn
+//   trend     +1 bullish / -1 bearish — drives the candle colouring
+//   flip      true on the bar where the trend changed — the square marker
+//   flipLevel the stop level at the most recent flip — the dashed level line
+//
+// Everything is derived from the real candles passed in; nothing is synthetic.
+export interface Terminator {
+  line: (number | null)[]
+  trend: (1 | -1 | null)[]
+  flip: boolean[]
+  flipLevel: (number | null)[]
+}
+
+export function terminator(
+  highs: number[], lows: number[], closes: number[],
+  period = 10, mult = 3,
+): Terminator {
+  const n = closes.length
+  const line: (number | null)[] = new Array(n).fill(null)
+  const trend: (1 | -1 | null)[] = new Array(n).fill(null)
+  const flip: boolean[] = new Array(n).fill(false)
+  const flipLevel: (number | null)[] = new Array(n).fill(null)
+  if (n === 0) return { line, trend, flip, flipLevel }
+
+  const at = atr(highs, lows, closes, period)
+
+  let upper = NaN   // ratcheted upper band (the stop while bearish)
+  let lower = NaN   // ratcheted lower band (the stop while bullish)
+  let dir: 1 | -1 | null = null
+  let lastFlipLevel: number | null = null
+
+  for (let i = 0; i < n; i++) {
+    const a = at[i]
+    if (a == null || !Number.isFinite(a)) continue
+    const hl2 = (highs[i] + lows[i]) / 2
+    const upBasic = hl2 + mult * a
+    const loBasic = hl2 - mult * a
+
+    // Ratchet: the band only tightens toward price, never loosens away from it,
+    // unless the previous close already broke through it.
+    upper = (!Number.isFinite(upper) || upBasic < upper || closes[i - 1] > upper) ? upBasic : upper
+    lower = (!Number.isFinite(lower) || loBasic > lower || closes[i - 1] < lower) ? loBasic : lower
+
+    let d: 1 | -1
+    if (dir == null) {
+      // Seed from where price sits relative to the band's midpoint.
+      d = closes[i] >= hl2 ? 1 : -1
+    } else if (dir === -1 && closes[i] > upper) {
+      d = 1
+    } else if (dir === 1 && closes[i] < lower) {
+      d = -1
+    } else {
+      d = dir
+    }
+
+    // On a flip the opposite band has been carrying a stale ratchet — reset it
+    // to this bar's basic level so the new stop starts beside price, which is
+    // the jump visible at every flip in the screenshots.
+    if (dir != null && d !== dir) {
+      if (d === 1) lower = loBasic
+      else upper = upBasic
+      flip[i] = true
+    }
+
+    trend[i] = d
+    line[i] = d === 1 ? lower : upper
+    if (flip[i]) lastFlipLevel = line[i]
+    flipLevel[i] = lastFlipLevel
+    dir = d
+  }
+
+  return { line, trend, flip, flipLevel }
+}
