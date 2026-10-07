@@ -3047,3 +3047,39 @@ export function terminator(
 
   return { line, trend, flip, flipLevel }
 }
+
+// [2026-10-07] TERMINATOR candle tint — the screenshots colour the CANDLES by
+// trend, not just the staircase, so this paints each bar with the trend colour.
+// Pure on purpose: bars in, new bars out, same OHLC and timestamps, only the
+// per-bar colour fields added. lightweight-charts applies those over the
+// series defaults, so warm-up bars (trend still null) are deliberately left
+// without colour fields and keep the user's own candle colours.
+export interface TintedBar {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  color?: string
+  borderColor?: string
+  wickColor?: string
+}
+
+export function terminatorTintBars(
+  bars: { time: number; open: number; high: number; low: number; close: number }[],
+  trend: (1 | -1 | null)[],
+  upColor: string,
+  downColor: string,
+): TintedBar[] {
+  return bars.map((b, i) => {
+    const out: TintedBar = { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }
+    const t = trend[i]
+    if (t === 1 || t === -1) {
+      const c = t === 1 ? upColor : downColor
+      out.color = c
+      out.borderColor = c
+      out.wickColor = c
+    }
+    return out
+  })
+}

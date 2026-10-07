@@ -4,7 +4,7 @@
 // Signal scanner, Deep Dive narrative generator
 
 import { api } from '../services/api'
-import { terminator as _terminatorCalc } from './indicatorCalc'
+import { terminator as _terminatorCalc, terminatorTintBars as _terminatorTint } from './indicatorCalc'
 import { fmtTime, fmtDate, fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
 import { sendAlert } from '../data/marketDataWS'
 import { liveApiSyncState } from '../trading/liveApi'
@@ -4205,6 +4205,17 @@ export function removeTerminatorSeries(): void {
     try { if (w[k] && w.mainChart) w.mainChart.removeSeries(w[k]) } catch (_) { /* */ }
     w[k] = null
   }
+  // Hand the candles back: re-setting the raw klines drops the per-bar colour
+  // fields, so the series falls back to the user's own candle colours.
+  try {
+    const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
+    if (w.cSeries && w.S && w.S.klines && w.S.klines.length
+      && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
+      w.cSeries.setData(w.S.klines.map((k: any) => ({
+        time: k.time, open: k.open, high: k.high, low: k.low, close: k.close,
+      })))
+    }
+  } catch (_) { /* best-effort */ }
 }
 
 export function updateTerminator(): void {
@@ -4248,4 +4259,20 @@ export function updateTerminator(): void {
     w._termLvlS.setData(lvl)
     w._termUpS.setMarkers(markers)
   } catch (_) { /* chart may be mid-rebuild */ }
+
+  // Candle tint — the screenshots colour the CANDLES by trend too. This runs
+  // from _indRenderHook, which fires AFTER renderChart has set the candle data,
+  // so re-setting here wins. Only for the types whose data IS the raw klines:
+  //   candles / hollow / bars  → safe
+  //   heikin                   → data is Heikin-Ashi transformed, not raw klines
+  //   volume-candles           → already carries its own per-bar colours
+  //   line / area / step       → no candles to tint
+  // Warm-up bars keep no colour fields, so the user's own candle colours still
+  // show there, and turning the indicator off restores them everywhere.
+  try {
+    const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
+    if (w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
+      w.cSeries.setData(_terminatorTint(kl, t.trend, TERMINATOR_UP, TERMINATOR_DN))
+    }
+  } catch (_) { /* never let the tint break the indicator */ }
 }
