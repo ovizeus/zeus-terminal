@@ -97,11 +97,20 @@ router.post('/state', (req, res) => {
             // Conservative validator — only checks fields the merge logic
             // relies on (id presence, symbol string). Specific business
             // validation happens elsewhere; this is structural sanity gate.
+            // [2026-10-07] The gate used to require `p.symbol`, but the client has
+            // always sent the field as `sym` (core/state.ts builds
+            // `{ id, side, sym, entry, size, ... }`), so it dropped EVERY synced
+            // position — live proof: 2 open demo positions and "Dropped 2 malformed
+            // position(s)" on every sync. Nothing below reads the symbol at all; the
+            // merge keys off p.id alone. Accept either spelling so the gate checks
+            // the shape the payload actually has, and keep rejecting an entry with
+            // no id or no symbol under either name.
             function _isValidPositionEntry(p) {
-                return p && typeof p === 'object' &&
-                    p.id != null &&
-                    (typeof p.id === 'string' || typeof p.id === 'number') &&
-                    typeof p.symbol === 'string' && p.symbol.length > 0;
+                if (!p || typeof p !== 'object') return false;
+                if (p.id == null || (typeof p.id !== 'string' && typeof p.id !== 'number')) return false;
+                const sym = (typeof p.sym === 'string' && p.sym.length > 0) ? p.sym
+                    : ((typeof p.symbol === 'string' && p.symbol.length > 0) ? p.symbol : null);
+                return sym !== null;
             }
             const _incomingPositionsRaw = Array.isArray(body.positions) ? body.positions : [];
             const incomingPositions = _incomingPositionsRaw.filter(_isValidPositionEntry);
