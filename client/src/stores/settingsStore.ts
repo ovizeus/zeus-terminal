@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { userSettingsApi } from '../services/api'
 import { useATStore } from './atStore'
 import { useMarketStore } from './marketStore'
+import { applyIndVisibility, renderActBar } from '../engine/indicators'
+import { setTF } from '../data/marketDataFeeds'
 import { _usApplyServerResponse, _usApplyPostResponse, _usGetSettingsRemoteTs } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
 import { debounce } from '../utils/debounce'
@@ -17,7 +19,9 @@ import { debounce } from '../utils/debounce'
 // Chart colors are refreshed by TradingChart's existing post-mount poll, so they
 // are intentionally left untouched here. Never throws — the load path must not
 // be broken by this best-effort live-state sync.
-function _applyLoadedTogglesToLiveState(): void {
+// Exported for tests — the live-state half of the load path (state maps);
+// the render half is _applyLoadedSettingsToRenderLayer.
+export function _applyLoadedTogglesToLiveState(): void {
   try {
     const w = window as unknown as {
       S?: { activeInds?: Record<string, boolean>; indicators?: Record<string, boolean> }
@@ -41,12 +45,122 @@ function _applyLoadedTogglesToLiveState(): void {
     }
     const mkt = useMarketStore.getState()
     const cur = mkt.market.indicators as unknown as Record<string, boolean>
+    // [2026-10-07] Iterate the LOADED map, not marketStore's defaults. The
+    // default map holds only 4 keys (ema/wma/st/vp), so keying the copy off it
+    // silently dropped all 86 other indicators — i.e. every custom one the
+    // operator actually runs — from the React surface. Union keeps any default
+    // the server map does not mention.
     const next: Record<string, boolean> = { ...cur }
-    for (const k of Object.keys(cur)) {
+    for (const k of Object.keys(inds)) {
       if (typeof inds[k] === 'boolean') next[k] = inds[k]
     }
     mkt.patch({ indicators: next as unknown as typeof mkt.market.indicators })
   } catch (_) { /* defensive — never break the load path */ }
+  // [PERSIST-RENDER-GAP 2026-10-07] State maps alone were never enough: the
+  // chart is painted by initActBar's one-shot pass long before this runs, so
+  // the loaded toggles and timeframe have to be pushed onto the render layer
+  // too. Safe to call on every load — it acts at most once per page load.
+  try { _applyLoadedSettingsToRenderLayer() } catch (_) { /* best-effort */ }
+}
+
+// [PERSIST-RENDER-GAP 2026-10-07] Apply the LOADED settings to the RENDER
+// layer, not just to the state maps.
+//
+// Operator symptom: "indicatorii activi ... ei cand ma uit sunt on si daca le
+// dau off on se activeaza iar", and the chart timeframe reset on every refresh.
+// The settings were never the problem — uid=1's row held chartTf='15m' and
+// exactly the 7 active indicators. Two gaps kept them from reaching the chart:
+//
+//  1. initActBar() (ui/dom2) applies indicator visibility exactly ONCE, early
+//     in boot, from whatever S.activeInds holds at that moment, and its
+//     _actBarBuilt guard blocks a second pass. The server GET resolves later,
+//     so whenever the device-local LS cache was gone (APK reinstall, cleared
+//     data, new device) the boot defaults were painted, while the panel — which
+//     reads S.activeInds, correctly hydrated here — showed ON. Toggling off→on
+//     calls applyIndVisibility directly, which is exactly why that "fixed" it.
+//  2. The timeframe was restored ONLY from the device-local `zeus_chart_tf` key
+//     (ChartControls), so the persisted settings.chartTf never reached the
+//     chart — even though setTF's own comment calls the USER_SETTINGS path "the
+//     cross-device source of truth".
+//
+// Applied once per load and only on SUCCESS: the server value seeds the
+// session, after which the user owns the chart. Without the one-shot, a later
+// `settings.changed` refresh would yank the timeframe out from under them.
+// Waits for the chart on a bounded poll — applyIndVisibility(id, true) calls
+// initXSeries()/updateX(), which need mainChart to exist.
+const _RENDER_APPLY_POLL_MS = 250
+const _RENDER_APPLY_MAX_ATTEMPTS = 40 // 10s budget, mirrors ChartControls
+let _renderApplyDone = false
+let _renderApplyTimer: ReturnType<typeof setInterval> | null = null
+
+function _chartIsReady(): boolean {
+  const w = window as unknown as { mainChart?: unknown; cSeries?: { priceToCoordinate?: unknown } }
+  return !!(w.mainChart && w.cSeries && typeof w.cSeries.priceToCoordinate === 'function')
+}
+
+function _doRenderApply(): void {
+  const st = useSettingsStore.getState().settings as unknown as {
+    indicators?: Record<string, boolean>
+    indSettings?: Record<string, boolean>
+    chartTf?: string
+  }
+  const w = window as unknown as { renderChart?: () => void }
+
+  // ── indicators: paint every id the stored map names, not just the four
+  // marketStore ships defaults for.
+  const inds = (st.indicators && Object.keys(st.indicators).length > 0)
+    ? st.indicators
+    : (st.indSettings && Object.keys(st.indSettings).length > 0 ? st.indSettings : null)
+  if (inds) {
+    let anyOn = false
+    for (const id of Object.keys(inds)) {
+      const on = !!inds[id]
+      if (on) anyOn = true
+      try { applyIndVisibility(id, on) } catch (_) { /* one bad series must not stop the rest */ }
+    }
+    try { renderActBar() } catch (_) { /* best-effort */ }
+    if (anyOn && typeof w.renderChart === 'function') {
+      try { w.renderChart() } catch (_) { /* best-effort */ }
+    }
+  }
+
+  // ── timeframe: the persisted value is the cross-device truth. Skip when the
+  // chart already shows it, so we never re-fetch candles for nothing.
+  const tf = typeof st.chartTf === 'string' ? st.chartTf.trim() : ''
+  if (tf) {
+    const mkt = useMarketStore.getState()
+    if (mkt.market.chartTf !== tf) {
+      try { setTF(tf, null) } catch (_) { /* best-effort */ }
+      try { mkt.patch({ chartTf: tf }) } catch (_) { /* best-effort */ }
+    }
+  }
+}
+
+/**
+ * Push the loaded settings onto the chart. Safe to call repeatedly — it does
+ * the work at most once per page load, after the chart exists.
+ */
+export function _applyLoadedSettingsToRenderLayer(): void {
+  if (_renderApplyDone || _renderApplyTimer) return
+  const run = (): boolean => {
+    if (!_chartIsReady()) return false
+    try { _doRenderApply() } catch (_) { /* never break the load path */ }
+    _renderApplyDone = true
+    return true
+  }
+  if (run()) return
+  let attempts = 0
+  _renderApplyTimer = setInterval(() => {
+    attempts++
+    if (run() || attempts >= _RENDER_APPLY_MAX_ATTEMPTS) {
+      if (_renderApplyTimer) { clearInterval(_renderApplyTimer); _renderApplyTimer = null }
+    }
+  }, _RENDER_APPLY_POLL_MS)
+}
+
+export function _resetRenderApplyForTest(): void {
+  _renderApplyDone = false
+  if (_renderApplyTimer) { clearInterval(_renderApplyTimer); _renderApplyTimer = null }
 }
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
