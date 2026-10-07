@@ -223,7 +223,15 @@ function _installUpdateHook() {
         const base = bullish ? col.bull : col.bear
         series.update({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, color: base, borderColor: base, wickColor: base })
       } else {
-        series.update({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close })
+        // [2026-10-07] Carry the TERMINATOR tint onto the live bar. Without
+        // this the newest candle reverted to the user's default colours on
+        // every tick and only regained the trend colour at the next full
+        // render. The colour is the trend TERMINATOR last computed; if a tick
+        // flips the trend, the next full render corrects it.
+        const _tc = (w._termActive && typeof w._termLastTrendColor === 'string') ? w._termLastTrendColor : null
+        const _u: any = { time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close }
+        if (_tc) { _u.color = _tc; _u.borderColor = _tc; _u.wickColor = _tc }
+        series.update(_u)
       }
     } catch (_) { }
   }

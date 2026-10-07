@@ -64,3 +64,59 @@ describe('applyCandleType must never blank the chart', () => {
     expect((w.cSeries as { keep?: boolean }).keep).toBe(true)
   })
 })
+
+// [2026-10-07] The live bar arrives through _applyLatestBar, which updated the
+// candle series with no colour fields — so while TERMINATOR was on, the newest
+// candle showed in the user's default colours until the next full render. The
+// tick path now carries the active trend colour.
+describe('_applyLatestBar carries the TERMINATOR tint', () => {
+  function setupLive() {
+    const w = window as unknown as Record<string, unknown>
+    const updates: Record<string, unknown>[] = []
+    w.mainChart = {
+      removeSeries: () => {},
+      addCandlestickSeries: () => ({
+        setData: () => {}, applyOptions: () => {},
+        update: (b: Record<string, unknown>) => { updates.push(b) },
+      }),
+    }
+    w.cSeries = null
+    w.S = { klines: [] }
+    applyCandleType('candles', { persist: false })
+    return updates
+  }
+  const bar = { time: 1, open: 10, high: 11, low: 9, close: 10.5 }
+
+  it('leaves the live bar uncoloured when TERMINATOR is off', () => {
+    const updates = setupLive()
+    const w = window as unknown as Record<string, unknown>
+    w._termActive = false
+    w._termLastTrendColor = null
+    ;(w._applyLatestBar as (b: unknown) => void)(bar)
+    expect(updates).toHaveLength(1)
+    expect(updates[0].color).toBeUndefined()
+  })
+
+  it('paints the live bar with the active trend colour when TERMINATOR is on', () => {
+    const updates = setupLive()
+    const w = window as unknown as Record<string, unknown>
+    w._termActive = true
+    w._termLastTrendColor = '#E547FC'
+    ;(w._applyLatestBar as (b: unknown) => void)(bar)
+    expect(updates[0].color).toBe('#E547FC')
+    expect(updates[0].borderColor).toBe('#E547FC')
+    expect(updates[0].wickColor).toBe('#E547FC')
+  })
+
+  it('still passes the real OHLC through untouched', () => {
+    const updates = setupLive()
+    const w = window as unknown as Record<string, unknown>
+    w._termActive = true
+    w._termLastTrendColor = '#05E17F'
+    ;(w._applyLatestBar as (b: unknown) => void)(bar)
+    expect(updates[0].open).toBe(10)
+    expect(updates[0].high).toBe(11)
+    expect(updates[0].low).toBe(9)
+    expect(updates[0].close).toBe(10.5)
+  })
+})

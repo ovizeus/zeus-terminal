@@ -4185,26 +4185,31 @@ export const TERMINATOR_UP = '#05E17F'
 export const TERMINATOR_DN = '#E547FC'
 
 export function initTerminatorSeries(): void {
-  if (w._termUpS || !w.mainChart) return
-  w._termUpS = w.mainChart.addLineSeries({
-    color: TERMINATOR_UP, lineWidth: 2, priceLineVisible: false, lastValueVisible: true,
-    lineStyle: 0, crosshairMarkerVisible: false,
-  })
-  w._termDnS = w.mainChart.addLineSeries({
-    color: TERMINATOR_DN, lineWidth: 2, priceLineVisible: false, lastValueVisible: true,
-    lineStyle: 0, crosshairMarkerVisible: false,
-  })
-  w._termLvlS = w.mainChart.addLineSeries({
-    color: '#8aa0b8', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-    lineStyle: 2, crosshairMarkerVisible: false,
-  })
+  if (!w.mainChart) return
+  if (!w._termSegS) w._termSegS = []
+  if (!w._termLvlS) {
+    w._termLvlS = w.mainChart.addLineSeries({
+      color: '#8aa0b8', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+      lineStyle: 2, crosshairMarkerVisible: false,
+    })
+  }
+}
+
+function _clearTerminatorSegments(): void {
+  const segs = w._termSegS || []
+  for (const sgs of segs) {
+    try { if (w.mainChart) w.mainChart.removeSeries(sgs) } catch (_) { /* */ }
+  }
+  w._termSegS = []
 }
 
 export function removeTerminatorSeries(): void {
-  for (const k of ['_termUpS', '_termDnS', '_termLvlS']) {
-    try { if (w[k] && w.mainChart) w.mainChart.removeSeries(w[k]) } catch (_) { /* */ }
-    w[k] = null
-  }
+  _clearTerminatorSegments()
+  try { if (w._termLvlS && w.mainChart) w.mainChart.removeSeries(w._termLvlS) } catch (_) { /* */ }
+  w._termLvlS = null
+  // Stop the live-tick path tinting too.
+  w._termActive = false
+  w._termLastTrendColor = null
   // Hand the candles back: re-setting the raw klines drops the per-bar colour
   // fields, so the series falls back to the user's own candle colours.
   try {
@@ -4216,6 +4221,31 @@ export function removeTerminatorSeries(): void {
       })))
     }
   } catch (_) { /* best-effort */ }
+}
+
+/**
+ * Split the stop line into contiguous same-trend runs.
+ * [2026-10-07] One series per run, created fresh on each update.
+ * Two long-lived series (one bull, one bear) cannot work: a lightweight-charts
+ * line series joins every point it holds, and neither dropping the inactive
+ * bars nor pushing them as `{ time }` whitespace breaks that — both were tried
+ * and both drew long diagonals clear across the chart between segments, which
+ * only showed up when the indicator was rendered against real klines and
+ * looked at. A run per segment is the only shape that cannot connect across a
+ * flip.
+ */
+export function _terminatorSegments(
+  bars: { time: number }[], line: (number | null)[], trend: (1 | -1 | null)[],
+): { trend: 1 | -1; points: { time: number; value: number }[] }[] {
+  const segs: { trend: 1 | -1; points: { time: number; value: number }[] }[] = []
+  let cur: { trend: 1 | -1; points: { time: number; value: number }[] } | null = null
+  for (let i = 0; i < bars.length; i++) {
+    const v = line[i], d = trend[i]
+    if (v == null || (d !== 1 && d !== -1)) { cur = null; continue }
+    if (!cur || cur.trend !== d) { cur = { trend: d, points: [] }; segs.push(cur) }
+    cur.points.push({ time: bars[i].time, value: v })
+  }
+  return segs
 }
 
 export function updateTerminator(): void {
@@ -4231,20 +4261,13 @@ export function updateTerminator(): void {
 
   const t = _terminatorCalc(highs, lows, closes, period, mult)
 
-  const up: any[] = [], dn: any[] = [], lvl: any[] = [], markers: any[] = []
+  const lvl: any[] = [], markers: any[] = []
   for (let i = 0; i < kl.length; i++) {
-    const time = kl[i].time
-    const v = t.line[i]
-    if (v == null) continue
-    const bull = t.trend[i] === 1
-    // One-bar overlap at a flip so the two series join instead of leaving a gap.
-    const joining = t.flip[i]
-    up.push({ time, value: bull || joining ? v : null })
-    dn.push({ time, value: !bull || joining ? v : null })
-    if (t.flipLevel[i] != null) lvl.push({ time, value: t.flipLevel[i] })
+    if (t.flipLevel[i] != null) lvl.push({ time: kl[i].time, value: t.flipLevel[i] })
     if (t.flip[i]) {
+      const bull = t.trend[i] === 1
       markers.push({
-        time,
+        time: kl[i].time,
         position: bull ? 'belowBar' : 'aboveBar',
         color: bull ? TERMINATOR_UP : TERMINATOR_DN,
         shape: 'square',
@@ -4252,12 +4275,30 @@ export function updateTerminator(): void {
       })
     }
   }
-  const strip = (arr: any[]) => arr.filter((p) => p.value != null)
+
   try {
-    w._termUpS.setData(strip(up))
-    w._termDnS.setData(strip(dn))
-    w._termLvlS.setData(lvl)
-    w._termUpS.setMarkers(markers)
+    _clearTerminatorSegments()
+    const segs = _terminatorSegments(kl, t.line, t.trend)
+    segs.forEach((sg, idx) => {
+      const col = sg.trend === 1 ? TERMINATOR_UP : TERMINATOR_DN
+      const sgs = w.mainChart.addLineSeries({
+        color: col, lineWidth: 2, priceLineVisible: false,
+        lastValueVisible: idx === segs.length - 1, crosshairMarkerVisible: false,
+      })
+      sgs.setData(sg.points)
+      w._termSegS.push(sgs)
+    })
+    // [2026-10-07] A marker anchors to a time that exists in ITS OWN series.
+    // Putting them all on the first segment clamped every one of them to that
+    // segment's range, so they piled up at the left edge — visible immediately
+    // in the rendered image. Each flip starts a segment, so each segment gets
+    // the marker whose time it actually contains.
+    w._termSegS.forEach((sgs: any, i: number) => {
+      const times = new Set(segs[i].points.map((pt: any) => pt.time))
+      const mine = markers.filter((m: any) => times.has(m.time))
+      if (mine.length) sgs.setMarkers(mine)
+    })
+    if (w._termLvlS) w._termLvlS.setData(lvl)
   } catch (_) { /* chart may be mid-rebuild */ }
 
   // Candle tint — the screenshots colour the CANDLES by trend too. This runs
@@ -4274,5 +4315,11 @@ export function updateTerminator(): void {
     if (w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
       w.cSeries.setData(_terminatorTint(kl, t.trend, TERMINATOR_UP, TERMINATOR_DN))
     }
+    // Hand the live-tick path the active trend colour so the newest candle
+    // keeps the tint between full renders (candleTypeSwitcher._applyLatestBar).
+    let _lastTrend: 1 | -1 | null = null
+    for (let i = t.trend.length - 1; i >= 0; i--) { if (t.trend[i] != null) { _lastTrend = t.trend[i]; break } }
+    w._termActive = true
+    w._termLastTrendColor = _lastTrend === 1 ? TERMINATOR_UP : (_lastTrend === -1 ? TERMINATOR_DN : null)
   } catch (_) { /* never let the tint break the indicator */ }
 }
