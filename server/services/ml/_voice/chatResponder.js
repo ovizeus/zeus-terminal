@@ -1574,7 +1574,12 @@ async function _replyLLMFallback(ctx, originalText) {
     const result = await llmClient.chat({
         messages,
         temperature: 0.7,
-        maxTokens: 320,
+        // [2026-10-07] 320 → 700. The Groq model is now a reasoning model
+        // (openai/gpt-oss-120b), which spends part of the budget thinking:
+        // measured live, 320 tokens came back finish_reason='length' (a reply
+        // cut mid-sentence) while 700 completed in 939ms — far inside the 8s
+        // timeout.
+        maxTokens: 700,
         timeoutMs: 8000
     });
 
@@ -1663,7 +1668,8 @@ async function respondStream(params) {
 
     const result = await llmClient.chatStream({
         messages, onChunk,
-        temperature: 0.7, maxTokens: 320, timeoutMs: 8000,
+        // [2026-10-07] see the maxTokens note on the non-streaming call above.
+        temperature: 0.7, maxTokens: 700, timeoutMs: 8000,
     });
 
     if (!result.ok) {

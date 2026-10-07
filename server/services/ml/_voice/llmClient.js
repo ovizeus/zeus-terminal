@@ -5,7 +5,7 @@
  *
  * Auto-detects provider from env vars:
  *   XAI_API_KEY  → xAI Grok (grok-2-latest)         api.x.ai/v1
- *   GROQ_API_KEY → Groq Llama 3.3 70B                api.groq.com/openai/v1
+ *   GROQ_API_KEY → Groq openai/gpt-oss-120b           api.groq.com/openai/v1
  *
  * If both present, xAI is preferred (operator-set). Falls back to Groq.
  * If neither, available()=false → caller falls back to local responder.
@@ -28,7 +28,15 @@ function _resolveProvider() {
         return {
             name: 'groq',
             url: 'https://api.groq.com/openai/v1/chat/completions',
-            model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            // [2026-10-07] Was 'llama-3.3-70b-versatile'. Groq RETIRED the
+            // Llama 3.x chat line for this account, so every Omega reply failed
+            // with HTTP 404 model_not_found and the operator thought the key had
+            // died. The key was fine — GET /models answered 200 with 11 models.
+            // Of those, only gpt-oss-120b/20b and qwen3.8-27b are chat models;
+            // gpt-oss-120b is the most capable and answers in ~1s, well inside the
+            // 8s timeout. GROQ_MODEL overrides it, so the next retirement is a
+            // config change rather than a deploy.
+            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
             key: process.env.GROQ_API_KEY
         };
     }
@@ -209,4 +217,4 @@ async function chatStream(params) {
     return { ok: true, text: fullText, model, provider: provider.name };
 }
 
-module.exports = { available, chat, chatStream, getProviderName, DEFAULT_TIMEOUT_MS };
+module.exports = { available, chat, chatStream, getProviderName, DEFAULT_TIMEOUT_MS, _resolveProvider };
