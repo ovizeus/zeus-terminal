@@ -348,7 +348,21 @@ function setGlobalHalt(active, byUserId, reason) {
         ts: Date.now(),
         reason: reason || null,
     };
+
+    // [ALERT STORM FIX 2026-10-07] Only a TRANSITION is news. This used to
+    // notify on every call: the dead-man switch re-armed ~200×/day for two
+    // months, so ~12k identical "GLOBAL HALT ARMED" Telegrams (plus a P0
+    // doctor event and an audit row each) buried every real alert. Deduping on
+    // the reason text would not work — it carries the staleness seconds
+    // ("..._stale_245s") and so differs on every call. We still PERSIST each
+    // call, so forensics keep the newest reason/ts; we just stop shouting.
+    // A read failure means "unknown previous state" — then we ALWAYS notify.
+    // Suppressing on an unreadable DB would mean swallowing a real alarm.
+    const _prev = getGlobalHaltState();
+    const _prevKnown = !_prev.error;
     db.atSetState('global:halt', payload, byUserId);
+    if (_prevKnown && _prev.active === !!active) return payload;
+
     logger.warn('AT_ENGINE', `GLOBAL_HALT ${active ? 'ARMED' : 'DISARMED'} by uid=${byUserId}` + (reason ? ' — ' + reason : ''));
     try { audit.record('GLOBAL_HALT_TOGGLE', { active: !!active, by: byUserId, reason: reason || null }, 'SERVER_AT'); } catch (_) { /* best-effort */ }
     _emitDoctor({
@@ -357,8 +371,14 @@ function setGlobalHalt(active, byUserId, reason) {
         payload: { active: !!active, by: byUserId, reason: reason || null }
     });
     try {
+        // [2026-10-07] Escape the reason: it is a machine string full of
+        // underscores ("DEAD_MAN_SWITCH:brain_heartbeat_stale_970s"), which
+        // legacy Markdown reads as italics. An odd count left an unterminated
+        // entity → Telegram 400 "can't parse entities ... byte offset 70",
+        // 149× in a single day, each costing the 2s plain-text retry.
+        const _r = reason ? (telegram.escapeMarkdown ? telegram.escapeMarkdown(reason) : reason) : '';
         telegram.sendToUser(byUserId, active
-            ? `🛑 *GLOBAL HALT ARMED*${reason ? '\nReason: ' + reason : ''}\nAll new entries blocked server-wide.`
+            ? `🛑 *GLOBAL HALT ARMED*${_r ? '\nReason: ' + _r : ''}\nAll new entries blocked server-wide.`
             : '✅ *GLOBAL HALT DISARMED*\nEntries re-enabled.');
     } catch (_) { /* best-effort */ }
     return payload;
