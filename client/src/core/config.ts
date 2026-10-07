@@ -1768,9 +1768,27 @@ function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
   USER_SETTINGS.chart = USER_SETTINGS.chart || {}
   if (flat.chartTf !== undefined) USER_SETTINGS.chart.tf = flat.chartTf
   if (flat.chartTz !== undefined) USER_SETTINGS.chart.tz = flat.chartTz
+  // [2026-10-07] chartType was MISSING here, so the persisted candle type never
+  // reached chart.candleType — even though _usApply has a boot apply for it.
+  // The dropdown label reads the field through a useState initializer, so the
+  // label could show the saved type while the chart drew default candles. It
+  // only ever worked while the device-local LS cache of this nested tree was
+  // warm, the same cold-cache failure as the timeframe.
+  if (flat.chartType !== undefined) {
+    // Normalise + validate. The client's own DEFAULT_SETTINGS seeded the legacy
+    // singular 'candle', which is NOT a CANDLE_TYPES id ('candles' is), and
+    // applyCandleType would have been handed a type it cannot build.
+    const _ct = flat.chartType === 'candle' ? 'candles' : flat.chartType
+    const _KNOWN = ['candles', 'hollow', 'heikin', 'bars', 'line', 'line-markers', 'step', 'area', 'volume-candles']
+    if (typeof _ct === 'string' && _KNOWN.indexOf(_ct) !== -1) USER_SETTINGS.chart.candleType = _ct
+  }
   if (flat.heatmapSettings !== undefined) USER_SETTINGS.chart.heatmap = flat.heatmapSettings
   if (flat.candleColors !== undefined) USER_SETTINGS.chart.colors = flat.candleColors
-  if (flat.indSettings !== undefined) USER_SETTINGS.indicators = flat.indSettings
+  // [2026-10-07] Prefer the canonical `indicators` map; only fall back to the
+  // legacy `indSettings`. This path read indSettings alone, which the June b214
+  // save fix (both keys kept in sync) hid rather than fixed.
+  if (flat.indicators !== undefined) USER_SETTINGS.indicators = flat.indicators
+  else if (flat.indSettings !== undefined) USER_SETTINGS.indicators = flat.indSettings
   if (flat.alertSettings !== undefined) USER_SETTINGS.alerts = flat.alertSettings
   if (flat.profile !== undefined) USER_SETTINGS.profile = flat.profile
   if (flat.bmMode !== undefined) USER_SETTINGS.bmMode = flat.bmMode

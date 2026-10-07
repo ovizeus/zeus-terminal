@@ -124,6 +124,16 @@ function _doRenderApply(): void {
     }
   }
 
+  // ── candle type: _usApply has a boot apply for it, but that only runs on the
+  // LS-cache path; nothing re-applied it once the server response landed.
+  // applyCandleType validates the id itself, so a legacy value cannot blank the
+  // chart here.
+  const usAny = (window as unknown as { USER_SETTINGS?: { chart?: { candleType?: string } }; applyCandleType?: (t: string, o?: { persist?: boolean }) => void })
+  const ct = usAny.USER_SETTINGS && usAny.USER_SETTINGS.chart && usAny.USER_SETTINGS.chart.candleType
+  if (ct && ct !== 'candles' && typeof usAny.applyCandleType === 'function') {
+    try { usAny.applyCandleType(ct, { persist: false }) } catch (_) { /* best-effort */ }
+  }
+
   // ── timeframe: the persisted value is the cross-device truth. Skip when the
   // chart already shows it, so we never re-fetch candles for nothing.
   const tf = typeof st.chartTf === 'string' ? st.chartTf.trim() : ''
@@ -261,7 +271,8 @@ const DEFAULT_SETTINGS: SettingsPayload = {
   // UI
   theme: 'native', uiScale: 100, soundEnabled: true,
   // Chart
-  chartTf: '5m', chartType: 'candle', candleColors: null, heatmapSettings: null, timezoneOffset: null,
+  // [2026-10-07] was 'candle' — not a CANDLE_TYPES id, so it could never be applied
+  chartTf: '5m', chartType: 'candles', candleColors: null, heatmapSettings: null, timezoneOffset: null,
   // Indicators
   indSettings: null,
   // Liq / LLV / Supremus / S-R

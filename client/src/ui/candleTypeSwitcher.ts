@@ -175,6 +175,15 @@ export function getCandleType(): CandleType {
 
 export function applyCandleType(type: CandleType, opts?: { persist?: boolean }): void {
   if (!w.mainChart) return
+  // [2026-10-07] Validate BEFORE touching the chart. _removeOldSeries() used to
+  // run first and _buildSeries() returned null for an unknown id, so a bad type
+  // wiped the candles and left an empty chart. The persisted chartType for the
+  // operator is the legacy singular 'candle', which is not one of these ids, so
+  // honouring the saved value would have blanked the chart on every boot.
+  if (!CANDLE_TYPES.some(c => c.id === type)) {
+    console.warn('[candleType] ignoring unknown type:', type)
+    return
+  }
   const klines = (w.S && w.S.klines) || []
   _removeOldSeries()
   const series = _buildSeries(type)
