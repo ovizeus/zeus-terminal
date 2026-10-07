@@ -442,6 +442,28 @@ migrate('417_vault', () => {
     `);
 });
 
+// [POISON ROW FIX 2026-10-07] emergency_close_queue had no attempt bookkeeping,
+// so a row that can never succeed retried forever. 13 COIN-M rows (adopted by
+// recon, closed via the USDⓈ-M /fapi path → "Invalid symbol") sat there from
+// 2026-08-18 burning ~7 Binance requests per tick, which held the circuit
+// breaker open and broke listenKey recreation. Worse, with MAX_ROWS_PER_TICK=10
+// and ORDER BY id they occupied every tick, so rows 46-48 were never attempted
+// once — the orphan-protection net was silently dead. These columns let the
+// processor count attempts, dead-letter a hopeless row and order by attempts so
+// a fresh row always gets a turn.
+migrate('418_emergency_queue_attempts', () => {
+    const cols = db.prepare('PRAGMA table_info(emergency_close_queue)').all().map(c => c.name);
+    if (!cols.includes('attempts')) {
+        db.exec('ALTER TABLE emergency_close_queue ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!cols.includes('last_error')) {
+        db.exec('ALTER TABLE emergency_close_queue ADD COLUMN last_error TEXT');
+    }
+    if (!cols.includes('last_attempt_at')) {
+        db.exec('ALTER TABLE emergency_close_queue ADD COLUMN last_attempt_at INTEGER');
+    }
+});
+
 migrate('018_pwd_temp_meta', () => {
     db.exec("ALTER TABLE users ADD COLUMN pwd_temp_expires_at TEXT DEFAULT NULL");
     db.exec("ALTER TABLE users ADD COLUMN pwd_must_change INTEGER NOT NULL DEFAULT 0");

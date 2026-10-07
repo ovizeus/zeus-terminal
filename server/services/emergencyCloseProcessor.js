@@ -23,6 +23,27 @@ const logger = require('./logger');
 
 const TICK_MS = 60_000;
 const MAX_ROWS_PER_TICK = 10;
+
+// [POISON ROW FIX 2026-10-07] Errors that will NEVER succeed on retry. These
+// used to fall into the transient bucket below and retry forever: 13 COIN-M
+// rows (BTCUSD_PERP etc., adopted by recon but closable only through the COIN-M
+// /dapi path this codebase does not implement) made 5,200 attempts in one day,
+// holding the Binance circuit breaker open and breaking listenKey recreation.
+const PERMANENT_CODES = new Set([
+    -1121, // Invalid symbol — the symbol is not on this endpoint, ever
+    -1111, // Precision over the maximum defined for this asset
+    -4141, // Symbol is closed / delisted
+]);
+// A hopeless row must leave the rotation even when the exchange keeps handing
+// back transient-looking errors, otherwise it starves the queue head forever.
+const MAX_ATTEMPTS = 240; // ≈4h at a 60s tick
+
+function _isPermanent(err) {
+    if (!err) return false;
+    if (err.code != null && PERMANENT_CODES.has(Number(err.code))) return true;
+    return /invalid symbol|symbol is closed|delisted/i.test(String(err.message || ''));
+}
+
 let _timer = null;
 let _running = false;
 
@@ -31,9 +52,13 @@ async function _tick() {
     _running = true;
     try {
         const { db } = require('./database');
+        // ORDER BY attempts first: with plain `ORDER BY id` the chronically
+        // failing rows at the head took every slot of every tick and a newly
+        // enqueued orphan never got a turn. Least-tried first guarantees fresh
+        // rows are attempted even while poison rows are still present.
         const rows = db.prepare(
-            `SELECT id, user_id, symbol, exchange, qty, decision_key FROM emergency_close_queue
-             WHERE resolved_at IS NULL ORDER BY id LIMIT ${MAX_ROWS_PER_TICK}`
+            `SELECT id, user_id, symbol, exchange, qty, decision_key, attempts FROM emergency_close_queue
+             WHERE resolved_at IS NULL ORDER BY attempts ASC, id ASC LIMIT ${MAX_ROWS_PER_TICK}`
         ).all();
         if (!rows || rows.length === 0) return;
 
@@ -97,9 +122,47 @@ async function _tick() {
                     db.prepare(`UPDATE emergency_close_queue SET resolved_at=?, resolved_by=? WHERE id=?`)
                         .run(Date.now(), 'processor:reduceonly_rejected_flat', row.id);
                     logger.info('EMERG_QUEUE', `row ${row.id} ${row.symbol}: -2022 (already flat) — resolved`);
+                } else if (_isPermanent(err)) {
+                    // [2026-10-07] Permanent: retrying cannot help. Resolve the
+                    // row so it stops hammering the exchange, but ALERT — a
+                    // position this code cannot close needs human eyes.
+                    const { db } = require('./database');
+                    db.prepare(`UPDATE emergency_close_queue SET resolved_at=?, resolved_by=?, last_error=?, last_attempt_at=? WHERE id=?`)
+                        .run(Date.now(), 'processor:permanent_error', String(err.message || '').slice(0, 300), Date.now(), row.id);
+                    logger.error('EMERG_QUEUE', `row ${row.id} ${row.symbol} uid=${row.user_id}: PERMANENT error (${err && err.message}) — resolved, NOT retried; manual check needed`);
+                    try {
+                        require('./positionEvents').append({
+                            position_seq: 0, user_id: row.user_id, exchange: row.exchange || 'binance',
+                            event_type: 'EMERGENCY_QUEUE_PERMANENT_ERROR',
+                            payload: { rowId: row.id, symbol: row.symbol, qty: row.qty, error: String(err.message || '') },
+                        });
+                    } catch (_) {}
+                    try {
+                        require('./telegram').sendToUser(row.user_id,
+                            `⚠️ *Emergency queue: unmanageable position*\n${row.symbol} qty ${row.qty}\n`
+                            + `The exchange rejects this permanently (${String(err.message || '').slice(0, 80)}).\n`
+                            + `Row resolved so it stops blocking the queue — check this symbol by hand.`);
+                    } catch (_) {}
                 } else {
-                    // Transient (CB open, rate-limit, timeout) — keep for next tick.
-                    logger.warn('EMERG_QUEUE', `row ${row.id} ${row.symbol}: attempt failed (${err && err.message}) — retrying next tick`);
+                    // Transient (CB open, rate-limit, timeout) — keep for next
+                    // tick, but count the attempt so a hopeless row eventually
+                    // leaves the rotation instead of starving the queue head.
+                    const { db } = require('./database');
+                    const _attempts = Number(row.attempts || 0) + 1;
+                    if (_attempts >= MAX_ATTEMPTS) {
+                        db.prepare(`UPDATE emergency_close_queue SET resolved_at=?, resolved_by=?, last_error=?, last_attempt_at=? WHERE id=?`)
+                            .run(Date.now(), 'processor:gave_up_max_attempts', String(err && err.message || '').slice(0, 300), Date.now(), row.id);
+                        logger.error('EMERG_QUEUE', `row ${row.id} ${row.symbol} uid=${row.user_id}: GAVE UP after ${_attempts} attempts (${err && err.message}) — dead-lettered; manual check needed`);
+                        try {
+                            require('./telegram').sendToUser(row.user_id,
+                                `🚨 *Emergency queue: gave up*\n${row.symbol} qty ${row.qty}\n`
+                                + `${_attempts} attempts failed. Row dead-lettered so it stops blocking the queue — close this by hand.`);
+                        } catch (_) {}
+                    } else {
+                        db.prepare(`UPDATE emergency_close_queue SET attempts=?, last_error=?, last_attempt_at=? WHERE id=?`)
+                            .run(_attempts, String(err && err.message || '').slice(0, 300), Date.now(), row.id);
+                        logger.warn('EMERG_QUEUE', `row ${row.id} ${row.symbol}: attempt ${_attempts}/${MAX_ATTEMPTS} failed (${err && err.message}) — retrying next tick`);
+                    }
                 }
             }
         }
@@ -120,4 +183,4 @@ function stop() {
     if (_timer) { clearInterval(_timer); _timer = null; }
 }
 
-module.exports = { start, stop, _tick };
+module.exports = { start, stop, _tick, MAX_ATTEMPTS, PERMANENT_CODES, _isPermanent };

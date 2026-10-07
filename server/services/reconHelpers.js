@@ -178,4 +178,23 @@ function hasActiveLeg(positions, userId, symbol, side) {
         && p.mode !== 'demo');
 }
 
-module.exports = { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld, hasActiveLeg };
+// [COIN-M ADOPTION GUARD 2026-10-07] True for any symbol this engine cannot
+// actually manage. Everything here talks to Binance USDⓈ-M (/fapi) or Bybit
+// linear; there is no COIN-M (/dapi) path anywhere in the codebase. COIN-M
+// contracts are the only Binance futures symbols that carry an underscore —
+// perpetuals as <COIN>USD_PERP and dated delivery as <COIN>USD_YYMMDD — while
+// USDⓈ-M symbols never do (BTCUSDT, 1000PEPEUSDT, BTCUSDC). So "contains an
+// underscore" is both sufficient and conservative.
+//
+// This matters because recon adopted real COIN-M positions off uid=1's testnet
+// account (SAT_RECON_ORPHAN_ADOPTED BTCUSD_PERP LONG 778). Every later close
+// attempt hit /fapi and got "Invalid symbol", producing 13 emergency-queue rows
+// that could never resolve and that held the Binance circuit breaker open for
+// ~7 weeks. Missing/garbage input counts as unmanageable: we refuse to act on a
+// position we cannot even name.
+function isUnmanageableSymbol(symbol) {
+    if (typeof symbol !== 'string' || symbol.length === 0) return true;
+    return symbol.includes('_');
+}
+
+module.exports = { isUnmanageableSymbol, buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld, hasActiveLeg };

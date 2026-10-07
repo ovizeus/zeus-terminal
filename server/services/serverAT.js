@@ -46,7 +46,7 @@ const telegram = require('./telegram');
 const audit = require('./audit');
 // [BUG-T2a + T2b 2026-05-13] Pure-function recon helpers extracted pentru
 // testability. T2a: hedge-aware Binance held map. T2b: strict userTrades filter.
-const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld, hasActiveLeg } = require('./reconHelpers');
+const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld, hasActiveLeg, isUnmanageableSymbol: _isUnmanageableSymbol } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const mlDslPolicy = require('./mlDslPolicy');
@@ -6065,6 +6065,30 @@ async function _runReconciliation(isStartup) {
                     // lev=1 "Manual x1" orphan. Skip — the existing record owns the leg.
                     // Non-destructive: nothing is removed; only the duplicate adoption is
                     // prevented. (The lingering stub itself is cleaned in stage 2.)
+                    // [COIN-M ADOPTION GUARD 2026-10-07] Refuse symbols this
+                    // engine cannot manage. uid=1's testnet account held real
+                    // COIN-M positions and recon adopted them
+                    // (SAT_RECON_ORPHAN_ADOPTED BTCUSD_PERP LONG 778) — but
+                    // every management/close call here goes to USDⓈ-M /fapi,
+                    // which answers "Invalid symbol" for *USD_PERP. Adoption
+                    // therefore created 13 positions that could never be closed
+                    // and then 13 unresolvable emergency_close_queue rows that
+                    // held the circuit breaker open for ~7 weeks. Leave the
+                    // position alone (we cannot touch it correctly) and say so.
+                    if (_isUnmanageableSymbol(symbol)) {
+                        logger.error(label, `UNMANAGEABLE SYMBOL uid=${userId} ${bpos.side} ${symbol}: not a USDⓈ-M symbol — NOT adopting, NOT closing (this engine has no COIN-M path)`);
+                        try { audit.record('SAT_RECON_UNMANAGEABLE_SYMBOL', { symbol, side: bpos.side, amt: bpos.amt, userId, exchange }, 'SERVER_AT'); } catch (_) { }
+                        if (_reconAlertedShouldFire('orphans', _orphanKey)) {
+                            try {
+                                telegram.sendToUser(userId,
+                                    `⚠️ *RECON: position Zeus cannot manage*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\n`
+                                    + `This is a COIN-M contract; Zeus only trades USDⓈ-M. It is left untouched — close it by hand on Binance if you do not want it.`);
+                            } catch (_) { }
+                        }
+                        _orphanPending.delete(_orphanKey);
+                        continue;
+                    }
+
                     if (hasActiveLeg(_positions, userId, symbol, bpos.side)) {
                         logger.warn(label, `DEDUP-GUARD uid=${userId} ${bpos.side} ${symbol}: exchange leg already tracked (one-way, no dup) — NOT adopting duplicate external`);
                         try { audit.record('SAT_RECON_DEDUP_GUARD', { symbol, side: bpos.side, userId }, 'SERVER_AT'); } catch (_) { }
@@ -6870,6 +6894,8 @@ module.exports = {
     isGlobalHaltActive,
     getGlobalHaltState,
     setGlobalHalt,
+    // [2026-10-07] Re-exported for tests — the guard itself lives in reconHelpers.
+    _isUnmanageableSymbol,
     // Client actions
     registerManualPosition,
     // [M1.2 Cat A] Pure transform helper: /api/order/place reqBody → canonical entry.

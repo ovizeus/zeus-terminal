@@ -22,12 +22,27 @@ const ALERT_DEBOUNCE_MS = 5 * 60 * 1000;
 // here because brain runs at process level, not per-user.
 const HALT_BY_USER_ID = 1;
 
+// [AUTO-RECOVERY 2026-10-07] The switch had no path back: it armed on a stale
+// heartbeat and nothing ever disarmed it. That is what turned a transient
+// event-loop freeze into a two-month silent outage — the freeze came and went
+// every 5 min, but the halt it armed was permanent, and only a process restart
+// (RECOVERY_BOOT_COMPLETE) cleared it. Now a sustained run of healthy
+// heartbeats disarms it again.
+//
+// Hard constraint: we clear ONLY a halt this switch armed (reason prefixed
+// DEAD_MAN_SWITCH:). An operator halt, or EMERGENCY_CLOSE_CATASTROPHIC, must
+// survive — silently undoing a real safety halt would be far worse than the
+// outage this fixes.
+const HALT_REASON_PREFIX = 'DEAD_MAN_SWITCH:';
+const HEALTHY_STREAK_TO_RECOVER = 6; // ×10s ≈ 1 min of proven-healthy brain
+
 let _timer = null;
 let _opts = {
     intervalMs: DEFAULT_INTERVAL_MS,
     staleThresholdMs: DEFAULT_STALE_THRESHOLD_MS,
 };
 let _lastAlertTs = 0;
+let _healthyStreak = 0;
 
 function _now() { return Date.now(); }
 
@@ -49,16 +64,58 @@ function check(opts) {
 
     const lastTs = row && row.last_ts ? Number(row.last_ts) : null;
     if (!lastTs) {
-        // No heartbeat row yet (brain not started or pre-Day-18 deploy) — don't false-alarm.
+        // No heartbeat row yet (brain not started or pre-Day-18 deploy) — don't
+        // false-alarm. It is also not evidence of health, so the recovery
+        // streak resets: we never un-halt on absence of evidence.
+        _healthyStreak = 0;
         return { stale: false, ageMs: null, lastTs: null, reason: 'no_signal_yet' };
     }
 
     const ageMs = _now() - lastTs;
     const stale = ageMs > threshold;
     if (stale) {
+        _healthyStreak = 0;
         _maybeFireAlert(ageMs, lastTs);
+    } else {
+        _healthyStreak++;
+        if (_healthyStreak >= HEALTHY_STREAK_TO_RECOVER) _maybeRecover(ageMs);
     }
-    return { stale, ageMs, lastTs };
+    return { stale, ageMs, lastTs, healthyStreak: _healthyStreak };
+}
+
+/**
+ * Disarm the halt we armed, once the brain has been healthy long enough.
+ * No-op unless the halt is active AND its reason says we are the one who
+ * armed it.
+ */
+function _maybeRecover(ageMs) {
+    let halt;
+    try {
+        const serverAT = require('./serverAT');
+        halt = serverAT.getGlobalHaltState();
+        if (!halt || !halt.active) return;
+        if (!String(halt.reason || '').startsWith(HALT_REASON_PREFIX)) return; // not ours
+        serverAT.setGlobalHalt(false, HALT_BY_USER_ID,
+            HALT_REASON_PREFIX + 'brain_recovered_after_' + _healthyStreak + '_healthy_checks');
+    } catch (e) {
+        console.error('[BRAIN-WATCHDOG] auto-recover failed:', e.message);
+        return;
+    }
+    _healthyStreak = 0;   // one recovery per outage
+    _lastAlertTs = 0;     // next real outage alerts immediately
+
+    try {
+        require('./telegram').sendToAll(
+            '✅ *BRAIN RECOVERED* — heartbeat healthy again\n'
+            + 'Global halt auto-disarmed. Entries re-enabled.'
+        );
+    } catch (_) { /* best-effort */ }
+
+    try {
+        require('./audit').record('BRAIN_WATCHDOG_RECOVERED', {
+            ageMs, userId: HALT_BY_USER_ID, previousReason: halt.reason,
+        }, 'BRAIN_WATCHDOG');
+    } catch (_) { /* best-effort */ }
 }
 
 function _maybeFireAlert(ageMs, lastTs) {
@@ -112,6 +169,7 @@ function stop() {
 
 function _reset() {
     _lastAlertTs = 0;
+    _healthyStreak = 0;
     _opts = {
         intervalMs: DEFAULT_INTERVAL_MS,
         staleThresholdMs: DEFAULT_STALE_THRESHOLD_MS,
@@ -122,4 +180,4 @@ function _reset() {
     }
 }
 
-module.exports = { start, stop, check, _reset };
+module.exports = { start, stop, check, _reset, HEALTHY_STREAK_TO_RECOVER, HALT_REASON_PREFIX };
