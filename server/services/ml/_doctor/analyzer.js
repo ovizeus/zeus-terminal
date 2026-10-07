@@ -27,16 +27,19 @@ const falsePositiveAuditor = require('./falsePositiveAuditor');
 const quarantineManager = require('./quarantineManager');
 const shedManager = require('./shedManager');
 const telemetryCollector = require('./telemetryCollector');
+const dbIntegrityMonitor = require('./dbIntegrityMonitor');
 
 const COGNITIVE_STATES = Object.freeze([
     'HEALTHY', 'DEGRADED', 'COMPROMISED', 'SAFE_MODE', 'DEAD'
 ]);
 const ANALYZER_INTERVAL_MS = 5000;
-// [Day 22] DB integrity check throttle — `PRAGMA integrity_check` is expensive
-// (full DB scan); run at most once per 5 min. Cached result reused between checks.
-const DB_INTEGRITY_CHECK_INTERVAL_MS = 5 * 60 * 1000;
-let _lastDbIntegrityCheckTs = 0;
-let _lastDbIntegrityFail = false;
+// [Day 22] DB integrity check — `PRAGMA integrity_check` is a FULL DB SCAN.
+// [FREEZE ROOT FIX 2026-10-07] Throttling it to 5 min was not enough: the
+// pragma ran INLINE here and better-sqlite3 is synchronous, so each scan froze
+// the entire event loop. At 7.9 GB that was 3-7 min per scan — longer than the
+// 60 s brainWatchdog threshold — so the brain heartbeat went stale every 5 min,
+// GLOBAL_HALT armed ~200×/day and nothing traded for 2 months. The scan now
+// runs in a worker thread (dbIntegrityMonitor) and we only read its verdict.
 
 // [2026-05-20 fix] Boot grace period for heartbeat staleness check.
 // Problem: after PM2 reload, OLD serverBrain heartbeat persists in DB with
@@ -190,20 +193,11 @@ function analyze(params) {
     // moneyFrozen: hook for §28 reconcilePosition status. For D-3 always false.
     const moneyFrozen = false;
 
-    // [Day 22] DB integrity check periodic — runs at most once per 5 min.
-    // PRAGMA integrity_check returns 'ok' if healthy, error list otherwise.
-    let dbIntegrityFail = _lastDbIntegrityFail;
-    if (nowTs - _lastDbIntegrityCheckTs >= DB_INTEGRITY_CHECK_INTERVAL_MS) {
-        _lastDbIntegrityCheckTs = nowTs;
-        try {
-            const rows = db.prepare('PRAGMA integrity_check(1)').all();
-            // Healthy: single row [{integrity_check: 'ok'}]. Anything else = fail.
-            dbIntegrityFail = !(rows.length === 1 && rows[0].integrity_check === 'ok');
-        } catch (_) {
-            dbIntegrityFail = true; // exception running pragma = DB unreadable
-        }
-        _lastDbIntegrityFail = dbIntegrityFail;
-    }
+    // [FREEZE ROOT FIX 2026-10-07] Cached verdict only — zero DB work on this
+    // tick. Until the first worker scan completes the verdict is "no failure":
+    // absence of evidence must never arm anything (same rule as brainWatchdog's
+    // no_signal_yet).
+    const dbIntegrityFail = dbIntegrityMonitor.getLastResult().fail;
 
     const { state, reason } = computeCognitiveState({
         activeP0, activeP1,
@@ -291,6 +285,8 @@ function getCurrentState() {
 function start() {
     if (_running) return;
     _running = true;
+    // Off-thread integrity scan — see dbIntegrityMonitor header.
+    try { dbIntegrityMonitor.start(); } catch (_) { /* never block the doctor */ }
     _timer = setInterval(() => {
         // [Day 22] Analyzer self-heartbeat via telemetryCollector — closes
         // recursive observability loop (Doctor monitors itself; if analyzer
@@ -319,6 +315,7 @@ function stop() {
     if (!_running) return;
     _running = false;
     if (_timer) { clearInterval(_timer); _timer = null; }
+    try { dbIntegrityMonitor.stop(); } catch (_) { /* best-effort */ }
 }
 
 function resetForTest() {

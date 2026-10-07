@@ -1702,6 +1702,11 @@ try { require('./server/cron/coldPathCron').schedule(); } catch (_) {}
 // [SRV-POS] Position classifications audit table retention — weekly 30d prune
 try { require('./server/cron/posClassRetention').schedule(); } catch (_) {}
 
+// [RETENTION GAP FIX 2026-10-07] ML telemetry retention — the six unbounded
+// tables the 2026-06-11 audit missed; they grew the DB to 7.9 GB, which froze
+// the event loop and kept GLOBAL_HALT armed for 2 months.
+try { require('./server/cron/mlTelemetryRetention').schedule(); } catch (_) {}
+
 // [DD3] ML bandit feature scan — 4h auto-quarantine check
 try { require('./server/cron/mlScanCron').schedule(); } catch (_) {}
 
