@@ -6080,8 +6080,12 @@ async function _runReconciliation(isStartup) {
                         try { audit.record('SAT_RECON_UNMANAGEABLE_SYMBOL', { symbol, side: bpos.side, amt: bpos.amt, userId, exchange }, 'SERVER_AT'); } catch (_) { }
                         if (_reconAlertedShouldFire('orphans', _orphanKey)) {
                             try {
+                                // Escape: the symbol here always carries an underscore
+                                // (that is why it is unmanageable), and legacy Markdown
+                                // reads it as italics → Telegram 400.
+                                const _escSym = telegram.escapeMarkdown ? telegram.escapeMarkdown(symbol) : symbol;
                                 telegram.sendToUser(userId,
-                                    `⚠️ *RECON: position Zeus cannot manage*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\n`
+                                    `⚠️ *RECON: position Zeus cannot manage*\n${bpos.side} ${_escSym} | Qty: ${bpos.amt}\n`
                                     + `This is a COIN-M contract; Zeus only trades USDⓈ-M. It is left untouched — close it by hand on Binance if you do not want it.`);
                             } catch (_) { }
                         }

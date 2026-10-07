@@ -139,3 +139,56 @@ describe('emergencyCloseProcessor — poison rows must not starve the queue', ()
         expect(post[2].side).toBe('BUY');
     });
 });
+
+// [2026-10-07 follow-up] The alerts added above interpolate row.symbol, and the
+// symbols that trigger them are exactly the ones carrying underscores
+// (BTCUSD_PERP). Unescaped, they reproduced the Telegram 400 this session had
+// just fixed elsewhere — observed live at "byte offset 54". Escape them.
+describe('emergency queue alerts must survive Telegram Markdown', () => {
+    let mockRows, mockSend, telegramMock;
+
+    function freshProcessor() {
+        jest.resetModules();
+        mockRows = [];
+        mockSend = jest.fn();
+        telegramMock = {
+            sendToUser: jest.fn(() => Promise.resolve(true)),
+            alertCritical: jest.fn(() => Promise.resolve(true)),
+            escapeMarkdown: (t) => String(t == null ? '' : t).replace(/([_*`[])/g, '\\$1'),
+        };
+        jest.doMock(path.resolve(__dirname, '../../server/services/database'), () => ({
+            db: { prepare: () => ({ all: () => mockRows, get: () => null, run: () => ({ changes: 1 }) }) },
+        }));
+        jest.doMock(path.resolve(__dirname, '../../server/services/credentialStore'), () => ({
+            getExchangeCreds: () => ({ apiKey: 'k', apiSecret: 's' }),
+            getExchangeCredsFor: () => ({ apiKey: 'k', apiSecret: 's' }),
+        }));
+        jest.doMock(path.resolve(__dirname, '../../server/services/binanceSigner'), () => ({
+            sendSignedRequest: (...a) => mockSend(...a),
+        }));
+        jest.doMock(path.resolve(__dirname, '../../server/services/telegram'), () => telegramMock);
+        return require('../../server/services/emergencyCloseProcessor');
+    }
+
+    const noUnescapedUnderscore = (text) => !/_/.test(String(text).replace(/\\_/g, ''));
+
+    test('the permanent-error alert escapes the COIN-M symbol', async () => {
+        const proc = freshProcessor();
+        mockRows = [{ id: 39, user_id: 1, symbol: 'BTCUSD_PERP', exchange: 'binance', qty: '778', decision_key: 'k', attempts: 0 }];
+        mockSend.mockImplementation(() => {
+            const e = new Error('Invalid symbol.'); e.code = -1121; return Promise.reject(e);
+        });
+        await proc._tick();
+        expect(telegramMock.sendToUser).toHaveBeenCalled();
+        expect(noUnescapedUnderscore(telegramMock.sendToUser.mock.calls[0][1])).toBe(true);
+    });
+
+    test('the gave-up alert escapes the symbol too', async () => {
+        const proc = freshProcessor();
+        mockRows = [{ id: 44, user_id: 1, symbol: 'ETHUSD_PERP', exchange: 'binance', qty: '195', decision_key: 'k', attempts: 999999 }];
+        mockSend.mockImplementation(() => Promise.reject(new Error('circuit breaker open')));
+        await proc._tick();
+        expect(telegramMock.sendToUser).toHaveBeenCalled();
+        expect(noUnescapedUnderscore(telegramMock.sendToUser.mock.calls[0][1])).toBe(true);
+    });
+});

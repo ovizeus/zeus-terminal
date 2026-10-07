@@ -138,9 +138,14 @@ async function _tick() {
                         });
                     } catch (_) {}
                     try {
-                        require('./telegram').sendToUser(row.user_id,
-                            `⚠️ *Emergency queue: unmanageable position*\n${row.symbol} qty ${row.qty}\n`
-                            + `The exchange rejects this permanently (${String(err.message || '').slice(0, 80)}).\n`
+                        // Escape: the symbols that land here are exactly the ones
+                        // carrying underscores (BTCUSD_PERP), which legacy Markdown
+                        // reads as italics → Telegram 400 "can't parse entities".
+                        const _tg = require('./telegram');
+                        const _esc = (v) => (_tg.escapeMarkdown ? _tg.escapeMarkdown(v) : String(v == null ? '' : v));
+                        _tg.sendToUser(row.user_id,
+                            `⚠️ *Emergency queue: unmanageable position*\n${_esc(row.symbol)} qty ${_esc(row.qty)}\n`
+                            + `The exchange rejects this permanently (${_esc(String(err.message || '').slice(0, 80))}).\n`
                             + `Row resolved so it stops blocking the queue — check this symbol by hand.`);
                     } catch (_) {}
                 } else {
@@ -154,8 +159,10 @@ async function _tick() {
                             .run(Date.now(), 'processor:gave_up_max_attempts', String(err && err.message || '').slice(0, 300), Date.now(), row.id);
                         logger.error('EMERG_QUEUE', `row ${row.id} ${row.symbol} uid=${row.user_id}: GAVE UP after ${_attempts} attempts (${err && err.message}) — dead-lettered; manual check needed`);
                         try {
-                            require('./telegram').sendToUser(row.user_id,
-                                `🚨 *Emergency queue: gave up*\n${row.symbol} qty ${row.qty}\n`
+                            const _tg = require('./telegram');
+                            const _esc = (v) => (_tg.escapeMarkdown ? _tg.escapeMarkdown(v) : String(v == null ? '' : v));
+                            _tg.sendToUser(row.user_id,
+                                `🚨 *Emergency queue: gave up*\n${_esc(row.symbol)} qty ${_esc(row.qty)}\n`
                                 + `${_attempts} attempts failed. Row dead-lettered so it stops blocking the queue — close this by hand.`);
                         } catch (_) {}
                     } else {
