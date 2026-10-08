@@ -322,7 +322,22 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
         set({ settings: merged, loaded: true })
         _projectAll(merged)
         _applyLoadedTogglesToLiveState()
-        _reapplyBrainCfgForCurrentMode()
+        // [BRAIN-NAMESPACE CLOBBER FIX 2026-10-08] Only re-apply the per-mode
+        // brain namespace when THIS response actually carried it.
+        // applyBrainCfgForMode does `Object.assign(USER_SETTINGS.autoTrade,
+        // cfg.autoTrade)` and then loadFromLegacy(), i.e. it pushes the
+        // namespace over the flat values we just received. When the response
+        // did not include `brain`, that namespace is whatever was already in
+        // memory — stale — so re-applying it REVERTED the fresh values.
+        // Traced on the 409 refresh path: confMin went 70 → 99 (the refresh
+        // landing correctly) → 70 (this clobber). It fires on every load, not
+        // just after a conflict, which is the "settings go back to the old
+        // ones" shape the operator reported. When the server does send `brain`
+        // the namespace is part of the same response and re-applying it is
+        // correct, so that path is unchanged.
+        if (data.settings && (data.settings as Record<string, unknown>).brain) {
+          _reapplyBrainCfgForCurrentMode()
+        }
         return
       }
       // ok === false → offline / transient; fall through to offline fallback
