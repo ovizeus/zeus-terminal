@@ -64,22 +64,30 @@ describe('ModeBar (NEON PULSE redesign)', () => {
         expect(bar?.className).toContain('zmb-demo')
     })
 
-    describe('BUG-T3+T7 hard-disable mode switch on opposite-mode positions', () => {
+    // [2026-10-07] This block used to assert a hard-disable: the mode-switch
+    // button was blocked while opposite-mode positions were open (BUG-T3+T7,
+    // 2026-05-17). The operator REVERSED that on 2026-05-18 — demo and live are
+    // independent sandboxes, positions keep running on their own side, and the
+    // confirm dialog already surfaces the count. ModeBar has carried
+    // `hardDisableForOppositePositions = false` ever since, so the old
+    // assertions were testing a feature that no longer exists by design and had
+    // been failing silently among the other red tests. Rewritten to pin the
+    // CURRENT contract instead: switching stays available.
+    describe('mode switch stays enabled with opposite-mode positions (hard-disable reversed 2026-05-18)', () => {
         beforeEach(() => {
             usePositionsStore.setState({ demoPositions: [], livePositions: [] })
         })
 
-        it('button enabled when no opposite-mode positions exist (demo current, no live positions)', () => {
+        it('enabled when no opposite-mode positions exist', () => {
             useATStore.setState({ mode: 'demo' })
             useUiStore.setState({ executionEnv: 'TESTNET' })
             usePositionsStore.setState({ demoPositions: [], livePositions: [] })
             const { container } = render(<ModeBar />)
             const btn = container.querySelector('#zmbBtn') as HTMLButtonElement | null
-            expect(btn).toBeInTheDocument()
             expect(btn?.disabled).toBe(false)
         })
 
-        it('button disabled when current=demo + open live positions exist', () => {
+        it('STILL enabled on demo with open live positions', () => {
             useATStore.setState({ mode: 'demo' })
             useUiStore.setState({ executionEnv: 'TESTNET' })
             usePositionsStore.setState({
@@ -88,10 +96,10 @@ describe('ModeBar (NEON PULSE redesign)', () => {
             })
             const { container } = render(<ModeBar />)
             const btn = container.querySelector('#zmbBtn') as HTMLButtonElement | null
-            expect(btn?.disabled).toBe(true)
+            expect(btn?.disabled).toBe(false)
         })
 
-        it('button disabled when current=live + open demo positions exist', () => {
+        it('STILL enabled on live with open demo positions', () => {
             useATStore.setState({ mode: 'live' })
             useUiStore.setState({ executionEnv: 'TESTNET' })
             usePositionsStore.setState({
@@ -100,37 +108,10 @@ describe('ModeBar (NEON PULSE redesign)', () => {
             })
             const { container } = render(<ModeBar />)
             const btn = container.querySelector('#zmbBtn') as HTMLButtonElement | null
-            expect(btn?.disabled).toBe(true)
-        })
-
-        it('closed opposite-mode positions do NOT disable the button', () => {
-            useATStore.setState({ mode: 'demo' })
-            useUiStore.setState({ executionEnv: 'TESTNET' })
-            usePositionsStore.setState({
-                demoPositions: [],
-                livePositions: [makePos({ mode: 'live', closed: true })],
-            })
-            const { container } = render(<ModeBar />)
-            const btn = container.querySelector('#zmbBtn') as HTMLButtonElement | null
             expect(btn?.disabled).toBe(false)
         })
 
-        it('disabled button carries title tooltip with count + close-first instruction', () => {
-            useATStore.setState({ mode: 'demo' })
-            useUiStore.setState({ executionEnv: 'TESTNET' })
-            usePositionsStore.setState({
-                demoPositions: [],
-                livePositions: [
-                    makePos({ mode: 'live', closed: false }),
-                    makePos({ mode: 'live', closed: false }),
-                ],
-            })
-            const { container } = render(<ModeBar />)
-            const btn = container.querySelector('#zmbBtn') as HTMLButtonElement | null
-            expect(btn?.getAttribute('title')).toMatch(/2.*LIVE.*close/i)
-        })
-
-        it('disabled state adds zmb-btn-disabled-locked class for CSS targeting', () => {
+        it('carries no lock tooltip or lock class any more', () => {
             useATStore.setState({ mode: 'demo' })
             useUiStore.setState({ executionEnv: 'TESTNET' })
             usePositionsStore.setState({
@@ -139,7 +120,8 @@ describe('ModeBar (NEON PULSE redesign)', () => {
             })
             const { container } = render(<ModeBar />)
             const btn = container.querySelector('#zmbBtn') as HTMLButtonElement | null
-            expect(btn?.className).toContain('zmb-btn-disabled-locked')
+            expect(btn?.getAttribute('title')).toBeFalsy()
+            expect(btn?.className || '').not.toContain('zmb-btn-disabled-locked')
         })
     })
 

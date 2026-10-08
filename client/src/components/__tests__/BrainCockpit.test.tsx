@@ -12,7 +12,10 @@ describe('BrainCockpit', () => {
     expect(screen.getByText('CONTEXT GATES')).toBeInTheDocument()
     expect(screen.getByText('FLOW INSIGHT')).toBeInTheDocument()
     expect(screen.getByText('DSL STATUS')).toBeInTheDocument()
-    expect(screen.getByText('THREAT RADAR')).toBeInTheDocument()
+    // [2026-10-07] THREAT RADAR assertion removed: the panel was deliberately
+    // dropped on 2026-06-13 because it duplicated NEWS+LIQ (see the note in
+    // BrainCockpit.tsx). The test had been red ever since, hidden among the
+    // other failures.
     expect(screen.getByText('ATMOSPHERE')).toBeInTheDocument()
   })
 
