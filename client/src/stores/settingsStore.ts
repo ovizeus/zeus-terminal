@@ -4,7 +4,7 @@ import { useATStore } from './atStore'
 import { useMarketStore } from './marketStore'
 import { applyIndVisibility, renderActBar } from '../engine/indicators'
 import { setTF } from '../data/marketDataFeeds'
-import { _usApplyServerResponse, _usApplyPostResponse, _usGetSettingsRemoteTs } from '../core/config'
+import { _usApplyServerResponse, _usApplyPostResponse, _usGetSettingsRemoteTs, _usHadCachedSettings } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
 import { debounce } from '../utils/debounce'
 
@@ -380,9 +380,29 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     try {
       const projected = _projectFromLegacy()
       const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
-      set({ settings: merged, loaded: true })
+      // [DEFAULTS-CLOBBER GUARD 2026-10-08] Only declare the store LOADED when
+      // the legacy tree actually held something. With no cache (fresh install,
+      // new device, the APK reinstall that wiped the operator's localStorage)
+      // AND a failed fetch, `projected` is all defaults; marking it loaded would
+      // let the next save POST those defaults, and since the server merges
+      // per-key, the real indicator map and chart colours would be overwritten
+      // permanently — exactly the failure saveToServer's own comment describes.
+      // Staying unloaded keeps saves blocked until a real load succeeds.
+      // The signal is whether boot actually FOUND a cached blob, not whether the
+      // projection looks non-empty — window.TC contributes defaults, so an empty
+      // tree still projects real-looking values.
+      let _hadCache = false
+      try { _hadCache = _usHadCachedSettings() } catch { _hadCache = false }
+      set(_hadCache ? { settings: merged, loaded: true } : { settings: merged })
       _projectAll(merged)
       _applyLoadedTogglesToLiveState()
+      // [2026-10-08] KNOWN, logged in the Book: on this branch the per-mode
+      // namespace still overwrites the flat values just projected from cache —
+      // a cached confMin of 77 comes back as the namespace default 65. It is the
+      // same family as the b247 clobber, which gated only the server path. Not
+      // gated here because the namespace legitimately holds content (seeded from
+      // defaults), so "has a namespace" is not a usable signal; deciding which
+      // side wins is a product call, not a mechanical fix.
       _reapplyBrainCfgForCurrentMode()
     } catch {
       set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })

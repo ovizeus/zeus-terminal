@@ -1747,6 +1747,12 @@ export function _ucRetryPendingBeacon() {
 w._usFlush = _usFlush
 
 let _usApplyDone = false
+// [DEFAULTS-CLOBBER GUARD 2026-10-08] Did boot find a real cached settings blob?
+// loadImpl's offline fallback needs this: with no cache AND a failed fetch it
+// would otherwise declare the store loaded while holding only defaults, and the
+// next save would POST those over the user's real settings.
+let _usHadCache = false
+export function _usHadCachedSettings(): boolean { return _usHadCache }
 
 // [MIGRATION-F0] Epoch-ms timestamp returned by the server on GET/POST
 // /api/user/settings. Used later (phase 0 commits 4–6) for conflict
@@ -2183,6 +2189,7 @@ export function loadUserSettings() {
       // protection this was doing by accident is already handled properly by
       // the settingsStore `loaded` guard immediately below it in _usSave.
       _usApplyDone = true
+      _usHadCache = false
       console.log('[US] no cached settings — server load will hydrate; saving enabled')
       return
     }
@@ -2228,6 +2235,7 @@ export function loadUserSettings() {
       }
     }
     if (parsed.manualLive) USER_SETTINGS.manualLive = parsed.manualLive
+    _usHadCache = true
     _usApply()
     console.log('[US] Settings loaded from localStorage')
   } catch (e: any) {
