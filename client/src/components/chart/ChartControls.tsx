@@ -576,6 +576,43 @@ const SYMBOLS: { label: string; items: { value: string; label: string }[] }[] = 
 // isOverlay           : toggle routes through togOvr (overlays.* store) instead of togInd.
 // modalOnly           : indicator has no on/off toggle, just a modal entry (e.g. OVI).
 type IndMeta = { id: string; ico: string; name: string; desc: string; settingsModal?: string; hasGenericSettings?: boolean; isOverlay?: boolean; modalOnly?: boolean }
+/**
+ * [DUAL-LIST 2026-10-08] Fall back to the registry so a newly registered
+ * indicator shows up here WITHOUT a second edit.
+ *
+ * TERMINATOR was added to core/config.ts INDICATORS only, so it was registered,
+ * bundled and drawing correctly — and still never appeared in this panel, which
+ * renders its own hand-written list. Nothing failed; it was invisible, and the
+ * operator found it before any test did.
+ *
+ * The two lists cannot simply be merged: this one carries metadata the registry
+ * has no concept of (the emoji icon, which settings modal to open, whether the
+ * toggle routes through togOvr). So instead of merging, anything registered but
+ * not described here is appended with a placeholder icon — usable immediately,
+ * and visibly un-styled so it still gets its own dedicated icon later, per the
+ * no-recycled-emoji rule above.
+ */
+export function _mergePanelList(
+  list: IndMeta[],
+  registry: { id?: string; name?: string; desc?: string }[] | null | undefined,
+): IndMeta[] {
+  if (!Array.isArray(registry) || registry.length === 0) return list
+  const known = new Set(list.map((i) => i.id))
+  const extra: IndMeta[] = []
+  for (const r of registry) {
+    if (!r || typeof r.id !== 'string' || !r.id || known.has(r.id)) continue
+    known.add(r.id)
+    extra.push({
+      id: r.id,
+      ico: '🧩',                       // placeholder — give it a dedicated one
+      name: r.name || r.id.toUpperCase(),
+      desc: r.desc || '',
+      hasGenericSettings: true,
+    })
+  }
+  return extra.length ? list.concat(extra) : list
+}
+
 const IND_LIST: IndMeta[] = [
   // [2026-06-16] Dedicated, distinct icon per indicator (no recycled emoji).
   { id: 'ema',      ico: '📈', name: 'EMA 50/200',      desc: 'Exponential Moving Average',   hasGenericSettings: true },
@@ -626,7 +663,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'plutus',   ico: '💰', name: 'PLUTUS',           desc: 'Smart-money footprint — effort vs result (Zeus original)', hasGenericSettings: true },
   { id: 'helios',   ico: '☀️', name: 'HELIOS',           desc: 'Regime oracle — Hurst trending vs mean-revert (Zeus original)', hasGenericSettings: true },
   { id: 'hyperion', ico: '🌅', name: 'HYPERION',         desc: 'Dual-line TSI momentum oscillator — green-top / red-bottom intensifying glow (Zeus original)', hasGenericSettings: true },
-  { id: 'terminator', ico: '🎯', name: 'TERMINATOR',  desc: 'ATR trailing-stop staircase — steps only WITH the trend (below price bullish, above bearish); flips on a close through it, marks the flip and keeps the flip level. Green #05E17F / magenta #E547FC', hasGenericSettings: true },
+  { id: 'terminator', ico: '🤖', name: 'TERMINATOR',  desc: 'ATR trailing-stop staircase — steps only WITH the trend (below price bullish, above bearish); flips on a close through it, marks the flip and keeps the flip level. Green #05E17F / magenta #E547FC', hasGenericSettings: true },
   { id: 'astrape', ico: '⚡', name: 'ASTRAPE',           desc: 'Storm Charge & Ignition — multi-colour charge histogram; ⚡ flashes big moves BEFORE they break (backtest-calibrated). Amber=accumulation, green up / red down, purple=distribution (Zeus original)', hasGenericSettings: true },
   { id: 'phoebe',  ico: '🔮', name: 'PHOEBE',            desc: 'Quantum Resonance Engine — lower heatmap oscillator + on-chart order blocks, support/resistance, Buy/Sell & Entry/TP/SL, plus a multi-timeframe matrix panel (Zeus original)', hasGenericSettings: true },
   { id: 'metis', ico: '🟢', name: 'METIS', desc: 'Traders Dynamic Index — RSI green/red/yellow lines + volatility bands + signals + bar colouring (Zeus original)', hasGenericSettings: true },
@@ -1207,7 +1244,7 @@ export function ChartControls() {
           {/* [2026-06-16] Ordering: (1) favorites pinned top in the order the operator
               starred them; (2) among the rest, active indicators float up. Stable sort
               (V8) keeps original order within each group. */}
-          {[...IND_LIST].sort((a, b) => {
+          {_mergePanelList(IND_LIST, (window as unknown as { INDICATORS?: { id?: string; name?: string; desc?: string }[] }).INDICATORS).sort((a, b) => {
             const fav = (id: string) => { const i = favorites.indexOf(id); return i === -1 ? Infinity : i }
             const fa = fav(a.id), fb = fav(b.id)
             if (fa !== fb) return fa - fb
