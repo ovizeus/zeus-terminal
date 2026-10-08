@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><title>wait</title>
+<style>html,body{margin:0;background:#0a0f16}#c{width:1200px;height:620px}</style>
+<script src="lw.js"></script></head><body><div id="c"></div><script>
+fetch('data.json').then(r=>r.json()).then(d=>{
+  const chart = LightweightCharts.createChart(document.getElementById('c'), {
+    layout:{background:{color:'#0a0f16'},textColor:'#7a9ab8'},
+    grid:{vertLines:{color:'#1a2530'},horzLines:{color:'#1a2530'}},
+    rightPriceScale:{borderColor:'#1e2530'}, timeScale:{borderColor:'#1e2530',timeVisible:false},
+    width:1200, height:620 });
+  const cs = chart.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',
+    borderUpColor:'#26a69a',borderDownColor:'#ef5350',wickUpColor:'#26a69a',wickDownColor:'#ef5350'});
+  cs.setData(d.tinted);
+  const lv = chart.addLineSeries({color:'#8aa0b8',lineWidth:1,priceLineVisible:false,lastValueVisible:false,lineStyle:2});
+  lv.setData(d.lvl);
+  const made=[];
+  d.segs.forEach((sg,i)=>{ const col=sg.trend===1?d.UP:d.DN;
+    const s=chart.addLineSeries({color:col,lineWidth:2,priceLineVisible:false,
+      lastValueVisible:i===d.segs.length-1,crosshairMarkerVisible:false});
+    s.setData(sg.points); made.push(s); });
+  made.forEach((s,i)=>{ const times=new Set(d.segs[i].points.map(p=>p.time));
+    const mine=d.markers.filter(m=>times.has(m.time)); if(mine.length) s.setMarkers(mine); });
+  chart.timeScale().fitContent();
+  setTimeout(()=>{document.title='READY'},500);
+});
+</script></body></html>
