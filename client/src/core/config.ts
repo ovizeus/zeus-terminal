@@ -2026,6 +2026,9 @@ export function _usSave() {
   }
 }
 
+/** Test hook for the save-deadlock guard — see saveUnblockedWithoutCache.test.ts */
+export function _usApplyDoneForTest(): boolean { return _usApplyDone }
+
 export function _usApply() {
   try {
     const S = w.S
@@ -2166,7 +2169,23 @@ function _migrateSettings(parsed: any) {
 export function loadUserSettings() {
   try {
     const raw = localStorage.getItem('zeus_user_settings')
-    if (!raw) return
+    if (!raw) {
+      // [SAVE DEADLOCK FIX 2026-10-08] There is nothing cached to apply, but we
+      // must still mark apply-done: _usSave() opens with `if (!_usApplyDone)
+      // return`, so bailing here used to disable EVERY save for the whole
+      // session. The operator's app auto-updates its APK and a WebView
+      // reinstall wipes localStorage, so from that moment nothing he changed
+      // was ever written — user_settings.updated_at sat frozen on 2026-07-11
+      // while he kept toggling indicators and timeframes. It could not heal
+      // either, because the LS cache is only rewritten BY a save.
+      // Saving must not depend on a cache that is legitimately absent on a
+      // fresh install, a new device or after clearing data. The boot-window
+      // protection this was doing by accident is already handled properly by
+      // the settingsStore `loaded` guard immediately below it in _usSave.
+      _usApplyDone = true
+      console.log('[US] no cached settings — server load will hydrate; saving enabled')
+      return
+    }
     const parsed = JSON.parse(raw)
     if ((parsed._version || 0) < _CURRENT_SETTINGS_VERSION) {
       _migrateSettings(parsed)
@@ -2212,6 +2231,9 @@ export function loadUserSettings() {
     _usApply()
     console.log('[US] Settings loaded from localStorage')
   } catch (e: any) {
+    // Same reasoning as the no-cache branch: a corrupt blob must not leave the
+    // session unable to save for as long as it stays open.
+    _usApplyDone = true
     console.warn('[US] Load failed:', e.message)
   }
 }
