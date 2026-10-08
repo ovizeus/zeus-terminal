@@ -95,6 +95,12 @@
    - *Reparație propusă (AȘTEAPTĂ GO, nimic atins):* (a) rezolvă/anulează cele 13 rânduri COIN-M + gardă de simbol ca să nu reintre în coadă, (b) retenție + prune pe tabelele ML uriașe + `VACUUM` (DB jos la ordin de mărime normal), (c) dez-armă GLOBAL_HALT, (d) verifică că intrările revin. Ordinea contează: fără (b) halt-ul se re-armează.
    - *De reținut:* soak-ul Bybit pe Mirela (pornit 26 iun) n-a avut cum să ruleze — e inclus în același blocaj.
 
+0.02 ✅ **TERMINATOR nu apărea în lista de indicatori — REPARAT** *(2026-10-08, b251, commit `ca066716`)*. Operatorul: „nu îl văd în lista de indicatoare" — **avea dreptate**.
+   - **Cauza:** indicatorii trăiesc în **DOUĂ liste independente**: `core/config.ts → INDICATORS` (registrul, folosit de panoul legacy şi de motor) şi `components/chart/ChartControls.tsx → IND_LIST` (lista proprie, hardcodată, pe care o randează panoul **React** — cel pe care îl foloseşti tu). **Îl adăugasem doar în registru.**
+   - Tot ce venea după registru era corect — înregistrat, în bundle, desenat corect, verificat pe klines reale — dar **nu era oferit nicăieri în panou**. Nimic nu a eşuat; era pur şi simplu invizibil. Acelaşi tipar „dual-path" deja notat pentru dock.
+   - **Lecţia:** „e în bundle şi se randează" NU înseamnă „userul îl poate porni". Verifică lista pe care o vede OMUL, nu doar pe cea pe care o citeşte motorul.
+   - *Fix:* adăugat în `IND_LIST` + **test de paritate** care leagă cele două liste: fiecare indicator din registru trebuie oferit în panou, iar singurele intrări permise doar în panou sunt overlay-urile (`liq/zs/sr/llv/ovi`, care nu sunt indicatori). Comparaţia a confirmat că `terminator` era **singura** omisiune reală. 4 teste; suita 677/677.
+
 0.03 ✅ **TRADINGUL FUNCŢIONEAZĂ DIN NOU — dovedit live 2026-10-08 16:35** — ⚠️ **dar pe DEMO, nu pe testnet.**
    - **Dovada completă a lanţului:** brain-ul analizează (`Conf=90 Regime=... ADX/RSI/MTF`) → creează pending → **FILL** → **se deschide poziţie cu DSL activ de la intrare**:
      `[AT_ENGINE] [1780224662013] uid=1 DEMO SHORT ETHUSDT @ $2426.77 | Size=$2000 Lev=5x | SL=$2485.37 TP=$2280.24 | Tier=LARGE Conf=90%` + `[DSL] ⚡ ACTIVE-from-entry ... cap 1.81%` + `ML-DSL FULL: DSL ACTIVE@entry`. Două FILL-uri în două minute (DOGEUSDT 16:34, ETHUSDT 16:35). **Zero intrări blocate, zero armări de halt, zero drift.**
