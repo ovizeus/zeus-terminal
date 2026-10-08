@@ -65,6 +65,44 @@ describe('driftChecker', () => {
         expect(serverATMock.setGlobalHalt).not.toHaveBeenCalled();
     });
 
+    // [DEMO DRIFT FALSE-HALT 2026-10-08] A DEMO position is simulated — there is
+    // nothing on the exchange to compare it to — but demo rows carry
+    // exchange:'binance', so groupPositionsByExchange filed them under binance
+    // and every one was flagged dbOnly. Live proof: at 00:55 the halt armed with
+    // DRIFT_DETECTED {"dbOnly":1} naming BNBUSDT SHORT, which is a demo
+    // position, and 1079 live entries were blocked over the next 16 hours.
+    // Demo trading must never halt live trading.
+    test('a DEMO position is NOT compared against the exchange', async () => {
+        serverATMock.getOpenPositions.mockReturnValue([
+            { userId: 42, symbol: 'BNBUSDT', side: 'SHORT', qty: 13.63, exchange: 'binance', mode: 'demo' },
+        ]);
+        exchangeOpsMock.getPositions.mockResolvedValue([]);
+        const result = await dc.checkUser(42);
+        expect(result.diff.dbOnly.length).toBe(0);
+        expect(result.driftDetected).toBe(false);
+        expect(serverATMock.setGlobalHalt).not.toHaveBeenCalled();
+    });
+
+    test('demo rows do not mask a REAL drift on the same exchange', async () => {
+        serverATMock.getOpenPositions.mockReturnValue([
+            { userId: 42, symbol: 'BNBUSDT', side: 'SHORT', qty: 13.63, exchange: 'binance', mode: 'demo' },
+            { userId: 42, symbol: 'ETHUSDT', side: 'LONG', qty: 1, exchange: 'binance', mode: 'live' },
+        ]);
+        exchangeOpsMock.getPositions.mockResolvedValue([]);
+        const result = await dc.checkUser(42);
+        expect(result.diff.dbOnly.map(d => d.symbol)).toEqual(['ETHUSDT']);
+        expect(result.driftDetected).toBe(true);
+    });
+
+    test('a live position with no mode field is still compared (fail safe)', async () => {
+        serverATMock.getOpenPositions.mockReturnValue([
+            { userId: 42, symbol: 'BTCUSDT', side: 'LONG', qty: 0.01, exchange: 'binance' },
+        ]);
+        exchangeOpsMock.getPositions.mockResolvedValue([]);
+        const result = await dc.checkUser(42);
+        expect(result.diff.dbOnly.length).toBe(1);
+    });
+
     test('exchange has position DB does not → drift', async () => {
         serverATMock.getOpenPositions.mockReturnValue([]);
         exchangeOpsMock.getPositions.mockResolvedValue([{ symbol: 'BTCUSDT', side: 'LONG', qty: 0.01 }]);

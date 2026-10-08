@@ -45,6 +45,18 @@ async function checkUser(userId) {
         dbPos = serverAT.getOpenPositions ? (serverAT.getOpenPositions(userId) || []) : [];
     } catch (_) { dbPos = []; }
 
+    // [DEMO DRIFT FALSE-HALT FIX 2026-10-08] Drop DEMO positions before comparing.
+    // They are simulated — there is nothing on the exchange to match them to — yet
+    // they carry exchange:'binance', so groupPositionsByExchange filed them under
+    // binance and every single one came back as dbOnly. That armed GLOBAL_HALT on
+    // a false signal: on 2026-10-08 at 00:55 it fired with dbOnly naming BNBUSDT
+    // SHORT, a demo position, and 1079 live entries were blocked over the next 16
+    // hours. Demo trading must never halt live trading.
+    // Only an explicit mode==='demo' is excluded: a row with no mode is still
+    // compared, so a genuinely untracked live position can never hide behind a
+    // missing field.
+    dbPos = dbPos.filter(p => !(p && p.mode === 'demo'));
+
     // [P2c.2] Compare PER EXCHANGE. Pre-P2c this compared ALL db positions (any
     // exchange) against only the ACTIVE exchange's held positions — so after a
     // switch a position on a non-active exchange was falsely flagged dbOnly →
