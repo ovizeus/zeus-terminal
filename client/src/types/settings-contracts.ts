@@ -85,6 +85,8 @@ export interface SettingsPayload {
 
   // Indicators / Liq / LLV / Supremus / S-R / Alerts (opaque nested blobs)
   indSettings?: Record<string, unknown> | null
+  /** [2026-10-08] chart overlay toggles: liq / zs / sr / llv / oflow / ovi */
+  overlays?: Record<string, boolean> | null
   liqSettings?: Record<string, unknown> | null
   llvSettings?: Record<string, unknown> | null
   zsSettings?: Record<string, unknown> | null
@@ -105,6 +107,8 @@ export interface SettingsPayload {
 
   // Manual live defaults + per-account leverage
   manualLive?: Record<string, unknown> | null
+  /** [2026-10-08] was persisted and whitelisted but missing from this contract */
+  manualTestnet?: Record<string, unknown> | null
   ptLevDemo?: number
   ptLevLive?: number
   ptMarginMode?: string

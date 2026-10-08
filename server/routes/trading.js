@@ -789,6 +789,10 @@ const SETTINGS_WHITELIST = new Set([
   // server-side → active indicators were localStorage-only and lost on cache-clear / new device.
   // Liq / LLV / Supremus / S-R
   'liqSettings', 'llvSettings', 'zsSettings', 'srSettings',
+  // [2026-10-08] 'overlays' = which chart overlays are toggled ON (liq/zs/sr/llv/
+  // oflow/ovi, from w.S.overlays). It was NOT whitelisted, so the client's save was
+  // silently dropped server-side and the overlays reset on every refresh.
+  'overlays',
   // Alerts
   'alertSettings',
   // Brain / profile

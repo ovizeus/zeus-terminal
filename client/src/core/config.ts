@@ -1791,6 +1791,8 @@ function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
   if (flat.indicators !== undefined) USER_SETTINGS.indicators = flat.indicators
   else if (flat.indSettings !== undefined) USER_SETTINGS.indicators = flat.indSettings
   if (flat.alertSettings !== undefined) USER_SETTINGS.alerts = flat.alertSettings
+  // [2026-10-08] chart overlay toggles
+  if (flat.overlays !== undefined) USER_SETTINGS.overlays = flat.overlays
   if (flat.profile !== undefined) USER_SETTINGS.profile = flat.profile
   if (flat.bmMode !== undefined) USER_SETTINGS.bmMode = flat.bmMode
   // [BRAIN-MODE-SPLIT b74] per-mode brain namespace

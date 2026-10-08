@@ -28,7 +28,31 @@ export function togOvr(o: any, btn: any): void {
     w.S.oviOn = w.S.overlays.ovi
     if (w.S.overlays.ovi) { oviReadSettings(); renderOviLiquid() } else { clearOviLiquid() }
   }
+  // [2026-10-08] Persist. togInd has always called _usSave(); togOvr never did,
+  // so the overlay toggles were lost on every refresh.
+  try { if (typeof w._usSave === 'function') w._usSave() } catch (_) { /* never block the toggle */ }
 }
+
+/**
+ * [2026-10-08] Boot counterpart of togOvr: render whatever w.S.overlays says,
+ * without flipping anything. The toggles are restored into w.S by the settings
+ * load, but nothing drew them — the same "state restored, never applied" gap
+ * that hid the active indicators and the saved timeframe.
+ */
+export function applyOverlays(): void {
+  const ov = (w.S && w.S.overlays) || {}
+  const step = (fn: () => void) => { try { fn() } catch (_) { /* one bad overlay must not stop the rest */ } }
+  if (ov.liq) step(() => { clearHeatmap(); renderHeatmapOverlay() })
+  if (ov.sr) step(() => { clearSR(); renderSROverlay() })
+  if (ov.zs) step(() => { clearZS(); renderZS() })
+  if (ov.llv) step(() => { clearLiqLevels(); renderLiqLevels() })
+  if (ov.ovi) step(() => { w.S.oviOn = true; oviReadSettings(); renderOviLiquid() })
+}
+
+// Exposed on window so the settings load path can call it without importing
+// this module (which would pull the whole chart graph into the store).
+// phase1Adapters already imports this file for its side effects.
+w.applyOverlays = applyOverlays
 
 export function clearHeatmap(): void { w.liqSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.liqSeries = [] }
 export function clearSR(): void { w.srSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.srSeries = [] }

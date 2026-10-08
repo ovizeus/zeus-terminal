@@ -22,6 +22,21 @@ import { debounce } from '../utils/debounce'
 // Exported for tests — the live-state half of the load path (state maps);
 // the render half is _applyLoadedSettingsToRenderLayer.
 export function _applyLoadedTogglesToLiveState(): void {
+  // [2026-10-08] Overlays — same two surfaces as the indicators: the legacy
+  // w.S.overlays the chart renderers read, and marketStore, which the React
+  // toolbar buttons render from (so restoring it also fixes their active
+  // state). Missing/empty map = leave the live state alone.
+  try {
+    const _st2 = useSettingsStore.getState().settings as unknown as { overlays?: Record<string, boolean> }
+    const ov = _st2.overlays
+    if (ov && typeof ov === 'object' && Object.keys(ov).length > 0) {
+      const w2 = window as unknown as { S?: { overlays?: Record<string, boolean> } }
+      if (w2.S) w2.S.overlays = { ...(w2.S.overlays || {}), ...ov }
+      const mkt2 = useMarketStore.getState()
+      const curOv = mkt2.market.overlays as unknown as Record<string, boolean>
+      mkt2.patch({ overlays: { ...curOv, ...ov } as unknown as typeof mkt2.market.overlays })
+    }
+  } catch (_) { /* defensive — never break the load path */ }
   try {
     const w = window as unknown as {
       S?: { activeInds?: Record<string, boolean>; indicators?: Record<string, boolean> }
@@ -123,6 +138,12 @@ function _doRenderApply(): void {
       try { w.renderChart() } catch (_) { /* best-effort */ }
     }
   }
+
+  // ── overlays: restored into w.S by the load, but nothing ever drew them.
+  try {
+    const wo = window as unknown as { applyOverlays?: () => void }
+    if (typeof wo.applyOverlays === 'function') wo.applyOverlays()
+  } catch (_) { /* best-effort */ }
 
   // ── candle type: _usApply has a boot apply for it, but that only runs on the
   // LS-cache path; nothing re-applied it once the server response landed.
@@ -275,6 +296,8 @@ const DEFAULT_SETTINGS: SettingsPayload = {
   chartTf: '5m', chartType: 'candles', candleColors: null, heatmapSettings: null, timezoneOffset: null,
   // Indicators
   indSettings: null,
+  // [2026-10-08] overlay toggles — previously never persisted at all
+  overlays: null,
   // Liq / LLV / Supremus / S-R
   liqSettings: null, llvSettings: null, zsSettings: null, srSettings: null,
   // Alerts
@@ -419,6 +442,19 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
           // boot; if it stayed stale here, it would OVERWRITE the user's toggles on reload ("change
           // indicators -> they reset to the old set"). Writing both keeps every reader consistent.
           ;(payload as unknown as { indSettings?: Record<string, boolean> }).indSettings = { ...ai }
+        }
+      } catch (_) { /* defensive — never block the save */ }
+      // [2026-10-08] Persist the chart OVERLAY toggles (liq / zs / sr / llv /
+      // oflow / ovi). They lived only in legacy w.S.overlays and neither togOvr
+      // ever saved, so they reset on every refresh — a forgotten save rather
+      // than a missing feature (togInd does save, and the React wrapper's own
+      // comment refers to "the legacy start value was already-true
+      // (persisted)"). Same guard as the indicator map: never POST an empty
+      // object over a saved one during the boot window.
+      try {
+        const _ov = (window as unknown as { S?: { overlays?: Record<string, boolean> } }).S?.overlays
+        if (_ov && typeof _ov === 'object' && Object.keys(_ov).length > 0) {
+          payload.overlays = { ..._ov }
         }
       } catch (_) { /* defensive — never block the save */ }
       // 3. POST direct via userSettingsApi.save. keepalive:true preserves the
