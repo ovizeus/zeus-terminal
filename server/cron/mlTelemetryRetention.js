@@ -100,6 +100,20 @@ function run(opts) {
     }
 
     const sum = Object.values(deleted).reduce((a, b) => a + b, 0);
+
+    // [WAL HIGH-WATER FIX 2026-10-08] Batch-deleting this many rows writes a lot
+    // of WAL, and SQLite never shrinks that file by itself — it keeps the
+    // high-water mark forever. Found it at 4908 MB against a DB whose pages came
+    // to only 2675 MB: ~5 GB of disk held for nothing, carrying exactly the kind
+    // of page-cache pressure that caused the original freeze. TRUNCATE hands it
+    // back (measured: 4908 MB → 0 MB in 0.5 s). Only after a prune that actually
+    // deleted something, so a no-op run stays free.
+    if (sum > 0) {
+        try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (err) {
+            try { logger.warn('CRON', `[mlTelemetryRetention] wal_checkpoint failed: ${err.message}`); } catch (_) {}
+        }
+    }
+
     if (sum > 0) {
         try {
             logger.info('CRON', `[mlTelemetryRetention] pruned ${sum} rows in ${Date.now() - startedAt}ms`

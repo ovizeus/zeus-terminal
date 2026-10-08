@@ -104,3 +104,34 @@ describe('mlTelemetryRetention', () => {
         expect(count('ml_voice_log')).toBe(3);
     });
 });
+
+// [WAL HIGH-WATER FIX 2026-10-08] Batch-deleting millions of rows writes a lot
+// of WAL, and SQLite never shrinks that file on its own — it keeps the
+// high-water mark. Found it at 4908 MB against a database whose pages only came
+// to 2675 MB, i.e. ~5 GB of disk held for nothing, with the same page-cache
+// pressure that caused the original freeze. The prune now truncates the WAL
+// after it runs.
+describe('WAL is truncated after a prune', () => {
+    test('run() checkpoints with TRUNCATE when it deleted something', () => {
+        const now = Date.now();
+        const spec = retention.POLICY.find(s => s.table === 'ml_module_heartbeats');
+        const stmt = db.prepare(`INSERT INTO ${spec.table} (${spec.column}) VALUES (?)`);
+        for (let i = 0; i < 5; i++) stmt.run(now - (spec.days + 5) * DAY);
+        const seen = [];
+        const realPragma = db.pragma.bind(db);
+        db.pragma = (p, o) => { seen.push(String(p)); return realPragma(p, o); };
+        try {
+            const res = retention.run({ now });
+            expect(res.deleted.ml_module_heartbeats).toBe(5);
+        } finally { db.pragma = realPragma; }
+        expect(seen.some(p => /wal_checkpoint\(TRUNCATE\)/i.test(p))).toBe(true);
+    });
+
+    test('a run that deleted nothing does not checkpoint', () => {
+        const seen = [];
+        const realPragma = db.pragma.bind(db);
+        db.pragma = (p, o) => { seen.push(String(p)); return realPragma(p, o); };
+        try { retention.run({ now: Date.now() }); } finally { db.pragma = realPragma; }
+        expect(seen.some(p => /wal_checkpoint/i.test(p))).toBe(false);
+    });
+});
