@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-09 seara · build b259 v1.7.233
+> **Ultima actualizare:** 2026-10-09 seara · build b260 v1.7.234
 > **Ordinea de mai jos e ordinea în care le facem.** 🔧 = o fac eu · 🙋 = are nevoie de tine (decizie, chei, sau ochii tăi).
 
 ---
@@ -17,7 +17,7 @@
 **P3 🙋 Calibrarea auto-carantinei ML.** Cronul reparat ieri descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. `ml_feature_global_overrides` e goală.
 *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm până creşte volumul.
 
-**P4 🙋 Confirmarea că setările se salvează — te aşteaptă pe tine.** `updated_at` e tot **11 iulie 2026**, iar `terminator` lipseşte din setări. **Asta NU dovedeşte că fix-ul a picat** — pur şi simplu n-ai mai intrat să aprinzi ceva de când l-am livrat. *Ce ai de făcut:* refresh forţat, aprinzi un indicator, încă un refresh. Nu trebuie să-mi spui nimic — verific eu în baza de date.
+**P4 🙋 Confirmarea că setările se salvează — acum chiar merită încercat.** Până azi `updated_at` era îngheţat pe **11 iulie** şi credeam că te aşteaptă doar pe tine. **Nu era aşa:** serverul respingea fiecare salvare cu 400 (vezi B6 — regresia mea din b248). E reparat şi livrat în b260. *Ce ai de făcut:* refresh forţat, aprinzi TERMINATOR, încă un refresh — ar trebui să rămână aprins **şi cu culorile lui**. Nu trebuie să-mi spui nimic, verific eu `updated_at` în baza de date.
 
 **P5 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e ON, deci Bybit nu trimite HTTP real — de stins când vrei soak adevărat.
 
@@ -93,6 +93,19 @@ Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea glo
 **B4. ✅ REPARAT (b258) — Whitelist-ul de setări aruncă tăcut cheile necunoscute — ne-a costat deja de două ori.**
 `server/routes/trading.js:837`: `if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];` — restul dispar, **fără niciun log**. Exact aşa s-au pierdut `indicators` (reparat în b193) şi `overlays` (reparat în b248). Tiparul se va repeta la următoarea setare nouă.
 *Fix:* un singur `logger.warn` cu cheile respinse. Ar fi prins ambele incidente în prima zi.
+
+**B6. ✅ REPARAT (b260) — NIMIC nu se salva, fiindcă am stricat eu validatorul în b248.** *(găsit şi reparat 2026-10-09 seara)*
+Operatorul a semnalat că la TERMINATOR „se duc culorile la refresh". Culorile erau doar simptomul.
+*Dovada, din `access.log` — logurile aplicaţiei nu spuneau nimic:* **51 de POST-uri pe `/api/user/settings` azi, TOATE cu răspuns 400.**
+*Cauza:* există **două liste** pe server, iar ele se desincronizaseră —
+`routes/trading.js SETTINGS_WHITELIST` decide ce se **stochează**, iar `middleware/validate.js SETTINGS_SHAPE` **respinge tot payload-ul** dacă întâlneşte o singură cheie pe care n-o cunoaşte. Am adăugat `overlays` în whitelist în **b248** şi niciodată în shape (`radarLens` lipsea la fel). Din clipa în care b253 a deblocat salvarea pe client, fiecare salvare a fost respinsă în bloc. **Nu e pierdere parţială — nu s-a scris absolut nimic.**
+*Deci cronologia reală a „nu persistă" e în două etape:* până pe 8 oct clientul nici nu încerca să salveze (garda reparată în b253); de pe 9 oct încearcă, iar serverul respinge — **regresie introdusă de mine în b248 şi scoasă la iveală de propriul meu fix din b253**.
+*Reparat:* ambele chei declarate, plus un **test de paritate** care leagă cele două liste ca să nu mai poată aluneca. Dovedit pe fişierul livrat: payload-ul real (`overlays` + `indicators` + `chartTf`) e acceptat, iar o cheie inventată e în continuare respinsă cu 400.
+*Lecţia, a treia oară azi:* două liste care trebuie să spună acelaşi lucru vor diverge; ori le legi cu un test, ori te muşcă.
+
+**B7. ✅ REPARAT (b260) — TERMINATOR n-avea setări.** Era singurul indicator cu `hasGenericSettings: true` şi **fără intrare în `IND_SETTINGS`**, deci rotiţa cădea pe `toast('No settings for ...')`. Între timp `updateTerminator` **citea deja** `cfg.period` şi `cfg.mult` şi cădea tăcut pe 10 şi 3 — valori pe care nimic nu le putea schimba. Acum sunt expuse prin acelaşi modal generic ca la ceilalţi (etichetele existau deja).
+
+**B8. ✅ REPARAT (b260) — chart-ul nu mai încărca istoric la derulare înapoi.** Serverul era sănătos: `/api/market/klines` răspunde 200 cu lumânări reale. Pe client, `initBackfill()` se abonează o singură dată la scara de timp a chart-ului, păzit de un boolean. Dar `TradingChart.tsx` îşi construieşte chart-ul într-un `useEffect` şi face `chart.remove()` la curăţare — deci **fiecare remontare creează un chart nou**, în timp ce garda rămâne pornită şi nimic nu mai e abonat la cel viu. Backfill-ul mergea până la prima remontare şi era mort după, **tăcut**, până la un reload complet de pagină. Acum se leagă de **instanţa** de chart şi se re-armează din `registerChart`, deci o remontare îl reabonează.
 
 ### 🟢 MICI
 
