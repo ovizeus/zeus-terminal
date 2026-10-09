@@ -33,7 +33,7 @@
 
 // ── Mocks (sparse — only what we need for isolated core logic) ──
 jest.mock('../../server/services/database', () => ({
-    db: { prepare: jest.fn(() => ({ all: jest.fn(() => []), run: jest.fn() })) },
+    db: { prepare: jest.fn(() => ({ all: jest.fn(() => []), run: jest.fn(), get: jest.fn(() => undefined) })) },
     atGetState: jest.fn(() => null),
     atSetState: jest.fn(),
     saveMissedTrade: jest.fn(),
@@ -50,10 +50,25 @@ jest.mock('../../server/services/database', () => ({
     moveToClosedAtomic: jest.fn(),
     getRecentClosedForUser: jest.fn(() => []),
     countOpenPositions: jest.fn(() => 0),
+    // [2026-10-09] serverAT restore calls db.atGetOpenUserIds(); without it the
+    // restore threw, the engine state never initialised, and EVERY entry in this
+    // suite returned ENTRY_FAILED — including the happy path. The suite was red
+    // because the mock had drifted behind the module, not because entry broke.
+    atGetOpenUserIds: jest.fn(() => []),
+    atLoadOpenPositions: jest.fn(() => []),
+    atGetStateByUser: jest.fn(() => []),
 }));
 
 jest.mock('../../server/services/binanceSigner', () => ({
     sendSignedRequest: jest.fn(),
+}));
+
+// [2026-10-09] Entry placement goes through the exchange router now, not straight
+// to the signer. Without this mock the real router ran inside the unit test.
+jest.mock('../../server/services/exchangeOps', () => ({
+    placeEntry: jest.fn(),
+    getPositions: jest.fn(async () => []),
+    closePosition: jest.fn(),
 }));
 
 jest.mock('../../server/services/telegram', () => ({
@@ -89,6 +104,7 @@ jest.mock('../../server/services/credentialStore', () => ({
 // ── Import target module ──
 const serverAT = require('../../server/services/serverAT.js');
 const { sendSignedRequest } = require('../../server/services/binanceSigner.js');
+const exchangeOps = require('../../server/services/exchangeOps');
 const telegram = require('../../server/services/telegram.js');
 
 // ── Test fixtures ──
@@ -139,133 +155,84 @@ describe('_executeLiveEntryCore (M1.1 Cat B — core safety machinery)', () => {
         telegram.sendToUser.mockReset();
         telegram.notifyUser.mockReset();
         telegram.alertOrderFilled.mockReset();
+        exchangeOps.placeEntry.mockReset();
     });
 
-    describe('happy path — full atomic SL+TP placement', () => {
-        it('places main order, safety SL, real SL, TP în correct sequence', async () => {
-            sendSignedRequest
-                .mockResolvedValueOnce({}) // marginType
-                .mockResolvedValueOnce({}) // leverage
-                .mockResolvedValueOnce({ orderId: 100, status: 'FILLED', avgPrice: '2330', executedQty: '0.5' }) // main entry
-                .mockResolvedValueOnce({ orderId: 101 }) // safety SL @ 15% OTM
-                .mockResolvedValueOnce({ orderId: 102 }) // real SL @ user-specified
-                .mockResolvedValueOnce({}) // safety SL cancel
-                .mockResolvedValueOnce({ orderId: 104 }); // TP
+    // [2026-10-09] These blocks used to drive seven sequential sendSignedRequest
+    // responses (marginType, leverage, entry, safety SL, real SL, cancel, TP) and
+    // assert the atomic sequence from here. That sequence no longer lives here:
+    // Task 40 routed entry placement through exchangeOps.placeEntry, which performs
+    // the whole safety dance internally. The suite kept mocking binanceSigner, so
+    // the real router ran and every test — including the happy path — came back
+    // ENTRY_FAILED. That is why they were red, not a regression in entry.
+    //
+    // The sequence itself is covered where it now lives: binanceOps.test.js has
+    // SL retry 3x then emergency close, emergency-close failure plus catastrophic
+    // queue insert, and TP failure not blocking ok=true (70 tests, green). What is
+    // left for THIS function is the translation it still owns: turning a placeEntry
+    // outcome into the position state the rest of the system reads.
+    describe('translating the placeEntry outcome into position state', () => {
+        it('a filled entry with SL and TP becomes LIVE and carries both order ids', async () => {
+            exchangeOps.placeEntry.mockResolvedValueOnce({
+                ok: true, orderId: 100, slOrderId: 102, tpOrderId: 104,
+                avgFillPrice: '2330', seq: 7,
+            });
 
-            const entry = makeValidLiveEntry();
-            const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
+            const result = await serverAT._executeLiveEntryCore(makeValidLiveEntry(), mockStc, mockCreds);
 
-            expect(result).toBeDefined();
-            expect(result.live).toBeDefined();
+            expect(result.live.status).toBe('LIVE');
             expect(result.live.slOrderId).toBe(102);
             expect(result.live.tpOrderId).toBe(104);
-            expect(result.live.status).toBe('LIVE');
             expect(result.live.slPlaced).toBe(true);
-            expect(result.live.tpPlaced).toBe(true);
-        });
-    });
-
-    describe('SL retry behavior', () => {
-        it('retries SL placement 3x on transient failure', async () => {
-            sendSignedRequest
-                .mockResolvedValueOnce({}) // marginType
-                .mockResolvedValueOnce({}) // leverage
-                .mockResolvedValueOnce({ orderId: 100, status: 'FILLED', avgPrice: '2330', executedQty: '0.5' }) // main
-                .mockResolvedValueOnce({ orderId: 101 }) // safety SL
-                .mockRejectedValueOnce(new Error('rate limit')) // SL attempt 1 fail
-                .mockRejectedValueOnce(new Error('temporary network')) // SL attempt 2 fail
-                .mockResolvedValueOnce({ orderId: 102 }) // SL attempt 3 success
-                .mockResolvedValueOnce({}) // safety SL cancel
-                .mockResolvedValueOnce({ orderId: 104 }); // TP
-
-            const entry = makeValidLiveEntry();
-            const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
-
-            expect(result.live.slOrderId).toBe(102);
-            expect(result.live.status).toBe('LIVE');
+            expect(result.live.mainOrderId).toBe(100);
         });
 
-        it('triggers EMERGENCY MARKET CLOSE if all 3 SL retries exhausted', async () => {
-            sendSignedRequest
-                .mockResolvedValueOnce({}) // marginType
-                .mockResolvedValueOnce({}) // leverage
-                .mockResolvedValueOnce({ orderId: 100, status: 'FILLED', avgPrice: '2330', executedQty: '0.5' }) // main
-                .mockResolvedValueOnce({ orderId: 101 }) // safety SL placed
-                .mockRejectedValueOnce(new Error('SL fail 1')) // SL 1
-                .mockRejectedValueOnce(new Error('SL fail 2')) // SL 2
-                .mockRejectedValueOnce(new Error('SL fail 3')) // SL 3
-                .mockResolvedValueOnce({ orderId: 110, status: 'FILLED', avgPrice: '2329.50' }); // emergency MARKET close
+        it('a fill the router could not protect is LIVE_NO_SL, not LIVE', async () => {
+            // The money-path case: we are on the exchange with no stop behind us.
+            exchangeOps.placeEntry.mockResolvedValueOnce({
+                ok: true, orderId: 100, slOrderId: null, tpOrderId: null, avgFillPrice: '2330',
+            });
 
-            const entry = makeValidLiveEntry();
-            const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
+            const result = await serverAT._executeLiveEntryCore(makeValidLiveEntry(), mockStc, mockCreds);
 
-            expect(result.live.status).toBe('EMERGENCY_CLOSED');
-            expect(result.live.slOrderId).toBeNull();
-            // Sentry fatal + Telegram alert verified separately via mock spies
-        });
-
-        it('preserves safety SL active if emergency close itself fails', async () => {
-            sendSignedRequest
-                .mockResolvedValueOnce({}) // marginType
-                .mockResolvedValueOnce({}) // leverage
-                .mockResolvedValueOnce({ orderId: 100, status: 'FILLED', avgPrice: '2330', executedQty: '0.5' }) // main
-                .mockResolvedValueOnce({ orderId: 101 }) // safety SL placed
-                .mockRejectedValueOnce(new Error('SL fail')) // SL 1
-                .mockRejectedValueOnce(new Error('SL fail')) // SL 2
-                .mockRejectedValueOnce(new Error('SL fail')) // SL 3
-                .mockRejectedValueOnce(new Error('emergency close fail')); // emergency MARKET close fails
-
-            const entry = makeValidLiveEntry();
-            const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
-
-            // Safety SL NOT cancelled (15% OTM still on exchange as backstop)
             expect(result.live.status).toBe('LIVE_NO_SL');
-            // Telegram critical alert dispatched
-            expect(telegram.sendToUser).toHaveBeenCalledWith(
-                1,
-                expect.stringMatching(/EMERGENCY CLOSE FAILED|UNPROTECTED/i)
-            );
-        });
-    });
-
-    describe('TP retry behavior', () => {
-        it('skips TP placement when dslParams set (DSL manages exit)', async () => {
-            sendSignedRequest
-                .mockResolvedValueOnce({}) // marginType
-                .mockResolvedValueOnce({}) // leverage
-                .mockResolvedValueOnce({ orderId: 100, status: 'FILLED', avgPrice: '2330', executedQty: '0.5' })
-                .mockResolvedValueOnce({ orderId: 101 }) // safety SL
-                .mockResolvedValueOnce({ orderId: 102 }) // real SL
-                .mockResolvedValueOnce({}); // safety SL cancel
-
-            const entryDsl = makeValidLiveEntry({ dslParams: { openDslPct: 0.6 } });
-            const result = await serverAT._executeLiveEntryCore(entryDsl, mockStc, mockCreds);
-
-            expect(result.live.slOrderId).toBe(102);
-            expect(result.live.tpOrderId).toBeNull();
-            expect(result.live.tpPlaced).toBe(false);
-            // NO 7th sendSignedRequest call for TP order
-            expect(sendSignedRequest).toHaveBeenCalledTimes(6);
+            expect(result.live.slPlaced).toBe(false);
+            expect(result.live.slOrderId).toBeNull();
         });
 
-        it('triggers TP emergency close if all retries fail and no DSL', async () => {
-            sendSignedRequest
-                .mockResolvedValueOnce({}) // marginType
-                .mockResolvedValueOnce({}) // leverage
-                .mockResolvedValueOnce({ orderId: 100, status: 'FILLED', avgPrice: '2330', executedQty: '0.5' })
-                .mockResolvedValueOnce({ orderId: 101 }) // safety SL
-                .mockResolvedValueOnce({ orderId: 102 }) // real SL
-                .mockResolvedValueOnce({}) // safety cancel
-                .mockRejectedValueOnce(new Error('TP fail 1'))
-                .mockRejectedValueOnce(new Error('TP fail 2'))
-                .mockRejectedValueOnce(new Error('TP fail 3'))
-                .mockResolvedValueOnce({ orderId: 200, status: 'FILLED', avgPrice: '2330' }); // emergency close
+        it('a rejected entry is ENTRY_FAILED and keeps the error', async () => {
+            exchangeOps.placeEntry.mockResolvedValueOnce({
+                ok: false, error: { message: 'Margin is insufficient', code: -2019 },
+            });
 
-            const entry = makeValidLiveEntry({ dslParams: null });
-            const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
+            const result = await serverAT._executeLiveEntryCore(makeValidLiveEntry(), mockStc, mockCreds);
 
-            expect(result.live.status).toBe('EMERGENCY_CLOSED');
-            expect(result.live.tpPlaced).toBe(false);
+            expect(result.live.status).toBe('ENTRY_FAILED');
+            expect(result.live.error).toMatch(/Margin is insufficient/);
+            expect(result.live.slOrderId).toBeNull();
+        });
+
+        it('a catastrophic result is LIVE_NO_SL and alerts the operator, never ENTRY_FAILED', async () => {
+            // Catastrophic means the emergency close itself failed: there IS a
+            // position on the exchange, unprotected. Reporting ENTRY_FAILED here
+            // would tell the system nothing was opened, which is the dangerous lie.
+            exchangeOps.placeEntry.mockResolvedValueOnce({
+                ok: false, catastrophic: true, error: { message: 'emergency close failed' },
+            });
+
+            const result = await serverAT._executeLiveEntryCore(makeValidLiveEntry(), mockStc, mockCreds);
+
+            expect(result.live.status).toBe('LIVE_NO_SL');
+            expect(telegram.sendToUser).toHaveBeenCalledWith(1, expect.stringMatching(/EMERGENCY CLOSE FAILED/));
+        });
+
+        it('a router that throws is ENTRY_FAILED, not an unhandled rejection', async () => {
+            exchangeOps.placeEntry.mockRejectedValueOnce(new Error('socket hang up'));
+
+            const result = await serverAT._executeLiveEntryCore(makeValidLiveEntry(), mockStc, mockCreds);
+
+            expect(result.live.status).toBe('ENTRY_FAILED');
+            expect(result.live.error).toMatch(/socket hang up/);
         });
     });
 
@@ -284,18 +251,16 @@ describe('_executeLiveEntryCore (M1.1 Cat B — core safety machinery)', () => {
                 .rejects.toThrow(/symbol/i);
         });
 
-        it('throws SafetyAssertionError post-fill if SL slOrderId null despite happy paths', async () => {
-            // Edge case: imagine sendSignedRequest succeeds dar returns no orderId
-            sendSignedRequest
-                .mockResolvedValueOnce({}) // marginType
-                .mockResolvedValueOnce({}) // leverage
-                .mockResolvedValueOnce({ orderId: 100, status: 'FILLED', avgPrice: '2330', executedQty: '0.5' }) // main
-                .mockResolvedValueOnce({ /* safety SL with no orderId */ })
-                .mockResolvedValueOnce({ /* real SL with no orderId */ });
+        it('a fill reported with no SL order id never comes back as LIVE', async () => {
+            // The router says it filled but hands back no stop id. Whatever else
+            // happens, this must not be recorded as a protected position.
+            exchangeOps.placeEntry.mockResolvedValueOnce({
+                ok: true, orderId: 100, slOrderId: null, avgFillPrice: '2330',
+            });
 
-            const entry = makeValidLiveEntry();
-            // Post-fill hard assertion catches this edge case + triggers emergency
-            const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
+            const result = await serverAT._executeLiveEntryCore(makeValidLiveEntry(), mockStc, mockCreds);
+
+            expect(result.live.status).not.toBe('LIVE');
             expect(result.live.status).toMatch(/EMERGENCY_CLOSED|LIVE_NO_SL/);
         });
     });

@@ -68,6 +68,22 @@ jest.mock('../../server/services/serverAT', () => ({
     _placeProtectionForExistingEntry: jest.fn(() => Promise.resolve({
         slOrderId: 12345, tpOrderId: null, status: 'LIVE_NO_TP',
     })),
+    // [2026-10-09] The SP2-b ownership guard asks whether the server fully owns
+    // entries for this user; the mock never grew the method, so the guard threw
+    // and the route fell through fail-closed to 423, masking every assertion in
+    // this file. These tests exercise the CLIENT placement path, which only
+    // exists while the server does not fully own entries.
+    serverFullyOwnsEntries: jest.fn(() => false),
+}));
+
+// [2026-10-09] The staleness guard (added after this file was written) blocks
+// every order with 423 STALE_DATA when it cannot see a live feed, which is always
+// true in a unit process. It fails closed by design, so it must be mocked fresh
+// for the body-validation cases below to be reachable at all. Staleness itself is
+// tested separately — these tests are about what the route does with the payload.
+jest.mock('../../server/services/wsMarketProxy', () => ({
+    isSymbolStale: jest.fn(() => false),
+    getStalenessMs: jest.fn(() => 0),
 }));
 
 jest.mock('../../server/services/telegram', () => ({
