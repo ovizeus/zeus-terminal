@@ -29,7 +29,7 @@
 
 **P9 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
 
-**P10 🙋 Decizia pe ML-ul neconectat.** Măsurat azi: **74 din 284 de fişiere** sunt legate la server, **198 din 367 de tabele sunt goale**. `_meta` (70 fişiere, 16.494 linii) şi `_operator` (10 fişiere, 1.920 linii) nu sunt referenţiate de nimic. Nu înseamnă cod greşit — înseamnă **cod care nu rulează**. *De decis împreună, pe ringuri, nu în bloc:* ce conectăm, ce tăiem, ce lăsăm ca referinţă. Cifrele complete: secţiunea „CÂT DIN ML E CHIAR CONECTAT".
+**P10 🙋 Conectarea ML-ului neconectat — plan scris, aşteaptă GO.** Măsurat: **74 din 284 de fişiere** legate, **198 din 367 de tabele goale**. Dar **209 din cele 210 module neconectate AU teste** (313 fişiere de test, 6816 teste verzi) — deci e cod testat şi nelegat, nu cod abandonat. **Se poate conecta, dar nu în bloc:** testele unitare dovedesc piesa, nu legătura, iar azi exact legăturile ne-au muşcat de două ori cu teste verzi. Planul pe etape (verificare de contract → un ring în umbră → măsurare → promovare pe trepte) e în secţiunea „PLAN: conectarea ML-ului neconectat". **Etapa 0 e ieftină şi nu atinge nimic viu — o pot face când zici.**
 
 **P11 🔧 Mărunţişuri, când se nimereşte:** lista de motive din reflection apare duplicată (`["anti_pattern","anti_pattern"]`); două tabele din politica de retenţie (`ml_dr_state`, `ml_reflection_runs`) ţin mult mai puţin decât fereastra lor de 30 de zile şi **n-am putut stabili de ce** — am adăugat raportare pe tabelă, aşa că rularea de mâine va spune singură.
 
@@ -196,6 +196,39 @@ Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea glo
 11. ✅ **„Position side cannot be changed"** — zero apariţii în ultimele 5000 de linii. Pare stins; îl las sub observaţie încă o rundă înainte să-l scot.
 12. ✅ **Arhivare tăcută → orfan** — zero orfani reali în loguri; `RECOVERY_BOOT` raportează `1/1 users OK, 0 orphaned`. Garda pasivă rămâne pusă.
 13. **Vault — confirmă download-ul pe Chrome desktop** (creare + descuiere + adăugare sunt deja confirmate de tine).
+
+---
+
+## 🔌 PLAN: conectarea ML-ului neconectat *(cerut 2026-10-09, de făcut mai târziu)*
+
+**Se poate? DA.** Şi e mai realist decât părea: cele 210 module neconectate **nu sunt cod abandonat**. 209 din 210 sunt chiar `require`-uite de un test; sunt 313 fişiere de test care ating ML-ul, 6816 teste, toate verzi. Un singur modul din `_meta` (`autobiographicalContinuity`) are 36 de teste. Codul a fost scris modul cu modul, cu teste, şi pur şi simplu n-a fost legat niciodată la sistem.
+
+**Dar NU „pe toate deodată", şi iată de ce — cu dovada din ziua asta:**
+Testele unitare dovedesc că o piesă merge **singură**. Nu dovedesc că **legătura** e corectă. Exact asta ne-a muşcat azi, de două ori, cu teste verzi:
+- `autoQuarantine.scanAllFeatures` funcţionează perfect izolat — dar cronul care o chema cerea o coloană inexistentă, iar un `catch` gol înghiţea eroarea. Inert de când există.
+- `parityShadowLogger` avea test verde — fiindcă **testul îşi inventa schema**. În producţie arunca la fiecare apel.
+Ambele erau buguri **de conectare**, nu de logică. A lega 210 module deodată înseamnă a multiplica fix clasa asta de 210 ori, direct în calea banilor.
+
+**Şi o întrebare care trebuie pusă înainte de orice fir:** „să gândească mai bine" nu se obţine adăugând module. Mai multe module ≠ decizii mai bune — unele pot înrăutăţi. Fiecare ring trebuie să **arate** că schimbă ceva în bine, altfel adăugăm doar zgomot şi suprafaţă de eroare.
+
+### Cum aş face-o, pe etape
+
+**Etapa 0 — verificare de contract, automată (ieftină, o pot face oricând).**
+Un script care, pentru fiecare din cele 210 module, verifică **static** că funcţia pe care ar chema-o chiar există, cu semnătura aşteptată, şi că tabelele/coloanele pe care le scrie există în schema reală. Asta prinde dinainte exact clasa A1/B2 — fără să conectăm nimic. *Rezultatul e o listă: ce se poate lega curat vs. ce e rupt înainte de a începe.*
+
+**Etapa 1 — un ring, în UMBRĂ.** Se alege un ring (propun `R2_cognition` — e aproape de decizie şi are 9.028 de linii), se leagă astfel încât **calculează şi înregistrează, dar NU influenţează** nimic. Zeus are deja tiparul ăsta (`ML_PIPELINE_SHADOW`, parity shadow), deci nu inventăm infrastructură.
+
+**Etapa 2 — măsurare, nu impresie.** Pe N decizii reale: ieşirea ringului se corelează cu rezultate mai bune? Dacă da, cât? Dacă nu se poate măsura, nu se promovează. Aici se vede dacă un modul merită locul lui.
+
+**Etapa 3 — promovare pe trepte, în spatele unui flag:** DEMO → TESTNET → REAL, cu soak între ele, exact disciplina pe care o folosim deja la brain.
+
+**Etapa 4 — verdict onest pe ce rămâne:** ce nu arată valoare rămâne în umbră sau se şterge. Un modul care nu schimbă nicio decizie e datorie, nu capital.
+
+### Ce te costă, realist
+Nu e muncă de o sesiune. 210 module, 7-8 ringuri, fiecare cu umbră + măsurare + promovare înseamnă **săptămâni**, nu ore. Etapa 0 e singura ieftină şi se poate face oricând — şi merită făcută prima, fiindcă poate arăta că o parte din cod e rupt la legătură şi scuteşte tot restul efortului.
+
+### Ce NU fac fără să-mi ceri explicit
+Nu leg nimic la calea de decizie „ca să vedem". Dacă vrei să începem, începem cu **Etapa 0**, care nu atinge nimic viu.
 
 ---
 
