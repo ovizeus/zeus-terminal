@@ -161,6 +161,36 @@ describe('binanceOps.placeEntry', () => {
         expect(serverAT.setGlobalHalt).toHaveBeenCalledWith(true, 1, 'EMERGENCY_CLOSE_CATASTROPHIC');
     }, 20000);
 
+    // [2026-10-09 audit B3] The emergency_close_queue INSERT sits in an empty
+    // catch. decision_key carries a UNIQUE index in production, so a second
+    // catastrophic event for the same decision throws — and the row that says
+    // "this position is on the exchange with no stop, come back for it" is
+    // dropped without a word. The halt and the critical alert still fire, so
+    // the operator is not blind, but the automatic retry is gone and nothing
+    // says so. The queue is the last safety net; a failure to write it must be
+    // loud.
+    it('a queue insert that fails is reported, not swallowed', async () => {
+        const telegram = require('../../server/services/telegram');
+        const params = _validParams();
+
+        // Occupy the decision_key so the real insert hits the UNIQUE index.
+        mockDb.prepare(
+            `INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at)
+             VALUES (1, 'X', 'binance', '1', ?, ?)`
+        ).run(params.decisionKey, Date.now());
+
+        telegram.alertCritical.mockClear();
+        mockSendSignedRequest
+            .mockResolvedValueOnce({ status: 'FILLED', orderId: 'e9', executedQty: '0.001', avgPrice: '50000' })
+            .mockRejectedValue(new Error('SL/emerg fail'));
+
+        const r = await binanceOps.placeEntry(1, params, _validCreds);
+        expect(r.catastrophic).toBe(true);
+
+        const said = telegram.alertCritical.mock.calls.map((c) => String(c[1] || '')).join(' ');
+        expect(said).toMatch(/queue/i);
+    }, 20000);
+
     it('TP failure does NOT block ok=true (warning only)', async () => {
         mockSendSignedRequest
             .mockResolvedValueOnce({ status: 'FILLED', orderId: 'e5', executedQty: '0.001', avgPrice: '50000' })

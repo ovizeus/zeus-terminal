@@ -27,6 +27,16 @@ const T0 = 1_780_000_000_000;
 
 beforeEach(() => {
     telemetry._resetForTest();
+    // [2026-10-09 audit] wrapFetch asks binanceScheduler.canProceed() first, and
+    // that consults the PERSISTED Binance rate state — the live production
+    // database, since this file sets no ZEUS_DB_PATH. Whenever Zeus is actually
+    // in WARM backoff after a real 429, the scheduler returns a synthetic 503
+    // without ever calling fetchFn, and the three observability tests below see
+    // no 429 to log. They passed this morning and failed this afternoon for no
+    // reason in the code: Zeus took a real 429 at 16:10 and went WARM until
+    // 16:47. Resetting the scheduler sets its _v6Disabled test-skip, which is
+    // what the sibling telemetry suites already do.
+    require('../../server/services/binanceScheduler')._resetForTest();
     logger.warn.mockClear();
 });
 

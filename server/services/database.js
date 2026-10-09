@@ -451,6 +451,33 @@ migrate('417_vault', () => {
 // once — the orphan-protection net was silently dead. These columns let the
 // processor count attempts, dead-letter a hopeless row and order by attempts so
 // a fresh row always gets a turn.
+// [2026-10-09 audit B2] parityShadowLogger was writing cycle_no / decision /
+// shadow_signal / diverged / details into dsl_parity_log, which has none of
+// them — that table is about DSL stop-loss parity (pivot_left, impulse_val,
+// current_sl), a different concern entirely. Both its INSERT and its SELECT
+// threw on every call, into empty catches, so the Bybit parity-shadow trail was
+// a silent no-op that would have reported 100% parity forever. It gets the
+// table its own shape needs rather than being bent onto the wrong one.
+migrate('419_parity_shadow_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS parity_shadow_log (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id        INTEGER NOT NULL,
+            symbol         TEXT    NOT NULL,
+            exchange       TEXT    NOT NULL,
+            shadow_exchange TEXT,
+            cycle_no       INTEGER,
+            decision       TEXT,
+            shadow_signal  TEXT,
+            diverged       INTEGER NOT NULL DEFAULT 0,
+            details        TEXT,
+            created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_parity_shadow_user_created
+            ON parity_shadow_log(user_id, created_at);
+    `);
+});
+
 migrate('418_emergency_queue_attempts', () => {
     const cols = db.prepare('PRAGMA table_info(emergency_close_queue)').all().map(c => c.name);
     if (!cols.includes('attempts')) {

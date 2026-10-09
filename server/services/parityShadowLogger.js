@@ -35,10 +35,14 @@ const serverState = require('./serverState');
 function logDivergence({ userId, symbol, exchange, shadowExchange, cycleNo, decision, shadowSignal, diverged, details }) {
     try {
         db.prepare(
-            `INSERT INTO dsl_parity_log (user_id, symbol, exchange, cycle_no, decision, shadow_signal, diverged, details, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
-        ).run(userId, symbol, exchange, cycleNo, decision, shadowSignal, diverged ? 1 : 0, JSON.stringify(details || {}));
-    } catch (_) {}
+            `INSERT INTO parity_shadow_log (user_id, symbol, exchange, shadow_exchange, cycle_no, decision, shadow_signal, diverged, details, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+        ).run(userId, symbol, exchange, shadowExchange || null, cycleNo, decision, shadowSignal, diverged ? 1 : 0, JSON.stringify(details || {}));
+    } catch (err) {
+        // [2026-10-09 audit B2] Used to be an empty catch, which is how this
+        // module stayed a no-op against a table without its columns.
+        try { require('./logger').warn('PARITY', `shadow divergence not recorded uid=${userId} ${symbol}: ${err.message}`); } catch (_) {}
+    }
 }
 
 /**
@@ -71,7 +75,7 @@ function computeShadowSignal(symbol, shadowExchange) {
 function getDailyParity(userId, date) {
     const rows = db.prepare(
         `SELECT COUNT(*) as total, SUM(CASE WHEN diverged=0 THEN 1 ELSE 0 END) as matched
-         FROM dsl_parity_log WHERE user_id=? AND created_at LIKE ?`
+         FROM parity_shadow_log WHERE user_id=? AND created_at LIKE ?`
     ).get(userId, date + '%');
     if (!rows || rows.total === 0) return { total: 0, matched: 0, parityPct: 100 };
     return {

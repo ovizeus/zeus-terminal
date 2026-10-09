@@ -807,6 +807,22 @@ const SETTINGS_WHITELIST = new Set([
   'radarLens',
 ]);
 
+// [2026-10-09 audit B4] Keys outside the whitelist used to be discarded in
+// silence. That is exactly how `indicators` (fixed in b193) and `overlays`
+// (b248) were lost: the client saved correctly, the server answered 200, and
+// the setting evaporated with nothing anywhere to say so. Returning the
+// rejects lets the caller log them, which turns the next occurrence from a
+// multi-day hunt into a grep.
+function _filterSettings(raw) {
+  const clean = {};
+  const dropped = [];
+  for (const key of Object.keys(raw || {})) {
+    if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];
+    else dropped.push(key);
+  }
+  return { clean, dropped };
+}
+
 router.post('/user/settings', validateSettingsBody, (req, res) => {
   try {
     const db = require('../services/database');
@@ -831,10 +847,14 @@ router.post('/user/settings', validateSettingsBody, (req, res) => {
       }
     }
 
-    // Whitelist: only allowed keys pass through
-    const clean = {};
-    for (const key of Object.keys(raw)) {
-      if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];
+    // Whitelist: only allowed keys pass through. Rejects are NAMED in the log —
+    // see _filterSettings for why that line is worth having.
+    const { clean, dropped } = _filterSettings(raw);
+    if (dropped.length > 0) {
+      try {
+        require('../services/logger').warn('SETTINGS',
+          `uid=${req.user.id} sent ${dropped.length} key(s) not in the whitelist, discarded: ${dropped.join(', ')}`);
+      } catch (_) { /* logging must never block a save */ }
     }
 
     // Merge with existing (so partial updates don't wipe other keys)
@@ -1409,3 +1429,5 @@ router.get('/brain/exits', (req, res) => {
 router._staleTest = { resolveStaleBlock: _resolveStaleBlock };
 
 module.exports = router;
+module.exports._filterSettings = _filterSettings;
+module.exports.SETTINGS_WHITELIST = SETTINGS_WHITELIST;

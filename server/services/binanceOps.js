@@ -277,13 +277,28 @@ async function placeEntry(uid, params, creds) {
 
                 if (!closeResult.ok) {
                     // CATASTROPHIC — persist to queue + PANIC halt + Telegram
+                    // [2026-10-09 audit B3] The queue is the last safety net: it is what
+                    // brings an unprotected position back for another attempt. decision_key
+                    // carries a UNIQUE index, so a repeat catastrophe for the same decision
+                    // throws here — and this used to be an empty catch, so the row vanished
+                    // and nothing said the retry was gone. A failure to write it is now
+                    // logged AND carried into the alert, because it changes what the
+                    // operator has to do: no automation is coming.
+                    let queueErr = null;
                     try {
                         db.prepare(
                             `INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, 'binance', ?, ?, ?)`
                         ).run(uid, params.symbol, params.qty, params.decisionKey, Date.now());
-                    } catch (_) {}
+                    } catch (err) {
+                        queueErr = err && err.message ? err.message : String(err);
+                        try { require('./logger').error('BINANCE_OPS', `emergency_close_queue write FAILED uid=${uid} ${params.symbol}: ${queueErr} — no automatic retry will happen`); } catch (_) {}
+                    }
                     try { require('./serverAT').setGlobalHalt(true, uid, 'EMERGENCY_CLOSE_CATASTROPHIC'); } catch (_) {}
-                    try { require('./telegram').alertCritical(uid, `CATASTROPHIC: ${params.symbol} position cannot close on Binance. Manual intervention NOW.`); } catch (_) {}
+                    try {
+                        require('./telegram').alertCritical(uid,
+                            `CATASTROPHIC: ${params.symbol} position cannot close on Binance. Manual intervention NOW.`
+                            + (queueErr ? ` ALSO: retry queue write failed (${queueErr}) — nothing will retry this automatically.` : ''));
+                    } catch (_) {}
 
                     return {
                         ok: false,

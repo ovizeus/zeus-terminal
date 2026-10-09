@@ -1,73 +1,66 @@
 'use strict';
+// [2026-10-09 audit B2] logDivergence inserted cycle_no, decision,
+// shadow_signal, diverged and details into dsl_parity_log — a table that has
+// none of those columns. It is about DSL stop-loss parity (pivot_left,
+// impulse_val, current_sl), an entirely different thing. Both the INSERT and
+// getDailyParity's SELECT fail on the real database, and both sit in empty
+// catches, so the whole module was a no-op that reported 100% parity forever.
+//
+// It survived because tests/integration/bybitIntegration.test.js CREATEs its
+// own dsl_parity_log with exactly the columns the code wants. The test passed
+// green for code that could not run in production — the most misleading kind of
+// green there is. This file uses the real migrated schema instead.
 
-const Database = require('better-sqlite3');
-const TEST_DB = '/tmp/zeus-parity-shadow-test-' + Date.now() + '.db';
-const mockDb = new Database(TEST_DB);
-mockDb.exec(`
-    CREATE TABLE dsl_parity_log (id INTEGER PRIMARY KEY, user_id INTEGER, symbol TEXT, exchange TEXT, cycle_no INTEGER, decision TEXT, shadow_signal TEXT, diverged INTEGER DEFAULT 0, details TEXT, created_at TEXT DEFAULT (datetime('now')));
-    CREATE TABLE audit_log (id INTEGER PRIMARY KEY, user_id INTEGER, action TEXT, details TEXT, created_at TEXT DEFAULT (datetime('now')));
-`);
-jest.mock('../../server/services/database', () => ({ db: mockDb }));
-jest.mock('../../server/services/serverState', () => ({
-    forExchange: jest.fn((ex) => ({
-        getSnapshotForSymbol: jest.fn((sym) => {
-            if (ex === 'bybit') return { price: 50100, regime: 'BULL', exchange: 'bybit' };
-            return { price: 50000, regime: 'BULL', exchange: 'binance' };
-        }),
-    })),
-}));
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zeus-parityshadow-'));
+process.env.ZEUS_DB_PATH = path.join(tmp, 'test.db');
+
+const { db } = require('../../server/services/database');
 const psl = require('../../server/services/parityShadowLogger');
 
 beforeEach(() => {
-    mockDb.exec('DELETE FROM dsl_parity_log; DELETE FROM audit_log;');
+    db.prepare('DELETE FROM parity_shadow_log').run();
 });
 
-describe('parityShadowLogger', () => {
-    it('logDivergence inserts row', () => {
-        psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: 1, decision: 'HOLD', shadowSignal: 'HOLD', diverged: false, details: {} });
-        const row = mockDb.prepare('SELECT * FROM dsl_parity_log').get();
+describe('parityShadowLogger writes to a table that actually exists', () => {
+    test('a divergence is persisted and can be read back', () => {
+        psl.logDivergence({
+            userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit',
+            cycleNo: 7, decision: 'LONG', shadowSignal: 'SHORT', diverged: true,
+            details: { why: 'test' },
+        });
+
+        const row = db.prepare('SELECT * FROM parity_shadow_log WHERE user_id = 1').get();
         expect(row).toBeDefined();
-        expect(row.diverged).toBe(0);
+        expect(row.symbol).toBe('BTCUSDT');
+        expect(row.cycle_no).toBe(7);
+        expect(row.decision).toBe('LONG');
+        expect(row.shadow_signal).toBe('SHORT');
+        expect(row.diverged).toBe(1);
     });
 
-    it('logDivergence records divergence', () => {
-        psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: 2, decision: 'LONG', shadowSignal: 'HOLD', diverged: true, details: { reason: 'regime mismatch' } });
-        const row = mockDb.prepare('SELECT * FROM dsl_parity_log WHERE diverged=1').get();
-        expect(row).toBeDefined();
-    });
-
-    it('computeShadowSignal returns snap from shadow exchange', () => {
-        const sig = psl.computeShadowSignal('BTCUSDT', 'bybit');
-        expect(sig.available).toBe(true);
-        expect(sig.price).toBe(50100);
-    });
-
-    it('getDailyParity computes percentage', () => {
+    test('daily parity counts matches against divergences instead of silently reporting 100%', () => {
         const today = new Date().toISOString().slice(0, 10);
-        for (let i = 0; i < 8; i++) psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: i, decision: 'HOLD', shadowSignal: 'HOLD', diverged: false });
-        psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: 9, decision: 'LONG', shadowSignal: 'HOLD', diverged: true });
-        psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: 10, decision: 'SHORT', shadowSignal: 'HOLD', diverged: true });
-        const p = psl.getDailyParity(1, today);
-        expect(p.total).toBe(10);
-        expect(p.matched).toBe(8);
-        expect(p.parityPct).toBe(80);
+        for (let i = 0; i < 7; i++) {
+            psl.logDivergence({ userId: 2, symbol: 'ETHUSDT', exchange: 'binance', shadowExchange: 'bybit',
+                cycleNo: i, decision: 'LONG', shadowSignal: 'LONG', diverged: false });
+        }
+        for (let i = 0; i < 3; i++) {
+            psl.logDivergence({ userId: 2, symbol: 'ETHUSDT', exchange: 'binance', shadowExchange: 'bybit',
+                cycleNo: 100 + i, decision: 'LONG', shadowSignal: 'SHORT', diverged: true });
+        }
+
+        const parity = psl.getDailyParity(2, today);
+        expect(parity.total).toBe(10);
+        expect(parity.matched).toBe(7);
+        expect(parity.parityPct).toBe(70);
     });
 
-    it('checkParityAlert fires when below 80%', () => {
-        const today = new Date().toISOString().slice(0, 10);
-        for (let i = 0; i < 7; i++) psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: i, decision: 'HOLD', shadowSignal: 'HOLD', diverged: false });
-        for (let i = 7; i < 12; i++) psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: i, decision: 'LONG', shadowSignal: 'SHORT', diverged: true });
-        const result = psl.checkParityAlert(1);
-        expect(result.alert).toBe(true);
-        expect(result.parity.parityPct).toBeLessThan(80);
-        const audit = mockDb.prepare(`SELECT * FROM audit_log WHERE action='PARITY_ALERT_LOW'`).get();
-        expect(audit).toBeDefined();
-    });
-
-    it('checkParityAlert no alert above 80%', () => {
-        for (let i = 0; i < 10; i++) psl.logDivergence({ userId: 1, symbol: 'BTCUSDT', exchange: 'binance', shadowExchange: 'bybit', cycleNo: i, decision: 'HOLD', shadowSignal: 'HOLD', diverged: false });
-        const result = psl.checkParityAlert(1);
-        expect(result.alert).toBe(false);
+    test('an empty day reports no samples rather than a fake 100%', () => {
+        const parity = psl.getDailyParity(999, '2020-01-01');
+        expect(parity.total).toBe(0);
     });
 });

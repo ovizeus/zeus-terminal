@@ -11,7 +11,12 @@ mockDb.exec(`
     CREATE TABLE position_events (id INTEGER PRIMARY KEY, position_seq INTEGER NOT NULL, user_id INTEGER NOT NULL, exchange TEXT NOT NULL, event_type TEXT NOT NULL, from_state TEXT, to_state TEXT, payload TEXT NOT NULL DEFAULT '{}', cycle_no INTEGER, ts INTEGER NOT NULL);
     CREATE TABLE emergency_close_queue (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, exchange TEXT NOT NULL, qty TEXT NOT NULL, decision_key TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, resolved_at INTEGER, resolved_by TEXT);
     CREATE TABLE audit_log (id INTEGER PRIMARY KEY, user_id INTEGER, action TEXT, details TEXT, created_at TEXT DEFAULT (datetime('now')));
-    CREATE TABLE dsl_parity_log (id INTEGER PRIMARY KEY, user_id INTEGER, symbol TEXT, exchange TEXT, cycle_no INTEGER, decision TEXT, shadow_signal TEXT, diverged INTEGER DEFAULT 0, details TEXT, created_at TEXT DEFAULT (datetime('now')));
+    -- [2026-10-09 audit B2] This used to declare a dsl_parity_log carrying
+    -- cycle_no/decision/shadow_signal/diverged — columns the real table does
+    -- not have. parityShadowLogger wrote to those columns, so this suite passed
+    -- green for code that threw on every call in production. The logger now has
+    -- its own table (migration 419) and this mirrors that real shape.
+    CREATE TABLE parity_shadow_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, exchange TEXT NOT NULL, shadow_exchange TEXT, cycle_no INTEGER, decision TEXT, shadow_signal TEXT, diverged INTEGER NOT NULL DEFAULT 0, details TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
 `);
 
 jest.mock('../../server/services/database', () => ({ db: mockDb }));
@@ -76,7 +81,7 @@ const exchangeOps = require('../../server/services/exchangeOps');
 const bybitOps = require('../../server/services/bybitOps');
 
 beforeEach(() => {
-    mockDb.exec('DELETE FROM at_positions; DELETE FROM position_events; DELETE FROM emergency_close_queue; DELETE FROM audit_log; DELETE FROM exchange_accounts; DELETE FROM dsl_parity_log;');
+    mockDb.exec('DELETE FROM at_positions; DELETE FROM position_events; DELETE FROM emergency_close_queue; DELETE FROM audit_log; DELETE FROM exchange_accounts; DELETE FROM parity_shadow_log;');
     bybitOps._resetSyntheticQueue();
     exchangeOps._resetForTest();
 });

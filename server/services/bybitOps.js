@@ -188,11 +188,21 @@ async function placeEntry(uid, params, creds) {
                 const closeResult = await _emergencyClose(uid, params, creds, seq);
                 positionStateMachine.transition(seq, 'OPENING', 'EMERGENCY', { reason: 'SL_PLACEMENT_FAILED', closeResult });
                 if (!closeResult.ok) {
+                    // [2026-10-09 audit B3] See binanceOps: the queue write is the last
+                    // safety net and used to fail silently on the UNIQUE decision_key.
+                    let queueErr = null;
                     try {
                         db.prepare(`INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, 'bybit', ?, ?, ?)`).run(uid, params.symbol, params.qty, params.decisionKey, Date.now());
-                    } catch (_) {}
+                    } catch (err) {
+                        queueErr = err && err.message ? err.message : String(err);
+                        try { require('./logger').error('BYBIT_OPS', `emergency_close_queue write FAILED uid=${uid} ${params.symbol}: ${queueErr} — no automatic retry will happen`); } catch (_) {}
+                    }
                     try { require('./serverAT').setGlobalHalt(true, uid, 'EMERGENCY_CLOSE_CATASTROPHIC'); } catch (_) {}
-                    try { require('./telegram').alertCritical(uid, `CATASTROPHIC Bybit ${params.symbol}: position cannot close. Manual intervention NOW.`); } catch (_) {}
+                    try {
+                        require('./telegram').alertCritical(uid,
+                            `CATASTROPHIC Bybit ${params.symbol}: position cannot close. Manual intervention NOW.`
+                            + (queueErr ? ` ALSO: retry queue write failed (${queueErr}) — nothing will retry this automatically.` : ''));
+                    } catch (_) {}
                     return { ok: false, error: canonicalErrors.create('ErrSlPlacementFailed', 'SL retry exhausted, emergency close FAILED'), catastrophic: true, seq };
                 }
                 return { ok: false, error: canonicalErrors.create('ErrSlPlacementFailed', 'SL retry exhausted, emergency close succeeded'), seq };
