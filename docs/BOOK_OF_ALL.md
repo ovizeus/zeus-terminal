@@ -8,11 +8,11 @@
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Închise azi: **A1, B1, B2, B3, B4, C1, C2, C3**. Rămase: A2 şi B5, amândouă găsite azi.)*
+> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Închise azi: **A1, B1, B2, B3, B4, C1, C2, C3**. Rămase deschise: **A2 şi A3, amândouă GRAVE şi amândouă găsite azi**.)*
 
 **P1 🔥 Rafala de rate-limit Binance — ACTIVĂ** *(A2)*. 44 de intrări în SUPPRESSED azi faţă de 0-3 pe zi înainte, continuu din ora 08:00. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi a rupt reînnoirea `listenKey` pentru uid=1. Backoff-ul escaladează şi nu se resetează (contorul 43→47 într-o oră, răcirea ajunsă la 33 min). Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 descrie costul ca per user. **N-am atins ritmul de polling** — cale de bani, vreau cauza dovedită. *Din 16:46 n-a mai apărut niciun 429; de verificat dacă revine.*
 
-**P2 🔧 Feed-ul de lichidări Binance nu primeşte nimic** *(B5)*. 551 de raportări consecutive cu `frames=0`, în timp ce Bybit şi OKX curg. Socket-ul se declară conectat, deci nimic nu semnalează problema. De verificat numele stream-ului şi formatul abonării.
+**P2 🔥 Feed-ul de lichidări Binance nu primeşte NIMIC — GRAV** *(A3)*. 551 de raportări consecutive cu `frames=0`, în timp ce Bybit şi OKX curg. Socket-ul se declară conectat, deci nimic nu semnalează problema. De verificat numele stream-ului şi formatul abonării.
 
 **P3 🙋 Calibrarea auto-carantinei ML.** Cronul reparat ieri descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. `ml_feature_global_overrides` e goală.
 *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm până creşte volumul.
@@ -60,6 +60,13 @@
 *Dinamica, măsurată:* backoff-ul escaladează cu `consecutive_ban_count`, iar contorul se resetează **doar după 4 ore curate** (`STRIKE_RESET_AFTER_MS`). Cum banurile vin la 10-20 de minute, nu se resetează niciodată: era 43 la 16:36, **47 la 16:59**. Răcirea WARM a ajuns deja la **33 de minute**. Protecţia în sine e corectă — îşi apără IP-ul — dar efectul e că sistemul rămâne tot mai mult în regim degradat: la reload-ul de la 16:48 schedulerul a tăiat explozia de boot (`fetchKlines failed`, `createListenKey failed ... reason=warm`, `RADAR /ticker/24hr HTTP 503`), deci nu-şi putea încărca nici măcar datele de piaţă. **Se opreşte doar reparând sursa, nu aşteptând.**
 *N-am atins ritmul de polling:* e cale de bani şi n-am încă o cauză dovedită — cere o investigaţie dedicată, nu o ajustare pe ghicite. **Primul lucru de făcut mâine.**
 
+**A3. 🆕 Feed-ul de lichidări Binance e conectat dar NU primeşte NIMIC — niciodată.** *(găsit 2026-10-09 17:25)*
+`[LIQ-FEED] state | BNB[conn=true frames=0 ev=0] BYB[conn=true frames=23 ev=7] OKX[conn=true frames=6360 ev=4515]` — Bybit şi OKX curg, Binance e la zero.
+*Dovadă că nu e un moment prost:* în ultimele 3000 de linii de log sunt **551 de raportări de stare şi în TOATE `BNB[conn=true frames=0]`**. Niciun cadru, vreodată.
+*De ce e GRAV şi nu mediu:* Binance e cea mai mare dintre cele trei burse, iar lichidările ei intră în harta de lichidări şi în semnalele derivate din ea. Rulăm deci cu sursa principală lipsă — **iar socket-ul se declară `conn=true`, deci nimic nu semnalează problema.** Un indicator care tace arată identic cu o piaţă liniştită. E exact tiparul lui A1 (strat întreg inert, raportat ca sănătos), doar că aici lipsa se vede direct în deciziile de tranzacţionare.
+*De verificat:* numele stream-ului şi formatul abonării (`!forceOrder@arr` vs per-simbol), dacă socket-ul primeşte doar ping-uri fără mesaje, şi dacă există un handler care aruncă tăcut la parsare.
+*NU e legat de A2:* rafala de rate-limit e pe REST (greutate/minut); asta e WebSocket, care nu consumă greutate.
+
 ### 🟡 MEDII
 
 **B1. ✅ REPARAT (b257) — `POST /api/srv-pos/shadow-report` accepta scrieri NEAUTENTIFICATE de pe internet.** *(confirmat live, apoi închis şi reverificat live)*
@@ -84,12 +91,6 @@ Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea glo
 **B4. ✅ REPARAT (b258) — Whitelist-ul de setări aruncă tăcut cheile necunoscute — ne-a costat deja de două ori.**
 `server/routes/trading.js:837`: `if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];` — restul dispar, **fără niciun log**. Exact aşa s-au pierdut `indicators` (reparat în b193) şi `overlays` (reparat în b248). Tiparul se va repeta la următoarea setare nouă.
 *Fix:* un singur `logger.warn` cu cheile respinse. Ar fi prins ambele incidente în prima zi.
-
-**B5. 🆕 Feed-ul de lichidări Binance e conectat dar NU primeşte nimic.** *(găsit 2026-10-09 17:25)*
-`[LIQ-FEED] state | BNB[conn=true frames=0 ev=0] BYB[conn=true frames=23 ev=7] OKX[conn=true frames=6360 ev=4515]` — Bybit şi OKX curg, Binance e la zero.
-*Dovadă că nu e un moment prost:* în ultimele 3000 de linii de log sunt **551 de raportări de stare şi în TOATE `BNB[conn=true frames=0]`**. Niciun cadru, vreodată, de la cea mai mare bursă dintre cele trei — în timp ce socket-ul se declară conectat, deci nimic nu semnalează o problemă.
-*Impact:* harta de lichidări şi semnalele derivate din ea rulează fără datele Binance, dar arată „conectat" — adică te-ai uita la un indicator care tace şi ai crede că piaţa e liniştită.
-*De verificat:* numele stream-ului şi formatul abonării (`!forceOrder@arr` vs per-simbol), plus dacă socket-ul primeşte ping-uri fără mesaje. **Nu e legat de rafala de rate-limit (A2)** — aceea e pe REST, asta e WebSocket.
 
 ### 🟢 MICI
 
