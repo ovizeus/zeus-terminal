@@ -29,7 +29,7 @@
 
 **P9 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
 
-**P10 🙋 Decizia pe ML-ul neconectat.** Măsurat azi: **74 din 284 de fişiere** sunt legate la server, **198 din 367 de tabele sunt goale**.  (70 fişiere, 16.494 linii) şi  (10 fişiere) nu sunt referenţiate de nimic. Nu înseamnă cod greşit — înseamnă **cod care nu rulează**. *De decis împreună, pe ringuri, nu în bloc:* ce conectăm, ce tăiem, ce lăsăm ca referinţă. Detaliile şi cifrele: secţiunea „CÂT DIN ML E CHIAR CONECTAT".
+**P10 🙋 Decizia pe ML-ul neconectat.** Măsurat azi: **74 din 284 de fişiere** sunt legate la server, **198 din 367 de tabele sunt goale**. `_meta` (70 fişiere, 16.494 linii) şi `_operator` (10 fişiere, 1.920 linii) nu sunt referenţiate de nimic. Nu înseamnă cod greşit — înseamnă **cod care nu rulează**. *De decis împreună, pe ringuri, nu în bloc:* ce conectăm, ce tăiem, ce lăsăm ca referinţă. Cifrele complete: secţiunea „CÂT DIN ML E CHIAR CONECTAT".
 
 **P11 🔧 Mărunţişuri, când se nimereşte:** lista de motive din reflection apare duplicată (`["anti_pattern","anti_pattern"]`); două tabele din politica de retenţie (`ml_dr_state`, `ml_reflection_runs`) ţin mult mai puţin decât fereastra lor de 30 de zile şi **n-am putut stabili de ce** — am adăugat raportare pe tabelă, aşa că rularea de mâine va spune singură.
 
