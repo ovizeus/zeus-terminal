@@ -8,22 +8,92 @@
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-**P1 🙋 Calibrarea auto-carantinei ML nu se potriveşte cu volumul real.** *(găsit 2026-10-09)*
-După ce am reparat cronul, el chiar descoperă acum uid=1/DEMO — **dovedit live: `1 users, 1 user/env pairs`**, era `0 users`. Dar nu va carantina nimic: pragul e `min_trades: 100` **pe o fereastră de 24h**, iar volumul real e ~11 evenimente/zi. Matematic nu se poate atinge. `ml_feature_global_overrides` e goală = zero carantine puse vreodată.
-*Decizia ta:* (a) lărgim fereastra la 7-30 zile păstrând pragul 100 — recomandarea mea, fiindcă deciziile sunt statistice şi 100 de mostre rămân un prag sănătos; (b) coborâm pragul; (c) o lăsăm aşa, conştient, până creşte volumul. N-am atins-o singur: schimbă comportamentul guvernanţei ML.
+> Litera din paranteză trimite la secţiunea de audit de mai jos, unde e dovada.
 
-**P2 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** *(confirmată vie azi 04:46)*
-`[EXCHANGE] Key health FAIL uid=2 bybit/testnet: Your api key has expired.` *De făcut de tine:* regenerezi cheia testnet şi o pui din UI (MultiExchange). Notă: `BYBIT_DRY_RUN_ONLY` e **ON**, deci Bybit oricum nu trimite HTTP real — de stins când vrei soak adevărat.
+**P1 🔧 Gaura de autentificare de pe `/api/srv-pos/shadow-report`** *(B1 — confirmat live, HTTP 200 de pe internet)*. Scriere neautentificată, apărată doar de un header constant. Fix ieftin: aceeaşi verificare JWT ca la ruta vecină. **O fac prima** fiindcă e singura găsită azi care se poate atinge din exterior.
 
-**P3 🙋 `nodemailer` 8.0.11 → 10.0.16, breaking, pe calea de auth.** Ultima din cele 17 vulnerabilităţi (1 high, 4 advisories: bypass de validare domeniu, scurgere credenţiale SMTP între tenanţi, 2× DoS). Rupe API-ul, pe calea de e-mail a autentificării — nu-l fac fără un test real de trimitere cu tine.
+**P2 🔧 Stratul ML de reflecţie nu produce nimic** *(A1 — `total_insights=0` la fiecare rulare)*. 4 din 4 analize pică tăcut, la fiecare 5 minute, de cine ştie când. Repar apelurile şi fac cronul să raporteze, ca să nu mai poată fi mut.
 
-**P4 🙋 Keystore-ul de release Android e în git.** `android/app/zeus-release.keystore`, parolă slabă. Oricine are repo-ul poate semna aplicaţii ca Zeus. *Fix:* scos din istoricul git **şi rotit** (rotirea e obligatorie — ce-a fost expus rămâne expus), sau mutat în Vault.
+**P3 🙋 Calibrarea auto-carantinei ML.** Cronul reparat azi descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la un volum real de ~11 evenimente/zi — matematic nu se poate atinge. `ml_feature_global_overrides` e goală = zero carantine puse vreodată.
+*Decizia ta:* (a) lărgim fereastra la 7-30 zile păstrând pragul 100 — **recomandarea mea**; (b) coborâm pragul; (c) o lăsăm aşa până creşte volumul. N-o ating singur: schimbă comportamentul guvernanţei ML.
 
-**P5 🔧 VACUUM: ~4,8 GB de recuperat.** 7,4 GB pe disc pentru ~2,6 GB de pagini reale. Cere ~20s oprire. O fac la cerere.
+**P4 🔧 Whitelist-ul de setări aruncă tăcut chei necunoscute** *(B4)*. Ne-a costat `indicators` (b193) şi `overlays` (b248). Un singur `logger.warn` le-ar fi prins pe amândouă în prima zi. Cel mai bun raport efort/valoare din listă.
 
-**P6 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Pe calea de rezervă (server picat + cache local), namespace-ul per-mod scrie peste valorile încărcate din cache — prins într-un test: `confMin` 77 revine la 65. **Decizie de produs:** offline, când cele două surse se contrazic, care câştigă?
+**P5 🔧 Coada de închidere de urgenţă poate pierde tăcut o intrare** *(B3)*, pe ambele burse. Halt-ul + alerta Telegram rămân, deci nu eşti orb — se pierde doar reîncercarea automată.
 
-**P7 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android (cere rebuild + reinstall APK), Vault download pe Chrome desktop.
+**P6 🔧 `parityShadowLogger` scrie în coloane inexistente, iar testul îşi inventează schema** *(B2)*. Cod mort acum, dar testul verde ar induce în eroare pe oricine îl conectează.
+
+**P7 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** *(confirmată vie azi 04:46)* Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e **ON**, deci Bybit oricum nu trimite HTTP real — de stins când vrei soak adevărat.
+
+**P8 🙋 `nodemailer` 8.0.11 → 10.0.16, breaking, pe calea de auth.** Ultima din cele 17 vulnerabilităţi (1 high). Nu-l fac fără un test real de trimitere cu tine.
+
+**P9 🙋 Keystore-ul de release Android e în git.** `android/app/zeus-release.keystore`, parolă slabă. Scos din istoric **şi rotit** (rotirea e obligatorie), sau mutat în Vault.
+
+**P10 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2722 MB de pagini reale. Cere ~20s oprire. O fac la cerere.
+
+**P11 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
+
+**P12 🔧 Igienă, când se nimereşte** *(C1-C3)*: cele două cron-uri complet mute, logul de backup gol din 9 iunie, şi `catch`-urile tăcute din jurul scrierilor în DB.
+
+**P13 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android, Vault download pe Chrome desktop.
+
+---
+## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
+
+> Metodă: **nimic pe bază de regex sau presupunere.** Am construit o bază în memorie cu schema reală (400 de tabele) şi am *preparat efectiv* toate cele 1522 de interogări statice din `server/`; am rulat tiparele suspecte pe baza vie (doar citire); iar pe ce se putea atinge din afară am testat cu `curl` de pe internet. Fiecare constatare de mai jos are dovada lângă ea. Ce am verificat şi **nu** e bug e listat la final — e la fel de util.
+
+### 🔴 GRAVE
+
+**A1. Stratul ML de reflecţie („cold path") rulează la fiecare 5 minute şi nu produce NIMIC.**
+`ml_reflection_runs` arată la **fiecare** rulare: `modules_run=11`, `modules_failed=0`, **`total_insights=0`**. Arată sănătos tocmai fiindcă eşecurile sunt numărate separat de insight-uri, iar toate cele 4 analize sunt în `catch (_) {}`. Toate 4 pică, din motive diferite:
+- `narrativeCoherence.computeCoherenceScore` — primeşte `{recentDecisions: [], threshold}`, dar funcţia cere obligatoriu `thread` (`_required(params,'thread')`) → aruncă;
+- `autoQuarantine.checkQuarantine` — **funcţia nu există** în fişier (cele reale sunt `scanAllFeatures` / `evaluateFeature`);
+- `agencyAttributionLedger.getAttributionStats` — nu e exportată;
+- `competingHypotheses.evaluateDominance` — nu incrementează niciodată, deci şi ea pică.
+*Dovadă:* `SELECT AVG(total_insights) FROM ml_reflection_runs` = **0**, pe toate rulările.
+*De ce e grav:* e aceeaşi clasă cu cronul de auto-carantină reparat azi — un subsistem întreg, pornit, raportat ca sănătos, cu efect zero. Nu pierde bani, dar tot ce credem că „învaţă" acolo nu se întâmplă.
+*Fix:* apelurile trebuie să primească parametrii reali (şi date reale, nu `[]`), iar cronul să logheze `modules_failed`/`total_insights` ca să nu mai poată fi mut.
+
+### 🟡 MEDII
+
+**B1. `POST /api/srv-pos/shadow-report` acceptă scrieri NEAUTENTIFICATE de pe internet.** *(confirmat live azi: HTTP 200)*
+Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea globală (linia 195), iar singura gardă e `x-zeus-request: 1` — o **constantă**. Comentariul din cod spune „custom header = CSRF proof": adevărat pentru un browser cross-origin, dar inutil împotriva unui `curl`. Spre deosebire de ea, ruta vecină `/orphan-report` verifică JWT-ul din cookie şi dă 401 — deci diferenţa nu e intenţionată, e o scăpare.
+*Impact:* buffer-ul de rapoarte e de 100 de intrări, limita e 5/minut pe IP → **~20 de minute** ca să scoţi afară toate rapoartele reale de divergenţă, adică exact dovezile pe care s-ar judeca migrarea pe poziţii server-side. Plus linii de log cu conţinut controlat de atacator.
+*Dovadă:* `curl -X POST -H 'x-zeus-request: 1' -d '{"count":0}' https://zeus-terminal.com/api/srv-pos/shadow-report` → `HTTP 200`. (Am trimis un payload inofensiv; a ocupat 1 slot din 100.)
+*Fix:* aceeaşi verificare JWT ca la `/orphan-report`, sau mutarea rutei după `createSessionAuth`.
+
+**B2. `parityShadowLogger` scrie în coloane care nu există — iar testul îşi inventează schema.**
+`logDivergence` inserează în `dsl_parity_log` coloanele `cycle_no, decision, shadow_signal, diverged, details`. **Niciuna nu există** în tabela reală (care are `pos_id, source, phase, current_sl, pivot_*, impulse_val, entry_price, tick_price`). Şi `getDailyParity` cade pe `diverged`. Ambele sunt în `catch (_) {}`.
+*Dovadă:* pregătit pe baza vie → `table dsl_parity_log has no column named cycle_no` şi `no such column: diverged`.
+*De ce e doar mediu:* **n-are niciun apelant în `server/`** — doar testele îl cheamă, deci nu se pierd date live acum.
+*Ce e de fapt problema:* `tests/integration/bybitIntegration.test.js` îşi creează **propria** `dsl_parity_log` cu exact coloanele pe care codul le aşteaptă. Testul trece verde pentru un cod care nu poate funcţiona în producţie. Cine conectează modulul mâine se va baza pe un test mincinos.
+*Fix:* ori tabelă proprie pentru parity-shadow, ori aliniere la schema reală; testul să folosească schema reală.
+
+**B3. Scrierea în `emergency_close_queue` e înghiţită tăcut, pe ambele burse.**
+`binanceOps.js:284` şi `bybitOps.js:193` — `INSERT` în coada de reîncercare a închiderilor de urgenţă, ambele în `catch (_) {}`. Dacă scrierea pică (lock, constrângere), poziţia neprotejată **nu mai e reîncercată niciodată**.
+*Atenuant real:* imediat după se armează halt-ul global şi pleacă alertă Telegram critică — deci nu e complet invizibil pentru tine; se pierde doar automatizarea.
+*Fix:* logare + alertă pe eşecul inserării (e ultima plasă, merită zgomot).
+
+**B4. Whitelist-ul de setări aruncă tăcut cheile necunoscute — ne-a costat deja de două ori.**
+`server/routes/trading.js:837`: `if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];` — restul dispar, **fără niciun log**. Exact aşa s-au pierdut `indicators` (reparat în b193) şi `overlays` (reparat în b248). Tiparul se va repeta la următoarea setare nouă.
+*Fix:* un singur `logger.warn` cu cheile respinse. Ar fi prins ambele incidente în prima zi.
+
+### 🟢 MICI
+
+**C1. 40% din `catch`-urile serverului sunt mute** — 551 din 1384 nu loghează nimic (376 complet goale, 175 doar cu comentariu). 38 dintre ele învelesc scrieri în baza de date. Pe client: 648. Nu e de reparat în bloc, dar e solul în care cresc bugurile A1/B2/B3.
+
+**C2. `coldPathCron` şi `r0SubstrateCron` nu scriu absolut nimic în loguri** — singurele două cron-uri fără nicio urmă. De aceea A1 a putut sta ascuns.
+
+**C3. `data/logs/offsite-backup-cron.log` e 0 bytes din 9 iunie.** Backup-urile **funcţionează** (verificat: `zeus-offsite-20261009-033001.db.enc`, 287 MB, azi la 03:30), dar nu lasă nicio urmă locală — dacă pică, n-ai unde să te uiţi.
+
+### ✅ Verificat şi NU e bug (ca să nu le mai căutăm)
+
+- **Fără secrete literale în cod** şi **fără injecţie SQL** din input de utilizator (cele 2 interogări cu interpolare primesc numele tabelei ca parametru intern, din migrări/prune).
+- **Poarta „doar localhost" NU e spoofabilă**, deşi `trust proxy` e pornit: nginx foloseşte `$proxy_add_x_forwarded_for`, care adaugă mereu IP-ul real la coadă. Testat de pe internet cu `X-Forwarded-For: 127.0.0.1` → **403**. (`proxy-addr` e şi patchuit.)
+- **Toate cele 7 cron-uri sunt chiar programate** din `server.js` — niciunul orfan.
+- **1516 din 1522 de interogări sunt valide** faţă de schema reală; 4 din cele 6 semnalate erau artefacte ale extractorului meu, 2 erau reale (B2).
+- **Backup offsite sănătos**, zilnic, comprimat ~10×.
+- **Disc sănătos:** 46 GB liberi (69% ocupat).
 
 ---
 
