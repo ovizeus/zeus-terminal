@@ -113,6 +113,11 @@ export const IND_ICONS: Record<string, string> = {
   morpheus: g(p('M8 2a6 6 0 100 12A6 6 0 008 2z') + p('M8 2a6 6 0 010 12z') + dot(5, 6, 0.9) + dot(11, 10, 0.9)), // colour palette / split mask (4 states)
   harmonia: g(p('M2 12a6 6 0 0112 0') + p('M4 12a4 4 0 018 0') + p('M6 12a2 2 0 014 0')), // rainbow arcs (full spectrum bands)
   daimon: g(p('M8 2L5 8h6z') + p('M5 8h6l-1 6H6z') + dot(8, 5.5, 0.8)), // little wizard (pointed hat + robe)
+  // TERMINATOR — SuperTrend flip line inside a target lock. Deliberately not
+  // `st`'s bare step (same maths, different indicator) nor `kratos`'s diagonal
+  // crosshair / `argus`'s eye: corner brackets + the flip step read as the
+  // name while still showing what it draws.
+  terminator: g(p('M2 5V2h3') + p('M11 2h3v3') + p('M14 11v3h-3') + p('M5 14H2v-3') + p('M4.5 10.5h3V6h4')),
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
   ovi: g(p('M8 2L4 9a4 4 0 008 0z')),                                       // liquid drop

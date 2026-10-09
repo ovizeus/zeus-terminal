@@ -7,6 +7,7 @@
   "POSITIONS_WS": true,
   "PARITY_SHADOW_ENABLED": true,
   "ALT_WS_FEEDS": true,
+  "CHART_BACKFILL_ENABLED": true,
   "BYBIT_TESTNET_ENABLED": true,
   "BYBIT_LIVE_ENABLED": false,
   "BYBIT_PARITY_ENABLED": true,

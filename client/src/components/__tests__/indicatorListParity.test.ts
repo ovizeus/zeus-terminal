@@ -63,10 +63,21 @@ describe('the two indicator lists stay in step', () => {
     expect(new Set(pIds).size).toBe(pIds.length)
   })
 
-  // The list's own header asks for "a dedicated, distinct icon per indicator
-  // (no recycled emoji)". 19 emoji are currently shared across ~41 entries, so
-  // this cannot be asserted globally yet — it is logged in the Book as cleanup.
-  // New indicators are held to the rule.
+  // [2026-10-09] An earlier note here claimed the "distinct icon per indicator"
+  // rule could not be asserted because 19 emoji are shared across ~41 entries.
+  // That read the wrong field. Since 2026-06-16 the icon actually rendered is
+  // the line-art glyph in constants/indicatorIcons.ts; `ico` is only the
+  // fallback for an id missing from it (ChartControls ~1266, indicators ~3655).
+  // 95 of 96 ids had a glyph, so the shared emoji never reached the screen —
+  // but TERMINATOR had none, which is why it alone showed an emoji in a panel
+  // of line art. The glyph map is the contract, so that is what is pinned.
+  it('every indicator has a dedicated line-art glyph, not an emoji fallback', () => {
+    const icons = fs.readFileSync(path.join(SRC, 'constants', 'indicatorIcons.ts'), 'utf8')
+    const body = icons.split('IND_ICONS: Record<string, string> = {')[1]
+    const glyphs = new Set([...body.matchAll(/^ {2}([a-z0-9_]+):/gm)].map((m) => m[1]))
+    expect(pIds.filter((id) => !glyphs.has(id))).toEqual([])
+  })
+
   it('TERMINATOR has an icon of its own', () => {
     const ico = panel.find((x) => x.id === 'terminator')!.ico
     expect(ico).toBeTruthy()
