@@ -30,8 +30,13 @@ describe('binanceGateway', () => {
   });
 
   test('fetch returns stale response when rate limited', async () => {
-    // Fill rate bucket to halt
-    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': '2350' });
+    // Fill rate bucket past the halt threshold. Derived from the pool rather
+    // than hardcoded: this test used to say 2350, which stopped saturating the
+    // bucket the day the futures capacity went 2400 -> 6000, and the suite had
+    // been red ever since for a limiter that works fine.
+    const pool = rl.POOLS['binance:futures'];
+    const overHalt = Math.ceil(pool.capacity * (pool.haltPct / 100)) + 1;
+    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': String(overHalt) });
     const res = await gw.fetch('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT', { __weight: 100 });
     expect(res._stale).toBe(true);
     expect(res._reason).toBe('rate_limit');

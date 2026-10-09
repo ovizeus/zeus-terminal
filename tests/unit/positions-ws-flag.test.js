@@ -19,11 +19,20 @@ describe('POSITIONS_WS flag — regression guard', () => {
         expect(flags.POSITIONS_WS).toBe(true);
     });
 
-    test('migrationFlags module exposes POSITIONS_WS true at load', () => {
-        // Independent of test runner state — must load module fresh
+    // [2026-10-09] This used to load migrationFlags and assert POSITIONS_WS was
+    // true there. Flags are isolated under test now — a test run was rewriting
+    // the production file and left it owned by root — so the module reports
+    // declared defaults, not the operator's configuration, and this said nothing.
+    // The guard that matters is the one above, which reads the file itself. What
+    // is worth asserting here is that the file it reads is the file production
+    // loads, so that guard actually governs the running server.
+    test('production loads the very file the guard above checks', () => {
         jest.resetModules();
         const MF = require('../../server/migrationFlags');
-        expect(MF.POSITIONS_WS).toBe(true);
+        expect(MF.flagsFilePath()).not.toBe(path.resolve(__dirname, '../../data/migration_flags.json'));
+
+        const src = fs.readFileSync(path.resolve(__dirname, '../../server/migrationFlags.js'), 'utf8');
+        expect(src).toMatch(/path\.join\(__dirname, '\.\.', 'data', 'migration_flags\.json'\)/);
     });
 
     test('serverAT module loads with POSITIONS_WS=true (no boot-time mutex violation)', () => {

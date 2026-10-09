@@ -16,6 +16,17 @@ mockDb.exec(`
 
 jest.mock('../../server/services/database', () => ({ db: mockDb }));
 
+// [2026-10-09] recoveryBoot skips any exchange shouldReconcileExchange rejects,
+// and the real flags ship BYBIT_DRY_RUN_ONLY=true, so the Bybit reconciliation
+// case below was silently skipped and its position stayed OPEN. This file exists
+// to exercise Bybit, so the latch is lifted here; everything else stays real.
+jest.mock('../../server/migrationFlags', () => {
+    const actual = jest.requireActual('../../server/migrationFlags');
+    return new Proxy(actual, {
+        get: (t, p) => (p === 'BYBIT_DRY_RUN_ONLY' ? false : t[p]),
+    });
+});
+
 jest.mock('../../server/services/credentialStore', () => ({
     getExchangeCreds: jest.fn((uid) => {
         if (uid === 10) return { exchange: 'bybit', mode: 'testnet', apiKey: 'testKey', apiSecret: 'testSecret' };

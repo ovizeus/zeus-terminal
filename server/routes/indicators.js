@@ -10,6 +10,13 @@ const { INDICATOR_IDS } = require('../services/indicatorIds');
 // window — each user's row IS their persisted config (replaced on every report), so the badge
 // mirrors EVERY user who has a stored indicator config, regardless of how recently they were
 // online. Returns { id: count } omitting zero-count ids. `now` kept for signature stability.
+// `now` is kept in the signature for callers and for the historical 30-day
+// window, which b167 (4d35cc2a) deliberately REMOVED: each row is the user's
+// PERSISTED config, rewritten on every POST /active, not an online heartbeat,
+// so the badge mirrors everyone who has the indicator configured regardless of
+// when they were last seen. Do not reintroduce an expiry here without changing
+// that decision — an older test still described the removed behaviour and cost
+// a wrong "fix" on 2026-10-09.
 function _aggregateUsage(rows, now, knownIds) {
   const seen = {}; // id -> Set(user_id)
   for (const r of rows || []) {

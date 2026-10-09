@@ -8,6 +8,21 @@ const TEST_DB_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'r5-elig-'));
 process.env.ZEUS_DB_PATH = path.join(TEST_DB_DIR, 'test.db');
 process.env.ZEUS_TEST_DISABLE_AUTH = '1';
 
+// [2026-10-09] These tests used to pass only because the test process read the
+// operator's live data/migration_flags.json, where the ML pipeline and influence
+// flags happen to be ON. Flags are isolated under test now (a test run was
+// rewriting that production file), so the premise has to be stated here instead
+// of inherited from whatever the deployment happens to be configured as.
+jest.mock('../../../server/migrationFlags', () => {
+    const actual = jest.requireActual('../../../server/migrationFlags');
+    const ON = new Set([
+        'ML_PIPELINE_SHADOW', 'ML_INGEST_ENABLED',
+        'ML_DEMO_INFLUENCE_ENABLED', 'ML_TESTNET_INFLUENCE_ENABLED',
+        'ML_LIVE_INFLUENCE_ENABLED',
+    ]);
+    return new Proxy(actual, { get: (t, p) => (ON.has(p) ? true : t[p]) });
+});
+
 const { db } = require('../../../server/services/database');
 const bp = require('../../../server/services/ml/_ring5/banditPosteriors');
 const versionRegistry = require('../../../server/services/ml/R5B_governance/versionRegistry');

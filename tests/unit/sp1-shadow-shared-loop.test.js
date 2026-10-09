@@ -1,3 +1,15 @@
+'use strict';
+
+// [2026-10-09] Parity-row writes are gated on PARITY_SHADOW_ENABLED, which is ON
+// in the operator's deployment but ships OFF. These tests passed only because the
+// test process was reading his live data/migration_flags.json; flags are isolated
+// under test now (a run was rewriting that file), so the premise is declared here.
+jest.mock('../../server/migrationFlags', () => {
+    const actual = jest.requireActual('../../server/migrationFlags');
+    const ON = new Set(['PARITY_SHADOW_ENABLED', 'SERVER_AT_TESTNET', 'SERVER_BRAIN_DEMO']);
+    return new Proxy(actual, { get: (t, p) => (ON.has(p) ? true : t[p]) });
+});
+
 describe('SP1 _runShadowForUsers (shared loop)', () => {
   let brain, serverState, db;
   beforeEach(() => {
