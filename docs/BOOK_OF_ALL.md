@@ -29,9 +29,11 @@
 
 **P9 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
 
-**P10 🔧 Mărunţişuri, când se nimereşte:** lista de motive din reflection apare duplicată (`["anti_pattern","anti_pattern"]`); două tabele din politica de retenţie (`ml_dr_state`, `ml_reflection_runs`) ţin mult mai puţin decât fereastra lor de 30 de zile şi **n-am putut stabili de ce** — am adăugat raportare pe tabelă, aşa că rularea de mâine va spune singură.
+**P10 🙋 Decizia pe ML-ul neconectat.** Măsurat azi: **74 din 284 de fişiere** sunt legate la server, **198 din 367 de tabele sunt goale**.  (70 fişiere, 16.494 linii) şi  (10 fişiere) nu sunt referenţiate de nimic. Nu înseamnă cod greşit — înseamnă **cod care nu rulează**. *De decis împreună, pe ringuri, nu în bloc:* ce conectăm, ce tăiem, ce lăsăm ca referinţă. Detaliile şi cifrele: secţiunea „CÂT DIN ML E CHIAR CONECTAT".
 
-**P11 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android (cere rebuild + reinstall APK), Vault download pe Chrome desktop.
+**P11 🔧 Mărunţişuri, când se nimereşte:** lista de motive din reflection apare duplicată (`["anti_pattern","anti_pattern"]`); două tabele din politica de retenţie (`ml_dr_state`, `ml_reflection_runs`) ţin mult mai puţin decât fereastra lor de 30 de zile şi **n-am putut stabili de ce** — am adăugat raportare pe tabelă, aşa că rularea de mâine va spune singură.
+
+**P12 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android (cere rebuild + reinstall APK), Vault download pe Chrome desktop.
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
@@ -130,6 +132,35 @@ Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea glo
 4. **REAL** — rămâne decizia ta (chei LIVE + flip `SERVER_BRAIN`/`SERVER_AT`), gated pe P&L testnet verde şi pe SP1.5 sizing-parity. Nimic de aprins din partea mea.
 
 ---
+
+### 📏 CÂT DIN ML E CHIAR CONECTAT — măsurat 2026-10-09
+
+> Întrebarea ta: „funcţionează tot, toate ringurile cu toate punctele?" Răspunsul scurt: **nu — un nucleu lucrează, restul e schelă.** Mai jos sunt cifrele, nu impresii.
+
+**Dimensiune:** 284 de fişiere, **68.392 de linii**, 367 de tabele `ml_`.
+
+**Cod — cât se atinge pornind de la `server.js`** *(graful complet de `require`; în tot serverul există un singur `require` dinamic, în `coldPathCron`, deci graful e exact)*:
+- **74 din 284 de fişiere sunt conectate. 210 nu.**
+
+**Date — ce scrie efectiv** *(ultimul rând din fiecare tabelă)*:
+- **198 din 367 de tabele sunt GOALE** — n-au avut niciun rând vreodată (54%)
+- **30 sunt scrise în ultimele 7 zile** (8%)
+- 105 au date vechi de peste 7 zile · 34 n-au coloană de timp
+
+**Ringurile care chiar lucrează** (au şi cod conectat, şi tabele scrise recent): `R0_substrate` (9/9 conectate), `R1_constitution` (3/3), `R3B_safety` (3/3), `_doctor` (18/20), `_ring5` (10/11, bandit-ul scrie), `_voice` (9/10), `R7_meta`, `R7_communication`. Plus nucleul de decizii: `ml_decision_snapshots`, `ml_decision_light`, `ml_attribution_events`, `ml_bandit_posteriors`, `ml_diagnostic_events`.
+
+**Zonele moarte, în ordinea mărimii:**
+- **`_meta` — 70 de fişiere, 16.494 de linii, ZERO conectate.** Nimic din server nu-l referenţiază. E cel mai mare bloc din tot ML-ul. *(Atenţie la confuzie: `R7_meta` e alt director şi ĂLA e viu.)*
+- **`_operator` — 10 fişiere, 1.920 de linii, ZERO conectate.** Nimic nu-l referenţiază.
+- `R3A_safety` — 25 din 26 neconectate (7.418 linii)
+- `R2_cognition` — 26 din 30 neconectate (9.028 linii)
+- `R5A_learning` — 25 din 28 neconectate (7.478 linii)
+- `R5B_governance` 10/13 · `R4_execution` 12/15 · `R6_shadowMeta` 8/9 · `_crosscutting` 9/10
+- `R2_brain` şi `R3B_validation` — **directoare complet goale**
+
+**De ce contează:** cele două subsisteme moarte găsite azi (cronul de auto-carantină, inert de când există; cold path-ul care apela funcţii inexistente) **nu erau accidente izolate** — sunt simptomele aceluiaşi lucru: un strat scris după specificaţie, din care o mare parte n-a fost niciodată legată la sistem. Iar cele 11 module pe care cold path-ul le „rula" erau doar *încărcate*, nu apelate — de aceea raporta `11 modules, 0 failed` cu rezultat zero.
+
+**Ce NU spun cifrele astea:** că e cod greşit sau de aruncat. Spun doar că **nu rulează**. Înainte de a decide ceva — conectăm, tăiem, sau lăsăm ca referinţă — ar trebui să ştim care bucăţi au fost testate vreodată pe date reale. Asta cere o sesiune separată, pe ringuri, nu o măturare.
 
 ### 🩺 DOCTORUL OMEGA — verificat cap-coadă 2026-10-09
 
