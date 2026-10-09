@@ -103,6 +103,28 @@ export function _applyLoadedTogglesToLiveState(): void {
 // `settings.changed` refresh would yank the timeframe out from under them.
 // Waits for the chart on a bounded poll — applyIndVisibility(id, true) calls
 // initXSeries()/updateX(), which need mainChart to exist.
+// [2026-10-09] A restore must never overrule a choice already made by hand.
+// The boot apply waits on a poll (chart ready + settings arrived, 10s budget)
+// and then calls setTF with the stored timeframe. If the operator picks a
+// timeframe inside that window — exactly what you do on landing — the apply
+// lands afterwards and snaps the chart back, dragging the re-render and
+// TERMINATOR's candle tint with it. setTF reports a manual pick here.
+let _userPickedTf = false
+export function noteUserTfChoice(): void {
+  _userPickedTf = true
+  try { (window as unknown as { __zUserPickedTf?: boolean }).__zUserPickedTf = true } catch (_) { /* */ }
+}
+export function _resetUserTfChoiceForTest(): void {
+  _userPickedTf = false
+  try { (window as unknown as { __zUserPickedTf?: boolean }).__zUserPickedTf = false } catch (_) { /* */ }
+}
+// setTF lives in marketDataFeeds, which this module already imports from, so it
+// cannot import back. It raises the window flag instead and we read both.
+function _tfWasPickedByUser(): boolean {
+  if (_userPickedTf) return true
+  try { return !!(window as unknown as { __zUserPickedTf?: boolean }).__zUserPickedTf } catch (_) { return false }
+}
+
 const _RENDER_APPLY_POLL_MS = 250
 const _RENDER_APPLY_MAX_ATTEMPTS = 40 // 10s budget, mirrors ChartControls
 let _renderApplyDone = false
@@ -113,7 +135,7 @@ function _chartIsReady(): boolean {
   return !!(w.mainChart && w.cSeries && typeof w.cSeries.priceToCoordinate === 'function')
 }
 
-function _doRenderApply(): void {
+function _doRenderApply(): boolean {
   const st = useSettingsStore.getState().settings as unknown as {
     indicators?: Record<string, boolean>
     indSettings?: Record<string, boolean>
@@ -126,7 +148,14 @@ function _doRenderApply(): void {
   const inds = (st.indicators && Object.keys(st.indicators).length > 0)
     ? st.indicators
     : (st.indSettings && Object.keys(st.indSettings).length > 0 ? st.indSettings : null)
-  if (inds) {
+  if (!inds) {
+    // [2026-10-09] Nothing to apply yet. Returning false keeps the one-shot
+    // UNSPENT: the settings simply had not arrived. Marking it done here is
+    // what left the operator's switched-off indicators switched back on — the
+    // boot defaults stayed painted and the real map never reached the chart.
+    return false
+  }
+  {
     let anyOn = false
     for (const id of Object.keys(inds)) {
       const on = !!inds[id]
@@ -158,13 +187,14 @@ function _doRenderApply(): void {
   // ── timeframe: the persisted value is the cross-device truth. Skip when the
   // chart already shows it, so we never re-fetch candles for nothing.
   const tf = typeof st.chartTf === 'string' ? st.chartTf.trim() : ''
-  if (tf) {
+  if (tf && !_tfWasPickedByUser()) {
     const mkt = useMarketStore.getState()
     if (mkt.market.chartTf !== tf) {
       try { setTF(tf, null) } catch (_) { /* best-effort */ }
       try { mkt.patch({ chartTf: tf }) } catch (_) { /* best-effort */ }
     }
   }
+  return true
 }
 
 /**
@@ -175,7 +205,12 @@ export function _applyLoadedSettingsToRenderLayer(): void {
   if (_renderApplyDone || _renderApplyTimer) return
   const run = (): boolean => {
     if (!_chartIsReady()) return false
-    try { _doRenderApply() } catch (_) { /* never break the load path */ }
+    // Only spend the one shot if there was actually something to apply. An
+    // early call with an empty store used to mark it done and the real
+    // settings, arriving moments later, were then skipped at the guard above.
+    let did = false
+    try { did = _doRenderApply() } catch (_) { /* never break the load path */ }
+    if (!did) return false
     _renderApplyDone = true
     return true
   }

@@ -19,6 +19,10 @@ const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn 
 
 // ===== TIMEFRAME =====
 export function setTF(tf: any, btn: any): void {
+  // [2026-10-09] A timeframe the OPERATOR picked (btn present) must never be
+  // overruled by the boot restore landing later — see noteUserTfChoice in
+  // settingsStore. Programmatic restores pass btn=null and do not raise it.
+  if (btn) { try { (w as any).__zUserPickedTf = true } catch (_) { /* */ } }
   w.S.chartTf = tf
   try { resetBackfill() } catch (_) { }
   // [Pack D.4] Persist TF directly to localStorage so a refresh-before-

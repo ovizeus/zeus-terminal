@@ -87,9 +87,10 @@ function _showLoading(show: boolean): void {
 export function resetBackfill(): void {
   _inFlight = false
   _exhausted = false
-  // Forget the chart we were bound to as well, so the next initBackfill()
-  // re-subscribes even if it is handed the same object back.
-  _installedOn = null
+  // Deliberately NOT clearing the chart binding: setTF() calls this on every
+  // timeframe change while the chart object stays the same, and dropping the
+  // binding there would invite a second subscription on the next init. The
+  // instance comparison in initBackfill is the single source of truth.
   _showLoading(false)
 }
 
