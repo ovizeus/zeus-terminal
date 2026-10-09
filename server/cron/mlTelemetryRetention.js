@@ -116,7 +116,17 @@ function run(opts) {
 
     if (sum > 0) {
         try {
+            // [2026-10-09 audit] Name the tables. Only the total used to be logged,
+            // so a policy entry deleting far more than its window intends looked
+            // exactly like a quiet one, and there was no way to tell afterwards
+            // which table had lost the rows.
+            const perTable = Object.keys(deleted)
+                .filter((t) => deleted[t] > 0)
+                .sort((a, b) => deleted[b] - deleted[a])
+                .map((t) => `${t}=${deleted[t]}`)
+                .join(' ');
             logger.info('CRON', `[mlTelemetryRetention] pruned ${sum} rows in ${Date.now() - startedAt}ms`
+                + (perTable ? ` — ${perTable}` : '')
                 + (budgetExhausted ? ' (time budget spent — continues next run)' : ''));
         } catch (_) {}
     }

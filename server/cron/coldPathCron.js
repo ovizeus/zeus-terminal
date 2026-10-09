@@ -85,6 +85,21 @@ function _tick() {
     } catch (_) {}
 
     const finishedAt = Date.now();
+
+    // [2026-10-09 audit C2] Report the outcome. This cron used to write nothing
+    // at all, which is how it went unnoticed that every analysis below fails
+    // into a silent catch and the layer produces no insights whatsoever.
+    try {
+        const logger = require('../services/logger');
+        const summary = `tick: ${decisionsProcessed} decisions, ${modulesRun} modules loaded, `
+            + `${modulesFailed} failed, ${totalInsights} insights, ${finishedAt - startedAt}ms`;
+        if (totalInsights === 0 || modulesFailed > 0) {
+            logger.warn('COLD_PATH', `${summary} — 0 insights means every analysis threw; the reflection layer is inert`);
+        } else {
+            logger.info('COLD_PATH', summary);
+        }
+    } catch (_) { /* logging must never break the cron */ }
+
     try {
         _db.prepare(`INSERT INTO ml_reflection_runs
             (started_at, finished_at, decisions_processed, modules_run, modules_failed, total_insights, duration_ms)

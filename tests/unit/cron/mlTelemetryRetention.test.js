@@ -135,3 +135,28 @@ describe('WAL is truncated after a prune', () => {
         expect(seen.some(p => /wal_checkpoint/i.test(p))).toBe(false);
     });
 });
+
+// [2026-10-09 audit] The run logged only the TOTAL rows pruned, so there was no
+// way to tell WHICH table lost them. Two policy tables (ml_dr_state,
+// ml_reflection_runs) hold far less than their 30-day window implies and the
+// logs cannot say why — an over-deleting policy entry would look identical to a
+// quiet one. Per-table counts make the next run answer that by itself.
+describe('the prune says what it pruned, per table', () => {
+    test('the summary names each table that actually lost rows', () => {
+        const logger = require('../../../server/services/logger');
+        const spy = jest.spyOn(logger, 'info').mockImplementation(() => {});
+        try {
+            const now = Date.now();
+            const spec = retention.POLICY[0];
+            db.prepare(`DELETE FROM ${spec.table}`).run();
+            const ins = db.prepare(`INSERT INTO ${spec.table} (${spec.column}) VALUES (?)`);
+            for (let i = 0; i < 3; i++) ins.run(now - (spec.days + 10) * DAY);
+
+            retention.run({ now });
+
+            const said = spy.mock.calls.map((c) => String(c[1] || '')).join(' ');
+            expect(said).toMatch(new RegExp(spec.table));
+            expect(said).toMatch(/3/);
+        } finally { spy.mockRestore(); }
+    });
+});
