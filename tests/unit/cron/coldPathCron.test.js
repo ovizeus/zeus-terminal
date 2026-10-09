@@ -35,14 +35,28 @@ describe('coldPathCron reports what it actually did', () => {
         expect(lines.join(' ')).toMatch(/insights/i);
     });
 
-    test('producing zero insights is surfaced as a warning, not buried', () => {
-        // Every analysis currently throws into a silent catch, so a real tick
-        // yields nothing. That must be loud: a reflection layer that reflects on
-        // nothing is indistinguishable from one that is switched off.
+    test('a quiet tick says there was nothing to analyse, and is not a warning', () => {
+        // No pairs discovered → legitimately nothing to do. Reporting that as a
+        // failure would train us to ignore the line, which is how the real
+        // failure stayed hidden in the first place.
+        mockPairs = [];
+        _tick();
+
+        const info = mockLogger.info.mock.calls.map((c) => String(c[1] || '')).join(' ');
+        expect(info).toMatch(/nothing to analyse/i);
+        expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    test('an analysis that throws IS a warning', () => {
+        mockPairs = [{ user_id: 1, resolved_env: 'DEMO' }];
+        const engine = require('../../../server/services/ml/R2_cognition/competingHypothesesEngine');
+        jest.spyOn(engine, 'getCompetingHypotheses').mockImplementation(() => { throw new Error('boom'); });
+
         _tick();
 
         const warned = mockLogger.warn.mock.calls.map((c) => String(c[1] || '')).join(' ');
-        expect(warned).toMatch(/0 insights|no insights/i);
+        expect(warned).toMatch(/FAILED/);
+        engine.getCompetingHypotheses.mockRestore();
     });
 });
 

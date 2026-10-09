@@ -28,6 +28,7 @@ function _tick() {
     let modulesRun = 0;
     let modulesFailed = 0;
     let totalInsights = 0;
+    let _pairsSeen = 0;
 
     try {
         const countRow = _db.prepare(
@@ -75,6 +76,7 @@ function _tick() {
             ).all(startedAt - COLD_INTERVAL_MS * 12);
         } catch (_) { pairs = []; }
 
+        _pairsSeen = pairs.length;
         for (const { user_id: uid, resolved_env: env } of pairs) {
             try {
                 const hypotheses = _ch.getCompetingHypotheses({ userId: uid, resolvedEnv: env });
@@ -95,9 +97,16 @@ function _tick() {
     try {
         const logger = require('../services/logger');
         const summary = `tick: ${decisionsProcessed} decisions, ${modulesRun} modules loaded, `
-            + `${modulesFailed} failed, ${totalInsights} insights, ${finishedAt - startedAt}ms`;
-        if (totalInsights === 0 || modulesFailed > 0) {
-            logger.warn('COLD_PATH', `${summary} — 0 insights means every analysis threw; the reflection layer is inert`);
+            + `${modulesFailed} failed, ${totalInsights} insights, ${_pairsSeen} user/env pairs, `
+            + `${finishedAt - startedAt}ms`;
+        // Distinguish "nothing to analyse" from "the analysis broke". The first
+        // is a legitimate quiet tick — no recent attribution events, or fewer
+        // hypotheses than a dominance verdict needs. The second is the failure
+        // this cron spent its whole life hiding, so only that one is a warning.
+        if (modulesFailed > 0) {
+            logger.warn('COLD_PATH', `${summary} — analyses FAILED; the reflection layer is not doing its job`);
+        } else if (totalInsights === 0) {
+            logger.info('COLD_PATH', `${summary} — nothing to analyse (no recent evidence or too few hypotheses)`);
         } else {
             logger.info('COLD_PATH', summary);
         }
