@@ -1,31 +1,37 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-09 · build b255 v1.7.229
+> **Ultima actualizare:** 2026-10-09 seara · build b259 v1.7.233
 > **Ordinea de mai jos e ordinea în care le facem.** 🔧 = o fac eu · 🙋 = are nevoie de tine (decizie, chei, sau ochii tăi).
 
 ---
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Din auditul de azi: **A1, B1, B2, B3, B4, C1, C2, C3 sunt închise**. Rămâne A2, nou şi activ.)*
+> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Închise azi: **A1, B1, B2, B3, B4, C1, C2, C3**. Rămase: A2 şi B5, amândouă găsite azi.)*
 
-**P1 🔥 Rafala de rate-limit Binance — ACTIVĂ** *(A2, descoperită azi la 16:40)*. 44 de intrări în SUPPRESSED azi faţă de 0-3 pe zi înainte, continuu din ora 08:00. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi a rupt reînnoirea `listenKey` pentru uid=1. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 descrie costul ca per user. **N-am atins ritmul de polling** — e cale de bani şi vreau cauza dovedită, nu o ajustare pe ghicite. Primul lucru de mâine.
+**P1 🔥 Rafala de rate-limit Binance — ACTIVĂ** *(A2)*. 44 de intrări în SUPPRESSED azi faţă de 0-3 pe zi înainte, continuu din ora 08:00. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi a rupt reînnoirea `listenKey` pentru uid=1. Backoff-ul escaladează şi nu se resetează (contorul 43→47 într-o oră, răcirea ajunsă la 33 min). Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 descrie costul ca per user. **N-am atins ritmul de polling** — cale de bani, vreau cauza dovedită. *Din 16:46 n-a mai apărut niciun 429; de verificat dacă revine.*
 
-**P2 🙋 Calibrarea auto-carantinei ML.** Cronul reparat ieri descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. `ml_feature_global_overrides` e goală.
+**P2 🔧 Feed-ul de lichidări Binance nu primeşte nimic** *(B5)*. 551 de raportări consecutive cu `frames=0`, în timp ce Bybit şi OKX curg. Socket-ul se declară conectat, deci nimic nu semnalează problema. De verificat numele stream-ului şi formatul abonării.
+
+**P3 🙋 Calibrarea auto-carantinei ML.** Cronul reparat ieri descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. `ml_feature_global_overrides` e goală.
 *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm până creşte volumul.
 
-**P3 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e ON, deci Bybit nu trimite HTTP real — de stins când vrei soak adevărat.
+**P4 🙋 Confirmarea că setările se salvează — te aşteaptă pe tine.** `updated_at` e tot **11 iulie 2026**, iar `terminator` lipseşte din setări. **Asta NU dovedeşte că fix-ul a picat** — pur şi simplu n-ai mai intrat să aprinzi ceva de când l-am livrat. *Ce ai de făcut:* refresh forţat, aprinzi un indicator, încă un refresh. Nu trebuie să-mi spui nimic — verific eu în baza de date.
 
-**P4 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Ultima din cele 17 vulnerabilităţi. Nu-l fac fără un test real de trimitere cu tine.
+**P5 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e ON, deci Bybit nu trimite HTTP real — de stins când vrei soak adevărat.
 
-**P5 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit**, sau mutat în Vault.
+**P6 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Ultima din cele 17 vulnerabilităţi. Nu-l fac fără un test real de trimitere cu tine.
 
-**P6 🔧 VACUUM: ~4,6 GB de recuperat.** Cere ~20s oprire. O fac la cerere.
+**P7 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit** (rotirea e obligatorie — ce-a fost expus rămâne expus), sau mutat în Vault.
 
-**P7 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Decizie de produs: offline, care sursă câştigă?
+**P8 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2722 MB de pagini reale. Cere ~20s oprire. O fac la cerere.
 
-**P8 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
+**P9 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
+
+**P10 🔧 Mărunţişuri, când se nimereşte:** lista de motive din reflection apare duplicată (`["anti_pattern","anti_pattern"]`); două tabele din politica de retenţie (`ml_dr_state`, `ml_reflection_runs`) ţin mult mai puţin decât fereastra lor de 30 de zile şi **n-am putut stabili de ce** — am adăugat raportare pe tabelă, aşa că rularea de mâine va spune singură.
+
+**P11 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android (cere rebuild + reinstall APK), Vault download pe Chrome desktop.
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
@@ -78,6 +84,12 @@ Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea glo
 **B4. ✅ REPARAT (b258) — Whitelist-ul de setări aruncă tăcut cheile necunoscute — ne-a costat deja de două ori.**
 `server/routes/trading.js:837`: `if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];` — restul dispar, **fără niciun log**. Exact aşa s-au pierdut `indicators` (reparat în b193) şi `overlays` (reparat în b248). Tiparul se va repeta la următoarea setare nouă.
 *Fix:* un singur `logger.warn` cu cheile respinse. Ar fi prins ambele incidente în prima zi.
+
+**B5. 🆕 Feed-ul de lichidări Binance e conectat dar NU primeşte nimic.** *(găsit 2026-10-09 17:25)*
+`[LIQ-FEED] state | BNB[conn=true frames=0 ev=0] BYB[conn=true frames=23 ev=7] OKX[conn=true frames=6360 ev=4515]` — Bybit şi OKX curg, Binance e la zero.
+*Dovadă că nu e un moment prost:* în ultimele 3000 de linii de log sunt **551 de raportări de stare şi în TOATE `BNB[conn=true frames=0]`**. Niciun cadru, vreodată, de la cea mai mare bursă dintre cele trei — în timp ce socket-ul se declară conectat, deci nimic nu semnalează o problemă.
+*Impact:* harta de lichidări şi semnalele derivate din ea rulează fără datele Binance, dar arată „conectat" — adică te-ai uita la un indicator care tace şi ai crede că piaţa e liniştită.
+*De verificat:* numele stream-ului şi formatul abonării (`!forceOrder@arr` vs per-simbol), plus dacă socket-ul primeşte ping-uri fără mesaje. **Nu e legat de rafala de rate-limit (A2)** — aceea e pe REST, asta e WebSocket.
 
 ### 🟢 MICI
 
