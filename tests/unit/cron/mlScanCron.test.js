@@ -2,7 +2,14 @@
 
 let mockFlagValue = true;
 let scanCalls = [];
-let mockUsers = [{ user_id: 1 }, { user_id: 2 }];
+// [2026-10-09] These are now (user_id, resolved_env) pairs: the cron discovers from
+// ml_attribution_events, which carries both, instead of looping every user over all
+// three envs. See mlScanCronDiscovery.test.js for the real-schema version of this.
+let mockUsers = [
+    { user_id: 1, resolved_env: 'DEMO' },
+    { user_id: 1, resolved_env: 'TESTNET' },
+    { user_id: 2, resolved_env: 'DEMO' },
+];
 
 jest.mock('../../../server/services/database', () => ({
     db: {
@@ -44,7 +51,11 @@ const autoQuarantine = require('../../../server/services/ml/R5B_governance/autoQ
 beforeEach(() => {
     mockFlagValue = true;
     scanCalls = [];
-    mockUsers = [{ user_id: 1 }, { user_id: 2 }];
+    mockUsers = [
+        { user_id: 1, resolved_env: 'DEMO' },
+        { user_id: 1, resolved_env: 'TESTNET' },
+        { user_id: 2, resolved_env: 'DEMO' },
+    ];
     autoQuarantine.scanAllFeatures.mockClear();
     jest.useFakeTimers();
 });
@@ -63,11 +74,12 @@ describe('mlScanCron', () => {
         expect(ENVS).toEqual(['DEMO', 'TESTNET', 'REAL']);
     });
 
-    test('_tick iterates users × envs and calls scanAllFeatures', () => {
+    test('_tick scans each discovered user/env pair and calls scanAllFeatures', () => {
         _tick();
-        expect(scanCalls.length).toBe(6);
+        expect(scanCalls.length).toBe(3);
         expect(scanCalls[0]).toMatchObject({ userId: 1, resolvedEnv: 'DEMO' });
-        expect(scanCalls[3]).toMatchObject({ userId: 2, resolvedEnv: 'DEMO' });
+        expect(scanCalls[1]).toMatchObject({ userId: 1, resolvedEnv: 'TESTNET' });
+        expect(scanCalls[2]).toMatchObject({ userId: 2, resolvedEnv: 'DEMO' });
     });
 
     test('_tick skips when ML_CRON_SCAN_ENABLED=false', () => {
@@ -86,7 +98,7 @@ describe('mlScanCron', () => {
             return { evaluated: 1, quarantined: [], skipped: 0, errors: [] };
         });
         _tick();
-        expect(callCount).toBe(6);
+        expect(callCount).toBe(3);
     });
 
     test('schedule sets interval + delayed initial tick', () => {

@@ -118,6 +118,16 @@ jest.mock('../../server/services/telegram', () => ({
     sendToUser: (...a) => mockTelegramSendToUser(...a),
 }));
 
+// [2026-10-09] These tests predate the Bybit dry-run latch. recoveryBoot skips any
+// exchange shouldReconcileExchange() rejects, and the real migrationFlags ships
+// BYBIT_DRY_RUN_ONLY=true, so every bybit case below was silently skipped: three
+// tests failed with totalReconciled=0 and were written off as "pre-existing".
+// The code was right; the tests were stale. The flag is mocked so the
+// non-active-exchange cases exercise what they mean to, and the latch itself is
+// pinned by its own test below.
+const mockFlags = { BYBIT_DRY_RUN_ONLY: false };
+jest.mock('../../server/migrationFlags', () => mockFlags);
+
 const recoveryBoot = require('../../server/services/recoveryBoot');
 
 function resetState() {
@@ -146,6 +156,7 @@ beforeEach(() => {
     mockSetGlobalHalt.mockReset();
     mockPositionEventsAppend.mockReset();
     mockTelegramSendToUser.mockReset().mockResolvedValue({ ok: true });
+    mockFlags.BYBIT_DRY_RUN_ONLY = false;
 });
 
 describe('recoveryBoot', () => {
@@ -289,6 +300,24 @@ describe('recoveryBoot', () => {
         }));
         // Never placed on the active (binance) exchange.
         expect(mockPlaceStopLoss).not.toHaveBeenCalledWith(1, expect.objectContaining({ exchangeOverride: 'binance' }));
+    });
+
+    // The production default is BYBIT_DRY_RUN_ONLY=true, and the whole point of the
+    // skip is that a dry-run Bybit must not land the user in erroredUsers and leave
+    // their global halt ARMED while Binance reconciled cleanly. Nothing covered that.
+    it('bybit under the dry-run latch is skipped, and does NOT keep the user halted', async () => {
+        mockFlags.BYBIT_DRY_RUN_ONLY = true;
+        addExchangeAccount(1, 'binance', 1);
+        addExchangeAccount(1, 'bybit', 0);
+
+        const r = await recoveryBoot.run();
+
+        // Bybit was never queried, and only the binance pass counted.
+        expect(mockGetPositions).not.toHaveBeenCalledWith(1, expect.objectContaining({ exchangeOverride: 'bybit' }));
+        expect(r.totalUsers).toBe(1);
+        expect(r.errors).toBe(0);
+        // The user is disarmed on the strength of the live exchange alone.
+        expect(mockSetGlobalHalt).toHaveBeenCalledWith(false, 1, 'RECOVERY_BOOT_COMPLETE');
     });
 
     it('run never throws (defensive)', async () => {

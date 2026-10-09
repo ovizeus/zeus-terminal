@@ -20,11 +20,24 @@ function _tick() {
     const sinceMs = Date.now() - LOOKBACK_MS;
     let totalEvaluated = 0, totalQuarantined = 0, totalErrors = 0, usersScanned = 0;
 
-    let users;
+    // [2026-10-09] Discover from ml_attribution_events — the table scanAllFeatures
+    // actually reads, and the one that carries user_id and resolved_env. The previous
+    // query asked ml_bandit_evidence for a user_id column it does not have (the user
+    // is the first segment of cell_key), so prepare() threw on every tick and the
+    // bare catch turned that into "0 users" for as long as this cron has existed.
+    // Scanning only the (user, env) pairs with evidence in the window also drops the
+    // two-thirds of calls that were always made against envs holding nothing.
+    let pairs;
     try {
-        users = _db.prepare('SELECT DISTINCT user_id FROM ml_bandit_evidence').all();
-    } catch (_) {
-        users = [];
+        pairs = _db.prepare(
+            `SELECT DISTINCT user_id, resolved_env FROM ml_attribution_events
+             WHERE attributed_at >= ?`
+        ).all(sinceMs);
+    } catch (err) {
+        pairs = [];
+        if (_logger && _logger.error) {
+            _logger.error('ML_SCAN_CRON', `user discovery failed, scanning nobody: ${err.message}`);
+        }
     }
 
     let scanAllFeatures;
@@ -32,25 +45,25 @@ function _tick() {
         scanAllFeatures = require('../services/ml/R5B_governance/autoQuarantine').scanAllFeatures;
     } catch (_) { return; }
 
-    for (const row of users) {
-        for (const env of ENVS) {
-            try {
-                const result = scanAllFeatures({ userId: row.user_id, resolvedEnv: env, sinceMs });
-                totalEvaluated += result.evaluated || 0;
-                totalQuarantined += (result.quarantined || []).length;
-                totalErrors += (result.errors || []).length;
-            } catch (err) {
-                totalErrors++;
-                if (_logger && _logger.warn) {
-                    _logger.warn('ML_SCAN_CRON', `scanAllFeatures failed uid=${row.user_id} env=${env}: ${err.message}`);
-                }
+    const seenUsers = new Set();
+    for (const { user_id: uid, resolved_env: env } of pairs) {
+        try {
+            const result = scanAllFeatures({ userId: uid, resolvedEnv: env, sinceMs });
+            totalEvaluated += result.evaluated || 0;
+            totalQuarantined += (result.quarantined || []).length;
+            totalErrors += (result.errors || []).length;
+        } catch (err) {
+            totalErrors++;
+            if (_logger && _logger.warn) {
+                _logger.warn('ML_SCAN_CRON', `scanAllFeatures failed uid=${uid} env=${env}: ${err.message}`);
             }
         }
-        usersScanned++;
+        seenUsers.add(uid);
     }
+    usersScanned = seenUsers.size;
 
     if (_logger && _logger.info) {
-        _logger.info('ML_SCAN_CRON', `tick complete: ${usersScanned} users × ${ENVS.length} envs, evaluated=${totalEvaluated}, quarantined=${totalQuarantined}, errors=${totalErrors}`);
+        _logger.info('ML_SCAN_CRON', `tick complete: ${usersScanned} users, ${pairs.length} user/env pairs, evaluated=${totalEvaluated}, quarantined=${totalQuarantined}, errors=${totalErrors}`);
     }
 }
 
