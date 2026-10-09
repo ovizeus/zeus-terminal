@@ -10,8 +10,10 @@ const mockLogger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 jest.mock('../../../server/services/logger', () => mockLogger);
 
 const mockRun = jest.fn();
+// `all()` answers the (user, env) discovery query; `get()` the decision count.
+let mockPairs = [];
 jest.mock('../../../server/services/database', () => ({
-    db: { prepare: jest.fn(() => ({ get: jest.fn(() => ({ cnt: 7 })), run: mockRun, all: jest.fn(() => []) })) },
+    db: { prepare: jest.fn(() => ({ get: jest.fn(() => ({ cnt: 7 })), run: mockRun, all: jest.fn(() => mockPairs) })) },
 }));
 
 const { _tick } = require('../../../server/cron/coldPathCron');
@@ -20,6 +22,7 @@ beforeEach(() => {
     mockLogger.info.mockClear();
     mockLogger.warn.mockClear();
     mockRun.mockClear();
+    mockPairs = [];
 });
 
 describe('coldPathCron reports what it actually did', () => {
@@ -40,5 +43,44 @@ describe('coldPathCron reports what it actually did', () => {
 
         const warned = mockLogger.warn.mock.calls.map((c) => String(c[1] || '')).join(' ');
         expect(warned).toMatch(/0 insights|no insights/i);
+    });
+});
+
+// [2026-10-09 audit A1] The four "analyses" were calls to nothing:
+//   computeCoherenceScore  — called with {recentDecisions:[]}, but it requires
+//                            a `thread`, and nothing enumerates threads, so it
+//                            has no periodic entry point at all.
+//   getAttributionStats    — does not exist; that module exports per-event
+//                            helpers (recordAttribution, classify...), nothing
+//                            periodic.
+//   checkQuarantine        — does not exist either; the real sweep is
+//                            scanAllFeatures, which mlScanCron already owns on
+//                            its own 4h cadence. Running it here every 5
+//                            minutes would duplicate, not add.
+//   evaluateDominance      — real, but was passed thresholds instead of the
+//                            `hypotheses` array it requires.
+// Only the last one is a genuine periodic analysis, so it is the one that is
+// made to work; the other three are removed rather than left pretending.
+describe('the cold path actually analyses something', () => {
+    test('dominance is evaluated over the hypotheses that exist, and counts as an insight', () => {
+        mockPairs = [{ user_id: 1, resolved_env: 'DEMO' }];
+        const engine = require('../../../server/services/ml/R2_cognition/competingHypothesesEngine');
+        jest.spyOn(engine, 'getCompetingHypotheses').mockReturnValue([
+            { id: 1, status: 'ACTIVE', posterior: 0.8 },
+            { id: 2, status: 'ACTIVE', posterior: 0.1 },
+        ]);
+        const dom = jest.spyOn(engine, 'evaluateDominance').mockReturnValue({ dominant: true });
+
+        _tick();
+
+        expect(dom).toHaveBeenCalledWith(expect.objectContaining({
+            hypotheses: expect.any(Array),
+        }));
+        const lines = mockLogger.info.mock.calls.concat(mockLogger.warn.mock.calls)
+            .map((c) => String(c[1] || '')).join(' ');
+        expect(lines).toMatch(/1 insights|[1-9][0-9]* insights/);
+
+        engine.getCompetingHypotheses.mockRestore();
+        engine.evaluateDominance.mockRestore();
     });
 });

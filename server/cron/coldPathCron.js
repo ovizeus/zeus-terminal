@@ -48,41 +48,44 @@ function _tick() {
     // [Fix 3] Cold path analysis — call real functions on modules that have them.
     // Each wrapped in individual try/catch (one failure doesn't block others).
 
-    // Narrative coherence — compute score on recent decisions
-    try {
-        const _nc = require('../services/ml/R2_cognition/narrativeCoherence');
-        if (typeof _nc.computeCoherenceScore === 'function') {
-            _nc.computeCoherenceScore({ recentDecisions: [], threshold: 0.5 });
-            totalInsights++;
-        }
-    } catch (_) {}
-
-    // Competing hypotheses — evaluate dominance across active hypotheses
+    // [2026-10-09 audit A1] This block used to hold four "analyses" that were
+    // calls to nothing, each in its own silent catch, which is why every
+    // recorded run produced total_insights=0 while looking healthy:
+    //   computeCoherenceScore — passed {recentDecisions:[]} but requires a
+    //       `thread`, and nothing enumerates threads, so there is no periodic
+    //       entry point for it at all;
+    //   getAttributionStats — does not exist (that module exports per-event
+    //       helpers, nothing periodic);
+    //   checkQuarantine — does not exist either; the real sweep is
+    //       scanAllFeatures, which mlScanCron already owns on a 4h cadence, so
+    //       running it here every 5 minutes would duplicate rather than add;
+    //   evaluateDominance — real, but was handed thresholds instead of the
+    //       `hypotheses` array it requires.
+    // Only dominance is a genuine periodic analysis, so it is the one kept and
+    // made to work. The other three are removed rather than left pretending to
+    // be a reflection layer.
     try {
         const _ch = require('../services/ml/R2_cognition/competingHypothesesEngine');
-        if (typeof _ch.evaluateDominance === 'function') {
-            _ch.evaluateDominance({ minPosterior: 0.1, dominanceThreshold: 0.7 });
-            totalInsights++;
-        }
-    } catch (_) {}
+        // Same discovery as mlScanCron: the (user, env) pairs with recent evidence.
+        let pairs = [];
+        try {
+            pairs = _db.prepare(
+                `SELECT DISTINCT user_id, resolved_env FROM ml_attribution_events
+                 WHERE attributed_at >= ?`
+            ).all(startedAt - COLD_INTERVAL_MS * 12);
+        } catch (_) { pairs = []; }
 
-    // Agency attribution — classify recent decision attributions
-    try {
-        const _aa = require('../services/ml/R2_cognition/agencyAttributionLedger');
-        if (typeof _aa.getAttributionStats === 'function') {
-            _aa.getAttributionStats({ limit: 50 });
-            totalInsights++;
+        for (const { user_id: uid, resolved_env: env } of pairs) {
+            try {
+                const hypotheses = _ch.getCompetingHypotheses({ userId: uid, resolvedEnv: env });
+                if (!Array.isArray(hypotheses) || hypotheses.length === 0) continue;
+                _ch.evaluateDominance({ hypotheses });
+                totalInsights++;
+            } catch (err) {
+                modulesFailed++;
+            }
         }
-    } catch (_) {}
-
-    // [Wave 6] Governance loop — periodic autoQuarantine check.
-    try {
-        const _aq = require('../services/ml/R5B_governance/autoQuarantine');
-        if (typeof _aq.checkQuarantine === 'function') {
-            _aq.checkQuarantine({ minTrades: 100 });
-            totalInsights++;
-        }
-    } catch (_) {}
+    } catch (_) { /* the loader itself failing is already counted above */ }
 
     const finishedAt = Date.now();
 

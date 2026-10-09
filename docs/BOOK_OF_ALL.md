@@ -8,32 +8,24 @@
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> Litera din paranteză trimite la secţiunea de audit de mai jos, unde e dovada. *(Fostul P1 — gaura de autentificare B1 — e reparat şi livrat în b257.)*
+> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Din auditul de azi: **A1, B1, B2, B3, B4, C1, C2, C3 sunt închise**. Rămâne A2, nou şi activ.)*
 
-**P1 🔧 Stratul ML de reflecţie nu produce nimic** *(A1 — `total_insights=0` la fiecare rulare)*. 4 din 4 analize pică tăcut, la fiecare 5 minute, de cine ştie când. Repar apelurile şi fac cronul să raporteze, ca să nu mai poată fi mut.
+**P1 🔥 Rafala de rate-limit Binance — ACTIVĂ** *(A2, descoperită azi la 16:40)*. 44 de intrări în SUPPRESSED azi faţă de 0-3 pe zi înainte, continuu din ora 08:00. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi a rupt reînnoirea `listenKey` pentru uid=1. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 descrie costul ca per user. **N-am atins ritmul de polling** — e cale de bani şi vreau cauza dovedită, nu o ajustare pe ghicite. Primul lucru de mâine.
 
-**P2 🙋 Calibrarea auto-carantinei ML.** Cronul reparat azi descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la un volum real de ~11 evenimente/zi — matematic nu se poate atinge. `ml_feature_global_overrides` e goală = zero carantine puse vreodată.
-*Decizia ta:* (a) lărgim fereastra la 7-30 zile păstrând pragul 100 — **recomandarea mea**; (b) coborâm pragul; (c) o lăsăm aşa până creşte volumul. N-o ating singur: schimbă comportamentul guvernanţei ML.
+**P2 🙋 Calibrarea auto-carantinei ML.** Cronul reparat ieri descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. `ml_feature_global_overrides` e goală.
+*Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm până creşte volumul.
 
-**P3 🔧 Whitelist-ul de setări aruncă tăcut chei necunoscute** *(B4)*. Ne-a costat `indicators` (b193) şi `overlays` (b248). Un singur `logger.warn` le-ar fi prins pe amândouă în prima zi. Cel mai bun raport efort/valoare din listă.
+**P3 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e ON, deci Bybit nu trimite HTTP real — de stins când vrei soak adevărat.
 
-**P4 🔧 Coada de închidere de urgenţă poate pierde tăcut o intrare** *(B3)*, pe ambele burse. Halt-ul + alerta Telegram rămân, deci nu eşti orb — se pierde doar reîncercarea automată.
+**P4 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Ultima din cele 17 vulnerabilităţi. Nu-l fac fără un test real de trimitere cu tine.
 
-**P5 🔧 `parityShadowLogger` scrie în coloane inexistente, iar testul îşi inventează schema** *(B2)*. Cod mort acum, dar testul verde ar induce în eroare pe oricine îl conectează.
+**P5 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit**, sau mutat în Vault.
 
-**P6 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** *(confirmată vie azi 04:46)* Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e **ON**, deci Bybit oricum nu trimite HTTP real — de stins când vrei soak adevărat.
+**P6 🔧 VACUUM: ~4,6 GB de recuperat.** Cere ~20s oprire. O fac la cerere.
 
-**P7 🙋 `nodemailer` 8.0.11 → 10.0.16, breaking, pe calea de auth.** Ultima din cele 17 vulnerabilităţi (1 high). Nu-l fac fără un test real de trimitere cu tine.
+**P7 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Decizie de produs: offline, care sursă câştigă?
 
-**P8 🙋 Keystore-ul de release Android e în git.** `android/app/zeus-release.keystore`, parolă slabă. Scos din istoric **şi rotit** (rotirea e obligatorie), sau mutat în Vault.
-
-**P9 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2722 MB de pagini reale. Cere ~20s oprire. O fac la cerere.
-
-**P10 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
-
-**P11 🔧 Igienă, când se nimereşte** *(C1-C3)*: cele două cron-uri complet mute, logul de backup gol din 9 iunie, şi `catch`-urile tăcute din jurul scrierilor în DB.
-
-**P12 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android, Vault download pe Chrome desktop.
+**P8 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
@@ -42,15 +34,24 @@
 
 ### 🔴 GRAVE
 
-**A1. Stratul ML de reflecţie („cold path") rulează la fiecare 5 minute şi nu produce NIMIC.**
-`ml_reflection_runs` arată la **fiecare** rulare: `modules_run=11`, `modules_failed=0`, **`total_insights=0`**. Arată sănătos tocmai fiindcă eşecurile sunt numărate separat de insight-uri, iar toate cele 4 analize sunt în `catch (_) {}`. Toate 4 pică, din motive diferite:
-- `narrativeCoherence.computeCoherenceScore` — primeşte `{recentDecisions: [], threshold}`, dar funcţia cere obligatoriu `thread` (`_required(params,'thread')`) → aruncă;
-- `autoQuarantine.checkQuarantine` — **funcţia nu există** în fişier (cele reale sunt `scanAllFeatures` / `evaluateFeature`);
-- `agencyAttributionLedger.getAttributionStats` — nu e exportată;
-- `competingHypotheses.evaluateDominance` — nu incrementează niciodată, deci şi ea pică.
-*Dovadă:* `SELECT AVG(total_insights) FROM ml_reflection_runs` = **0**, pe toate rulările.
-*De ce e grav:* e aceeaşi clasă cu cronul de auto-carantină reparat azi — un subsistem întreg, pornit, raportat ca sănătos, cu efect zero. Nu pierde bani, dar tot ce credem că „învaţă" acolo nu se întâmplă.
-*Fix:* apelurile trebuie să primească parametrii reali (şi date reale, nu `[]`), iar cronul să logheze `modules_failed`/`total_insights` ca să nu mai poată fi mut.
+**A1. ✅ REPARAT (b258) — stratul ML de reflecţie („cold path") rula la 5 minute şi nu producea NIMIC.**
+`ml_reflection_runs` arăta la **fiecare** rulare `modules_run=11`, `modules_failed=0`, **`total_insights=0`** — părea sănătos tocmai fiindcă eşecurile se numărau separat de insight-uri, iar toate analizele erau în `catch (_) {}`.
+*Ce am găsit uitându-mă la fiecare din cele patru „analize":* erau apeluri către nimic.
+- `computeCoherenceScore` — primea `{recentDecisions: []}`, dar cere obligatoriu un `thread`; şi **nu există nicio funcţie care să enumere thread-uri**, deci n-are cum să fie rulată periodic;
+- `getAttributionStats` — **nu există**; modulul ăla exportă doar ajutoare per-eveniment (`recordAttribution`, `classifyDominantAttribution`), nimic periodic;
+- `checkQuarantine` — **nu există** nici ea; scanarea reală e `scanAllFeatures`, pe care `mlScanCron` o deţine deja la 4h — rulată aici la 5 minute ar fi dublat, nu adăugat;
+- `evaluateDominance` — **reală**, dar primea praguri în loc de tabloul `hypotheses` pe care îl cere.
+*Fix:* singura analiză cu adevărat periodică (dominanţa între ipoteze concurente) primeşte acum date reale — descoperă perechile (user, mediu) cu probe recente, exact ca `mlScanCron`, ia ipotezele cu `getCompetingHypotheses` şi evaluează. Celelalte trei **le-am şters**, nu le-am lăsat să se prefacă: un strat de reflecţie care nu reflectă nimic e mai rău decât unul oprit, fiindcă pare că lucrează. Cronul raportează acum ce a făcut, iar „0 insights" e avertisment, nu tăcere.
+
+**A2. 🔥 ACTIV ACUM — Zeus depăşeşte plafonul de greutate Binance şi îşi taie singur cererile semnate.** *(descoperit 2026-10-09 16:40, în curs)*
+`binance_rate_state_log` arată **44 de intrări în SUPPRESSED azi**, faţă de 0-3 în fiecare zi precedentă. Nu e o rafală izolată: evenimentele **încep la 08:00 şi continuă neîntrerupt**, 5-6 pe oră, până acum. (Reload-urile mele de azi au fost la 04:41, 05:23 şi 06:25 — deci *înainte* de start; nu ele sunt cauza.)
+*Ce se întâmplă, din loguri:*
+- `[BINANCE_RATE] HTTP 429 from testnet.binancefuture.com/fapi/v2/positionRisk src=signer:GET /fapi/v2/positionRisk usedWeight=6010/6000` — plafonul de 6000/minut e depăşit;
+- `[BINANCE IP-CB] Tripped — refusing all signed requests for ~61s` — întrerupătorul taie **toate** cererile semnate, nu doar pe cele vinovate;
+- `[USERDATA] listenKey refresh failed uid=1 ... synthetic 503 scheduler backpressure` şi apoi `listenKey recreate failed` — **stream-ul de date utilizator nu se mai poate reînnoi**, adică actualizările de poziţii în timp real cad.
+*De ce contează deşi e testnet:* banul e pe IP, iar întrerupătorul refuză toate cererile semnate — deci atinge şi restul sistemului, nu doar contul de testnet.
+*Pistă concretă, neconfirmată:* `serverAT.js:5399` cere `positionRisk` **per poziţie** (`{ symbol: pos.symbol }`), în timp ce comentariul de la 5676 descrie costul ca „one positionRisk (w5) per user". `SERVER_AUTHORITATIVE_POSITIONS` e aprins pe testnet **şi** pe real. Dacă numărul de poziţii urmărite a crescut azi, asta ar explica exact tiparul.
+*N-am atins ritmul de polling:* e cale de bani şi n-am încă o cauză dovedită — cere o investigaţie dedicată, nu o ajustare pe ghicite. **Primul lucru de făcut mâine.**
 
 ### 🟡 MEDII
 
@@ -61,29 +62,29 @@ Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea glo
 *Dovadă după:* aceeaşi cerere → **HTTP 401 `auth required`**; fără header → 403; `/orphan-report` neschimbat la 401.
 *Fix:* apelanţii la distanţă au nevoie de sesiune; localhost rămâne liber pentru diagnosticul tău cu `curl`; verificarea de cookie e acum un helper comun. Testele vechi n-aveau cum s-o prindă — supertest vine de pe 127.0.0.1, unde se aplică ramura exceptată; cele noi conduc un apelant la distanţă prin `trust proxy`. 30/30 pe cele patru suite srvPos.
 
-**B2. `parityShadowLogger` scrie în coloane care nu există — iar testul îşi inventează schema.**
+**B2. ✅ REPARAT (b258) — `parityShadowLogger` scrie în coloane care nu există — iar testul îşi inventează schema.**
 `logDivergence` inserează în `dsl_parity_log` coloanele `cycle_no, decision, shadow_signal, diverged, details`. **Niciuna nu există** în tabela reală (care are `pos_id, source, phase, current_sl, pivot_*, impulse_val, entry_price, tick_price`). Şi `getDailyParity` cade pe `diverged`. Ambele sunt în `catch (_) {}`.
 *Dovadă:* pregătit pe baza vie → `table dsl_parity_log has no column named cycle_no` şi `no such column: diverged`.
 *De ce e doar mediu:* **n-are niciun apelant în `server/`** — doar testele îl cheamă, deci nu se pierd date live acum.
 *Ce e de fapt problema:* `tests/integration/bybitIntegration.test.js` îşi creează **propria** `dsl_parity_log` cu exact coloanele pe care codul le aşteaptă. Testul trece verde pentru un cod care nu poate funcţiona în producţie. Cine conectează modulul mâine se va baza pe un test mincinos.
 *Fix:* ori tabelă proprie pentru parity-shadow, ori aliniere la schema reală; testul să folosească schema reală.
 
-**B3. Scrierea în `emergency_close_queue` e înghiţită tăcut, pe ambele burse.**
+**B3. ✅ REPARAT (b258) — Scrierea în `emergency_close_queue` e înghiţită tăcut, pe ambele burse.**
 `binanceOps.js:284` şi `bybitOps.js:193` — `INSERT` în coada de reîncercare a închiderilor de urgenţă, ambele în `catch (_) {}`. Dacă scrierea pică (lock, constrângere), poziţia neprotejată **nu mai e reîncercată niciodată**.
 *Atenuant real:* imediat după se armează halt-ul global şi pleacă alertă Telegram critică — deci nu e complet invizibil pentru tine; se pierde doar automatizarea.
 *Fix:* logare + alertă pe eşecul inserării (e ultima plasă, merită zgomot).
 
-**B4. Whitelist-ul de setări aruncă tăcut cheile necunoscute — ne-a costat deja de două ori.**
+**B4. ✅ REPARAT (b258) — Whitelist-ul de setări aruncă tăcut cheile necunoscute — ne-a costat deja de două ori.**
 `server/routes/trading.js:837`: `if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];` — restul dispar, **fără niciun log**. Exact aşa s-au pierdut `indicators` (reparat în b193) şi `overlays` (reparat în b248). Tiparul se va repeta la următoarea setare nouă.
 *Fix:* un singur `logger.warn` cu cheile respinse. Ar fi prins ambele incidente în prima zi.
 
 ### 🟢 MICI
 
-**C1. 40% din `catch`-urile serverului sunt mute** — 551 din 1384 nu loghează nimic (376 complet goale, 175 doar cu comentariu). 38 dintre ele învelesc scrieri în baza de date. Pe client: 648. Nu e de reparat în bloc, dar e solul în care cresc bugurile A1/B2/B3.
+**C1. ✅ ÎNCHIS prin revizuire — 40% din `catch`-urile serverului sunt mute** — 551 din 1384 nu loghează nimic (376 complet goale, 175 doar cu comentariu). 38 dintre ele învelesc scrieri în baza de date. Pe client: 648. Nu e de reparat în bloc, dar e solul în care cresc bugurile A1/B2/B3.
 
-**C2. `coldPathCron` şi `r0SubstrateCron` nu scriu absolut nimic în loguri** — singurele două cron-uri fără nicio urmă. De aceea A1 a putut sta ascuns.
+**C2. ✅ REPARAT (b258) — `coldPathCron` şi `r0SubstrateCron` nu scriu absolut nimic în loguri** — singurele două cron-uri fără nicio urmă. De aceea A1 a putut sta ascuns.
 
-**C3. `data/logs/offsite-backup-cron.log` e 0 bytes din 9 iunie.** Backup-urile **funcţionează** (verificat: `zeus-offsite-20261009-033001.db.enc`, 287 MB, azi la 03:30), dar nu lasă nicio urmă locală — dacă pică, n-ai unde să te uiţi.
+**C3. ✅ CONSTATARE GREŞITĂ DE-A MEA, corectată — `data/logs/offsite-backup-cron.log` e 0 bytes din 9 iunie.** Backup-urile **funcţionează** (verificat: `zeus-offsite-20261009-033001.db.enc`, 287 MB, azi la 03:30), dar nu lasă nicio urmă locală — dacă pică, n-ai unde să te uiţi.
 
 ### ✅ Verificat şi NU e bug (ca să nu le mai căutăm)
 
@@ -113,6 +114,23 @@ Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea glo
 2. **P2 de mai sus** (calibrarea) — altfel stratul de guvernanţă rulează, dar nu decide nimic.
 3. **ML-DSL** — dacă vrei să revii la el, ordinea e `ML_DSL_SHADOW_ENABLED` → `LEARN` → `LOSSSIDE_SHADOW` → `LOSSSIDE_ACTIVE` → `FULL_CONTROL`, cu soak între trepte. **Atenţie:** Book-ul scria „flag APRINS, 34 poziţii, net +810" — flag-ul e **stins** acum. Nu ştiu când/de ce s-a stins; nota aia era depăşită.
 4. **REAL** — rămâne decizia ta (chei LIVE + flip `SERVER_BRAIN`/`SERVER_AT`), gated pe P&L testnet verde şi pe SP1.5 sizing-parity. Nimic de aprins din partea mea.
+
+---
+
+### 🩺 DOCTORUL OMEGA — verificat cap-coadă 2026-10-09
+
+**Verdict: funcţionează.** 61.501 evenimente de diagnostic, scrise activ; 64 de module înregistrate, DAG valid la fiecare boot.
+
+**Ce raportează, pe severităţi:**
+- **P0 — 10.786**, din care **10.775 sunt alerte `serverAT.globalHalt`**, aproape toate istorice (oprirea de 2 luni şi incidentul demo-opreşte-live din 8 octombrie). Nu e o avalanşă nouă.
+- **P2 — 50.682**, iar cele recente sunt `serverBrain.reflection`: brain-ul îşi blochează singur intrările (`anti_pattern`), adică exact funcţia S9 livrată în b240. **51 azi**, toate pe XRPUSDT LONG. Funcţionează cum trebuie. *(Cosmetic: lista de motive apare duplicată — `["anti_pattern","anti_pattern"]`.)*
+- P1 — 2, P3 — 31.
+
+**Ce pare gol dar NU e bug:**
+- **coloana `verdict` e goală la toate cele 61.501** — se scrie exclusiv din `falsePositiveAuditor.setVerdict`, accesibil doar prin ruta ta de operator (`/api/omega/doctor/...`). Înseamnă că n-ai triat niciodată manual o alertă ca fals-pozitiv. Unealtă neapăsată, nu cod mort.
+- **`ml_cognitive_checkpoints` = 0** şi **`ml_doctor_override_journal` = 0** — la fel, declanşate doar manual din rutele doctorului.
+
+**Un incident real, provocat de mine:** la **05:16** doctorul a trecut singur `HEALTHY → COMPROMISED` („self-heartbeat stale >30s"), iar la **05:19:15** s-a armat halt global prin dead-man switch (`brain_heartbeat_stale_63s`). Cauza: rulam suitele de teste complete pe VPS-ul viu şi am înfometat event loop-ul (acelaşi lucru a produs şi falsa derivă de ceas de -15,7s). **Şi-a revenit singur la 05:20:15** — `brain_recovered_after_6_healthy_checks`, exact plasa de auto-recovery construită pe 7 octombrie. A durat un minut, pe demo. Dovadă că mecanismul e bun, şi încă un motiv să nu rulez suita completă pe maşina vie.
 
 ---
 
