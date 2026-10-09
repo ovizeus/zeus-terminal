@@ -12,7 +12,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const FLAGS_FILE = path.join(__dirname, '..', 'data', 'migration_flags.json');
+// [2026-10-09] Under a test runner the flags live in a throwaway file. A suite
+// that loads this module and calls set() otherwise rewrites the PRODUCTION file:
+// that happened, and although save() wrote back the same values it had loaded,
+// the file changed owner to root while the server runs as zeus, so the app could
+// no longer persist any flag change — silently. Tests must never touch it.
+const _UNDER_TEST = !!process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test';
+const FLAGS_FILE = _UNDER_TEST
+    ? path.join(require('os').tmpdir(), `zeus_migration_flags_test_${process.pid}.json`)
+    : path.join(__dirname, '..', 'data', 'migration_flags.json');
+// Under test nothing is read or written at all: a per-pid temp file still leaks
+// between test FILES in the same worker (one suite's set() becoming another
+// suite's starting state), so every suite starts from the declared defaults.
 
 // [AUDIT-20260619 P1-1] REAL-money master switches that must never be flipped ON
 // via any runtime/admin route — only the formal operator procedure (JSON edit +
@@ -207,7 +218,7 @@ Object.freeze(DEFAULTS);
 const flags = Object.assign({}, DEFAULTS);
 
 try {
-    if (fs.existsSync(FLAGS_FILE)) {
+    if (!_UNDER_TEST && fs.existsSync(FLAGS_FILE)) {
         const saved = JSON.parse(fs.readFileSync(FLAGS_FILE, 'utf8'));
         for (const k of Object.keys(DEFAULTS)) {
             if (typeof saved[k] === 'boolean') flags[k] = saved[k];
@@ -334,6 +345,7 @@ _enforceMutexStrict();
 
 // ── Persist to disk ──
 function save() {
+    if (_UNDER_TEST) return;
     try {
         const dir = path.dirname(FLAGS_FILE);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -402,6 +414,8 @@ function getAll() {
 }
 
 module.exports = {
+    // Where flags persist. Exposed so a test can assert it is NOT the live file.
+    flagsFilePath: () => FLAGS_FILE,
     // Direct flag access (read-only semantics — use set() to change)
     get SERVER_MARKET_DATA() { return flags.SERVER_MARKET_DATA; },
     get SERVER_BRAIN() { return flags.SERVER_BRAIN; },

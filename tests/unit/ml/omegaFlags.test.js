@@ -22,22 +22,26 @@ describe('OMEGA Wave 1A — Migration Flags', () => {
         expect(MF).toHaveProperty(flagName);
     });
 
-    const ACTIVATED_FLAGS = [
-        // Stage 1-3 flipped
-        'ML_INGEST_ENABLED', 'ML_PIPELINE_SHADOW', 'ML_DEMO_INFLUENCE_ENABLED',
-        // Deliberately activated by operator on 2026-06-09 (testnet ML influence ON)
-        'ML_TESTNET_INFLUENCE_ENABLED',
-        // Defaults true since 109b8962 — fail-closed REAL consent gate
-        'ML_LIVE_OPTIN_REQUIRED',
-    ];
-    const INACTIVE_FLAGS = EXPECTED_FLAGS.filter(f => !ACTIVATED_FLAGS.includes(f));
+    // [2026-10-09] This block used to assert which flags the OPERATOR had switched
+    // on, and only passed because the test process read the live
+    // data/migration_flags.json. That is deployment state, not code behaviour: it
+    // drifts every time he flips a flag, and it made the suite go red for a
+    // perfectly healthy system. Worse, reading that file meant a test run could
+    // also WRITE it — which happened, leaving it owned by root so the server
+    // could no longer persist flags at all.
+    //
+    // What the code actually owns is the DECLARED DEFAULT: every ML influence
+    // flag ships OFF, and the REAL consent gate ships ON. That is the fail-closed
+    // contract worth pinning, and it holds whatever the operator has configured.
+    const CONSENT_GATE = 'ML_LIVE_OPTIN_REQUIRED';
+    const INFLUENCE_FLAGS = EXPECTED_FLAGS.filter((f) => f !== CONSENT_GATE);
 
-    test.each(ACTIVATED_FLAGS)('flag %s is active (resolved true)', (flagName) => {
-        expect(MF[flagName]).toBe(true);
+    test.each(INFLUENCE_FLAGS)('flag %s ships OFF by default (fail-closed)', (flagName) => {
+        expect(MF.DEFAULTS[flagName]).toBe(false);
     });
 
-    test.each(INACTIVE_FLAGS)('flag %s defaults to false', (flagName) => {
-        expect(MF[flagName]).toBe(false);
+    test('the REAL consent gate ships ON by default, so consent can never be skipped', () => {
+        expect(MF.DEFAULTS[CONSENT_GATE]).toBe(true);
     });
 
     test('all 9 OMEGA flags exist in DEFAULTS', () => {
