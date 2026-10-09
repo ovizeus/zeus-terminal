@@ -8,34 +8,32 @@
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> Litera din paranteză trimite la secţiunea de audit de mai jos, unde e dovada.
+> Litera din paranteză trimite la secţiunea de audit de mai jos, unde e dovada. *(Fostul P1 — gaura de autentificare B1 — e reparat şi livrat în b257.)*
 
-**P1 🔧 Gaura de autentificare de pe `/api/srv-pos/shadow-report`** *(B1 — confirmat live, HTTP 200 de pe internet)*. Scriere neautentificată, apărată doar de un header constant. Fix ieftin: aceeaşi verificare JWT ca la ruta vecină. **O fac prima** fiindcă e singura găsită azi care se poate atinge din exterior.
+**P1 🔧 Stratul ML de reflecţie nu produce nimic** *(A1 — `total_insights=0` la fiecare rulare)*. 4 din 4 analize pică tăcut, la fiecare 5 minute, de cine ştie când. Repar apelurile şi fac cronul să raporteze, ca să nu mai poată fi mut.
 
-**P2 🔧 Stratul ML de reflecţie nu produce nimic** *(A1 — `total_insights=0` la fiecare rulare)*. 4 din 4 analize pică tăcut, la fiecare 5 minute, de cine ştie când. Repar apelurile şi fac cronul să raporteze, ca să nu mai poată fi mut.
-
-**P3 🙋 Calibrarea auto-carantinei ML.** Cronul reparat azi descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la un volum real de ~11 evenimente/zi — matematic nu se poate atinge. `ml_feature_global_overrides` e goală = zero carantine puse vreodată.
+**P2 🙋 Calibrarea auto-carantinei ML.** Cronul reparat azi descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la un volum real de ~11 evenimente/zi — matematic nu se poate atinge. `ml_feature_global_overrides` e goală = zero carantine puse vreodată.
 *Decizia ta:* (a) lărgim fereastra la 7-30 zile păstrând pragul 100 — **recomandarea mea**; (b) coborâm pragul; (c) o lăsăm aşa până creşte volumul. N-o ating singur: schimbă comportamentul guvernanţei ML.
 
-**P4 🔧 Whitelist-ul de setări aruncă tăcut chei necunoscute** *(B4)*. Ne-a costat `indicators` (b193) şi `overlays` (b248). Un singur `logger.warn` le-ar fi prins pe amândouă în prima zi. Cel mai bun raport efort/valoare din listă.
+**P3 🔧 Whitelist-ul de setări aruncă tăcut chei necunoscute** *(B4)*. Ne-a costat `indicators` (b193) şi `overlays` (b248). Un singur `logger.warn` le-ar fi prins pe amândouă în prima zi. Cel mai bun raport efort/valoare din listă.
 
-**P5 🔧 Coada de închidere de urgenţă poate pierde tăcut o intrare** *(B3)*, pe ambele burse. Halt-ul + alerta Telegram rămân, deci nu eşti orb — se pierde doar reîncercarea automată.
+**P4 🔧 Coada de închidere de urgenţă poate pierde tăcut o intrare** *(B3)*, pe ambele burse. Halt-ul + alerta Telegram rămân, deci nu eşti orb — se pierde doar reîncercarea automată.
 
-**P6 🔧 `parityShadowLogger` scrie în coloane inexistente, iar testul îşi inventează schema** *(B2)*. Cod mort acum, dar testul verde ar induce în eroare pe oricine îl conectează.
+**P5 🔧 `parityShadowLogger` scrie în coloane inexistente, iar testul îşi inventează schema** *(B2)*. Cod mort acum, dar testul verde ar induce în eroare pe oricine îl conectează.
 
-**P7 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** *(confirmată vie azi 04:46)* Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e **ON**, deci Bybit oricum nu trimite HTTP real — de stins când vrei soak adevărat.
+**P6 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** *(confirmată vie azi 04:46)* Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e **ON**, deci Bybit oricum nu trimite HTTP real — de stins când vrei soak adevărat.
 
-**P8 🙋 `nodemailer` 8.0.11 → 10.0.16, breaking, pe calea de auth.** Ultima din cele 17 vulnerabilităţi (1 high). Nu-l fac fără un test real de trimitere cu tine.
+**P7 🙋 `nodemailer` 8.0.11 → 10.0.16, breaking, pe calea de auth.** Ultima din cele 17 vulnerabilităţi (1 high). Nu-l fac fără un test real de trimitere cu tine.
 
-**P9 🙋 Keystore-ul de release Android e în git.** `android/app/zeus-release.keystore`, parolă slabă. Scos din istoric **şi rotit** (rotirea e obligatorie), sau mutat în Vault.
+**P8 🙋 Keystore-ul de release Android e în git.** `android/app/zeus-release.keystore`, parolă slabă. Scos din istoric **şi rotit** (rotirea e obligatorie), sau mutat în Vault.
 
-**P10 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2722 MB de pagini reale. Cere ~20s oprire. O fac la cerere.
+**P9 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2722 MB de pagini reale. Cere ~20s oprire. O fac la cerere.
 
-**P11 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
+**P10 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
 
-**P12 🔧 Igienă, când se nimereşte** *(C1-C3)*: cele două cron-uri complet mute, logul de backup gol din 9 iunie, şi `catch`-urile tăcute din jurul scrierilor în DB.
+**P11 🔧 Igienă, când se nimereşte** *(C1-C3)*: cele două cron-uri complet mute, logul de backup gol din 9 iunie, şi `catch`-urile tăcute din jurul scrierilor în DB.
 
-**P13 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android, Vault download pe Chrome desktop.
+**P12 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android, Vault download pe Chrome desktop.
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
@@ -56,11 +54,12 @@
 
 ### 🟡 MEDII
 
-**B1. `POST /api/srv-pos/shadow-report` acceptă scrieri NEAUTENTIFICATE de pe internet.** *(confirmat live azi: HTTP 200)*
-Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea globală (linia 195), iar singura gardă e `x-zeus-request: 1` — o **constantă**. Comentariul din cod spune „custom header = CSRF proof": adevărat pentru un browser cross-origin, dar inutil împotriva unui `curl`. Spre deosebire de ea, ruta vecină `/orphan-report` verifică JWT-ul din cookie şi dă 401 — deci diferenţa nu e intenţionată, e o scăpare.
-*Impact:* buffer-ul de rapoarte e de 100 de intrări, limita e 5/minut pe IP → **~20 de minute** ca să scoţi afară toate rapoartele reale de divergenţă, adică exact dovezile pe care s-ar judeca migrarea pe poziţii server-side. Plus linii de log cu conţinut controlat de atacator.
-*Dovadă:* `curl -X POST -H 'x-zeus-request: 1' -d '{"count":0}' https://zeus-terminal.com/api/srv-pos/shadow-report` → `HTTP 200`. (Am trimis un payload inofensiv; a ocupat 1 slot din 100.)
-*Fix:* aceeaşi verificare JWT ca la `/orphan-report`, sau mutarea rutei după `createSessionAuth`.
+**B1. ✅ REPARAT (b257) — `POST /api/srv-pos/shadow-report` accepta scrieri NEAUTENTIFICATE de pe internet.** *(confirmat live, apoi închis şi reverificat live)*
+Ruta e montată la linia 184 din `server.js`, **înainte** de autentificarea globală (linia 195), iar singura gardă era `x-zeus-request: 1` — o **constantă**. Comentariul din cod spunea „custom header = CSRF proof": adevărat pentru un browser cross-origin, inutil împotriva unui `curl`. Ruta vecină `/orphan-report` verifica JWT-ul şi dădea 401 — deci era scăpare, nu intenţie.
+*Impact:* buffer de 100 de intrări, 5/minut pe IP → **~20 de minute** ca să scoţi afară toate rapoartele reale de divergenţă, adică exact dovezile pe care s-ar judeca migrarea pe poziţii server-side.
+*Dovadă înainte:* `curl -X POST -H 'x-zeus-request: 1' -d '{"count":0}' .../shadow-report` → **HTTP 200**.
+*Dovadă după:* aceeaşi cerere → **HTTP 401 `auth required`**; fără header → 403; `/orphan-report` neschimbat la 401.
+*Fix:* apelanţii la distanţă au nevoie de sesiune; localhost rămâne liber pentru diagnosticul tău cu `curl`; verificarea de cookie e acum un helper comun. Testele vechi n-aveau cum s-o prindă — supertest vine de pe 127.0.0.1, unde se aplică ramura exceptată; cele noi conduc un apelant la distanţă prin `trust proxy`. 30/30 pe cele patru suite srvPos.
 
 **B2. `parityShadowLogger` scrie în coloane care nu există — iar testul îşi inventează schema.**
 `logDivergence` inserează în `dsl_parity_log` coloanele `cycle_no, decision, shadow_signal, diverged, details`. **Niciuna nu există** în tabela reală (care are `pos_id, source, phase, current_sl, pivot_*, impulse_val, entry_price, tick_price`). Şi `getDailyParity` cade pe `diverged`. Ambele sunt în `catch (_) {}`.
