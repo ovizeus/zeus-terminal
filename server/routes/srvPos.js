@@ -15,6 +15,23 @@ function _isLocalhost(req) {
     return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 }
 
+// [2026-10-09 audit B1] This router is mounted BEFORE the global session auth,
+// so every handler here authenticates for itself. `x-zeus-request` is CSRF
+// protection — it stops a browser posting cross-origin — and is NOT
+// authentication: it is a constant, so curl satisfies it for free. Confirmed
+// live: an anonymous POST to /shadow-report from the internet returned 200.
+// Returns the user id from the session cookie, or null.
+function _sessionUserId(req) {
+    try {
+        const jwt = require('jsonwebtoken');
+        const config = require('../config');
+        const token = (req.cookies && req.cookies.zeus_token) || null;
+        if (!token) return null;
+        const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
+        return (decoded && decoded.id) || null;
+    } catch (_) { return null; }
+}
+
 // Prune empty IP entries from rate limit map to prevent unbounded growth
 let _cleanupTimer = setInterval(() => {
     for (const [ip, ts] of _postTimestamps) {
@@ -33,8 +50,14 @@ router.post('/shadow-report', express.json(), (req, res) => {
     // Auth: localhost always allowed (curl diagnostics).
     // Remote: require x-zeus-request header (custom header = CSRF proof, browser won't
     // send it cross-origin without preflight which server doesn't allow).
-    if (!_isLocalhost(req) && req.headers['x-zeus-request'] !== '1') {
-        return res.status(403).json({ ok: false, error: 'missing x-zeus-request header' });
+    if (!_isLocalhost(req)) {
+        if (req.headers['x-zeus-request'] !== '1') {
+            return res.status(403).json({ ok: false, error: 'missing x-zeus-request header' });
+        }
+        // Remote callers must carry a session, same as /orphan-report below.
+        if (!_sessionUserId(req)) {
+            return res.status(401).json({ ok: false, error: 'auth required' });
+        }
     }
 
     const ip = req.ip || '0.0.0.0';
@@ -128,17 +151,8 @@ router.post('/orphan-report', express.json(), (req, res) => {
     if (!_isLocalhost(req) && req.headers['x-zeus-request'] !== '1') {
         return res.status(403).json({ ok: false, error: 'missing x-zeus-request header' });
     }
-    // Auth: extract userId from cookie JWT
-    let userId = null;
-    try {
-        const jwt = require('jsonwebtoken');
-        const config = require('../config');
-        const token = (req.cookies && req.cookies.zeus_token) || null;
-        if (token) {
-            const decoded = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
-            userId = decoded && decoded.id;
-        }
-    } catch (_) {}
+    // Auth: session cookie (shared helper — see _sessionUserId).
+    const userId = _sessionUserId(req);
     if (!userId) return res.status(401).json({ ok: false, error: 'auth required' });
 
     // Debounce: 10s per user
