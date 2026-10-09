@@ -158,6 +158,13 @@ const SETTINGS_SHAPE = {
   manualLive: 'object', manualTestnet: 'object', dslSettings: 'object',
   // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace — nested { live, demo }
   brain: 'object',
+  // [2026-10-09] These two were whitelisted in routes/trading.js but never
+  // declared here, and this validator refuses the WHOLE payload when it meets
+  // one key it does not know. `overlays` was added in b248; from the moment
+  // b253 unblocked the client's save path, every single save came back 400 and
+  // nothing persisted at all — 51 of them in one day. A parity test now pins
+  // the two lists together (tests/unit/settingsValidatorParity.test.js).
+  overlays: 'object', radarLens: 'object',
 };
 
 function validateSettingsBody(req, res, next) {

@@ -60,7 +60,13 @@ const w = window as any
 
 let _inFlight = false
 let _exhausted = false
-let _installed = false
+// [2026-10-09] Remember WHICH chart we subscribed to, not merely that we once
+// did. TradingChart.tsx builds its chart inside a useEffect and calls
+// chart.remove() on cleanup, so every remount yields a NEW chart object. The
+// old boolean guard stayed true across that, so the subscription died with the
+// old chart and was never recreated: backfill worked until the first remount
+// and was silently dead afterwards until a full page reload.
+let _installedOn: any = null
 
 function _enabled(): boolean {
   return !!(w.__MF && w.__MF.CHART_BACKFILL_ENABLED === true)
@@ -81,6 +87,9 @@ function _showLoading(show: boolean): void {
 export function resetBackfill(): void {
   _inFlight = false
   _exhausted = false
+  // Forget the chart we were bound to as well, so the next initBackfill()
+  // re-subscribes even if it is handed the same object back.
+  _installedOn = null
   _showLoading(false)
 }
 
@@ -138,8 +147,8 @@ export async function loadOlder(): Promise<void> {
 }
 
 export function initBackfill(): void {
-  if (_installed || !w.mainChart) return
-  _installed = true
+  if (!w.mainChart || _installedOn === w.mainChart) return
+  _installedOn = w.mainChart
   try {
     w.mainChart.timeScale().subscribeVisibleLogicalRangeChange((r: any) => {
       const ok = _shouldTriggerBackfill({
@@ -153,5 +162,5 @@ export function initBackfill(): void {
       })
       if (ok) { void loadOlder() }
     })
-  } catch (_) { _installed = false }
+  } catch (_) { _installedOn = null }
 }

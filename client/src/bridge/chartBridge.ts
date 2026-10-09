@@ -31,6 +31,7 @@
 
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import * as LightweightCharts from 'lightweight-charts'
+import { initBackfill } from '../data/chartBackfill'
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface ChartRefs {
@@ -97,6 +98,15 @@ export function registerChart(refs: ChartRefs): void {
   if (!w.oviSeries) w.oviSeries = []
 
   console.log('[CHART-BRIDGE] Chart registered — all refs exposed to window')
+
+  // [2026-10-09] Re-arm the left-edge history backfill against THIS chart.
+  // TradingChart builds its chart in a useEffect and removes it on cleanup, so
+  // a remount registers a brand new object here. initBackfill() used to run
+  // only once from the legacy boot path, so after the first remount nothing
+  // was subscribed to the live chart's time scale and scrolling back silently
+  // stopped loading older candles. It is bound to the chart instance now, so
+  // calling it here is idempotent for the same chart and rebinds for a new one.
+  try { initBackfill() } catch (_) { /* an enhancement; never block chart readiness */ }
 
   // ── Dispatch readiness event ──
   // legacyLoader.ts listens for this before calling startApp()

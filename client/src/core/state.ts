@@ -1899,6 +1899,12 @@ export const IND_SETTINGS: any = {
   wma: { p1: 20, p2: 50 },
   st: { period: 10, mult: 3 },
   boreas: { atrPeriod: 10, mult: 3 },
+  // [2026-10-09] TERMINATOR was the only indicator with hasGenericSettings but
+  // no entry here, so its gear said "No settings" while updateTerminator was
+  // already reading cfg.period / cfg.mult and silently falling back to 10 / 3.
+  // These are the two values the renderer actually uses — a field that changed
+  // nothing would be worse than none.
+  terminator: { period: 10, mult: 3 },
   mentor: { maPeriod: 50, fast: 12, slow: 26, sigP: 9 },
   bb: { period: 20, stdDev: 2 },
   rsi14: { period: 14 },
