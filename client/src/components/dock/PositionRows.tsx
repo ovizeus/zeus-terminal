@@ -7,6 +7,7 @@
  * via the same engine exports the old inline handlers called.
  */
 import { useRef, useEffect, useState, memo } from 'react'
+import type { CSSProperties } from 'react'
 import { escHtml } from '../../utils/dom'
 import { fP, fmt } from '../../utils/format'
 import { attachConfirmClose } from '../../engine/events'
@@ -16,6 +17,7 @@ import { _safePnl, resolveDisplayPnl } from '../../utils/guards'
 import { useUiStore } from '../../stores'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
+import { ZiRow, POSITION_COLUMNS_WITH_ACTION, JOURNAL_COLUMNS, type ZiColumn, type ZiTone } from '../zi'
 
 // [Phase 12.A — Batch D5] Resolve exchange chip label for a LIVE position.
 //   Prefer the position's own exchange field (if server ever attaches one),
@@ -31,6 +33,39 @@ function _resolveExchangeLabel(pos: { exchange?: unknown }, fallback: 'binance' 
 
 const w = window as any
 
+// [2026-10-10 institutional redesign, Task 2 — DESIGN ONLY] Everything below the
+// imports that is styling is new; every handler, store call, effect and hook in
+// this file is exactly what it was. The rows stay COMPONENTS (they hold the
+// close / save-SL-TP / cancel / modify money-path call sites) and use ZiRow INSIDE themselves, with the action button as the last
+// cell, so the shared column template and the actions both survive.
+//
+// The action track is a fixed pixel width instead of `auto`. `auto` sizes each
+// row's own grid to its own button, so a row showing '✓ CONFIRM?' would push
+// its P&L column left of the row above it, and the (empty) header cell would
+// not reserve any space at all. The four data tracks are untouched.
+export const ACTION_TRACK = '96px'
+export const MANUAL_POSITION_COLUMNS: readonly ZiColumn[] = Object.freeze([
+  ...POSITION_COLUMNS_WITH_ACTION.slice(0, 4),
+  { ...POSITION_COLUMNS_WITH_ACTION[4], width: ACTION_TRACK },
+])
+export const MANUAL_JOURNAL_COLUMNS: readonly ZiColumn[] = JOURNAL_COLUMNS
+
+const sideTone = (side: string): ZiTone => (side === 'LONG' ? 'pos' : 'neg')
+const pnlTone = (n: number): ZiTone => (n >= 0 ? 'pos' : 'neg')
+const signedUsd = (n: number): string => (n >= 0 ? '+' : '-') + '$' + Math.abs(n).toFixed(2)
+
+const DETAIL: CSSProperties = { fontSize: 11, color: 'var(--zi-mut)', paddingBottom: 3, fontVariantNumeric: 'tabular-nums' }
+const CHIP: CSSProperties = { border: '1px solid var(--zi-line)', color: 'var(--zi-mut)', padding: '0 5px', borderRadius: 2, fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', marginLeft: 6 }
+const BTN_BASE: CSSProperties = { background: 'transparent', borderRadius: 2, cursor: 'pointer', fontWeight: 600, letterSpacing: '0.06em', width: '100%' }
+const FIELD: CSSProperties = { flex: 1, background: 'var(--zi-field)', border: '1px solid var(--zi-line)', padding: '3px 5px', borderRadius: 2, fontSize: 11, width: 60, fontFamily: 'var(--zi-mono)' }
+const FIELD_LBL: CSSProperties = { fontSize: 10, width: 22 }
+const SAVE_BTN: CSSProperties = { padding: '3px 10px', background: 'transparent', border: '1px solid var(--zi-edge)', color: 'var(--zi-val)', borderRadius: 2, fontSize: 9, cursor: 'pointer', fontWeight: 600, minHeight: 24, letterSpacing: '0.08em' }
+const closeBtnStyle = (confirm: boolean): CSSProperties => ({
+  ...BTN_BASE, padding: '10px 6px', fontSize: 10, minHeight: 52,
+  border: `1px solid ${confirm ? 'var(--zi-warn)' : 'var(--zi-neg)'}`,
+  color: confirm ? 'var(--zi-warn)' : 'var(--zi-neg)',
+})
+
 function _getCurPrice(sym: string | undefined): number {
   if (!sym) return 0
   try {
@@ -41,6 +76,27 @@ function _getCurPrice(sym: string | undefined): number {
   } catch { return 0 }
 }
 
+// Presentational only: the inputs keep the ids slEdit_<id> / tpEdit_<id> that
+// the save routine reads from the DOM, and the caller keeps its own state + save fn.
+function SlTpEditor({ id, sl, tp, setSl, setTp, onSave }: {
+  id: unknown; sl: string; tp: string
+  setSl: (v: string) => void; setTp: (v: string) => void; onSave: () => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 4, padding: '3px 0 7px', alignItems: 'center' }}>
+      <label htmlFor={`slEdit_${id}`} style={{ ...FIELD_LBL, color: 'var(--zi-neg)' }}>SL:</label>
+      <input id={`slEdit_${id}`} type="number" step={0.1} value={sl} onChange={e => setSl(e.target.value)} placeholder="—" style={{ ...FIELD, color: 'var(--zi-neg)' }} />
+      <label htmlFor={`tpEdit_${id}`} style={{ ...FIELD_LBL, color: 'var(--zi-pos)' }}>TP:</label>
+      <input id={`tpEdit_${id}`} type="number" step={0.1} value={tp} onChange={e => setTp(e.target.value)} placeholder="—" style={{ ...FIELD, color: 'var(--zi-pos)' }} />
+      <button onClick={onSave} style={SAVE_BTN}>SAVE</button>
+    </div>
+  )
+}
+
+function ModeChip({ isLive }: { isLive: boolean }) {
+  return <span style={{ ...CHIP, ...(isLive ? { color: 'var(--zi-warn)', borderColor: 'var(--zi-warn)' } : {}) }}>{isLive ? 'LIVE' : 'DEMO'}</span>
+}
+
 // ── Pending order row ────────────────────────────────────────────────────────
 // [PERF-8 2026-05-13] memo wrapper — row componente sunt rendered N times în
 // positions/pending/journal lists. Re-render trigger pe fiecare price tick
@@ -49,7 +105,6 @@ function _getCurPrice(sym: string | undefined): number {
 // CORECT doar pentru cards changed. Pattern mirror din PositionsList [PERF-3].
 export const PendingOrderRow = memo(function PendingOrderRow({ ord }: { ord: any }) {
   const symBase = (ord.sym || '').replace('USDT', '')
-  const sideColor = ord.side === 'LONG' ? 'var(--cyan)' : 'var(--blu)'
   const curPrice = _getCurPrice(ord.sym)
   const distPct = curPrice > 0 ? (((ord.limitPrice - curPrice) / curPrice) * 100).toFixed(2) : '?'
   const age = Date.now() - (ord.createdAt || Date.now())
@@ -59,42 +114,35 @@ export const PendingOrderRow = memo(function PendingOrderRow({ ord }: { ord: any
   const exchLabel = isLive ? _resolveExchangeLabel(ord, activeExchange) : null
 
   return (
-    <div className="pos-row pos-pending" style={{ borderColor: sideColor }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700, color: sideColor }}>
-          <span style={{ background: '#00d4ff22', color: '#00d4ff', padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 700, marginRight: 4 }}>
-            WAITING LIMIT
-          </span>
-          {ord.side} {symBase} {ord.lev}x
-          <span style={{
-            background: isLive ? '#ff444422' : '#aa44ff22',
-            color: isLive ? '#ff4444' : '#aa44ff',
-            padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700, marginLeft: 4,
-          }}>{isLive ? 'LIVE' : 'DEMO'}</span>
-          {exchLabel && (
-            <span style={{
-              background: '#00d4ff1a',
-              color: '#00d4ff',
-              padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700, marginLeft: 4, letterSpacing: 1,
-            }}>{exchLabel}</span>
-          )}
-        </span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button
-            onClick={() => modifyPendingPrice(ord.id)}
-            style={{ padding: '6px 10px', background: '#001a33', border: '1px solid #00aaff', color: '#00d4ff', borderRadius: 3, fontSize: 9, cursor: 'pointer', fontWeight: 700, minHeight: 36 }}
-          >EDIT MODIFY</button>
-          <button
-            onClick={() => cancelPendingOrder(ord.id)}
-            style={{ padding: '6px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: 3, fontSize: 9, cursor: 'pointer', fontWeight: 700, minHeight: 36 }}
-          >✕ CANCEL</button>
-        </div>
+    <div data-zi-position-row="pending">
+      <ZiRow
+        columns={MANUAL_POSITION_COLUMNS}
+        cells={[
+          <span key="s">
+            {symBase} {ord.lev}x
+            <span style={{ ...CHIP, color: 'var(--zi-warn)', borderColor: 'var(--zi-warn)' }}>WAITING LIMIT</span>
+            <ModeChip isLive={isLive} />
+            {exchLabel && <span style={CHIP}>{exchLabel}</span>}
+          </span>,
+          { value: ord.side, tone: sideTone(ord.side) },
+          `$${fmt(ord.size)}`,
+          '—',
+          <div key="a" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <button
+              onClick={() => modifyPendingPrice(ord.id)}
+              style={{ ...BTN_BASE, padding: '6px 6px', border: '1px solid var(--zi-edge)', color: 'var(--zi-val)', fontSize: 9, minHeight: 36 }}
+            >EDIT MODIFY</button>
+            <button
+              onClick={() => cancelPendingOrder(ord.id)}
+              style={{ ...BTN_BASE, padding: '6px 6px', border: '1px solid var(--zi-neg)', color: 'var(--zi-neg)', fontSize: 9, minHeight: 36 }}
+            >✕ CANCEL</button>
+          </div>,
+        ]}
+      />
+      <div style={DETAIL}>
+        Limit: ${fP(ord.limitPrice)} | Size: ${fmt(ord.size)} | Now: {curPrice > 0 ? '$' + fP(curPrice) : '—'} ({distPct}%)
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 3, color: 'var(--dim)' }}>
-        <span>Limit: ${fP(ord.limitPrice)} | Size: ${fmt(ord.size)}</span>
-        <span>Now: {curPrice > 0 ? '$' + fP(curPrice) : '—'} ({distPct}%)</span>
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 1 }}>
+      <div style={{ ...DETAIL, color: 'var(--zi-faint)' }}>
         {ord.sl ? `SL: $${fP(ord.sl)} ` : ''}
         {ord.tp ? `TP: $${fP(ord.tp)} ` : ''}
         | {ageStr} ago
@@ -133,12 +181,18 @@ export const DemoPositionRow = memo(function DemoPositionRow({ pos }: { pos: any
     pos.pnl = 0
     const symBase = (pos.sym || 'BTC').replace('USDT', '')
     return (
-      <div className="pos-row">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700 }}>{pos.side} {symBase} {pos.lev}x</span>
-          <button ref={btnRef} style={{ padding: '10px 14px', background: '#2a0010', border: '2px solid #ff4466', color: '#ff4466', borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>✕ CLOSE</button>
-        </div>
-        <div style={{ fontSize: 13, marginTop: 3, color: '#ff8800' }}>Price unavailable</div>
+      <div data-zi-position-row="demo">
+        <ZiRow
+          columns={MANUAL_POSITION_COLUMNS}
+          cells={[
+            `${symBase} ${pos.lev}x`,
+            { value: pos.side, tone: sideTone(pos.side) },
+            `$${fmt(pos.size)}`,
+            '—',
+            <button key="c" ref={btnRef} style={closeBtnStyle(false)}>✕ CLOSE</button>,
+          ]}
+        />
+        <div style={{ ...DETAIL, color: 'var(--zi-warn)' }}>Price unavailable</div>
       </div>
     )
   }
@@ -159,7 +213,6 @@ export const DemoPositionRow = memo(function DemoPositionRow({ pos }: { pos: any
   const dslActive = dsl && dsl.active
   const slVal = dslActive && dsl.currentSL > 0 ? dsl.currentSL : pos.sl
   const slLabel = dslActive ? 'DSL' : 'SL'
-  const slColor = dslActive ? '#39ff14' : '#ff6644'
 
   const saveSLTP = () => {
     // savePosSLTP reads the input values by id (slEdit_<id>, tpEdit_<id>) which
@@ -168,44 +221,35 @@ export const DemoPositionRow = memo(function DemoPositionRow({ pos }: { pos: any
   }
 
   return (
-    <div className={`pos-row ${pos.side === 'LONG' ? 'pos-long' : 'pos-short'}`}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700 }}>
-          {pos.side} {symBase} {pos.lev}x
-          <span style={{ background: isLive ? '#ff444422' : '#aa44ff22', color: isLive ? '#ff4444' : '#aa44ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
-            {isLive ? 'LIVE' : 'DEMO'}
-          </span>
-          {exchLabel && (
-            <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 4, letterSpacing: 1 }}>
-              {exchLabel}
-            </span>
-          )}
-        </span>
-        <button ref={btnRef} data-id={pos.id} style={{ padding: '10px 14px', background: '#2a0010', border: '2px solid #ff4466', color: '#ff4466', borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>✕ CLOSE</button>
+    <div data-zi-position-row="demo">
+      <ZiRow
+        columns={MANUAL_POSITION_COLUMNS}
+        cells={[
+          <span key="s">
+            {symBase} {pos.lev}x
+            <ModeChip isLive={isLive} />
+            {exchLabel && <span style={CHIP}>{exchLabel}</span>}
+          </span>,
+          { value: pos.side, tone: sideTone(pos.side) },
+          `$${fmt(margin)}`,
+          { value: signedUsd(pos.pnl), tone: pnlTone(pos.pnl) },
+          <button key="c" ref={btnRef} data-id={pos.id} style={closeBtnStyle(false)}>✕ CLOSE</button>,
+        ]}
+      />
+      <div style={DETAIL}>
+        Entry: ${fP(pos.entry)} | Now: ${fP(curPrice)} | {pos.pnl >= 0 ? '+' : ''}{pnlPct}%
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 3 }}>
-        <span style={{ color: 'var(--dim)' }}>Entry: ${fP(pos.entry)} | Now: ${fP(curPrice)}</span>
-        <span style={{ color: pos.pnl >= 0 ? 'var(--grn)' : 'var(--red)' }}>
-          {pos.pnl >= 0 ? '+' : ''}${pos.pnl.toFixed(2)} ({pnlPct}%)
-        </span>
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 1 }}>
+      <div style={DETAIL}>
         Margin: ${fmt(margin)} | Notional: ${fmt(notional)} | Fees≈${fmt(estFees)} | ROE: {roe}%
       </div>
       {dslActive && (
-        <div style={{ fontSize: 12, color: slColor, marginTop: 1 }}>
+        <div style={{ ...DETAIL, color: dslActive ? 'var(--zi-pos)' : 'var(--zi-neg)' }}>
           {slLabel}: ${fP(slVal)}{pos.tp ? ` | TP: $${fP(pos.tp)}` : ''}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 4, marginTop: 3, alignItems: 'center' }}>
-        <span style={{ fontSize: 10, color: '#ff6644', width: 22 }}>SL:</span>
-        <input id={`slEdit_${pos.id}`} type="number" step={0.1} value={sl} onChange={e => setSl(e.target.value)} placeholder="—" style={{ flex: 1, background: '#0a0a14', border: '1px solid #333', color: '#ff6644', padding: '3px 5px', borderRadius: 3, fontSize: 11, fontFamily: 'var(--ff)', width: 60 }} />
-        <span style={{ fontSize: 10, color: '#00ff88', width: 22 }}>TP:</span>
-        <input id={`tpEdit_${pos.id}`} type="number" step={0.1} value={tp} onChange={e => setTp(e.target.value)} placeholder="—" style={{ flex: 1, background: '#0a0a14', border: '1px solid #333', color: '#00ff88', padding: '3px 5px', borderRadius: 3, fontSize: 11, fontFamily: 'var(--ff)', width: 60 }} />
-        <button onClick={saveSLTP} style={{ padding: '3px 8px', background: '#001a22', border: '1px solid #00aaff', color: '#00d4ff', borderRadius: 3, fontSize: 9, cursor: 'pointer', fontWeight: 700, minHeight: 24 }}>SAVE</button>
-      </div>
+      <SlTpEditor id={pos.id} sl={sl} tp={tp} setSl={setSl} setTp={setTp} onSave={saveSLTP} />
       {pos.liqPrice ? (
-        <div style={{ fontSize: 12, color: pos.side === 'LONG' ? '#ff3355' : '#00d97a', marginTop: 1 }}>
+        <div style={{ ...DETAIL, color: 'var(--zi-neg)' }}>
           LIQ: ${fP(pos.liqPrice)}
         </div>
       ) : null}
@@ -275,9 +319,6 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
   }
 
   const _closeBtnText = pendingConfirm ? '✓ CONFIRM?' : '✕ CLOSE'
-  const _closeBtnBg = pendingConfirm ? '#1a1200' : '#2a0010'
-  const _closeBtnBorder = pendingConfirm ? 'var(--gold)' : '#ff4466'
-  const _closeBtnColor = pendingConfirm ? 'var(--gold)' : '#ff4466'
 
   const cur = _getCurPrice(pos.sym)
   const symBase = (pos.sym || '').replace('USDT', '')
@@ -286,17 +327,21 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
   if (!cur || !Number.isFinite(cur) || cur <= 0) {
     pos.pnl = 0
     return (
-      <div className={`pos-row ${pos.side === 'LONG' ? 'pos-long' : 'pos-short'}`}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700 }}>
-            {dotRed} {pos.side} {symBase} {pos.lev}x
-            {exchLabel && (
-              <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6, letterSpacing: 1 }}>{exchLabel}</span>
-            )}
-          </span>
-          <button data-live-id={pos.id} onClick={_onCloseClick} style={{ padding: '10px 14px', background: _closeBtnBg, border: `2px solid ${_closeBtnBorder}`, color: _closeBtnColor, borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>{_closeBtnText}</button>
-        </div>
-        <div style={{ fontSize: 13, marginTop: 3, color: '#ff8800' }}>Price unavailable</div>
+      <div data-zi-position-row="live">
+        <ZiRow
+          columns={MANUAL_POSITION_COLUMNS}
+          cells={[
+            <span key="s">
+              {dotRed} {symBase} {pos.lev}x
+              {exchLabel && <span style={CHIP}>{exchLabel}</span>}
+            </span>,
+            { value: pos.side, tone: sideTone(pos.side) },
+            `$${fmt(pos.size)}`,
+            '—',
+            <button key="c" data-live-id={pos.id} onClick={_onCloseClick} style={closeBtnStyle(pendingConfirm)}>{_closeBtnText}</button>,
+          ]}
+        />
+        <div style={{ ...DETAIL, color: 'var(--zi-warn)' }}>Price unavailable</div>
       </div>
     )
   }
@@ -317,32 +362,27 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
   }
 
   return (
-    <div className={`pos-row ${pos.side === 'LONG' ? 'pos-long' : 'pos-short'}`}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700 }}>
-          {dotRed} {pos.side} {symBase} {pos.lev}x
-          {exchLabel && (
-            <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6, letterSpacing: 1 }}>{exchLabel}</span>
-          )}
-        </span>
-        <button data-live-id={pos.id} onClick={_onCloseClick} style={{ padding: '10px 14px', background: _closeBtnBg, border: `2px solid ${_closeBtnBorder}`, color: _closeBtnColor, borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>{_closeBtnText}</button>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 3 }}>
-        <span style={{ color: 'var(--dim)' }}>Entry: ${fP(pos.entry)} | Now: ${fP(cur)}</span>
-        <span style={{ color: pnl >= 0 ? 'var(--grn)' : 'var(--red)' }}>
-          {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} ({pnlPct}%)
-        </span>
+    <div data-zi-position-row="live">
+      <ZiRow
+        columns={MANUAL_POSITION_COLUMNS}
+        cells={[
+          <span key="s">
+            {dotRed} {symBase} {pos.lev}x
+            {exchLabel && <span style={CHIP}>{exchLabel}</span>}
+          </span>,
+          { value: pos.side, tone: sideTone(pos.side) },
+          `$${fmt(Number(pos.size) || 0)}`,
+          { value: signedUsd(pnl), tone: pnlTone(pnl) },
+          <button key="c" data-live-id={pos.id} onClick={_onCloseClick} style={closeBtnStyle(pendingConfirm)}>{_closeBtnText}</button>,
+        ]}
+      />
+      <div style={DETAIL}>
+        Entry: ${fP(pos.entry)} | Now: ${fP(cur)} | {pnl >= 0 ? '+' : ''}{pnlPct}%
       </div>
       {pos.liqPrice ? (
-        <div style={{ fontSize: 12, color: '#ff3355', marginTop: 1 }}>LIQ: ${fP(pos.liqPrice)}</div>
+        <div style={{ ...DETAIL, color: 'var(--zi-neg)' }}>LIQ: ${fP(pos.liqPrice)}</div>
       ) : null}
-      <div style={{ display: 'flex', gap: 4, marginTop: 3, alignItems: 'center' }}>
-        <span style={{ fontSize: 10, color: '#ff6644', width: 22 }}>SL:</span>
-        <input id={`slEdit_${pos.id}`} type="number" step={0.1} value={sl} onChange={e => setSl(e.target.value)} placeholder="—" style={{ flex: 1, background: '#0a0a14', border: '1px solid #333', color: '#ff6644', padding: '3px 5px', borderRadius: 3, fontSize: 11, fontFamily: 'var(--ff)', width: 60 }} />
-        <span style={{ fontSize: 10, color: '#00ff88', width: 22 }}>TP:</span>
-        <input id={`tpEdit_${pos.id}`} type="number" step={0.1} value={tp} onChange={e => setTp(e.target.value)} placeholder="—" style={{ flex: 1, background: '#0a0a14', border: '1px solid #333', color: '#00ff88', padding: '3px 5px', borderRadius: 3, fontSize: 11, fontFamily: 'var(--ff)', width: 60 }} />
-        <button onClick={saveSLTP} style={{ padding: '3px 8px', background: '#001a22', border: '1px solid #00aaff', color: '#00d4ff', borderRadius: 3, fontSize: 9, cursor: 'pointer', fontWeight: 700, minHeight: 24 }}>SAVE</button>
-      </div>
+      <SlTpEditor id={pos.id} sl={sl} tp={tp} setSl={setSl} setTp={setTp} onSave={saveSLTP} />
     </div>
   )
 })
@@ -354,13 +394,23 @@ export const JournalRow = memo(function JournalRow({ trade }: { trade: any }) {
   const win = pnl >= 0
   const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
   const ep = '$' + fP(trade.entry || 0) + '→$' + fP(trade.exit || 0)
+  const symBase = String(trade.sym || '').replace('USDT', '')
   return (
-    <div className={`journal-row ${win ? 'win' : 'loss'}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px' }}>
-      <span style={{ color: 'var(--dim)', flexShrink: 0, minWidth: 36, fontSize: 10 }}>{escHtml(trade.time || '')}</span>
-      <span style={{ color: trade.side === 'LONG' ? 'var(--grn)' : 'var(--red)', flexShrink: 0, minWidth: 38, fontSize: 10 }}>{escHtml(trade.side || '')}</span>
-      <span style={{ color: 'var(--dim)', fontSize: 10, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep}</span>
-      <span style={{ color: win ? 'var(--grn)' : 'var(--red)', fontWeight: 700, fontSize: 10, flexShrink: 0, minWidth: 55, textAlign: 'right' as const }}>{pnlStr}</span>
-      <span style={{ color: 'var(--dim)', fontSize: 9, flexShrink: 0, maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{escHtml(trade.reason || '—')}</span>
+    <div data-zi-journal-row={win ? 'win' : 'loss'}>
+      <ZiRow
+        columns={MANUAL_JOURNAL_COLUMNS}
+        cells={[
+          escHtml(trade.time || ''),
+          <span key="s">
+            {symBase || '—'}{' '}
+            <span style={{ color: trade.side === 'LONG' ? 'var(--zi-pos)' : 'var(--zi-neg)' }}>{escHtml(trade.side || '')}</span>
+          </span>,
+          { value: pnlStr, tone: win ? 'pos' : 'neg' },
+        ]}
+      />
+      <div style={{ ...DETAIL, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {ep} | {escHtml(trade.reason || '—')}
+      </div>
     </div>
   )
 })
