@@ -8,7 +8,7 @@
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> *(**2026-10-10:** auditul de persistență la refresh a adăugat P11-P15 și constatările R1-R9. **Închise azi: P12** (tipul de lumânare, b265) **și P11** (cele opt chei care suprascriau, b266) — P12 era o instanță din clasa lui P11. Rămân 13, din care **2 sunt ale mele**: P14 Radar Lens și R9.)*
+> *(**2026-10-10:** auditul de persistență la refresh → P11-P15 și constatările R1-R10. **Închise azi: P11, P12, P13, P14** și **R1, R2, R3, R4, R7, R9** — b265, b266, b267. Rămân 11, și **niciunul nu mai e al meu**: toate așteaptă o decizie sau o acțiune de la tine. Cele două noi de azi, **R10** (panoul S/R, 16 controale moarte) și **P15** (desenele cross-device), sunt exact de tipul ăsta.)*
 
 **P1 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**
 
@@ -36,9 +36,9 @@
 
 **P12 ✅ REZOLVAT (b265 v1.7.239) — tipul de lumânare nu persista** *(R2)*. Lipsea `ch.candleType` din `_projectFromLegacy`. O linie de proiecție, **3 teste noi** picate toate prima dată pe cauza corectă, unul dintre ele parcurgând tot drumul hidratare → proiecție → salvare, ca să nu mai poată fi reparată doar o jumătate. Client 710/710, tsc curat. **De confirmat vizual la tine:** alege Heikin Ashi, refresh, trebuie să rămână.
 
-**P13 🔧 `LIQ CHART SETTINGS` e un modal decorativ** *(R3)*. Nu are cititori nicăieri. Două variante: îl conectăm la overlay-ul de lichidări, sau îl scoatem din UI ca să nu mintă. 🙋 *Decizia ta — nu ştiu dacă vrei funcţia sau curăţenia.*
+**P13 ✅ REZOLVAT (b267 v1.7.241) — `LIQ CHART SETTINGS` scos** *(R3)*. Decizia ta: *„scoate-l ca să nu mintă”*. Gata — 23 de controale, zero cititori, dus. **Overlay-ul de lichidări rămâne neatins** și persistă în continuare prin `overlays`; a dispărut doar rotita și panoul. 4 teste care fixează ștergerea, inclusiv o gardă că overlay-ul n-a plecat cu el.
 
-**P14 🔧 Radar Lens se resetează la refresh** *(R4)*. Serverul e gata (whitelist + validator); lipseşte doar partea de client. **Al meu.**
+**P14 ✅ REZOLVAT (b267 v1.7.241) — Radar Lens ține minte** *(R4)*. Conectat ca **buclă completă** — restaurare la montare **și** salvare la click — pentru că jumătatea de salvare singură e exact greșeala care a făcut tipul de lumânare să pară reparat trei zile. Cheia **nu primeste niciodată un default**, deci nu poate suprascrie o alegere stocată cum făceau cele opt din b266; un id nerecunoscut e ignorat, nu dat randerului. **9 teste** (5 pe sârmă + 4 pe componentă).
 
 **P15 🙋 Desenele de pe chart nu urmează utilizatorul** *(R5)*. Supravieţuiesc refresh-ului, dar se pierd pe alt dispozitiv / la reinstalare APK. De dus în sincronizarea pe server — dar desenele pot fi mari, deci vreau să stabilim un plafon împreună înainte să le pun pe fir.
 
@@ -75,10 +75,10 @@ Ciclul e închis — doar că pe valoarea greşită. **Simptom: alegi Heikin Ash
 
 ### 🟠 MEDII
 
-**R3. `LIQ CHART SETTINGS` nu face absolut nimic — nici în sesiune, nici după refresh.**
+**R3. ✅ SCOS (b267) — `LIQ CHART SETTINGS` nu făcea absolut nimic — nici în sesiune, nici după refresh.**
 `client/src/components/modals/LiqSettingsModal.tsx`: cele patru `useState` au valori **hardcodate** (`'BTC'`, `'$500'`, `'24h'`, `'$USD'`) şi nu citesc niciodată din `w.S.liqSettings` — deci modalul arată default-urile chiar şi redeschis în aceeaşi sesiune. `saveAndApply()` scrie în `w.S.liqSettings`, dă `toast('Liq settings applied')` şi se închide. Căutat în tot `client/` şi `server/`: **zero cititori** ai lui `liqSettings`, nicio scriere în localStorage, nicio secţiune UC. Modalul e decorativ. `srSettings` e şi mai gol: whitelistat pe server, dar **nici writer, nici reader** nicăieri.
 
-**R4. Radar Lens se resetează la fiecare refresh — jumătatea de client nu a fost scrisă niciodată.**
+**R4. ✅ REPARAT (b267) — Radar Lens se reseta la fiecare refresh; jumătatea de client nu fusese scrisă niciodată.**
 Whitelist-ul serverului are `'radarLens'` cu comentariul *„Radar Lens (D4 persistence)"* (`trading.js:807`) şi validatorul îl acceptă. Dar `RadarLensBar` (`client/src/components/brain/BrainCockpit.tsx:18-28`) ţine lentila şi timeframe-ul în `useState('hybrid')` / `useState('5m')` simple: fără localStorage, fără save, fără load. Nimic în tot clientul nu trimite vreodată cheia — **`radarLens` e ABSENT la toţi cei 9 utilizatori din DB**. Persistenţa a fost pregătită pe server şi nu a fost niciodată conectată în UI.
 
 **R5. Desenele de pe chart, indicatorii cu stea şi tema sunt doar pe dispozitiv.**
@@ -89,7 +89,9 @@ Whitelist-ul serverului are `'radarLens'` cu comentariul *„Radar Lens (D4 pers
 
 **R8. `public/app/assets` era root-owned** — de la un build rulat ca root la 05:47. Deploy-ul de azi a picat cu `EACCES` până l-am dat înapoi lui `zeus`. Aceeași familie cu incidentul `migration_flags.json`: ce lasă root în urmă blochează tăcut procesul zeus — și e greșeala mea. *Reparat la deploy; de verificat la fiecare build.*
 
-**R9. Pull-ul user-context pune `fontSize` din `uiScale` — o funcție scoasă în iunie.** `config.ts:782` face `document.documentElement.style.fontSize = sec.uiScale.data + 'px'`. Dacă secţiunea ar purta `100`, rădăcina ar primi **font de 100px** și interfața ar exploda. **Nu e armată:** verificat pe viu — `uiScale.data` e `null` la uid=1 și nu există niciun rând în `user_ctx_data`, iar garda `data != null` blochează calea. Dar codul mort a rămas. *De șters, nu de reparat — n-am înlănțuit-o cu P11 ca să nu amestec două schimbări.*
+**R9. ✅ ȘTERS (b267) — Pull-ul user-context punea `fontSize` din `uiScale`, o funcție scoasă în iunie.** Aplica o valoare în **procente** ca **pixeli**: o secțiune cu `100` dădea documentului **font de 100px**. Nu era armată în producție — verificat pe viu, nu presupus: `data` e `null` și `user_ctx_data` n-are rânduri. Dar o valoare rămasă de dinainte de iunie pe un singur dispozitiv era tot ce trebuia. Testul pică cu **`expected '100px' to be ''`** — grenada spusă cât se poate de clar.
+
+**R10. 🟠 Panoul `ZEUS S/R SETTINGS` are 17 controale și exact unul e conectat.** `applySR()` (`marketDataWS.ts:582`) citește **doar** checkbox-ul `srEn`. Pivot length, max levels, min strength, zone width, timeframe, ambele culori, trei opacități, lățimi, min volume, show touched, hide weak și display period **nu sunt citite de nimeni** — iar toast-ul zice tot *„S/R settings applied”*. Aceeași minciună ca la LIQ, dar mai mare. **🙋 Nu l-am atins:** la LIQ panoul n-avea nicio funcție, aici butonul SAVE chiar reface detecția S/R, deci ștergerea lui ar lua și ceva care merge. *Recomandarea mea:* păstrezi butonul, scot cele 16 controale moarte. **Decizia ta.**
 
 **R6. `zeus_dsl_parity_shadow` nu e în `_USER_KEYS`** — singura cheie `zeus_*`/`zt_*` rămasă neizolată după reparaţia de ieri, deci se împarte între două conturi pe acelaşi browser. E un jurnal de diagnostic, nu o setare; impactul e doar date de paritate amestecate.
 
