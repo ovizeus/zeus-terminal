@@ -14,12 +14,75 @@
 
 ---
 
+## ⚠️ NOTĂ DESPRE TYPECHECK — citește înainte de orice pas de verificare
+
+**`tsc --noEmit -p tsconfig.json` NU verifică nimic și iese mereu 0.** `client/tsconfig.json` are
+`"files": []` și doar referințe de proiect. Dovedit: un identificator complet inexistent pus în
+`PositionRows.tsx` a lăsat tsc să iasă tot 0. Planul ăsta instruia comanda greșită în toate sarcinile,
+și a fost raportată ca poartă trecută de mai multe ori. Greșeala mea.
+
+**Comanda reală:**
+```
+sudo -u zeus bash -c 'cd /opt/zeus-worktrees/institutional/client && npx tsc --noEmit -p tsconfig.app.json > /tmp/tsc.txt 2>&1; echo "exit: $?"; grep -c "error TS" /tmp/tsc.txt'
+```
+**Nu folosi pipe către `head`/`tail` și apoi `$?`** — ia exit code-ul lui `head`, nu al lui tsc. A fost
+a doua jumătate a aceleiași greșeli.
+
+**Poarta nu e „exit 0” — e „fără erori NOI".** Rulat corect, proiectul are **67 de erori preexistente**
+(ChartControls, ModeBar, DoctorPanel, bootstrapMisc, câteva fișiere de test). Livrează cu ele, fiindcă
+vite construiește fără typecheck. Deci:
+
+1. numărul total trebuie să rămână **67**;
+2. `grep` pe raport **nu trebuie să numească niciun fișier atins de sarcină**.
+
+---
 ## Ground rules for every task
 
 - Run client tests as the `zeus` user, never as root: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx vitest run <path>'`. Root-owned artefacts in `client/` silently break the live process.
 - **Do not run `pm2 reload`.** Tasks 1–4 are client-only. One reload happens in Task 5, at the very end.
 - Never edit an icon. `client/src/constants/icons.ts` and `indicatorIcons.ts` are out of bounds.
 - Never change a handler body, a store call, or a `useEffect`. If a task seems to require it, stop and ask.
+
+## ⛔ AMENDAMENT 2026-10-10 18:0x — DOUĂ PRESUPUNERI GREȘITE ÎN TASK 2 ȘI 3
+
+Descoperite înainte de a trimite Task 2, prin citirea codului real. **Citește asta înaintea Task 2 și Task 3.** Planul original presupunea că panourile randează rândurile inline. Nu o fac, și diferența nu e cosmetică.
+
+### A2-1. Rândurile din Manual Trade sunt COMPONENTE cu acțiuni pe calea banilor
+
+`ManualTradePanel.tsx` deleagă fiecare rând la `components/dock/PositionRows.tsx` (366 linii):
+`DemoPositionRow`, `LivePositionRow`, `PendingOrderRow`, `JournalRow`.
+
+Acele componente conțin **11 apeluri pe calea banilor**:
+
+| funcție | apeluri | ce face |
+|---|---|---|
+| `closeLivePos` | 3 | **închide o poziție REALĂ** |
+| `savePosSLTP` | 4 | salvează stop-loss / take-profit |
+| `cancelPendingOrder` | 2 | anulează un ordin |
+| `modifyPendingPrice` | 2 | modifică prețul unui ordin |
+
+Butoanele `✕ CLOSE` au `minHeight: 52` — **țintă de atingere pentru mobil, pusă deliberat.** Se păstrează.
+
+**🚫 Pasul 4 din Task 2, așa cum era scris, ar fi ȘTERS aceste acțiuni.** Înlocuirea rândurilor cu celule `ZiRow` inerte ar fi lăsat userul fără buton de închidere pe o poziție live. Exact clasa de greșeală pentru care există regula de adâncime pe calea banilor.
+
+**Corect:** **NU** înlocui componentele de rând. Rămân, cu toate handler-ele intacte. Se restilizează **pe dinăuntru** la tokenii `--zi-*`. `ZiTable` se folosește pentru header; rândurile rămân componente, iar **ele** folosesc `ZiRow` pe dinăuntru, cu butonul de acțiune trecut ca o celulă suplimentară — așa se păstrează ȘI șablonul comun de coloane, ȘI acțiunile.
+
+*Consecință pentru Task 1:* `POSITION_COLUMNS` are nevoie de o coloană de acțiune, iar `ZiRow` trebuie să accepte un nod care nu e numeric (un buton) fără să-i impună stil mono/tabular. De tratat ca o completare la Task 1 înainte de Task 2.
+
+### A2-2. Auto Trade nu are tablou de poziții — e încă un div umplut imperativ
+
+Task 3 scria `atPositions.map(...)`. **`atPositions` nu există.** Secțiunea e `<div id="atActivePosPanel">`, goală, umplută de `renderATPositions()` din `trading/autotrade.ts:1925` (fișier de 2291 linii).
+
+Funcția aia nu e prezentare — poartă **logică de proprietate**: filtrează `autoTrade === true`, exclude `owner === 'ARES'`, potrivește modul live/demo, și are comentarii care explică de ce fiecare condiție există. Scopul ei declarat: *fiecare poziție apare în exact UN panou* (AT / Manual / ARES).
+
+**🚫 Conversia ei în React ar însemna reimplementarea acelei logici.** Nu e în scopul unei schimbări de prezentare și ar risca poziții duplicate sau dispărute între panouri.
+
+**Corect:** lasă `#atActivePosPanel` exact cum e. Îl învelești în `ZiSection` pentru titlu și spațiere, iar conținutul rămâne al randorului existent. **Tabelul de poziții din Auto Trade NU se reconstruiește pe `ZiRow` în această trecere.** E o reducere de scop asumată, cu motiv clar.
+
+### De ce a scăpat asta la scrierea planului
+Auto-review-ul planului declarase punctul slab ca fiind *„numele de câmpuri `ui.*` sunt plauzibile, nu verificate"*. Era mai rău decât o problemă de nume: era o **presupunere structurală greșită**. Lecția: la o rescriere de prezentare, citește cum se randează fiecare listă **înainte** de a scrie pasul, nu după.
+
+---
 
 ## File structure
 
@@ -554,8 +617,8 @@ again. A test that cannot fail is not protecting anything.
 
 - [ ] **Step 16: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; 773 tests passing (760 before + 13 new).
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); 773 tests passing (760 before + 13 new).
 
 - [ ] **Step 17: Commit**
 
@@ -652,7 +715,7 @@ change the component to suit the test.
 Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx vitest run src/components/dock/__tests__/ManualTradePanelZi.test.tsx'`
 Expected: FAIL on the `.zi` assertion — the panel does not carry the class yet.
 
-- [ ] **Step 4: Replace the markup**
+- [ ] **Step 4: Replace the markup** — ⛔ **READ AMENDMENT A2-1 FIRST.** The positions and journal rows are components holding 11 money-path calls; do NOT replace them with `ZiRow` cells.
 
 In `ManualTradePanel.tsx`, keep everything above the `return (` untouched. Replace the
 returned JSX with the structure below, wiring each control to the **same** state variable and
@@ -727,8 +790,8 @@ Expected: PASS, 3 tests.
 
 - [ ] **Step 6: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; every existing test still green. **If a pre-existing ManualTradePanel
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); every existing test still green. **If a pre-existing ManualTradePanel
 test fails, that is a real regression in behaviour — fix the panel, not the test.**
 
 - [ ] **Step 7: Commit**
@@ -984,7 +1047,7 @@ describe('Auto Trade panel, rebuilt', () => {
 Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx vitest run src/components/dock/__tests__/AutoTradePanelZi.test.tsx'`
 Expected: FAIL on several assertions — the panel still has the settings and the brain divs.
 
-- [ ] **Step 7: Rebuild the panel**
+- [ ] **Step 7: Rebuild the panel** — ⛔ **READ AMENDMENT A2-2 FIRST.** `atPositions` does not exist; `#atActivePosPanel` is filled imperatively by `renderATPositions()` and must be left alone.
 
 Keep every hook call and all three handlers (`handleSaveAT`, `handleKill`, `handleToggle`)
 exactly as they are. Replace the returned JSX with:
@@ -1089,8 +1152,8 @@ Expected: PASS — the 5 Auto Trade assertions, the 5 drawer assertions, the 3 M
 
 - [ ] **Step 9: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; all green. A failing pre-existing AutoTradePanel test is a real
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); all green. A failing pre-existing AutoTradePanel test is a real
 regression — fix the panel.
 
 - [ ] **Step 10: Commit**
@@ -1297,8 +1360,8 @@ Expected: no output.
 
 - [ ] **Step 8: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; all green.
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); all green.
 
 - [ ] **Step 9: Commit**
 
@@ -1394,8 +1457,8 @@ three surfaces rather than widening `ALLOWED`.
 
 - [ ] **Step 3: Full verification**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; all tests green.
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); all tests green.
 
 Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal && npx jest --forceExit --runInBand tests/unit/server/routes/ tests/unit/settingsValidatorParity.test.js'`
 Expected: 20 passed. (No server file changed, but confirm nothing drifted.)

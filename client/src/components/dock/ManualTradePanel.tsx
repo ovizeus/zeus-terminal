@@ -6,8 +6,25 @@ import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, 
 import { attachConfirmClose } from '../../engine/events'
 import { DemoPositionRow, LivePositionRow, PendingOrderRow, JournalRow } from './PositionRows'
 import { computeManualClosedStats } from '../../utils/manualStats'
+import type { CSSProperties } from 'react'
+import { ZiPanel, ZiSection, ZiMetric, ZiTable, POSITION_COLUMNS_WITH_ACTION, JOURNAL_COLUMNS } from '../zi'
+import type { ZiTone } from '../zi'
 
 const w = window as any
+
+// [2026-10-10 institutional redesign, Task 2 — DESIGN ONLY] Styling constants
+// for the order ticket. Colours come from the --zi-* tokens, never hard-coded.
+const FIELD_STYLE: CSSProperties = {
+  width: '100%', boxSizing: 'border-box', background: 'var(--zi-field)', border: '1px solid var(--zi-line)',
+  color: 'var(--zi-val)', padding: '8px 10px', borderRadius: 2, fontSize: 13, minHeight: 36,
+}
+const GHOST_BTN: CSSProperties = {
+  background: 'transparent', border: '1px solid var(--zi-edge)', color: 'var(--zi-val)', borderRadius: 2,
+  cursor: 'pointer', fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', padding: '4px 10px', minHeight: 28,
+}
+const FIELD_WRAP: CSSProperties = { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }
+const ROW_STYLE: CSSProperties = { display: 'flex', gap: 10, flexWrap: 'wrap' }
+const BANNER: CSSProperties = { fontSize: 11, padding: '8px 10px', borderRadius: 2, lineHeight: 1.5 }
 
 /** 1:1 port of #panelDemo from public/index.html lines 2050-2204
  *  Syncs bidirectionally with w.TP for trading functions in marketDataTrading.ts */
@@ -211,6 +228,17 @@ export function ManualTradePanel() {
     }
   })
 
+  const _pnlTone: ZiTone = manualPnlClass === 'pos' ? 'pos' : manualPnlClass === 'neg' ? 'neg' : 'neutral'
+  const _locked = isLiveMode && envLabel === 'LOCKED'
+  const _panelTitle = isLiveMode
+    ? (envLabel === 'TESTNET' ? `● MANUAL TRADE (TESTNET${_exchSuffix})` : (envLabel === 'REAL' ? `● MANUAL TRADE (REAL${_exchSuffix})` : '⛔ MANUAL TRADE (LOCKED)'))
+    : 'MANUAL TRADE'
+  const _sideBtn = (active: boolean, tone: 'pos' | 'neg'): CSSProperties => ({
+    flex: 1, minHeight: 40, background: active ? 'var(--zi-raise)' : 'transparent', cursor: 'pointer',
+    border: `1px solid ${active ? `var(--zi-${tone})` : 'var(--zi-line)'}`, borderRadius: 2,
+    color: active ? `var(--zi-${tone})` : 'var(--zi-mut)', fontSize: 12, fontWeight: 600, letterSpacing: '0.12em',
+  })
+
   return (
     <>
     {/* Mode toggle separator — hidden, old JS switchGlobalMode() finds btnDemo/btnLive */}
@@ -226,50 +254,55 @@ export function ManualTradePanel() {
       </div>
       <div className="trade-line" />
     </div>
-    <div className="trade-panel" id="panelDemo">
-      <div className={`tp-hdr ${isLiveMode ? (envLabel === 'LOCKED' ? 'locked-hdr' : 'live-hdr') : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-        <span>{isLiveMode
-          ? (envLabel === 'TESTNET' ? `\u25CF MANUAL TRADE (TESTNET${_exchSuffix})` : (envLabel === 'REAL' ? `\u25CF MANUAL TRADE (REAL${_exchSuffix})` : '\u26D4 MANUAL TRADE (LOCKED)'))
-          : 'MANUAL TRADE'}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span id="demoBalance" className="tp-bal">{(() => {
-            if (isLiveMode) {
-              if (envLabel === 'LOCKED') return 'BAL: Exchange locked \u2014 not configured'
-              const prefix = envLabel === 'TESTNET' ? `BAL (TESTNET${_exchSuffix}): $` : `BAL (REAL${_exchSuffix}): $`
-              return prefix + liveBalanceTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            }
-            return `BAL: $${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-          })()}</span>
-          <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => promptAddFunds()}>+ ADD</button>
-          <button id="btnResetDemo" style={{ fontSize: '7px', padding: '2px 6px', background: '#1a0a00', border: '1px solid #ff880066', color: '#ff8800', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Reset demo balance to $10,000" onClick={() => promptResetDemo()}>↻ RESET</button>
+    {/* #panelDemo stays the outermost node: bootstrapInit/pageview move it by id and
+        toggle its display. `.trade-panel` is kept for the .zpv-active-panel rule. The
+        .zi gate lives on the ZiPanel INSIDE it, so it travels with the node. */}
+    <div className="trade-panel" id="panelDemo" style={{ border: 'none', background: 'transparent' }}>
+    <ZiPanel title={_panelTitle} rail={_locked ? 'neg' : isLiveMode ? 'pos' : 'neutral'}>
+      {/* BALANCE STRIP */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6, padding: '10px 16px' }}>
+        <span id="demoBalance" className="zi-num" style={{ fontSize: 12, color: 'var(--zi-val)' }}>{(() => {
+          if (isLiveMode) {
+            if (envLabel === 'LOCKED') return 'BAL: Exchange locked — not configured'
+            const prefix = envLabel === 'TESTNET' ? `BAL (TESTNET${_exchSuffix}): $` : `BAL (REAL${_exchSuffix}): $`
+            return prefix + liveBalanceTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          }
+          return `BAL: $${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        })()}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button id="btnAddFunds" style={GHOST_BTN} title="Add funds to demo balance" onClick={() => promptAddFunds()}>+ ADD</button>
+          <button id="btnResetDemo" style={GHOST_BTN} title="Reset demo balance to $10,000" onClick={() => promptResetDemo()}>↻ RESET</button>
         </span>
       </div>
-      <div className="tp-body">
+
+      <div className="zi-rule" />
+      {/* ORDER TICKET — every control keeps its id, value and onChange */}
+      <div className="tp-body" style={{ padding: '14px 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {/* ORDER SIDE */}
-        <div className="tp-sides">
-          <button id="demoLongBtn" className={`tp-side-btn long-btn${side === 'LONG' ? ' act' : ''}`} onClick={() => setSide('LONG')}>LONG ▲</button>
-          <button id="demoShortBtn" className={`tp-side-btn short-btn${side === 'SHORT' ? ' act' : ''}`} onClick={() => setSide('SHORT')}>SHORT ▼</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button id="demoLongBtn" aria-pressed={side === 'LONG'} style={_sideBtn(side === 'LONG', 'pos')} onClick={() => setSide('LONG')}>LONG ▲</button>
+          <button id="demoShortBtn" aria-pressed={side === 'SHORT'} style={_sideBtn(side === 'SHORT', 'neg')} onClick={() => setSide('SHORT')}>SHORT ▼</button>
         </div>
 
         {/* SETTINGS ROW */}
-        <div className="tp-row">
-          <div className="tp-field">
-            <div className="tp-lbl">ORDER TYPE</div>
-            <select id="demoOrdType" className="tp-sel" value={ordType} onChange={e => handleOrdTypeChange(e.target.value)}>
+        <div style={ROW_STYLE}>
+          <div style={FIELD_WRAP}>
+            <label htmlFor="demoOrdType" className="zi-lbl">ORDER TYPE</label>
+            <select id="demoOrdType" style={FIELD_STYLE} value={ordType} onChange={e => handleOrdTypeChange(e.target.value)}>
               <option value="market">MARKET</option>
               <option value="limit">LIMIT</option>
             </select>
           </div>
-          <div className="tp-field">
-            <div className="tp-lbl">MARGIN MODE</div>
-            <select id="demoMarginMode" className="tp-sel" value={marginMode} onChange={e => { setMarginMode(e.target.value); if (w.USER_SETTINGS) { w.USER_SETTINGS.manualTestnet = w.USER_SETTINGS.manualTestnet || {}; w.USER_SETTINGS.manualTestnet.marginMode = e.target.value; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() } }}>
+          <div style={FIELD_WRAP}>
+            <label htmlFor="demoMarginMode" className="zi-lbl">MARGIN MODE</label>
+            <select id="demoMarginMode" style={FIELD_STYLE} value={marginMode} onChange={e => { setMarginMode(e.target.value); if (w.USER_SETTINGS) { w.USER_SETTINGS.manualTestnet = w.USER_SETTINGS.manualTestnet || {}; w.USER_SETTINGS.manualTestnet.marginMode = e.target.value; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() } }}>
               <option value="cross">CROSS</option>
               <option value="isolated">ISOLATED</option>
             </select>
           </div>
-          <div className="tp-field">
-            <div className="tp-lbl">LEVERAGE</div>
-            <select id="demoLev" className="tp-sel" value={lev} onChange={e => handleLevChange(e.target.value)}>
+          <div style={FIELD_WRAP}>
+            <label htmlFor="demoLev" className="zi-lbl">LEVERAGE</label>
+            <select id="demoLev" style={FIELD_STYLE} value={lev} onChange={e => handleLevChange(e.target.value)}>
               <option value="1">1x</option>
               <option value="2">2x</option>
               <option value="5">5x</option>
@@ -284,61 +317,69 @@ export function ManualTradePanel() {
 
         {/* CUSTOM LEVERAGE ROW */}
         {showCustomLev && (
-          <div className="tp-row" id="demoCustomLevRow">
-            <div className="tp-field" style={{ width: '100%' }}>
-              <div className="tp-lbl">LEVIER CUSTOM (1 — 150x)</div>
-              <input type="number" id="demoCustomLev" className="tp-inp" value={customLev} onChange={e => handleCustomLevChange(+e.target.value)} min={1} max={150} step={1} placeholder="ex: 75" style={{ width: '100%' }} />
+          <div style={ROW_STYLE} id="demoCustomLevRow">
+            <div style={{ ...FIELD_WRAP, width: '100%' }}>
+              <label htmlFor="demoCustomLev" className="zi-lbl">LEVIER CUSTOM (1 — 150x)</label>
+              <input type="number" id="demoCustomLev" className="zi-num" style={FIELD_STYLE} value={customLev} onChange={e => handleCustomLevChange(+e.target.value)} min={1} max={150} step={1} placeholder="ex: 75" />
             </div>
           </div>
         )}
 
         {/* ENTRY / SIZE */}
-        <div className="tp-row">
-          <div className="tp-field">
-            <div id="demoEntryLabel" className="tp-lbl">{ordType === 'market' ? 'ENTRY PRICE' : 'LIMIT PRICE'}</div>
-            <input type="number" id="demoEntry" className="tp-inp" value={entry} onChange={e => setEntry(e.target.value)} placeholder="Market Price" step={0.1} readOnly={ordType === 'market'} />
+        <div style={ROW_STYLE}>
+          <div style={FIELD_WRAP}>
+            <label id="demoEntryLabel" htmlFor="demoEntry" className="zi-lbl">{ordType === 'market' ? 'ENTRY PRICE' : 'LIMIT PRICE'}</label>
+            <input type="number" id="demoEntry" className="zi-num" style={FIELD_STYLE} value={entry} onChange={e => setEntry(e.target.value)} placeholder="Market Price" step={0.1} readOnly={ordType === 'market'} />
           </div>
-          <div className="tp-field">
-            <div className="tp-lbl">SIZE (USDT)</div>
-            <input type="number" id="demoSize" className="tp-inp" value={size} onChange={e => handleSizeChange(e.target.value)} step={10} />
-          </div>
-        </div>
-
-        {/* LIQUIDATION PRICE PREVIEW */}
-        <div style={{ background: '#1a0a0a', border: '1px solid #ff335533', borderRadius: '4px', padding: '7px 10px', margin: '4px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '1px' }}>
-            <svg className="z-i" viewBox="0 0 16 16"><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> LIQ PRICE
-          </span>
-          <span id="demoLiqPrice" style={{ fontSize: '13px', fontWeight: 700, color: '#ff5577', fontFamily: "'Cinzel',serif" }}>
-            {liqPrice > 0 ? `$${liqPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-          </span>
-        </div>
-
-        {/* TP / SL */}
-        <div className="tp-row">
-          <div className="tp-field">
-            <div className="tp-lbl">TAKE PROFIT</div>
-            <input type="number" id="demoTP" className="tp-inp" value={tp} onChange={e => setTp(e.target.value)} placeholder="Optional" step={0.1} />
-          </div>
-          <div className="tp-field">
-            <div className="tp-lbl">STOP LOSS</div>
-            <input type="number" id="demoSL" className="tp-inp" value={sl} onChange={e => setSl(e.target.value)} placeholder="Optional" step={0.1} />
+          <div style={FIELD_WRAP}>
+            <label htmlFor="demoSize" className="zi-lbl">SIZE (USDT)</label>
+            <input type="number" id="demoSize" className="zi-num" style={FIELD_STYLE} value={size} onChange={e => handleSizeChange(e.target.value)} step={10} />
           </div>
         </div>
 
         {/* SIZE SHORTCUTS */}
-        <div className="tp-pcts">
-          <button className="tp-pct" onClick={() => setPct(25)}>25%</button>
-          <button className="tp-pct" onClick={() => setPct(50)}>50%</button>
-          <button className="tp-pct" onClick={() => setPct(75)}>75%</button>
-          <button className="tp-pct" onClick={() => setPct(100)}>100%</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button style={{ ...GHOST_BTN, flex: 1, fontSize: 11 }} onClick={() => setPct(25)}>25%</button>
+          <button style={{ ...GHOST_BTN, flex: 1, fontSize: 11 }} onClick={() => setPct(50)}>50%</button>
+          <button style={{ ...GHOST_BTN, flex: 1, fontSize: 11 }} onClick={() => setPct(75)}>75%</button>
+          <button style={{ ...GHOST_BTN, flex: 1, fontSize: 11 }} onClick={() => setPct(100)}>100%</button>
+        </div>
+
+        {/* TP / SL */}
+        <div style={ROW_STYLE}>
+          <div style={FIELD_WRAP}>
+            <label htmlFor="demoTP" className="zi-lbl">TAKE PROFIT</label>
+            <input type="number" id="demoTP" className="zi-num" style={FIELD_STYLE} value={tp} onChange={e => setTp(e.target.value)} placeholder="Optional" step={0.1} />
+          </div>
+          <div style={FIELD_WRAP}>
+            <label htmlFor="demoSL" className="zi-lbl">STOP LOSS</label>
+            <input type="number" id="demoSL" className="zi-num" style={FIELD_STYLE} value={sl} onChange={e => setSl(e.target.value)} placeholder="Optional" step={0.1} />
+          </div>
+        </div>
+
+        {/* LIQUIDATION PRICE PREVIEW */}
+        <div style={{ borderTop: '1px solid var(--zi-hair)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span className="zi-lbl">
+            <svg className="z-i" viewBox="0 0 16 16"><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> LIQ PRICE
+          </span>
+          <span id="demoLiqPrice" className="zi-num" style={{ fontSize: 14, color: liqPrice > 0 ? 'var(--zi-neg)' : 'var(--zi-mut)' }}>
+            {liqPrice > 0 ? `$${liqPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+          </span>
         </div>
 
         {/* STALE DATA BANNER */}
-        {isStale && <div style={{ background: '#3a0000', border: '1px solid #ff3355', borderRadius: '4px', padding: '6px 10px', marginBottom: '6px', fontSize: '9px', color: '#ff5577', letterSpacing: '1px', textAlign: 'center', fontFamily: 'var(--ff)' }}>⚠️ STALE DATA — trading paused</div>}
+        {isStale && <div style={{ ...BANNER, border: '1px solid var(--zi-neg)', color: 'var(--zi-neg)', letterSpacing: '0.1em', textAlign: 'center' }}>⚠️ STALE DATA — trading paused</div>}
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className={`tp-exec ${isLiveMode && envLabel === 'LOCKED' ? 'tp-exec-locked' : 'demo-exec'}`} disabled={isPlacingLive || isStale} onClick={() => {
+        <button id="demoExec" disabled={isPlacingLive || isStale}
+          style={{
+            width: '100%', minHeight: 44, borderRadius: 2, cursor: (isPlacingLive || isStale || _locked) ? 'not-allowed' : 'pointer',
+            background: 'var(--zi-raise)', fontSize: 13, fontWeight: 600, letterSpacing: '0.12em',
+            border: `1px solid ${_locked ? 'var(--zi-warn)' : side === 'LONG' ? 'var(--zi-pos)' : 'var(--zi-neg)'}`,
+            color: _locked ? 'var(--zi-warn)' : side === 'LONG' ? 'var(--zi-pos)' : 'var(--zi-neg)',
+            opacity: (isPlacingLive || isStale) ? 0.5 : 1,
+          }}
+          onClick={() => {
           // [UI-CMP-6] Sync useRef guard FIRST (immune to React state batch
           // delay) — then keep the existing isPlacingLive belt-and-braces.
           if (placeBusyRef.current) return
@@ -354,29 +395,28 @@ export function ManualTradePanel() {
           }
         }}>
           {(() => {
-            if (isPlacingLive) return '\u23F3 PLACING\u2026'
-            if (isLiveMode && envLabel === 'LOCKED') return '\uD83D\uDD12 PLACE ORDER (LIVE MODE LOCKED)'
-            if (isLiveMode) { const tag = envLabel; return side === 'LONG' ? `\u25B2 OPEN LONG (${tag})` : `\u25BC OPEN SHORT (${tag})` }
-            return side === 'LONG' ? '\u25B2 OPEN LONG' : '\u25BC OPEN SHORT'
+            if (isPlacingLive) return '⏳ PLACING…'
+            if (isLiveMode && envLabel === 'LOCKED') return '🔒 PLACE ORDER (LIVE MODE LOCKED)'
+            if (isLiveMode) { const tag = envLabel; return side === 'LONG' ? `▲ OPEN LONG (${tag})` : `▼ OPEN SHORT (${tag})` }
+            return side === 'LONG' ? '▲ OPEN LONG' : '▼ OPEN SHORT'
           })()}
         </button>
+      </div>
 
-        {/* PENDING ORDERS */}
-        <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h8v3L9 8l3 3v3H4v-3l3-3-3-3V2" /></svg> PENDING ORDERS</span>
-          <span style={{ fontSize: '9px', color: 'var(--dim)' }}>0</span>
-        </div>
+      {/* PENDING ORDERS */}
+      <ZiSection title="Pending orders" aside={String(pendingRender.length)}>
         {/* [R9] React-owned pending orders list — reads positionsStore.pendingOrders */}
         <div id="pendingOrdersTable">
           {pendingRender.length === 0
-            ? <div style={{ fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: 4 }}>No pending orders</div>
-            : pendingRender.map((ord: any) => <PendingOrderRow key={ord.id} ord={ord} />)}
+            ? <div style={{ fontSize: 11, color: 'var(--zi-mut)', padding: '2px 0' }}>No pending orders</div>
+            : <ZiTable columns={POSITION_COLUMNS_WITH_ACTION}>{pendingRender.map((ord: any) => <PendingOrderRow key={ord.id} ord={ord} />)}</ZiTable>}
         </div>
+      </ZiSection>
 
-        {/* OPEN POSITIONS */}
-        <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>OPEN POSITIONS</span>
-          <button ref={closeAllRef} id="closeAllBtn" data-close-id="closeAllBtn" style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
+      {/* OPEN POSITIONS */}
+      <ZiSection title="Open positions" aside={String(manualDemoPositions.length)}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', paddingBottom: 8 }}>
+          <button ref={closeAllRef} id="closeAllBtn" data-close-id="closeAllBtn" style={{ ...GHOST_BTN, borderColor: 'var(--zi-neg)', color: 'var(--zi-neg)', userSelect: 'none' }}>✕ CLOSE ALL</button>
         </div>
         {/* [BUG-T3 FIX 2026-05-14] Opposite-mode hidden positions banner.
             Visible only when there ARE positions in the opposite mode (count > 0).
@@ -386,15 +426,10 @@ export function ManualTradePanel() {
           <div
             data-testid="bug-t3-opposite-mode-banner"
             style={{
-              fontSize: 9,
-              padding: '6px 8px',
-              margin: '4px 0',
-              background: oppositeModeLabel === 'LIVE' ? '#2a0a0a' : '#2a1a00',
-              border: `1px solid ${oppositeModeLabel === 'LIVE' ? '#ff4466' : '#f0c040'}`,
-              borderRadius: 3,
-              color: oppositeModeLabel === 'LIVE' ? '#ff8899' : '#f0d080',
-              letterSpacing: '0.5px',
-              lineHeight: 1.5,
+              ...BANNER,
+              margin: '0 0 8px',
+              border: `1px solid ${oppositeModeLabel === 'LIVE' ? 'var(--zi-neg)' : 'var(--zi-warn)'}`,
+              color: oppositeModeLabel === 'LIVE' ? 'var(--zi-neg)' : 'var(--zi-warn)',
             }}
           >
             ⚠️ {oppositeCount} {oppositeModeLabel} {oppositeCount === 1 ? 'position' : 'positions'} hidden — switch to {oppositeModeLabel} mode to view
@@ -403,44 +438,44 @@ export function ManualTradePanel() {
         {/* [R9] React-owned demo/live-mode manual positions — reads positionsStore.demoPositions */}
         <div id="demoPosTable">
           {manualDemoPositions.length === 0
-            ? <div style={{ fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: 8 }}>No open positions</div>
-            : manualDemoPositions.map((pos: any) => <DemoPositionRow key={pos.id} pos={pos} />)}
+            ? <div style={{ fontSize: 11, color: 'var(--zi-mut)', padding: '2px 0' }}>No open positions</div>
+            : <ZiTable columns={POSITION_COLUMNS_WITH_ACTION}>{manualDemoPositions.map((pos: any) => <DemoPositionRow key={pos.id} pos={pos} />)}</ZiTable>}
         </div>
+      </ZiSection>
 
-        {/* P&L STATS — React-owned via positionsStore (D9) */}
-        <div className="tp-pnl-row">
-          <div className="tp-pnl-cell"><div className="tp-lbl">TOTAL P&amp;L</div><div className={`tp-pnl-val ${manualPnlClass}`}>${manualPnl.toFixed(2)}</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">WIN RATE</div><div className="tp-pnl-val">{manualWr}</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div className="tp-pnl-val">{manualTrades}</div></div>
+      {/* P&L STATS — React-owned via positionsStore (D9) */}
+      <ZiSection title="Closed trades">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+          <ZiMetric label="Total P&L" value={`${manualPnl >= 0 ? '+' : '-'}$${Math.abs(manualPnl).toFixed(2)}`} tone={_pnlTone} />
+          <ZiMetric label="Win rate" value={manualWr} />
+          <ZiMetric label="Trades" value={manualTrades} />
         </div>
+      </ZiSection>
 
-        {/* [R9] LIVE/TESTNET OPEN POSITIONS — reactive on exchangeMode */}
-        <div id="livePositionsInDemo" style={{ display: isLiveMode ? 'block' : 'none', borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
-          <div style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '6px' }}>EXCHANGE POSITIONS</div>
-          <div id="livePositionsDemo" style={{ fontSize: '9px', color: 'var(--dim)', textAlign: isLiveMode && liveRender.length ? 'left' : 'center' }}>
+      {/* [R9] LIVE/TESTNET OPEN POSITIONS — reactive on exchangeMode */}
+      <div id="livePositionsInDemo" style={{ display: isLiveMode ? 'block' : 'none' }}>
+        <ZiSection title="Exchange positions" aside={String(liveRender.length)}>
+          <div id="livePositionsDemo" style={{ fontSize: 11, color: 'var(--zi-mut)' }}>
             {liveRender.length === 0
               ? <span>No exchange positions</span>
-              : liveRender.map((pos: any) => <LivePositionRow key={pos.id} pos={pos} />)}
+              : <ZiTable columns={POSITION_COLUMNS_WITH_ACTION}>{liveRender.map((pos: any) => <LivePositionRow key={pos.id} pos={pos} />)}</ZiTable>}
           </div>
-        </div>
-
-        {/* TRADE JOURNAL */}
-        <div style={{ borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px 6px' }}>
-            <span style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--dim)' }}>TRADE JOURNAL</span>
-            <button className="csv-btn" onClick={() => exportJournalCSV?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> CSV</button>
-          </div>
-          <div className="jl-hdr">
-            <span>TIME</span><span>SIDE</span><span>ENTRY→EXIT</span><span>PnL</span><span>REASON</span>
-          </div>
-          {/* [R9] React-owned journal — reads positionsStore.journal */}
-          <div className="journal-wrap" id="journalBody">
-            {journalSorted.length === 0
-              ? <div style={{ padding: 10, textAlign: 'center', fontSize: 8, color: 'var(--dim)' }}>No trades yet</div>
-              : journalSorted.map((t: any) => <JournalRow key={(t.id || t.openTs || t.time) + ':' + (t.closedAt || '')} trade={t} />)}
-          </div>
-        </div>
+        </ZiSection>
       </div>
+
+      {/* TRADE JOURNAL */}
+      <ZiSection
+        title="Trade journal"
+        aside={<button className="csv-btn" style={{ ...GHOST_BTN, textTransform: 'none' }} onClick={() => exportJournalCSV?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> CSV</button>}
+      >
+        {/* [R9] React-owned journal — reads positionsStore.journal */}
+        <div className="journal-wrap" id="journalBody">
+          {journalSorted.length === 0
+            ? <div style={{ padding: '2px 0', fontSize: 11, color: 'var(--zi-mut)' }}>No trades yet</div>
+            : <ZiTable columns={JOURNAL_COLUMNS}>{journalSorted.map((t: any) => <JournalRow key={(t.id || t.openTs || t.time) + ':' + (t.closedAt || '')} trade={t} />)}</ZiTable>}
+        </div>
+      </ZiSection>
+    </ZiPanel>
     </div>
     </>
   )
