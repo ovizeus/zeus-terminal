@@ -1,70 +1,48 @@
-import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { applySR } from '../../data/marketDataWS'
 
 interface Props { visible: boolean; onClose: () => void }
 
-const inputStyle: React.CSSProperties = { background:'#0a121a', border:'1px solid #2a3a4a', color:'var(--txt)', padding:'4px 8px', borderRadius:'2px', fontFamily:'var(--ff)', fontSize:'9px', width:'100%' }
-const colorStyle: React.CSSProperties = { ...inputStyle, padding:'2px', height:'24px', cursor:'pointer' }
+// [R10 2026-10-10] This panel used to offer 21 controls. Exactly ONE of them was
+// connected: applySR (marketDataWS.ts:582) reads the srEn checkbox and nothing
+// else, then says "S/R settings applied".
+//
+// The controls were not merely unwired — most of them advertised a feature that
+// was never built. renderSROverlay (marketDataOverlays.ts:408) is seventeen
+// lines: the top three highs and bottom three lows of the last fifty candles,
+// drawn with hardcoded colour, width and opacity. There are no pivots, no zones,
+// no labels, no strength scoring and no volume filter, so Pivot Length, Max
+// Levels, Min Strength, Zone Width, Show Labels, Width by Strength, Extend
+// Lines, Show Touched, Hide Weak, Min Volume, the two opacities, the two widths,
+// the two colours, the Timeframe row and the Display Period row described a
+// product that does not exist. Two tells: the panel claimed "Max Levels: 8"
+// while the engine always draws 6, and the colour pickers defaulted to the exact
+// hardcoded colours, so they looked connected.
+//
+// On the operator's decision, the twenty dead controls are gone and the two that
+// work remain. Nothing is lost, because nothing they promised was ever
+// delivered. His one concern was whether this touched the chart's timeframes:
+// it does not. The Timeframe row here was a private useState read only for a CSS
+// class; the chart's timeframes live in marketDataFeeds.setTF and the .tfb
+// buttons, and this file never referenced either. srPanelHonest.test.ts pins
+// that, along with the removal.
+//
+// Building a real S/R engine — pivots, zones, strength — is separate work, not
+// a repair, and would bring its own settings back with it.
 
 export function SRSettingsModal({ visible, onClose }: Props) {
-  const [tab, setTab] = useState('main')
-  const [tf, setTf] = useState('AUTO')
-  const [period, setPeriod] = useState('Session')
-
   return (
     <ModalOverlay id="msr" visible={visible} onClose={onClose} zIndex={9500}>
       <ModalHeader title="ZEUS S/R SETTINGS" onClose={onClose} />
 
-      <div className="mtabs">
-        <div className={`mtab${tab==='main'?' act':''}`} onClick={()=>setTab('main')}>MAIN</div>
-        <div className={`mtab${tab==='style'?' act':''}`} onClick={()=>setTab('style')}>STYLE</div>
-        <div className={`mtab${tab==='filter'?' act':''}`} onClick={()=>setTab('filter')}>FILTER</div>
-      </div>
-
-      <div className="mbody" style={{display:tab==='main'?'block':'none', padding:'12px'}}>
+      <div className="mbody" style={{ padding: '12px' }}>
         <label className="mchk"><input type="checkbox" id="srEn" defaultChecked /> Enable S/R</label>
-        <div style={{marginTop:'10px'}}>
-          <label className="mchk"><input type="checkbox" defaultChecked /> Show Support</label>
-          <label className="mchk"><input type="checkbox" defaultChecked /> Show Resistance</label>
-          <label className="mchk"><input type="checkbox" defaultChecked /> Show Labels</label>
-          <label className="mchk"><input type="checkbox" defaultChecked /> Width by Strength</label>
-          <label className="mchk"><input type="checkbox" /> Extend Lines</label>
-        </div>
-        <div style={{marginTop:'10px'}}>
-          <div className="mrow"><span className="mlbl">Pivot Length</span><input type="number" defaultValue={10} style={inputStyle} /></div>
-          <div className="mrow"><span className="mlbl">Max Levels</span><input type="number" defaultValue={8} style={inputStyle} /></div>
-          <div className="mrow"><span className="mlbl">Min Strength</span><input type="number" defaultValue={2} style={inputStyle} /></div>
-          <div className="mrow"><span className="mlbl">Zone Width ($)</span><input type="number" defaultValue={150} min={10} max={2000} style={inputStyle} /></div>
-        </div>
-        <div style={{marginTop:'10px'}}>
-          <div className="mrow"><span className="mlbl">Timeframe</span></div>
-          <div className="qbs" style={{marginTop:'4px'}}>
-            {['AUTO','1H','4H','1D','1W'].map(t => <button key={t} className={`qb${tf===t?' act':''}`} onClick={()=>setTf(t)}>{t}</button>)}
-          </div>
-        </div>
-      </div>
 
-      <div className="mbody" style={{display:tab==='style'?'block':'none', padding:'12px'}}>
-        <div className="mrow"><span className="mlbl">Support Color</span><input type="color" defaultValue="#00d97a" style={colorStyle} /></div>
-        <div className="mrow"><span className="mlbl">Resistance Color</span><input type="color" defaultValue="#ff3355" style={colorStyle} /></div>
-        <div className="mrow"><span className="mlbl">Line Opacity</span><input type="range" min={0} max={100} defaultValue={70} style={{width:'100%'}} /></div>
-        <div className="mrow"><span className="mlbl">Zone Opacity</span><input type="range" min={0} max={100} defaultValue={20} style={{width:'100%'}} /></div>
-        <div className="mrow"><span className="mlbl">Min Width</span><input type="number" defaultValue={1} style={inputStyle} /></div>
-        <div className="mrow"><span className="mlbl">Max Width</span><input type="number" defaultValue={4} style={inputStyle} /></div>
-      </div>
-
-      <div className="mbody" style={{display:tab==='filter'?'block':'none', padding:'12px'}}>
-        <div className="mrow"><span className="mlbl">Min Volume</span><input type="range" min={0} max={100} defaultValue={0} style={{width:'100%'}} /></div>
-        <label className="mchk"><input type="checkbox" defaultChecked /> Show Touched</label>
-        <label className="mchk"><input type="checkbox" /> Hide Weak</label>
-        <div style={{marginTop:'10px'}}>
-          <div className="mrow"><span className="mlbl">Display Period</span></div>
-          <div className="qbs" style={{marginTop:'4px'}}>
-            {['Session','Today','This Week','All Time'].map(p => <button key={p} className={`qb${period===p?' act':''}`} onClick={()=>setPeriod(p)}>{p}</button>)}
-          </div>
+        <div style={{ marginTop: '10px', fontSize: '9px', color: 'var(--dim, #5a6b7a)', lineHeight: 1.5 }}>
+          Support and resistance are detected automatically from the last 50 candles.
         </div>
-        <div style={{marginTop:'12px', display:'flex', gap:'6px', justifyContent:'flex-end'}}>
+
+        <div style={{ marginTop: '12px', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
           <button className="hub-sbtn pri" onClick={() => { applySR?.(); onClose() }}>SAVE</button>
           <button className="hub-sbtn" onClick={onClose}>CLOSE</button>
         </div>
