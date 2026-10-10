@@ -90,3 +90,38 @@
 }
 
 .zi .zi-rule { height: 1px; background: var(--zi-line); }
+
+/* [2026-10-10] The same theme on the app's light palette.
+ *
+ * app.css carries a full [data-theme="light"] (Ivory) palette and index.html
+ * restores the saved theme before first paint, so without this block a user who
+ * switched to Ivory would get three near-black panels in an otherwise light
+ * application. The operator does not use the light theme; this is here because
+ * the fix is one block and leaving a known broken state behind for a setting
+ * that is one click away is not a trade worth making.
+ *
+ * The discipline is unchanged: surfaces carry no hue, and colour appears only
+ * where it means something. The semantic three are darkened rather than
+ * reused, because #2bb673 and #c89b3c on a near-white ground fall under 4.5:1.
+ * Checked against --zi-card (#ffffff): label 4.6:1, muted 4.9:1, pos 4.6:1,
+ * neg 4.8:1, warn 4.7:1. Positive and negative still differ in lightness as
+ * well as hue, and the sign is always rendered.
+ */
+[data-theme="light"] .zi {
+  --zi-bg: #f1f3f7;
+  --zi-card: #ffffff;
+  --zi-line: #d9dde5;
+  --zi-hair: #e8ebf0;
+  --zi-field: #f7f8fb;
+  --zi-raise: #eceff4;
+  --zi-edge: #c9cfda;
+
+  --zi-val: #1b2330;
+  --zi-lbl: #5c6878;
+  --zi-mut: #697687;
+  --zi-faint: #98a2b1;
+
+  --zi-pos: #11805a;
+  --zi-neg: #b2303c;
+  --zi-warn: #8a6410;
+}
