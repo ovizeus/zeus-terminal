@@ -628,6 +628,13 @@ function _projectFromLegacy(): Partial<SettingsPayload> {
     smartExitEnabled: at.smartExitEnabled,
     mscanEnabled: at.multiSym,
     chartTf: ch.tf,
+    // [2026-10-10] ch.candleType was missing here, so the candle type could
+    // not persist: the switcher wrote it into the legacy tree, this projection
+    // ignored it, the store kept DEFAULT_SETTINGS.chartType, and the save then
+    // posted that default over the real choice. The read half was fixed on
+    // 2026-10-07 (_usApplyFlatToUserSettings), which closed the loop on the
+    // wrong value and made the bug look repaired. See candleTypePersist.test.ts.
+    chartType: ch.candleType,
     candleColors: ch.colors,
     heatmapSettings: ch.heatmap,
     indSettings: us.indicators,
