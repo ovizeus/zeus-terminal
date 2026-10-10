@@ -141,7 +141,13 @@ Fiecare boot reface exchangeInfo, klines-init pe toate simbolurile, OI, funding,
 
 **🐛 Screenshot-ul a găsit un bug pe care testele nu-l puteau vedea:** un `ZiMetric` fără valoare randa eticheta urmată de **nimic**. Pe o suprafață de bani, gol se citește ca zero — exact **R-C-9**. Reparat: absența (`null`/`undefined`/`''`) devine `—`, iar un **0 măsurat rămâne 0**, fiindcă un zero real e informație. Rebuild fără al doilea reload (**R-OP-2**: schimbările doar de client nu cer restart). 833 teste / 113 fișiere.
 
-⚠️ **Ce rămâne pentru tine:** panourile **conectate la date reale** — bancul de probă nu poate face login în contul tău. De verificat: rotița deschide sertarul și SAVE persistă; un ordin pe demo; `✕ CLOSE` pe o poziție; THEIA cu cele trei benzi. Revenire: `git checkout pre-institutional-redesign -- <path>` sau `/root/zeus-backups/pre-redesign-20261010-1640`.
+**A doua verificare vizuală: PANOURILE REALE.** Am randat `ManualTradePanel`, `AutoTradePanel` și `TheiaPage` — componentele adevărate, cu store-urile alimentate și CSS-ul complet al aplicației — și le-am fotografiat. **Confirmat:** pozițiile cu `✕ CLOSE` și editorul SL/TP cu SAVE sunt acolo și randează; THEIA are benzile; nimic nu aruncă la montare.
+
+**🐛 Al doilea bug găsit de ochi, nu de teste:** linia de stare din Auto Trade scria **„CONFIGUREAZA MAI JOS”** — română într-un UI englezesc (**R-C-11**), și după redesign și **fals**, fiindcă setările nu mai sunt jos, sunt în sertar. Default preexistent din `atStore`, pe care rescrierea l-a adus într-un loc vizibil. Acum **„Not configured yet”**, cu test.
+
+**✅ Și o întrebare deschisă, închisă de aceeași poză:** movul `#aa44ff` rămas în `atStore.modeLabel`/`modeDisplay` **NU ajunge** la panoul rescris — panoul citește `.text`, niciodată `.color`. Zero mov în fișierele redesignului.
+
+⚠️ **Ce rămâne doar pentru tine** (un banc de probă nu poate face login): panourile **cu date vii** — bancul de probă nu poate face login în contul tău. De verificat: rotița deschide sertarul și SAVE persistă; un ordin pe demo; `✕ CLOSE` pe o poziție; THEIA cu cele trei benzi. Revenire: `git checkout pre-institutional-redesign -- <path>` sau `/root/zeus-backups/pre-redesign-20261010-1640`.
 
 - **Mockup aprobat:** https://claude.ai/artifact/HGSwWUV2HmbC4RdPoqp9pB (*„mergem așa”*)
 - **Spec:** `docs/superpowers/specs/2026-10-10-institutional-redesign-design.md`
