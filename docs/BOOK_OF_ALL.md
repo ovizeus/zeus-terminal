@@ -1,39 +1,40 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-09 seara · build b260 v1.7.234
+> **Ultima actualizare:** 2026-10-10 · build b262 v1.7.236
 > **Ordinea de mai jos e ordinea în care le facem.** 🔧 = o fac eu · 🙋 = are nevoie de tine (decizie, chei, sau ochii tăi).
 
 ---
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Închise azi: **A1, B1, B2, B3, B4, C1, C2, C3**. Rămase deschise: **A2 şi A3, amândouă GRAVE şi amândouă găsite azi**.)*
+> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Închise: A1, A4, B1-B8, C1-C3. A3 reclasificat — nu e bug de cod.)*
 
-**P1 🔥 Rafala de rate-limit Binance — ACTIVĂ** *(A2)*. 44 de intrări în SUPPRESSED azi faţă de 0-3 pe zi înainte, continuu din ora 08:00. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi a rupt reînnoirea `listenKey` pentru uid=1. Backoff-ul escaladează şi nu se resetează (contorul 43→47 într-o oră, răcirea ajunsă la 33 min). Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 descrie costul ca per user. **N-am atins ritmul de polling** — cale de bani, vreau cauza dovedită. *Din 16:46 n-a mai apărut niciun 429; de verificat dacă revine.*
+**P1 🔧 Alertă când Zeus cade.** Azi-noapte s-a prăbuşit de **1082 de ori în 3,5 ore** şi **nimeni n-a aflat** — ai găsit-o tu. Auto-vindecarea din b262 acoperă cazul WAL corupt, dar nu şi „Zeus e jos din orice alt motiv". O alertă Telegram pe prăbuşire repetată e lucrul care contează cel mai mult din toată lista.
 
-**P2 🔥 Feed-ul de lichidări Binance nu primeşte NIMIC — GRAV** *(A3)*. 551 de raportări consecutive cu `frames=0`, în timp ce Bybit şi OKX curg. Socket-ul se declară conectat, deci nimic nu semnalează problema. De verificat numele stream-ului şi formatul abonării.
+**P2 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită.
 
-**P3 🙋 Calibrarea auto-carantinei ML.** Cronul reparat ieri descoperă acum uid=1/DEMO (**dovedit: `1 users`**, era `0`), dar pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. `ml_feature_global_overrides` e goală.
-*Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm până creşte volumul.
+**P3 🙋 Cauza corupţiei WAL — rămâne deschisă.** Fără erori de disc, spaţiu suficient, proprietari corecţi, nimeni conectat. Dacă se repetă, avem acum şi fişierele păstrate şi auto-vindecarea; de urmărit.
 
-**P4 🙋 Confirmarea că setările se salvează — acum chiar merită încercat.** Până azi `updated_at` era îngheţat pe **11 iulie** şi credeam că te aşteaptă doar pe tine. **Nu era aşa:** serverul respingea fiecare salvare cu 400 (vezi B6 — regresia mea din b248). E reparat şi livrat în b260. *Ce ai de făcut:* refresh forţat, aprinzi TERMINATOR, încă un refresh — ar trebui să rămână aprins **şi cu culorile lui**. Nu trebuie să-mi spui nimic, verific eu `updated_at` în baza de date.
+**P4 🙋 Calibrarea auto-carantinei ML.** Pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm.
 
-**P5 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange). `BYBIT_DRY_RUN_ONLY` e ON, deci Bybit nu trimite HTTP real — de stins când vrei soak adevărat.
+**P5 🙋 WebSocket-ul de futures Binance e blocat de reţea** *(A3)*. Nu e de reparat în cod. Orice soluţie de rutare o facem împreună — un WARP pe VPS-ul ăsta a mai stricat lucruri o dată.
 
-**P6 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Ultima din cele 17 vulnerabilităţi. Nu-l fac fără un test real de trimitere cu tine.
+**P6 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange).
 
-**P7 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit** (rotirea e obligatorie — ce-a fost expus rămâne expus), sau mutat în Vault.
+**P7 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Nu-l fac fără un test real de trimitere cu tine.
 
-**P8 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2722 MB de pagini reale. Cere ~20s oprire. O fac la cerere.
+**P8 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit**, sau mutat în Vault.
 
-**P9 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Offline, namespace-ul per-mod scrie peste valorile din cache (`confMin` 77 → 65). **Decizie de produs:** care sursă câştigă?
+**P9 🔧 VACUUM: ~4,6 GB de recuperat.** Cere ~20s oprire. O fac la cerere.
 
-**P10 🙋 Conectarea ML-ului neconectat — plan scris, aşteaptă GO.** Măsurat: **74 din 284 de fişiere** legate, **198 din 367 de tabele goale**. Dar **209 din cele 210 module neconectate AU teste** (313 fişiere de test, 6816 teste verzi) — deci e cod testat şi nelegat, nu cod abandonat. **Se poate conecta, dar nu în bloc:** testele unitare dovedesc piesa, nu legătura, iar azi exact legăturile ne-au muşcat de două ori cu teste verzi. Planul pe etape (verificare de contract → un ring în umbră → măsurare → promovare pe trepte) e în secţiunea „PLAN: conectarea ML-ului neconectat". **Etapa 0 e ieftină şi nu atinge nimic viu — o pot face când zici.**
+**P10 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Decizie de produs: offline, care sursă câştigă?
 
-**P11 🔧 Mărunţişuri, când se nimereşte:** lista de motive din reflection apare duplicată (`["anti_pattern","anti_pattern"]`); două tabele din politica de retenţie (`ml_dr_state`, `ml_reflection_runs`) ţin mult mai puţin decât fereastra lor de 30 de zile şi **n-am putut stabili de ce** — am adăugat raportare pe tabelă, aşa că rularea de mâine va spune singură.
+**P11 🙋 Conectarea ML-ului neconectat — plan scris, aşteaptă GO.** 74 din 284 fişiere legate, 198 din 367 tabele goale, dar **209 din 210 module neconectate AU teste**. Se poate, dar nu în bloc. Etapa 0 e ieftină şi nu atinge nimic viu.
 
-**P12 🙋 Confirmări vizuale care cer ochii tăi:** TERMINATOR pe chart (glyph nou), kill-switch overlay pe laptop, jurnalul manual „jos" după hard-refresh, widget-ul Android (cere rebuild + reinstall APK), Vault download pe Chrome desktop.
+**P12 🔧 Mărunţişuri:** motivele din reflection apar duplicate; două tabele din retenţie ţin mai puţin decât fereastra lor (raportarea pe tabelă adăugată ieri va spune de ce).
+
+**P13 🙋 Confirmări vizuale:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
@@ -62,12 +63,21 @@
 *Dinamica, măsurată:* backoff-ul escaladează cu `consecutive_ban_count`, iar contorul se resetează **doar după 4 ore curate** (`STRIKE_RESET_AFTER_MS`). Cum banurile vin la 10-20 de minute, nu se resetează niciodată: era 43 la 16:36, **47 la 16:59**. Răcirea WARM a ajuns deja la **33 de minute**. Protecţia în sine e corectă — îşi apără IP-ul — dar efectul e că sistemul rămâne tot mai mult în regim degradat: la reload-ul de la 16:48 schedulerul a tăiat explozia de boot (`fetchKlines failed`, `createListenKey failed ... reason=warm`, `RADAR /ticker/24hr HTTP 503`), deci nu-şi putea încărca nici măcar datele de piaţă. **Se opreşte doar reparând sursa, nu aşteptând.**
 *N-am atins ritmul de polling:* e cale de bani şi n-am încă o cauză dovedită — cere o investigaţie dedicată, nu o ajustare pe ghicite. **Primul lucru de făcut mâine.**
 
-**A3. 🆕 Feed-ul de lichidări Binance e conectat dar NU primeşte NIMIC — niciodată.** *(găsit 2026-10-09 17:25)*
-`[LIQ-FEED] state | BNB[conn=true frames=0 ev=0] BYB[conn=true frames=23 ev=7] OKX[conn=true frames=6360 ev=4515]` — Bybit şi OKX curg, Binance e la zero.
-*Dovadă că nu e un moment prost:* în ultimele 3000 de linii de log sunt **551 de raportări de stare şi în TOATE `BNB[conn=true frames=0]`**. Niciun cadru, vreodată.
-*De ce e GRAV şi nu mediu:* Binance e cea mai mare dintre cele trei burse, iar lichidările ei intră în harta de lichidări şi în semnalele derivate din ea. Rulăm deci cu sursa principală lipsă — **iar socket-ul se declară `conn=true`, deci nimic nu semnalează problema.** Un indicator care tace arată identic cu o piaţă liniştită. E exact tiparul lui A1 (strat întreg inert, raportat ca sănătos), doar că aici lipsa se vede direct în deciziile de tranzacţionare.
-*De verificat:* numele stream-ului şi formatul abonării (`!forceOrder@arr` vs per-simbol), dacă socket-ul primeşte doar ping-uri fără mesaje, şi dacă există un handler care aruncă tăcut la parsare.
-*NU e legat de A2:* rafala de rate-limit e pe REST (greutate/minut); asta e WebSocket, care nu consumă greutate.
+**A3. ⚠️ RECLASIFICAT — NU e bug de cod: reţeaua datacenter-ului blochează WebSocket-ul de futures Binance.** *(reclasificat 2026-10-10)*
+Raportasem „feed-ul de lichidări Binance e conectat dar nu primeşte nimic, 551 de raportări consecutive cu `frames=0`". Faptul e real, **dar cauza nu e în codul nostru** — iar aplicaţia o spune deja singură în log:
+`[LIQ-FEED] BNB silent >2min — datacenter network appears to block fstream.binance.com WS data flow (REST+SPOT WS work; FUTURES WS silent)`
+*Verificat independent de mine:* `wss://fstream.binance.com` **se conectează** (TCP+TLS în regulă) dar livrează **zero cadre în 20 de secunde**, în timp ce REST-ul pe `fapi.binance.com` răspunde HTTP 200. Deci nu e abonare greşită, nu e parser rupt: pachetele pur şi simplu nu vin.
+*Ce rămâne adevărat:* harta de lichidări rulează fără cea mai mare bursă, iar Bybit şi OKX o acoperă parţial.
+*Ce NU e de făcut în cod:* nimic — detecţia funcţionează deja. E o chestiune de rutare de reţea. **Atenţie:** un WARP instalat pe acest VPS a mai stricat lucruri o dată (vezi regula din memorie), deci orice soluţie de rutare se face cu tine de faţă, nu pe cont propriu.
+
+**A4. ✅ REPARAT (b262) — ZEUS A FOST JOS 3 ORE ŞI JUMĂTATE PESTE NOAPTE; baza NU era problema.** *(2026-10-10, 00:34 → 04:04)*
+La **00:34:08** write-ahead log-ul (WAL) s-a corupt şi orice citire de schemă a început să dea `malformed database schema (9054)`. Fiindcă prima citire se face la `require`, procesul murea înainte să apuce să reacţioneze: **1082 de reporniri**, 502 la fiecare vizitator, **şi nicio alertă**. Ai găsit-o tu, după ore.
+*Diagnostic:* fişierul bazei era **intact tot timpul** — deschis fără WAL a pornit imediat (1192 obiecte), iar `PRAGMA integrity_check` complet a răspuns **ok**. Datele erau întregi: setările tale de aseară (20:12), ultima decizie brain 00:34, 401 tabele.
+*Reparaţie:* oprit bucla, mutat `-wal` şi `-shm` deoparte (**păstrate**, nu şterse), repornit. Zeus a urcat în 25 de secunde.
+*Prevenţie livrată:* deschiderea bazei sondează acum schema şi, la o eroare de corupţie, **pune WAL-ul în carantină (redenumit, niciodată şters) şi reîncearcă o dată**. SQLite nu poate citi oricum un WAL corupt, deci nu se pierde nimic recuperabil, iar fişierul rămâne pentru analiză. Corupţia bazei *propriu-zise* rămâne fatală intenţionat — a porni pe o bază stricată e mai rău decât a sta jos.
+*Cauza corupţiei: NESTABILITĂ, şi n-o inventez.* Fără erori de kernel sau disc, 41 GB liberi, ambele fişiere deţinute corect de `zeus`, nimeni conectat la acea oră (shell-urile mele `sqlite3` fuseseră cu ore înainte şi n-au lăsat artefacte root). Rămâne deschisă.
+*Backup:* cel de noapte eşuase pe baza coruptă (`VACUUM INTO failed`) — bine, fiindcă n-a suprascris unul bun. Am luat unul proaspăt imediat după reparaţie: `zeus-offsite-20261010-040952.db.enc` (2,7 G → 275 M).
+⚠️ **Gaura rămasă, mai importantă decât bugul:** 1082 de prăbuşiri în 3,5 ore şi **zero alerte**. Auto-vindecarea acoperă acest caz; nu acoperă „Zeus e jos din orice alt motiv". *De făcut:* o alertă Telegram pe prăbuşire repetată.
 
 ### 🟡 MEDII
 
