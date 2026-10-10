@@ -18,7 +18,17 @@ const DB_PATH = process.env.ZEUS_DB_PATH
 const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-const db = new Database(DB_PATH);
+// [2026-10-10] Open through the WAL-recovery wrapper. A corrupt write-ahead
+// log used to kill the process at require time — 1082 restart attempts and a
+// three-and-a-half-hour outage overnight, while the database itself was
+// perfectly intact. The wrapper quarantines an unreadable WAL (renamed, never
+// deleted) and retries; corruption in the database proper still throws, because
+// starting on a broken database would be worse than staying down.
+const { openWithWalRecovery } = require('./dbOpen');
+const db = openWithWalRecovery(DB_PATH, {
+    open: (p) => new Database(p),
+    log: (m) => { try { console.warn(m); } catch (_) { /* */ } },
+});
 
 // [Day 16 2026-05-18] Baseline schema seeding for fresh DBs.
 // On a truly fresh DB (no _migrations table), exec the prod schema snapshot
