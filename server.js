@@ -1,4 +1,36 @@
 // Zeus Terminal v122 — Server with Trading API + Multi-User
+
+// ─── Crash Safety Net — FIRST, before anything that can throw ───
+// [2026-10-10] These handlers used to live at the bottom of this file, 2115
+// lines below the database require. Zeus crashed 1082 times overnight when the
+// database threw on line 19, and this alert — which works — was never armed,
+// so nobody was told for three and a half hours. A failure while modules load
+// is precisely the failure that causes a crash loop, so the net goes first.
+// logger and telegram are required lazily INSIDE the handlers: at this point
+// in the file they do not exist yet, and a boot crash may happen before they
+// ever do. Console output always works, so that is never conditional.
+function _zCrashNotify(kind, message, stack) {
+  try { console.error(`[FATAL] ${kind}: ${message}`, stack || ''); } catch (_) { /* */ }
+  try { require('./server/services/logger').error('FATAL', `${kind}: ${message}`); } catch (_) { /* logger may not be loaded */ }
+  try {
+    const t = require('./server/services/telegram');
+    if (t && typeof t.sendToAll === 'function') return t.sendToAll(`🔴 *ZEUS CRASH* — ${kind}: ${message}`);
+  } catch (_) { /* telegram may not be loaded during a boot crash */ }
+  return null;
+}
+
+process.on('uncaughtException', (err) => {
+  const p = _zCrashNotify('uncaughtException', err && err.message, err && err.stack);
+  if (p && typeof p.finally === 'function') p.finally(() => process.exit(1));
+  setTimeout(() => process.exit(1), 3000).unref(); // force exit if telegram hangs
+});
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  try { console.error('[WARN] Unhandled promise rejection:', msg); } catch (_) { /* */ }
+  try { require('./server/services/logger').warn('PROMISE', 'unhandledRejection: ' + msg); } catch (_) { /* */ }
+});
+
 // [SENTRY] Must be first import — instruments all subsequent requires
 const Sentry = require('./server/instrument');
 const express = require('express');
@@ -2130,18 +2162,4 @@ process.on('message', (msg) => {
   }
 });
 
-// ─── Crash Safety Net ───
-process.on('uncaughtException', (err) => {
-  console.error('[FATAL] Uncaught exception:', err.message, err.stack);
-  logger.error('FATAL', 'uncaughtException: ' + err.message);
-  telegram.sendToAll('🔴 *ZEUS CRASH* — uncaughtException: ' + err.message).finally(() => {
-    process.exit(1);
-  });
-  setTimeout(() => process.exit(1), 3000); // force exit if telegram hangs
-});
-
-process.on('unhandledRejection', (reason) => {
-  const msg = reason instanceof Error ? reason.message : String(reason);
-  console.error('[WARN] Unhandled promise rejection:', msg);
-  logger.warn('PROMISE', 'unhandledRejection: ' + msg);
-});
+// ─── Crash Safety Net ─── armed at the very top of this file; see there.
