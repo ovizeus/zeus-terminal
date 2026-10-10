@@ -43,6 +43,30 @@
 **P15 ✅ REZOLVAT (b269 v1.7.243) — desenele urmează utilizatorul** *(R5)*. Secțiune nouă `drawings` în canalul user-context (SQLite), cu plafon la **300** (`drawingScope.SYNC_MAX_DRAWINGS`). Setul local **nu e niciodată tăiat** — doar copia care călătorește — iar o tăiere o spune în consolă, ca să nu existe divergență tăcută între dispozitiv și server. Măsurat, nu estimat: 77 bytes o linie orizontală, 144 un trendline, deci 200 de desene = 21,6 KB din plafonul de 64 KB — **grija mea cu mărimea era nefondată și mi-am retras-o**. La pull desenele se re-randează imediat, fără refresh.
 
 ---
+## 🎨 CERUT 2026-10-10 — reproiectare „instituțională" AutoTrade + Manual Trade, diagnosticul în THEIA
+
+> Cerere operator: *„vreau sa fac o schimbare de look la autotrade si manual trade ceva mai institutional mai simplu dar sa pastram logica… activiti log brain dashboard si brain vision sa le scot sa le bagam in theia cu aceiasi tema si auto trade sa ramana gen ca manual trade doar informatiile stricte de trade si tema schimbata nu asa cu mov"*
+
+**Statut: în brainstorming, NU se atinge cod până la aprobarea designului.** Logica rămâne neatinsă — e strict prezentare + relocare.
+
+### Ce există acum (verificat în cod, nu din memorie)
+
+| panou | linii | ce conține |
+|---|---|---|
+| `dock/ManualTradePanel.tsx` | 447 | ORDER TYPE / MARGIN / LEVERAGE / TP / SL → OPEN POSITIONS → WIN RATE + TRADES → EXCHANGE POSITIONS → TRADE JOURNAL. **Curat, strict trade.** E referința. |
+| `dock/AutoTradePanel.tsx` | 563 | header → GLOBAL MODE / LEVERAGE AUTO → TRADING SYMBOLS → ENTRY CONDITIONS → ADVANCED CONTROLS → RISK MANAGEMENT → stats → **ACTIVITY LOG** → **BRAIN VISION** → **BRAIN DASHBOARD** → SAVE → KILL SWITCH → ACTIVE POSITIONS |
+| `intel/TheiaPage.tsx` | 95 | grid de 9 carduri read-only (VerdictBand, BrainPulse, EnginePositions, MarketLens, Since, SafetyHealth, MlDigest, Memory, RecentDecisions) |
+
+### Constrângerea tehnică importantă
+**Brain Vision și Brain Dashboard NU sunt componente React.** Sunt `<div id="brainVisionBody">` goale, umplute **imperativ cu `innerHTML`** de `core/bootstrapBrainDash.ts` (211 linii, două IIFE-uri cu polling). Datele vin însă deja din `useBrainStore` / `useATStore` — deci se pot converti în carduri React reale care citesc aceleași store-uri. Asta decide dacă mutarea e ieftină-și-urâtă (mut doar div-urile gazdă) sau curată (carduri THEIA adevărate).
+
+### Ce trebuie scos din paleta actuală
+`#aa44ff` (mov Brain Vision), `#3ab4dc` (cyan Brain Dashboard), borduri `rgba(120,80,220,.25)`, fundaluri `rgba(10,6,20,.6)`, plus accentele `var(--gold)` pe butoane.
+
+### Întrebarea pivot (nerezolvată)
+AutoTrade are ~30 de setări pe care Manual Trade nu le are. Dacă rămâne „ca Manual Trade, doar informații stricte de trade", **unde se duc setările?** Variante: sertar/modal separat „AUTO TRADE SETTINGS" / secțiune colapsată / în THEIA. **Răspunsul schimbă tot restul designului.**
+
+---
 ## 🚨 INCIDENT 2026-10-10 16:14 — am provocat un ban de IP de la Binance cu reload-uri prea dese
 
 **Vina mea, direct și fără scuze.** Am făcut **8 reload-uri pm2 azi**, dintre care **5 în 50 de minute**
