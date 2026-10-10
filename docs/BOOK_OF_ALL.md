@@ -188,7 +188,34 @@ Fiecare boot reface exchangeInfo, klines-init pe toate simbolurile, OI, funding,
 
 **🔍 Și o confirmare care contează mai mult decât poza:** la prima randare pozițiile **nu** apăreau în Manual Trade. Nu era bug — erau poziții `autoTrade: true`, iar filtrul de proprietate le exclude corect. Cu `autoTrade: false` au apărut imediat. Deci **invariantul „fiecare poziție apare în exact UN panou” (AT / Manual / ARES) a supraviețuit rescrierii** — exact lucrul pe care A2-2 l-a protejat lăsând `renderATPositions()` neatinsă.
 
-*(Rămâne neverificat doar ce cere o sesiune vie: persistența unei setări după refresh în UI — deși contractul e acoperit de teste server-side — și un ordin pe demo. Scriptul e gata: `scripts/verify-live-redesign.sh`.)*
+**✅ PERSISTENȚA SAVE — DOVEDITĂ În PRODUCȚIE, cu salvarea reală a operatorului.**
+Nu printr-un click al meu, ci din dovadă, care e mai tare:
+
+| | |
+|---|---|
+| deploy b270 | `2026-10-10 20:37:07` |
+| **ultima salvare a setărilor lui** | **`2026-10-10 20:49:41`** |
+
+**Douăsprezece minute după deploy**, din contul lui, prin codul livrat, în baza reală.
+Și ce s-a salvat e exact lucrul reparat:
+
+```
+uid 1 (el):     chartType = heikin      ultima salvare 20:49:41
+uid 2,5,11..16: chartType = candle      mai–august
+```
+
+Dimineață valoarea lui era `candles`; ceilalți opt au încă `candle` — default-ul hardcodat despre care
+comentariul codului spune că **nu putea fi aplicat niciodată**. El a ales Heikin Ashi, s-a salvat, a rămas.
+**P12 / R2 e dovedit reparat în producție, cu datele lui** — bugul care a părut reparat trei zile
+fiindcă se conectase doar jumătatea de citire.
+
+Aceeași salvare confirmă și b266: **cele 8 chei** au rămas neatinse (`theme`, `uiScale`, `soundEnabled`,
+`timezoneOffset`, `liq/sr/llv/zsSettings`) — exact comportamentul dorit, o cheie absentă din payload lasă
+valoarea stocată în pace. 44 de chei, nimic corupt. `radarLens` încă absent: normal, n-a umblat la Radar Lens.
+
+*(Singurul lucru rămas nefăcut de nimeni: **un ordin pe demo prin UI**. Și ăla e mai bine să-l facă el —
+e singurul care mișcă bani, fie și de hârtie. Scriptul e gata dacă vrea restul:
+`scripts/verify-live-redesign.sh`.)*
 
 *(Istoric: inițial blocat — permisiunile au refuzat crearea unui cont temporar și citirea codului care semnează sesiunile, corect în ambele cazuri.)* Am încercat o cale care să NU ceară impersonare: **un cont temporar de verificare**, creat și șters după, cu care să deschid panourile în browser pe serverul viu. Sistemul de permisiuni a refuzat crearea contului (*modifică resurse partajate*) — ceea ce confirmă concluzia la care ajunsesem oricum: pe o bază de producție cu utilizatori reali, crearea de conturi nu e decizia asistentului.
 
