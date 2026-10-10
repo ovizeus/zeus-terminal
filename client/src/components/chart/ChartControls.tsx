@@ -712,7 +712,12 @@ const IND_LIST: IndMeta[] = [
   { id: 'daimon',   ico: '🧙', name: 'DAIMON',            desc: 'A chart wizard that walks, reads the market & calls trades (Zeus original)', hasGenericSettings: false },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
-  { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
+  // [2026-10-10] No settingsModal: the LIQ CHART SETTINGS panel could not store
+  // anything and never could — 23 controls, hardcoded initialisers, and zero
+  // readers of liqSettings anywhere. Removed rather than wired, so the gear
+  // stops promising a setting that cannot be kept. The overlay itself is
+  // untouched and still persists through `overlays`. See noLyingSettingsGear.test.ts.
+  { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',                                 isOverlay: true },
   { id: 'zs',  ico: '👑', name: 'SUPREMUS',    desc: 'Zone Supremus S/R',       settingsModal: 'supremus', isOverlay: true },
   { id: 'sr',  ico: '📐', name: 'S/R Levels',  desc: 'Auto support/resistance', settingsModal: 'sr',       isOverlay: true },
   { id: 'llv', ico: '💢', name: 'LLV Volume', desc: 'Large Liquidation Vols',  settingsModal: 'llv',      isOverlay: true },

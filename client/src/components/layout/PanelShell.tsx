@@ -51,7 +51,6 @@ import { NotificationsModal } from '../modals/NotificationsModal'
 import { CloudSyncModal } from '../modals/CloudSyncModal'
 import { AlertsModal } from '../modals/AlertsModal'
 import { ChartSettingsModal } from '../modals/ChartSettingsModal'
-import { LiqSettingsModal } from '../modals/LiqSettingsModal'
 import { LLVSettingsModal } from '../modals/LLVSettingsModal'
 import { SupremusModal } from '../modals/SupremusModal'
 import { SRSettingsModal } from '../modals/SRSettingsModal'
@@ -427,7 +426,6 @@ export function PanelShell() {
       <CloudSyncModal visible={activeModal === 'cloud'} onClose={closeModal} />
       <AlertsModal visible={activeModal === 'alerts'} onClose={closeModal} />
       <ChartSettingsModal visible={activeModal === 'charts'} onClose={closeModal} />
-      <LiqSettingsModal visible={activeModal === 'liq'} onClose={closeModal} />
       <LLVSettingsModal visible={activeModal === 'llv'} onClose={closeModal} />
       <SupremusModal visible={activeModal === 'supremus'} onClose={closeModal} />
       <SRSettingsModal visible={activeModal === 'sr'} onClose={closeModal} />

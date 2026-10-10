@@ -621,7 +621,7 @@ function _buildAllSections(): any {
     panels: { ts: _t('panels'), data: { groups: _j('zeus_groups'), dslStrip: _g('zeus_dsl_strip_open'), atStrip: _g('zeus_at_strip_open'), ptStrip: _g('zeus_pt_strip_open'), mtfOpen: _g('zeus_mtf_open'), dslMode: _dslMode, adaptStrip: _g('zeus_adaptive_strip_open') } },
     indSettings: { ts: _t('indSettings'), data: _j('zeus_ind_settings') },
     llvSettings: { ts: _t('llvSettings'), data: _j('zeus_llv_settings') },
-    uiScale: { ts: _t('uiScale'), data: _g('zeus_ui_scale') },
+    // [R9 2026-10-10] uiScale no longer pushed — removed feature, see the pull side.
     signalRegistry: { ts: _t('signalRegistry'), data: _j('zeus_signal_registry') },
     perfStats: { ts: _t('perfStats'), data: _j('zeus_perf_v1') },
     dailyPnl: { ts: _t('dailyPnl'), data: _j('zeus_daily_pnl_v1') },
@@ -775,14 +775,13 @@ export function _userCtxPull() {
         }
       }
 
-      if (sec.uiScale && sec.uiScale.data != null) {
-        if (sec.uiScale.ts > (_ucDirtyTs.uiScale || 0)) {
-          localStorage.setItem('zeus_ui_scale', sec.uiScale.data)
-          _ucDirtyTs.uiScale = sec.uiScale.ts; _dirty = true
-          document.documentElement.style.fontSize = sec.uiScale.data + 'px'
-          console.log('[UC] \u2705 uiScale merged from server')
-        }
-      }
+      // [R9 2026-10-10] The uiScale merge is gone. uiScale is a feature removed on
+      // 2026-06-13 — nothing writes it and no stylesheet consumed the variable it
+      // set — but this branch still applied it, and it did so as PIXELS when the
+      // stored value is a PERCENTAGE. A section carrying 100 gave the document a
+      // 100px root font. Never armed in production (verified live: data null for
+      // uid=1, no rows in user_ctx_data), but a stale pre-June value on any device
+      // was all it needed. See core/__tests__/ucPullNoFontSize.test.ts.
 
       const _restoreJSON = function (sectionName: string, lsKey: string, reloadFn: any) {
         if (sec[sectionName] && sec[sectionName].data != null) {
@@ -1808,6 +1807,9 @@ function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
     if (flat.brain.demo && typeof flat.brain.demo === 'object') Object.assign(USER_SETTINGS.brain.demo, flat.brain.demo)
   }
   if (flat.assistArmed !== undefined) USER_SETTINGS.assistArmed = flat.assistArmed
+  // [2026-10-10] Radar Lens. Whitelisted server-side from the start; nothing
+  // client-side ever carried it either way, so the lens reset on every refresh.
+  if (flat.radarLens !== undefined) (USER_SETTINGS as any).radarLens = flat.radarLens
   USER_SETTINGS.autoTrade = USER_SETTINGS.autoTrade || {}
   const atKeys = ['lev', 'sl', 'rr', 'size', 'maxPos', 'killPct', 'confMin', 'sigMin',
     'riskPct', 'maxDay', 'lossStreak', 'maxAddon', 'adaptEnabled', 'adaptLive', 'smartExitEnabled']

@@ -93,6 +93,12 @@ export interface SettingsPayload {
   srSettings?: Record<string, unknown> | null
   alertSettings?: Record<string, unknown> | null
 
+  /** [2026-10-10] Radar Lens choice. The server whitelisted and validated this
+   *  from the start ("D4 persistence") but no client code ever sent it, so the
+   *  lens reset on every refresh. Absent, never defaulted: a fabricated default
+   *  would clobber the stored choice on a boot that saved before the bar mounted. */
+  radarLens?: { lens?: string; tf?: string } | null
+
   // Brain / profile
   profile?: string
   bmMode?: string

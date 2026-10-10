@@ -3,21 +3,52 @@ import { resetProtectMode } from '../../engine/brain'
 import { BlockReasonText } from './BlockReasonText'
 import { useBrainStatsStore, BRAIN_NEURON_IDS } from '../../stores/brainStatsStore'
 import { _ZI } from '../../constants/icons'
+import { USER_SETTINGS, _usScheduleSave } from '../../core/config'
 
 // [L1+L2] Radar lens controls — strictly visualization. Selecting any
 // lens turns the 12-axis renderer ON via window.BRAIN_RADAR_12X_UI_ONLY.
-// Per Zeus rules: in-memory only (no localStorage as final truth, no
-// server writes); proper per-user persistence is deferred to L4 after
-// T+7d soak. To rollback to legacy 6-axis: DevTools console
+// To rollback to legacy 6-axis: DevTools console
 // `window.BRAIN_RADAR_12X_UI_ONLY = false`.
+//
+// [2026-10-10] The choice now persists. It was in-memory by design, with
+// per-user persistence "deferred to L4 after T+7d soak" — but the server
+// half was then built (routes/trading.js whitelists 'radarLens' with the
+// comment "D4 persistence", and the validator accepts it) while this half
+// was never wired. So nothing ever sent the key, radarLens was ABSENT for
+// all nine users in the live database, and the lens reset to hybrid on
+// every refresh. The soak it was waiting for is long past.
+//
+// Wired as a full loop on purpose — restore on mount AND persist on click.
+// Wiring only the save half is what made the candle type look repaired for
+// three days. See radarLensPersist.test.ts + RadarLensBar.test.tsx.
 type RadarLens = 'hybrid' | 'realtime' | 'timeframe' | 'slow'
 type RadarLensTf = '5m' | '15m' | '1h' | '4h'
 const _RADAR_LENS_LABELS: Record<RadarLens, string> = {
   hybrid: 'HYBRID', realtime: 'REAL-TIME', timeframe: 'TIMEFRAME', slow: 'SLOW',
 }
-function RadarLensBar() {
-  const [lens, setLensState] = useState<RadarLens>('hybrid')
-  const [tf, setTfState] = useState<RadarLensTf>('5m')
+const _RADAR_LENSES: RadarLens[] = ['hybrid', 'realtime', 'timeframe', 'slow']
+const _RADAR_TFS: RadarLensTf[] = ['5m', '15m', '1h', '4h']
+
+/** Read the persisted choice, validating both halves. A stored id we do not
+ *  recognise is ignored rather than handed to the renderer — the same guard
+ *  _usApplyFlatToUserSettings applies to the candle type. */
+function _savedLens(): { lens: RadarLens; tf: RadarLensTf } {
+  try {
+    const raw = (USER_SETTINGS as Record<string, unknown>).radarLens as
+      { lens?: string; tf?: string } | null | undefined
+    const lens = raw && _RADAR_LENSES.indexOf(raw.lens as RadarLens) !== -1
+      ? (raw.lens as RadarLens) : 'hybrid'
+    const tf = raw && _RADAR_TFS.indexOf(raw.tf as RadarLensTf) !== -1
+      ? (raw.tf as RadarLensTf) : '5m'
+    return { lens, tf }
+  } catch (_) {
+    return { lens: 'hybrid', tf: '5m' }
+  }
+}
+
+export function RadarLensBar() {
+  const [lens, setLensState] = useState<RadarLens>(() => _savedLens().lens)
+  const [tf, setTfState] = useState<RadarLensTf>(() => _savedLens().tf)
   // Apply lens on mount + every change. Defensive: if MCR not yet
   // booted, skip silently — the canvas IIFE wires up shortly after.
   useEffect(() => {
@@ -26,6 +57,16 @@ function RadarLensBar() {
       try { mcr.setLens(lens, tf) } catch (_) { /* */ }
     }
   }, [lens, tf])
+  /** Persist through the same legacy-tree + scheduled-save path the candle
+   *  type switcher uses, so there is one save mechanism, not two. */
+  const _persist = (nextLens: RadarLens, nextTf: RadarLensTf) => {
+    try {
+      ;(USER_SETTINGS as Record<string, unknown>).radarLens = { lens: nextLens, tf: nextTf }
+      _usScheduleSave()
+    } catch (_) { /* a failed save must never break the control */ }
+  }
+  const pickLens = (l: RadarLens) => { setLensState(l); _persist(l, tf) }
+  const pickTf = (t: RadarLensTf) => { setTfState(t); _persist(lens, t) }
   const _btnStyle = (active: boolean, accent: string) => ({
     padding: '3px 8px', fontSize: '9px', letterSpacing: '1px',
     border: '1px solid ' + (active ? accent : '#1e2a3a'),
@@ -45,7 +86,7 @@ function RadarLensBar() {
     }}>
       <span style={{ color: '#7a9ab8', fontSize: '9px', letterSpacing: '1.5px' }}>RADAR LENS:</span>
       {(['hybrid', 'realtime', 'timeframe', 'slow'] as RadarLens[]).map(l => (
-        <button key={l} onClick={() => setLensState(l)} style={_btnStyle(lens === l, '#00d4ff')}>
+        <button key={l} onClick={() => pickLens(l)} style={_btnStyle(lens === l, '#00d4ff')}>
           {_RADAR_LENS_LABELS[l]}
         </button>
       ))}
@@ -60,7 +101,7 @@ function RadarLensBar() {
               confirmed: fetchAllRSI lists ['5m','15m','1h','3h','4h','1d']). */}
           <select
             value={tf}
-            onChange={(e) => setTfState(e.target.value as RadarLensTf)}
+            onChange={(e) => pickTf(e.target.value as RadarLensTf)}
             style={{
               padding: '3px 6px',
               fontSize: '10px',

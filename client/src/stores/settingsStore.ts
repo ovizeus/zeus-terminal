@@ -667,6 +667,9 @@ function _projectFromLegacy(): Partial<SettingsPayload> {
     ptMarginMode: us.ptMarginMode,
     chartTz: ch.tz,
     dslSettings: us.dslSettings as Record<string, unknown> | null | undefined,
+    // [2026-10-10] Radar Lens — see radarLensPersist.test.ts. Wired as a full
+    // loop (project + save + hydrate + apply) rather than a save alone.
+    radarLens: (us as Record<string, unknown>).radarLens as SettingsPayload['radarLens'],
   }
   for (const k of Object.keys(out) as Array<keyof SettingsPayload>) {
     if (out[k] === undefined) delete out[k]
@@ -747,6 +750,7 @@ function _projectToLegacy(settings: SettingsPayload): void {
   if (settings.ptLevLive !== undefined) (us as any).ptLevLive = settings.ptLevLive
   if (settings.ptMarginMode !== undefined) (us as any).ptMarginMode = settings.ptMarginMode
   if (settings.dslSettings !== undefined) (us as any).dslSettings = settings.dslSettings
+  if (settings.radarLens !== undefined) (us as any).radarLens = settings.radarLens
 }
 
 /**
