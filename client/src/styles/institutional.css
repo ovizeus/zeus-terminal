@@ -1,0 +1,58 @@
+/* Zeus — the institutional theme, 2026-10-10.
+ *
+ * Every colour in the redesign is named here and nowhere else. The whole look
+ * is gated behind the single class `.zi`, which sits on exactly three roots:
+ * the Auto Trade panel, the Manual Trade panel and the THEIA page. Removing it
+ * from those three places restores the previous appearance without touching
+ * anything else — that is the agreed way back if the result is not wanted.
+ *
+ * Contrast was checked against --zi-card: label 5.5:1, muted 5:1, pos 6.6:1,
+ * neg 4.6:1, warn 6.5:1. --zi-faint is for hairlines and non-essential text
+ * only. Positive and negative differ in lightness as well as hue, and the sign
+ * is always rendered, so nothing depends on colour alone.
+ *
+ * Note on type: the app-wide --ff is 'Share Tech Mono', i.e. labels are set in
+ * a monospace face everywhere. That is the main reason the old panels did not
+ * read as institutional. The pairing below is scoped to .zi on purpose and must
+ * never be promoted to :root.
+ */
+.zi {
+  --zi-bg: #0a0e14;
+  --zi-card: #111821;
+  --zi-line: #1c2733;
+  --zi-hair: #141c26;
+  --zi-field: #0d141c;
+  --zi-raise: #16202b;
+  --zi-edge: #27343f;
+
+  --zi-val: #e4ecf4;
+  --zi-lbl: #8a9bb0;
+  --zi-mut: #7c8ea4;
+  --zi-faint: #5f7186;
+
+  --zi-pos: #2bb673;
+  --zi-neg: #d94f5c;
+  --zi-warn: #c89b3c;
+
+  --zi-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --zi-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  background: var(--zi-bg);
+  color: var(--zi-val);
+  font-family: var(--zi-sans);
+}
+
+.zi-lbl {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--zi-lbl);
+  font-weight: 500;
+}
+
+.zi-num {
+  font-family: var(--zi-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.zi-rule { height: 1px; background: var(--zi-line); }

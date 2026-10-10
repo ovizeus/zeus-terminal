@@ -21,6 +21,7 @@ import { startPositionsRealtime, stopPositionsRealtime } from './services/positi
 import { startMarketRadarRealtime, stopMarketRadarRealtime } from './services/marketRadarRealtime'
 import { start as startLiqFeedClient, stop as stopLiqFeedClient } from './services/liqFeedClient'
 import './app.css'
+import './styles/institutional.css'
 
 export function App() {
   const theme = useUiStore((s) => s.theme)
