@@ -34,6 +34,16 @@ let _reflectionTimer = null;
 let _sessionTimer = null;
 
 // ── helpers to get/init per-user state ──
+// [2026-10-10] Reflection alerts read concerns: ["anti_pattern","anti_pattern"],
+// which looks like one concern listed twice. It is two DIFFERENT anti-patterns
+// that both matched — the payload kept only `type` and dropped `pattern`, the
+// one field that says which. Keep both, so an alert is readable.
+function _concernLabels(concerns) {
+    return (concerns || [])
+        .filter((c) => c && c.type)
+        .map((c) => (c.pattern ? `${c.type}:${c.pattern}` : c.type));
+}
+
 function _rules(uid)       { if (!_learnedRules.has(uid)) _learnedRules.set(uid, []); return _learnedRules.get(uid); }
 function _patterns(uid)    { if (!_antiPatterns.has(uid)) _antiPatterns.set(uid, []); return _antiPatterns.get(uid); }
 function _tht(uid)         { if (!_thoughts.has(uid)) _thoughts.set(uid, []); return _thoughts.get(uid); }
@@ -279,7 +289,7 @@ function questionEntry(symbol, dir, confidence, regime, marketContext, userId) {
             ts: Date.now(), symbol, type: 'pre_trade_check',
             severity: proceed ? 'info' : 'critical',
             text: `${symbol} ${dir}: ${concerns.length} concern(s). ${proceed ? 'Proceeding with caution.' : 'ENTRY BLOCKED.'}`,
-            concerns: concerns.map(c => c.type),
+            concerns: _concernLabels(concerns),
         });
     }
 
@@ -853,11 +863,11 @@ function shouldAlert(key, now) {
 }
 function _resetAlertThrottle() { _alertThrottle.clear(); }
 function buildReflectionAlert(symbol, dir, concerns) {
-    const types = (concerns || []).map((c) => c && c.type).filter(Boolean).join(', ') || 'reflection';
+    const types = _concernLabels(concerns).join(', ') || 'reflection';
     return `🧠 Brain blocked ${dir} ${symbol} — second-guessed: ${types}`;
 }
 
-module.exports = {
+module.exports = { _concernLabels,
     start,
     stop,
     reflectOnTrade,
