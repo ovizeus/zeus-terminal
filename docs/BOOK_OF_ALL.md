@@ -137,7 +137,11 @@ Fiecare boot reface exchangeInfo, klines-init pe toate simbolurile, OI, funding,
 4. **`ACTION_COLUMN` era `auto`** — într-o grilă per-rând, fiecare rând ar fi avut coloanele în alt loc.
 5. **Poarta de typecheck era falsă** — `tsc -p tsconfig.json` nu verifica nimic și ieșea mereu 0. Dovedit cu un identificator inexistent. Vezi R-V-5.
 
-👁️ **De confirmat vizual de operator:** cele două panouri și THEIA. Nimeni n-a văzut rezultatul într-un browser — toate verificările sunt prin teste. Revenire: `git checkout pre-institutional-redesign -- <path>` sau `/root/zeus-backups/pre-redesign-20261010-1640`.
+👁️ **Verificare vizuală FĂCUTĂ** (2026-10-10, banc de probă + Chrome headless pe componentele reale cu CSS-ul real livrat). **Confirmat cu ochii:** coloanele se aliniază între rânduri cu conținut de lungimi diferite (pista fixă de 96px funcționează — `$1,000` și `-12.5%` stau exact sub celelalte); cifrele sunt tabulare și coloanele numerice nu se mișcă; culoarea apare doar pe P&L și direcție; zero mov; tema light se randează corect, nu ca trei panouri negre.
+
+**🐛 Screenshot-ul a găsit un bug pe care testele nu-l puteau vedea:** un `ZiMetric` fără valoare randa eticheta urmată de **nimic**. Pe o suprafață de bani, gol se citește ca zero — exact **R-C-9**. Reparat: absența (`null`/`undefined`/`''`) devine `—`, iar un **0 măsurat rămâne 0**, fiindcă un zero real e informație. Rebuild fără al doilea reload (**R-OP-2**: schimbările doar de client nu cer restart). 833 teste / 113 fișiere.
+
+⚠️ **Ce rămâne pentru tine:** panourile **conectate la date reale** — bancul de probă nu poate face login în contul tău. De verificat: rotița deschide sertarul și SAVE persistă; un ordin pe demo; `✕ CLOSE` pe o poziție; THEIA cu cele trei benzi. Revenire: `git checkout pre-institutional-redesign -- <path>` sau `/root/zeus-backups/pre-redesign-20261010-1640`.
 
 - **Mockup aprobat:** https://claude.ai/artifact/HGSwWUV2HmbC4RdPoqp9pB (*„mergem așa”*)
 - **Spec:** `docs/superpowers/specs/2026-10-10-institutional-redesign-design.md`
