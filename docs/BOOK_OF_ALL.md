@@ -43,6 +43,37 @@
 **P15 ✅ REZOLVAT (b269 v1.7.243) — desenele urmează utilizatorul** *(R5)*. Secțiune nouă `drawings` în canalul user-context (SQLite), cu plafon la **300** (`drawingScope.SYNC_MAX_DRAWINGS`). Setul local **nu e niciodată tăiat** — doar copia care călătorește — iar o tăiere o spune în consolă, ca să nu existe divergență tăcută între dispozitiv și server. Măsurat, nu estimat: 77 bytes o linie orizontală, 144 un trendline, deci 200 de desene = 21,6 KB din plafonul de 64 KB — **grija mea cu mărimea era nefondată și mi-am retras-o**. La pull desenele se re-randează imediat, fără refresh.
 
 ---
+
+### ✅ VERIFICARE LA SÂNGE PE LOGICĂ — redesignul NU a rupt nimic (2026-10-10)
+
+Codul legacy citește setările **după id din DOM**, iar `_iv()` cade pe DEFAULT când elementul lipsește.
+Dacă rescrierea pierdea un id, salvarea ar fi scris default-uri peste valorile reale — tăcut.
+Am extras **toate cele 50 de id-uri** pe care `config.ts`, `state.ts`, `autotrade.ts`, `bootstrapInit.ts`
+și `pageview.ts` le caută în DOM, și le-am verificat una câte una.
+
+**Rezultat: niciun id pierdut de redesign.** Cele 7 care nu se găsesc în componente lipseau **și la tag-ul
+`pre-institutional-redesign`**, deci sunt preexistente.
+
+### 🔴 R12 — `manualLive` nu s-a salvat NICIODATĂ (preexistent, găsit de auditul de id-uri)
+
+`config.ts:2001` construiește `USER_SETTINGS.manualLive` din trei id-uri:
+```js
+manualLive = { size: _iv('liveSize', null), sl: _iv('liveSL', null), tp: _iv('liveTP', null) }
+```
+**Niciunul dintre cele trei id-uri nu există nicăieri în aplicație** — nici acum, nici înainte de redesign.
+Deci `_iv()` returnează `null` de fiecare dată, iar fiecare salvare scrie `null` peste ce era stocat.
+
+**Dovada, aceeași semnătură ca la cele 8 chei din b266 — zero varianță:**
+```
+9 din 9 utilizatori:  manualLive = {"size": null, "sl": null, "tp": null}
+```
+E **a zecea instanță** din clasa R-C-6. Mărimea, SL-ul și TP-ul implicite ale panoului manual LIVE
+n-au persistat niciodată.
+
+🙋 **Nu am reparat-o** — e în afara redesignului și atinge calea de salvare. Reparația e mică
+(nu mai trimite cheia când câmpurile nu există, exact ca la b266) dar o fac doar cu acordul tău.
+
+---
 ## 📜 REGULILE DUPĂ CARE LUCRĂM — rubrică permanentă
 
 > Cerut de operator 2026-10-10: *„poti scrie si rubrica de rwguli dupa care lucram daca se intampla ceva sa le avem in book of all"*.
