@@ -32,7 +32,7 @@
 
 **P11 🔧 Cele nouă chei care se suprascriu cu default-uri la fiecare salvare** *(R1)*. Dovedit pe baza vie: zero varianţă la 9 din 9 utilizatori. Reparaţia e mecanică (proiecţie în ambele sensuri sau scoaterea cheilor din payload), dar atinge calea de salvare a setărilor — se face cu teste, nu pe repede înainte. **Al meu.**
 
-**P12 🔧 Tipul de lumânare nu persistă** *(R2)*. Lipseşte `ch.candleType` din `_projectFromLegacy`. E cea mai mică reparaţie din listă şi se vede imediat. **Al meu.**
+**P12 ✅ REZOLVAT (b265 v1.7.239) — tipul de lumânare nu persista** *(R2)*. Lipsea `ch.candleType` din `_projectFromLegacy`. O linie de proiecție, **3 teste noi** picate toate prima dată pe cauza corectă, unul dintre ele parcurgând tot drumul hidratare → proiecție → salvare, ca să nu mai poată fi reparată doar o jumătate. Client 710/710, tsc curat. **De confirmat vizual la tine:** alege Heikin Ashi, refresh, trebuie să rămână.
 
 **P13 🔧 `LIQ CHART SETTINGS` e un modal decorativ** *(R3)*. Nu are cititori nicăieri. Două variante: îl conectăm la overlay-ul de lichidări, sau îl scoatem din UI ca să nu mintă. 🙋 *Decizia ta — nu ştiu dacă vrei funcţia sau curăţenia.*
 
@@ -66,9 +66,10 @@
 `chartType` e dovada cea mai curată: 8 utilizatori încă ţin `"candle"` — valoarea despre care **comentariul propriu al codului** (`config.ts:1786`) spune că *nu e un id din `CANDLE_TYPES` şi nu putea fi aplicată niciodată*. Nimeni nu a scris vreodată valoarea aia; a pus-o salvarea. Zero varianţă la 9 utilizatori nu e coincidenţă — e semnătura unei chei pe care o scrie doar codul.
 *Atenuare parţială:* valorile reale ale lui `uiScale`, `llvSettings` şi `zsSettings` trăiesc de fapt în celălalt canal (secţiunile UC), deci acelea chiar persistă — copia din `user_settings` e un fantomă care induce în eroare. Pentru `theme`, `chartType`, `liqSettings`, `srSettings` **nu există nicio copie care funcţionează** (vezi R2, R3, R4).
 
-**R2. Tipul de lumânare NU poate persista — jumătatea de scriere a drumului lipseşte.**
+**R2. ✅ REPARAT (b265) — Tipul de lumânare NU putea persista; jumătatea de scriere a drumului lipsea.**
 `candleTypeSwitcher.ts:196` scrie `USER_SETTINGS.chart.candleType = type` şi cheamă `_usScheduleSave`. Dar `_projectFromLegacy` **nu citeşte `ch.candleType`**, deci magazinul rămâne pe default-ul `'candles'`, salvarea trimite `chartType: 'candles'`, iar la boot `_usApplyFlatToUserSettings` (`config.ts:1784`) ia `flat.chartType` şi **scrie default-ul înapoi** în `chart.candleType`.
 Ciclul e închis — doar că pe valoarea greşită. **Simptom: alegi Heikin Ashi, dai refresh, te întorci la candles.** Reparaţia din 2026-10-07 a rezolvat jumătatea de *citire* şi a lăsat-o pe cea de *scriere*, de aceea pare reparat şi nu e. Confirmat de DB: niciun utilizator nu are vreodată altceva decât default.
+*Reparat:* `chartType: ch.candleType` în `_projectFromLegacy`; teste în `client/src/stores/__tests__/candleTypePersist.test.ts`.
 
 ### 🟠 MEDII
 
@@ -83,6 +84,8 @@ Whitelist-ul serverului are `'radarLens'` cu comentariul *„Radar Lens (D4 pers
 *(Verificat mecanic: din cele 74 de chei user-scoped, 31 nu sunt în nicio secţiune UC. Majoritatea sunt corect locale — PIN, chei API, tab-leader, starea beacon-ului. Cele 4 de mai sus sunt cele care ar trebui să urmeze utilizatorul.)*
 
 ### 🟡 MICI
+
+**R8. `public/app/assets` era root-owned** — de la un build rulat ca root la 05:47. Deploy-ul de azi a picat cu `EACCES` până l-am dat înapoi lui `zeus`. Aceeași familie cu incidentul `migration_flags.json`: ce lasă root în urmă blochează tăcut procesul zeus — și e greșeala mea. *Reparat la deploy; de verificat la fiecare build.*
 
 **R6. `zeus_dsl_parity_shadow` nu e în `_USER_KEYS`** — singura cheie `zeus_*`/`zt_*` rămasă neizolată după reparaţia de ieri, deci se împarte între două conturi pe acelaşi browser. E un jurnal de diagnostic, nu o setare; impactul e doar date de paritate amestecate.
 
