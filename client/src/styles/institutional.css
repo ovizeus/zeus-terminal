@@ -125,3 +125,25 @@
   --zi-neg: #b2303c;
   --zi-warn: #8a6410;
 }
+
+/* [2026-10-10] The emergency stop, restored.
+ *
+ * Task 3 dropped the legacy .at-kill class, and with it
+ * `animation: zBlink 1s infinite` on .at-kill.triggered. That blink is not
+ * decoration: it is how a FIRED kill switch announces itself. Without it a
+ * triggered emergency stop looks like an ordinary button, on the one control
+ * that must never be mistaken for one.
+ *
+ * Restored here rather than by re-adding .at-kill, because that class also sets
+ * font-family: var(--ff) — the app monospace this redesign exists to remove.
+ * zBlink is the keyframe app.css already defines.
+ */
+.zi .zi-kill:hover {
+  background: rgba(217, 79, 92, 0.08);
+}
+
+.zi .zi-kill.triggered {
+  background: rgba(217, 79, 92, 0.2);
+  border-color: var(--zi-neg);
+  animation: zBlink 1s infinite;
+}

@@ -341,6 +341,7 @@ export function AutoTradePanel() {
         <button
           type="button"
           onClick={handleKill}
+          className={`zi-kill${killed ? ' triggered' : ''}`}
           style={{ ...ACTION_BTN, background: 'none', border: `1px solid ${killed ? 'var(--zi-neg)' : '#4a2630'}`, color: 'var(--zi-neg)', width: 'auto', margin: 0 }}
         >
           Close all
