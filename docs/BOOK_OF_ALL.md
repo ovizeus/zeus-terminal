@@ -1,40 +1,36 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-10 · build b262 v1.7.236
+> **Ultima actualizare:** 2026-10-10 · build b263 v1.7.237
 > **Ordinea de mai jos e ordinea în care le facem.** 🔧 = o fac eu · 🙋 = are nevoie de tine (decizie, chei, sau ochii tăi).
 
 ---
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> Litera din paranteză trimite la secţiunea de audit, unde e dovada. *(Închise: A1, A4, B1-B8, C1-C3. A3 reclasificat — nu e bug de cod.)*
+> *(Închise azi: alerta la cădere + etichetele din reflection. Rămân 11, din care **doar 2 sunt ale mele**.)*
 
-**P1 🔧 Alertă când Zeus cade.** Azi-noapte s-a prăbuşit de **1082 de ori în 3,5 ore** şi **nimeni n-a aflat** — ai găsit-o tu. Auto-vindecarea din b262 acoperă cazul WAL corupt, dar nu şi „Zeus e jos din orice alt motiv". O alertă Telegram pe prăbuşire repetată e lucrul care contează cel mai mult din toată lista.
+**P1 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**
 
-**P2 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită.
+**P2 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2,7 GB de pagini reale. Cere ~20s oprire — **zi-mi când şi o fac**.
 
-**P3 🙋 Cauza corupţiei WAL — rămâne deschisă.** Fără erori de disc, spaţiu suficient, proprietari corecţi, nimeni conectat. Dacă se repetă, avem acum şi fişierele păstrate şi auto-vindecarea; de urmărit.
+**P3 🙋 Calibrarea auto-carantinei ML.** Pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm.
 
-**P4 🙋 Calibrarea auto-carantinei ML.** Pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm.
+**P4 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange).
 
-**P5 🙋 WebSocket-ul de futures Binance e blocat de reţea** *(A3)*. Nu e de reparat în cod. Orice soluţie de rutare o facem împreună — un WARP pe VPS-ul ăsta a mai stricat lucruri o dată.
+**P5 🙋 WebSocket-ul de futures Binance e blocat de reţea** *(A3)*. Nu e de reparat în cod — socket-ul se conectează dar primeşte zero cadre, în timp ce REST-ul merge. Soluţie de rutare, făcută împreună: un WARP pe VPS-ul ăsta a mai stricat lucruri o dată.
 
-**P6 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange).
+**P6 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Nu-l fac fără un test real de trimitere cu tine.
 
-**P7 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Nu-l fac fără un test real de trimitere cu tine.
+**P7 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit**, sau mutat în Vault.
 
-**P8 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit**, sau mutat în Vault.
+**P8 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Decizie de produs: offline, care sursă câştigă?
 
-**P9 🔧 VACUUM: ~4,6 GB de recuperat.** Cere ~20s oprire. O fac la cerere.
+**P9 🙋 Conectarea ML-ului neconectat — plan scris, aşteaptă GO.** 74 din 284 fişiere legate, 198 din 367 tabele goale, dar **209 din 210 module neconectate AU teste**. Se poate, dar nu în bloc. Etapa 0 e ieftină şi nu atinge nimic viu.
 
-**P10 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Decizie de produs: offline, care sursă câştigă?
+**P10 🙋 Cauza corupţiei WAL — rămâne deschisă.** Fără erori de disc, spaţiu suficient, proprietari corecţi, nimeni conectat. Auto-vindecarea acoperă repetarea; fişierele corupte sunt păstrate în `/root/zeus-recover/`.
 
-**P11 🙋 Conectarea ML-ului neconectat — plan scris, aşteaptă GO.** 74 din 284 fişiere legate, 198 din 367 tabele goale, dar **209 din 210 module neconectate AU teste**. Se poate, dar nu în bloc. Etapa 0 e ieftină şi nu atinge nimic viu.
-
-**P12 🔧 Mărunţişuri:** motivele din reflection apar duplicate; două tabele din retenţie ţin mai puţin decât fereastra lor (raportarea pe tabelă adăugată ieri va spune de ce).
-
-**P13 🙋 Confirmări vizuale:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
+**P11 🙋 Confirmări vizuale:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
@@ -275,6 +271,12 @@ Nu leg nimic la calea de decizie „ca să vedem". Dacă vrei să începem, înc
 ## ✅ REZOLVATE — arhivă
 
 > Aici cobor tot ce-i gata, ca lista de sus să rămână doar activ. Git + changelog au detaliul complet.
+
+### 2026-10-10 (b262-b263)
+
+- ✅ **Alertă când Zeus cade** *(b263, fostul P1)*. Ce a lipsit azi-noapte: 1082 de prăbuşiri în 3,5 ore şi niciun semn. O aplicaţie căzută nu poate anunţa că e căzută, deci watchdog-ul rulează din cron, **în afara ei**, la fiecare minut. pm2 raporta „online" între prăbuşiri toată noaptea — de aia starea singură nu e semnal, ci **numărul de reporniri care urcă**. Vorbeşte când procesul nu e online, când lipseşte din pm2, şi la **peste 3 reporniri între verificări** (buclă, nu deploy). Nu se repetă în fiecare minut, revine după 30 de minute dacă tot e stricat, anunţă revenirea **o dată** şi apoi tace. Prima rulare doar învaţă numărul curent — altfel un server sănătos ar raporta „1083 de reporniri". **Dovedit pe botul real**, nu doar în teste; iar la reload-ul de deploy de după a tăcut, cum trebuie.
+- ✅ **Alertele de reflection spun acum CE a blocat tranzacţia** *(b263)*. Toate citeau `["anti_pattern","anti_pattern"]`, ca şi cum acelaşi motiv ar fi listat de două ori. Erau **două anti-pattern-uri diferite**, dar payload-ul păstra doar tipul şi arunca numele — exact câmpul care spune care. 51 de alerte ieri, niciuna lizibilă. Acum se păstrează amândouă, printr-un singur helper folosit de payload, de textul alertei şi de jurnalul de gânduri, ca să nu se mai despartă.
+
 
 ### 2026-10-09 (b255)
 
