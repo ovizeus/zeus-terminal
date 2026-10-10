@@ -80,7 +80,11 @@ const DEFAULT_AT_UI: ATUI = {
   dotBg: '#aa44ff',
   dotShadow: '0 0 6px #aa44ff',
   btnText: 'AUTO TRADE OFF',
-  status: { icon: null, text: 'Configureaza mai jos', action: null },
+  // [2026-10-10] Was 'Configureaza mai jos' — Romanian in an English UI, and
+  // after the redesign also false: the settings moved into the drawer behind
+  // the gear, so there is nothing below to configure. Found by looking at the
+  // rendered panel; no test asserted on it.
+  status: { icon: null, text: 'Not configured yet', action: null },
   modeLabel: { icon: null, text: 'DEMO', color: '#aa44ff' },
   modeDisplay: { icon: null, text: 'DEMO MODE', lockSuffix: false, color: '#aa44ff', border: '#aa44ff44' },
   liveWarnVisible: false,
