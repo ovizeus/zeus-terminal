@@ -324,19 +324,35 @@ const DEFAULT_SETTINGS: SettingsPayload = {
   adaptEnabled: false, adaptLive: false, smartExitEnabled: false,
   // Multi-Symbol scan (persisted per-user on server)
   mscanEnabled: true, mscanSyms: null,
-  // UI
-  theme: 'native', uiScale: 100, soundEnabled: true,
   // Chart
   // [2026-10-07] was 'candle' — not a CANDLE_TYPES id, so it could never be applied
-  chartTf: '5m', chartType: 'candles', candleColors: null, heatmapSettings: null, timezoneOffset: null,
+  chartTf: '5m', chartType: 'candles', candleColors: null, heatmapSettings: null,
   // Indicators
   indSettings: null,
   // [2026-10-08] overlay toggles — previously never persisted at all
   overlays: null,
-  // Liq / LLV / Supremus / S-R
-  liqSettings: null, llvSettings: null, zsSettings: null, srSettings: null,
   // Alerts
   alertSettings: null,
+  // [2026-10-10] Eight keys used to be seeded here that nothing filled and
+  // nothing read — theme, uiScale, soundEnabled, timezoneOffset, liqSettings,
+  // srSettings, llvSettings, zsSettings. Because the payload is a spread of
+  // this store and the server merges per key (where a null DOES overwrite),
+  // every save destroyed the stored value with a hardcoded default. The live
+  // database showed it plainly: all nine users held byte-identical values,
+  // which is the signature of a key only the code ever writes.
+  //
+  // They are gone rather than filled, because each already has a real owner
+  // and this store is not it: theme and soundEnabled live in localStorage
+  // ('zeus_theme' / 'zt:sound_muted'), llvSettings and zsSettings belong to
+  // the user-context channel (verified live — 9 of 9 rows for llvSettings,
+  // chartExtras on disk for zsSettings), uiScale is a feature removed on
+  // 2026-06-13, and timezoneOffset is a dead duplicate of chartTz. A key
+  // absent from the payload leaves the stored value untouched, which is
+  // exactly what we want. See noDefaultClobber.test.ts.
+  //
+  // Making theme and sound follow the user across devices is deliberately NOT
+  // done here: that needs an apply-on-load too, and wiring only the save half
+  // is the mistake that made the candle type look fixed for three days.
 }
 
 interface SettingsStoreState {
