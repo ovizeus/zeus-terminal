@@ -123,7 +123,21 @@ Fiecare boot reface exchangeInfo, klines-init pe toate simbolurile, OI, funding,
 
 > Cerere operator: *„vreau sa fac o schimbare de look la autotrade si manual trade ceva mai institutional mai simplu dar sa pastram logica… activiti log brain dashboard si brain vision sa le scot sa le bagam in theia cu aceiasi tema si auto trade sa ramana gen ca manual trade doar informatiile stricte de trade si tema schimbata nu asa cu mov"*
 
-**Statut 2026-10-10 17:07 — DESIGN APROBAT, plan scris, execuția începe diseară pe SUBAGENȚI.** Logica rămâne neatinsă; pictogramele NU se ating.
+**✅ LIVRAT b270 v1.7.244 — 2026-10-10 seara.** Toate cele 5 sarcini, fiecare verificată și revizuită înainte de următoarea. **831 teste / 113 fișiere**, typecheck neschimbat la 67 erori preexistente, **zero** în fișierele atinse. **UN singur reload**, cu `binance_rate_state` verificat înainte (R-OP-1).
+
+- **Logica neatinsă:** fiecare handler cu corpul exact, niciun store schimbat, `trading/autotrade.ts` **0 linii în diff**. Calea banilor re-verificată: `closeLivePos` 3, `savePosSLTP` 4, `cancelPendingOrder` 2, `modifyPendingPrice` 2.
+- **Verificat în bundle-ul SERVIT**, nu presupus: JS poartă `zi-num`/`zi-kill`, CSS poartă `--zi-bg`, `--zi-pos`, blocul `[data-theme=light] .zi` și keyframe-ul `zBlink`; `brainVisionBody`/`brainDashBody` **au dispărut complet** din output.
+- **Tema light adăugată** deși operatorul n-o folosește — un singur bloc, iar culorile semantice sunt întunecate (verdele și ambra din tema dark cad sub 4.5:1 pe alb).
+- **`bootstrapBrainDash.ts` NU a fost șters** — `bridge/phase1Adapters.ts` îl importă. A rămas ca modul gol cu explicație; cele două IIFE-uri ieșeau oricum devreme după Task 3.
+
+### 🐛 Cinci lucruri găsite pe drum, fiecare ar fi costat ceva
+1. **Planul meu ar fi șters butonul de închidere de pe o poziție live** (A2-1) — panourile nu randează rândurile inline, le deleagă la componente cu **11 apeluri pe calea banilor**.
+2. **Pozițiile Auto Trade sunt un div umplut imperativ** (A2-2) de o funcție care poartă logică de proprietate — lăsată în pace, nu convertită.
+3. **Sertarul rămâne montat când e închis** — codul legacy citește inputurile după id, iar `_iv()` cade pe DEFAULT când elementul lipsește. Demontarea ar fi scris default-uri peste setările reale (același clobber care a omorât 8 chei azi).
+4. **`ACTION_COLUMN` era `auto`** — într-o grilă per-rând, fiecare rând ar fi avut coloanele în alt loc.
+5. **Poarta de typecheck era falsă** — `tsc -p tsconfig.json` nu verifica nimic și ieșea mereu 0. Dovedit cu un identificator inexistent. Vezi R-V-5.
+
+👁️ **De confirmat vizual de operator:** cele două panouri și THEIA. Nimeni n-a văzut rezultatul într-un browser — toate verificările sunt prin teste. Revenire: `git checkout pre-institutional-redesign -- <path>` sau `/root/zeus-backups/pre-redesign-20261010-1640`.
 
 - **Mockup aprobat:** https://claude.ai/artifact/HGSwWUV2HmbC4RdPoqp9pB (*„mergem așa”*)
 - **Spec:** `docs/superpowers/specs/2026-10-10-institutional-redesign-design.md`
