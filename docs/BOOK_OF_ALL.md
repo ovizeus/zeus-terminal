@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-10 · build b263 v1.7.237
+> **Ultima actualizare:** 2026-10-10 · build b264 v1.7.238
 > **Ordinea de mai jos e ordinea în care le facem.** 🔧 = o fac eu · 🙋 = are nevoie de tine (decizie, chei, sau ochii tăi).
 
 ---
@@ -110,6 +110,19 @@ Operatorul a semnalat că la TERMINATOR „se duc culorile la refresh". Culorile
 **B7. ✅ REPARAT (b260) — TERMINATOR n-avea setări.** Era singurul indicator cu `hasGenericSettings: true` şi **fără intrare în `IND_SETTINGS`**, deci rotiţa cădea pe `toast('No settings for ...')`. Între timp `updateTerminator` **citea deja** `cfg.period` şi `cfg.mult` şi cădea tăcut pe 10 şi 3 — valori pe care nimic nu le putea schimba. Acum sunt expuse prin acelaşi modal generic ca la ceilalţi (etichetele existau deja).
 
 **B8. ✅ REPARAT (b260) — chart-ul nu mai încărca istoric la derulare înapoi.** Serverul era sănătos: `/api/market/klines` răspunde 200 cu lumânări reale. Pe client, `initBackfill()` se abonează o singură dată la scara de timp a chart-ului, păzit de un boolean. Dar `TradingChart.tsx` îşi construieşte chart-ul într-un `useEffect` şi face `chart.remove()` la curăţare — deci **fiecare remontare creează un chart nou**, în timp ce garda rămâne pornită şi nimic nu mai e abonat la cel viu. Backfill-ul mergea până la prima remontare şi era mort după, **tăcut**, până la un reload complet de pagină. Acum se leagă de **instanţa** de chart şi se re-armează din `registerChart`, deci o remontare îl reabonează.
+
+**B9. ✅ REPARAT (b264) — alerta de prăbuşire exista de mult; era doar armată prea târziu ca să tragă.** *(găsit 2026-10-10)*
+`server.js` trimite de mult un Telegram pe `uncaughtException` („🔴 ZEUS CRASH"). **Era înregistrată la linia 2134, iar baza de date se încarcă la linia 19.** Deci orice eşec în timpul încărcării modulelor — exact tipul de eşec care produce o buclă de prăbuşire — murea cu **2115 linii înainte** ca cineva să asculte. Asta e motivul tăcerii de azi-noapte, prin 1082 de prăbuşiri.
+*Reparat:* plasa e armată acum **la începutul fişierului**, înaintea primului `require` propriu. `logger` şi `telegram` se cer **leneş, din interiorul handler-elor** — la acel punct din fişier încă nu există, iar o prăbuşire la boot poate apărea înainte să existe vreodată; scrierea în consolă rămâne necondiţionată, deci ceva ajunge mereu în log.
+*Dovedit, nu presupus:* un script izolat cu handler-ul pus primul **prinde** exact eroarea de azi-noapte aruncată la `require`; acelaşi script fără el moare mut. O repetare ar alerta **de la prima prăbuşire**, nu de la a 1082-a. Un test static fixează ordinea ca să nu alunece înapoi.
+*Watchdog-ul din cron rămâne* — el acoperă cazul în care procesul e omorât direct şi niciun handler de-al nostru nu mai apucă să ruleze.
+
+**B10. ✅ REPARAT (b264) — 14 chei de `localStorage` se vedeau între conturi pe acelaşi browser.**
+Zeus scopează `localStorage` pe utilizator (`cheie:uid`) ca două conturi pe acelaşi browser să nu-şi citească setările. **Lista e întreţinută de mână**, iar 14 chei pe care aplicaţia chiar le scrie n-au fost adăugate niciodată — printre ele **`zeus_chart_tf`** (timeframe-ul) şi **`zeus_ind_favorites`** (indicatorii cu stea). Adică exact setările care se observă primele. Scoparea *părea* completă în timp ce tăcut nu era.
+*Reparat:* toate 14 scopate; cele două care sunt într-adevăr per-dispozitiv (`zeus_app_version`, `zeus_dsl_parity_shadow`) rămân nescopate, intenţionat. Un test compară acum lista cu ce scrie efectiv codul, deci nu mai poate rămâne în urmă.
+*Notă:* pentru tine singur pe browser nu schimbă nimic vizibil; contează dacă tu şi Mirela folosiţi vreodată acelaşi dispozitiv.
+
+**Verificat în vânătoarea asta şi CURAT** *(merită notat, ca să nu le recăutăm)*: zero apeluri `async` lăsate fără `await` pe toată calea banilor (`serverAT`, `binanceOps`, `bybitOps`, `exchangeOps`, `recoveryBoot`, `emergencyCloseProcessor`, ruta de trading); zero indicatori cu rotiţă de setări care nu deschide nimic (88 cu modal generic, 5 cu modal dedicat, toate acoperite); `argus: {}` e gol intenţionat, cu rotiţa dezactivată — consecvent, nu bug.
 
 ### 🟢 MICI
 

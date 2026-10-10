@@ -73,12 +73,23 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     'zeus_drawings_v1': 1,
     'zeus_ts_open': 1,
     'zeus_pin_hash': 1, 'zeus_pin_unlocked_until': 1, // [ZT6] PIN unlock is per-user
-    'zt_api_key': 1, 'zt_api_secret': 1, 'zt_api_token': 1, 'zt_api_exchange': 1
+    'zt_api_key': 1, 'zt_api_secret': 1, 'zt_api_token': 1, 'zt_api_exchange': 1,
     // [ZT6] Intentionally NOT scoped (per-browser, not per-user):
     //   'zeus_tab_leader' — multi-tab leader election for AT executor (all
     //     logged-in tabs across users must see the same leader).
     //   'zeus_app_version' — PWA/update banner install-version marker tied
     //     to the browser cache, not to the logged-in user.
+    // [2026-10-10] These 14 were written by the app but never listed here, so
+    // two accounts on the same browser shared them. zeus_chart_tf and
+    // zeus_ind_favorites are the chart timeframe and the starred indicators —
+    // the scoping looked complete while quietly leaking the settings the
+    // operator notices first. A test now pins the list against what the code
+    // actually writes (lsUserScoping.test.ts).
+    'zeus_chart_tf': 1, 'zeus_chart_symbol': 1, 'zeus_chart_sessions': 1,
+    'zeus_chart_vwap_on': 1, 'zeus_drawings_vis': 1, 'zeus_ind_favorites': 1,
+    'zeus:ui:brainDashOpen': 1, 'zeus:ui:brainVisionOpen': 1,
+    'omega_tts_speed': 1, 'omega_tts_volume': 1, 'zt:sound_muted': 1,
+    'theia_last_open': 1, 'zeus_wlc_snoozeUntil': 1, 'zeus_ref': 1,
   }
   const _USER_PREFIXES = ['zt_cloud_']
 
