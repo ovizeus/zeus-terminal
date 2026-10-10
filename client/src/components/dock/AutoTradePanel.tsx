@@ -11,6 +11,9 @@ import { toast } from '../../data/marketDataHelpers'
 import { resetKillSwitch } from '../../trading/autotrade'
 import { ATStatusIcon } from '../ATStatusIcon'
 import { AtWhyBlockedPill } from './AtWhyBlockedPill'
+import { ZiPanel, ZiSection, ZiMetric } from '../zi'
+import type { ZiTone } from '../zi'
+import { AutoTradeConfigDrawer } from './AutoTradeConfigDrawer'
 
 /** Parse a string input to number for save; empty/invalid → fallback. */
 function toNum(s: string, fallback: number): number {
@@ -23,6 +26,10 @@ function toNum(s: string, fallback: number): number {
 export function AutoTradePanel() {
   const killTriggered = useATStore((s) => s.killTriggered)
   const ui = useATStore((s) => s.ui)
+  // [Task 3] read-only selectors for the state line and the P&L tones.
+  const armed = useATStore((s) => s.enabled)
+  const totalPnL = useATStore((s) => s.totalPnL)
+  const dailyPnL = useATStore((s) => s.dailyPnL)
   // Phase 2C: read canonical executionEnv. null = LOCKED.
   const executionEnv = useUiStore((s) => s.executionEnv)
   const executionBlockedReason = useUiStore((s) => s.executionBlockedReason)
@@ -48,20 +55,6 @@ export function AutoTradePanel() {
   const [adaptEnabled, setAdaptEnabled] = useState(false)
   const [adaptLive, setAdaptLive] = useState(false)
   const [smartExit, setSmartExit] = useState(false)
-  // [b66] Persist collapse state across refresh / app restart. User keeps both
-  // panels closed most of the time — re-opening them on every mount is noise.
-  const [brainVisionOpen, setBrainVisionOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem('zeus:ui:brainVisionOpen') !== '0' } catch { return true }
-  })
-  const [brainDashOpen, setBrainDashOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem('zeus:ui:brainDashOpen') !== '0' } catch { return true }
-  })
-  useEffect(() => {
-    try { localStorage.setItem('zeus:ui:brainVisionOpen', brainVisionOpen ? '1' : '0') } catch {}
-  }, [brainVisionOpen])
-  useEffect(() => {
-    try { localStorage.setItem('zeus:ui:brainDashOpen', brainDashOpen ? '1' : '0') } catch {}
-  }, [brainDashOpen])
   const [symPickerOpen, setSymPickerOpen] = useState(false)
 
   // Multi-symbol scan state — reactive label + picker.
@@ -246,318 +239,128 @@ export function AutoTradePanel() {
     setTimeout(() => setToggling(false), 1000) // unlock after 1s
   }
 
+  // [2026-10-10 institutional redesign, Task 3 — DESIGN ONLY] The panel shows
+  // live state only. Every setting lives in AutoTradeConfigDrawer, which gets the
+  // same state/handlers (state stays owned here). Positions: #atActivePosPanel is
+  // filled imperatively by trading/autotrade.ts::renderATPositions(), which carries
+  // the one-panel-per-position ownership logic — it is deliberately NOT rebuilt.
+  const [cfgOpen, setCfgOpen] = useState(false)
+  const killed = killTriggered || ui.killBtnTriggered
+  const pnlTone = (n: number): ZiTone => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'neutral')
+  const ACTION_BTN: React.CSSProperties = {
+    flexGrow: 1, height: 36, background: 'var(--zi-raise)', border: '1px solid var(--zi-edge)', borderRadius: 3,
+    color: 'var(--zi-val)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 600, cursor: 'pointer',
+  }
+
   return (
     <>
-    {/* ═══ AT SEPARATOR — neon lines + toggle + status (1:1 from .at-sep) ═══ */}
-    <div className="at-sep" style={{ display: 'flex' }}>
-      {/* Neural Data Stream relocated → AnalysisSections (below Fear & Greed), always visible. */}
-
-      <div className="at-line"></div>
-      <div className="at-center">
-        <div className="at-label">
-          <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}><path d="M9 1L4 9h4l-1 6 5-8H8l1-6" /></svg>
-          {' '}ZEUS AUTO TRADE{' '}
-          <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}><path d="M9 1L4 9h4l-1 6 5-8H8l1-6" /></svg>
-        </div>
-        <button className={ui.btnClass} onClick={handleToggle} disabled={toggling}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: ui.dotBg, boxShadow: ui.dotShadow }}></span>
-          <span>{ui.btnText}</span>
+    <div id="atPanel" style={{ height: '100%' }}>
+    <ZiPanel
+      title="Auto Trade"
+      rail={killed ? 'neg' : armed ? 'pos' : 'neutral'}
+      action={
+        <button
+          type="button"
+          aria-label="Open configuration"
+          onClick={() => setCfgOpen(true)}
+          style={{ background: 'none', border: '1px solid var(--zi-line)', borderRadius: 3, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, cursor: 'pointer' }}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--zi-lbl)" strokeWidth="1.2" aria-hidden="true">
+            <circle cx="8" cy="8" r="2.2" />
+            <path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3" />
+          </svg>
         </button>
-        <div className="at-status">
-          <span>
-            <ATStatusIcon kind={ui.status.icon} />
-            {ui.status.icon ? ' ' : ''}{ui.status.text}
-          </span>
-          {ui.status.action === 'resetKill' && (
-            <button data-action="resetKillSwitch" onClick={() => resetKillSwitch()}
-              style={{ color: '#00ff88', background: 'none', border: '1px solid #00ff8866', borderRadius: '2px', padding: '1px 5px', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px' }}>
-              RESET KILL SWITCH
-            </button>
-          )}
-        </div>
+      }
+    >
+      {/* THE ONE TRUTH LINE: armed/idle · demo/live · cycle (the engine's own status text) */}
+      <div style={{ padding: '14px 16px 6px', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span className="zi-num" style={{ fontSize: 15, fontWeight: 600, letterSpacing: '0.04em', color: armed ? 'var(--zi-pos)' : 'var(--zi-mut)' }}>
+          {armed ? 'ARMED' : 'IDLE'}
+        </span>
+        <span style={{ color: 'var(--zi-faint)', fontSize: 12 }}>/</span>
+        <span className="zi-num" style={{ fontSize: 15, fontWeight: 500, letterSpacing: '0.04em' }}>
+          <ATStatusIcon kind={ui.modeLabel.icon} />
+          {ui.modeLabel.icon ? ' ' : ''}{ui.modeLabel.text}
+        </span>
+        <span style={{ flexGrow: 1 }} />
+        <span className="zi-lbl" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ATStatusIcon kind={ui.status.icon} />
+          {ui.status.text}
+        </span>
+        {ui.status.action === 'resetKill' && (
+          <button data-action="resetKillSwitch" type="button" onClick={() => resetKillSwitch()}
+            style={{ color: 'var(--zi-pos)', background: 'none', border: '1px solid var(--zi-edge)', borderRadius: 2, padding: '4px 10px', minHeight: 28, fontSize: 10, letterSpacing: '0.1em', cursor: 'pointer', fontFamily: 'inherit' }}>
+            RESET KILL SWITCH
+          </button>
+        )}
+      </div>
+      <div style={{ padding: '0 16px 10px' }}>
         <AtWhyBlockedPill />{/* [R30] store-driven subscriber; source: brainStore.safetyPill */}
         {ui.sentinel.visible && (
-          <div style={{ fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center', background: ui.sentinel.bg, color: ui.sentinel.color, border: ui.sentinel.border }}>
+          <div className="zi-lbl" style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
             <ATStatusIcon kind={ui.sentinel.icon} />
             {ui.sentinel.icon ? ' ' : ''}{ui.sentinel.text}
           </div>
         )}
       </div>
-      <div className="at-line"></div>
-    </div>
 
-    {/* ═══ AT PANEL ═══ */}
-    <div className="at-panel" id="atPanel">
-      <div className="at-hdr">
-        <span>ZEUS AI AUTO TRADE ENGINE</span>
-        <span style={{ fontSize: '8px', color: ui.modeLabel.color, letterSpacing: '1px' }}>
-          <ATStatusIcon kind={ui.modeLabel.icon} />
-          {ui.modeLabel.icon ? ' ' : ''}{ui.modeLabel.text}
-        </span>
+      {ui.liveWarnVisible && (
+        <div role="alert" style={{ margin: '0 16px 12px', padding: '8px 10px', border: '1px solid var(--zi-edge)', borderLeft: '2px solid var(--zi-warn)', borderRadius: 2, fontSize: 11, lineHeight: 1.5, color: 'var(--zi-val)' }}>
+          {executionEnv === 'TESTNET'
+            ? <><strong>TESTNET MODE ACTIVE:</strong> Auto trades will execute with TEST funds on {_exchLabel} Testnet.</>
+            : (executionEnv === 'REAL'
+              ? <><strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on {_exchLabel}.</>
+              : <><strong>LIVE MODE LOCKED:</strong> {executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'}</>)}
+        </div>
+      )}
+
+      {/* METRICS — every value is one the engine already computes into ui.* */}
+      <div style={{ padding: '4px 16px 18px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+        <ZiMetric label="Balance" value={ui.balanceText} />
+        <ZiMetric label="Auto trades" value={ui.totalTradesText} secondary={ui.winRateText} />
+        <ZiMetric label="Auto P&L" value={ui.totalPnLText} tone={pnlTone(totalPnL)} />
+        <ZiMetric label={ui.dailyLabel} value={ui.dailyLossText} tone={pnlTone(dailyPnL)} />
       </div>
-      <div className="at-body">
-        <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
-          <a href="/journal.html" style={{ fontSize: '11px', color: 'var(--bg)', background: 'var(--gold)', textDecoration: 'none', letterSpacing: '1px', padding: '6px 18px', borderRadius: '4px', fontWeight: 700, display: 'inline-block' }}>FULL JOURNAL</a>
+
+      <ZiSection title="Positions" aside={ui.posCountText}>
+        <div id="atActivePosPanel" style={{ minHeight: '32px' }}>
+          <div style={{ textAlign: 'center', fontSize: '8px', color: 'var(--dim)', padding: '8px' }}>No active auto positions</div>
         </div>
+      </ZiSection>
 
-        {/* MODE */}
-        <div className="at-row">
-          <div className="at-field">
-            <div className="at-lbl">GLOBAL MODE</div>
-            <div className="at-sel" style={{ background: '#0a0a1a', border: `1px solid ${ui.modeDisplay.border}`, padding: '6px 8px', borderRadius: '4px', fontSize: '10px', color: ui.modeDisplay.color, letterSpacing: '1px', textAlign: 'center', cursor: 'default' }}>
-              <ATStatusIcon kind={ui.modeDisplay.icon} />
-              {ui.modeDisplay.icon ? ' ' : ''}{ui.modeDisplay.text}
-              {ui.modeDisplay.lockSuffix && (
-                <>
-                  {' \u00b7 '}
-                  <ATStatusIcon kind="w" />
-                  {' EXEC LOCKED'}
-                </>
-              )}
-            </div>
-          </div>
-          <div className="at-field">
-            <div className="at-lbl">LEVERAGE AUTO</div>
-            {/* [Phase 10.8] Preset pills + free-form input. User explicitly
-                requested no upper cap ("sa nu fiu limitat"); server / Binance
-                will reject invalid values at order placement time. */}
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              {['2', '5', '10', '20'].map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => commitLev(v)}
-                  style={{
-                    padding: '3px 7px',
-                    background: atLev === v ? '#f0c04022' : '#0a0a14',
-                    border: '1px solid ' + (atLev === v ? '#f0c040' : '#333'),
-                    color: atLev === v ? '#f0c040' : 'var(--dim)',
-                    borderRadius: 3,
-                    fontSize: 10,
-                    cursor: 'pointer',
-                    fontFamily: 'var(--ff)',
-                    fontWeight: 700,
-                  }}
-                >
-                  {v}x
-                </button>
-              ))}
-              <input
-                id="atLev"
-                type="number"
-                min={1}
-                step={1}
-                value={atLev}
-                onChange={e => setAtLev(e.target.value)}
-                placeholder="custom"
-                style={{
-                  flex: 1,
-                  minWidth: 50,
-                  background: '#0a0a14',
-                  border: '1px solid #333',
-                  color: '#f0c040',
-                  padding: '3px 6px',
-                  fontSize: 11,
-                  borderRadius: 3,
-                  fontFamily: 'var(--ff)',
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* TRADING SYMBOLS (multi-symbol) */}
-        <div className="at-condition" id="atSymbolSection" style={{ display: 'none' }}>
-          <div className="at-cond-title">TRADING SYMBOLS</div>
-          <div id="atSymbolGrid" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '4px 0' }}></div>
-          <div style={{ fontSize: '7px', color: '#556', marginTop: '4px' }}>Select which symbols the AT engine trades for you</div>
-        </div>
-
-        {/* ENTRY CONDITIONS */}
-        <div className="at-condition">
-          <div className="at-cond-title">ENTRY CONDITIONS (all must be OK)</div>
-          <div className="at-cond-row">
-            <span className="at-cond-name">Confluence Score</span>
-            <span>≥ <input type="number" id="atConfMin" value={confMin} onChange={e => setConfMin(e.target.value)} min={50} max={95} className="at-inp" style={{ width: '52px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condConfClass}>{ui.condConf}</span></span>
-          </div>
-          <div className="at-cond-row">
-            <span className="at-cond-name">Aligned signals</span>
-            <span>≥ <input type="number" id="atSigMin" value={sigMin} onChange={e => setSigMin(e.target.value)} min={2} max={6} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condSigClass}>{ui.condSig}</span></span>
-          </div>
-        </div>
-
-        {/* ADVANCED CONTROLS */}
-        <div className="at-condition">
-          <div className="at-cond-title">ADVANCED CONTROLS</div>
-          <label className="mchk" style={{ padding: '4px 0' }}>
-            <input type="checkbox" id="atAdaptEnabled" checked={adaptEnabled} onChange={e => setAdaptEnabled(e.target.checked)} />
-            Enable Adaptive Mode (master)
-          </label>
-          <label className="mchk" style={{ padding: '4px 0' }}>
-            <input type="checkbox" id="atAdaptLive" checked={adaptLive} onChange={e => setAdaptLive(e.target.checked)} />
-            Allow live position adjustment
-          </label>
-          <div className="hub-disabled-notice" style={{ margin: '2px 0 6px 18px', fontSize: '8px', color: '#556' }}>When OFF: all macro multipliers = ×1.00, no entry/sizing changes.</div>
-          <label className="mchk" style={{ padding: '4px 0' }}>
-            <input type="checkbox" id="atSmartExit" checked={smartExit} onChange={e => setSmartExit(e.target.checked)} />
-            Enable Smart Exit (auto-exec)
-          </label>
-          <div className="hub-disabled-notice" style={{ margin: '2px 0 6px 18px', fontSize: '8px', color: '#556' }}>When OFF: advisory only. When ON: emergency exits may execute if signals double-confirmed + cooldown.</div>
-        </div>
-
-        {/* RISK MANAGEMENT */}
-        <div className="at-condition">
-          <div className="at-cond-title">RISK MANAGEMENT</div>
-          <div className="at-cond-row"><span className="at-cond-name">Size per Trade</span><span><input type="number" id="atSize" value={atSize} onChange={e => setAtSize(e.target.value)} min={10} step={10} className="at-inp" style={{ width: '65px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> USDT</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Risk % / Trade</span><span><input type="number" id="atRiskPct" value={atRiskPct} onChange={e => setAtRiskPct(e.target.value)} min={0.1} max={5} step={0.1} className="at-inp" style={{ width: '50px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Max Trades / Day</span><span><input type="number" id="atMaxDay" value={atMaxDay} onChange={e => setAtMaxDay(e.target.value)} min={1} max={20} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> /day</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Max Open Positions</span><span><input type="number" id="atMaxPos" value={atMaxPos} onChange={e => setAtMaxPos(e.target.value)} min={1} max={10} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> pos</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Stop Loss</span><span><input type="number" id="atSL" value={atSL} onChange={e => setAtSL(e.target.value)} min={0.3} max={10} step={0.1} className="at-inp" style={{ width: '55px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Take Profit (R:R)</span><span><input type="number" id="atRR" value={atRR} onChange={e => setAtRR(e.target.value)} min={1} max={5} step={0.5} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> :1</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Drawdown % / Day</span><span><input type="number" id="atKillPct" value={atKillPct} onChange={e => setAtKillPct(e.target.value)} min={1} max={20} step={0.5} className="at-inp" style={{ width: '45px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Loss Streak Limit</span><span><input type="number" id="atLossStreak" value={atLossStreak} onChange={e => setAtLossStreak(e.target.value)} min={1} max={10} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> losses</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Max Add-ons</span><span><input type="number" id="atMaxAddon" value={atMaxAddon} onChange={e => setAtMaxAddon(e.target.value)} min={0} max={5} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> add-ons</span></div>
-          {/* Multi-Symbol Scan row */}
-          <div className="at-cond-row" id="atMscanRow" style={{ flexWrap: 'wrap', position: 'relative' }}>
-            <span className="at-cond-name">Multi-Symbol Scan</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="checkbox"
-                id="atMultiSym"
-                checked={mscanEnabled}
-                onChange={(e) => setMscanEnabled(e.target.checked)}
-              />
-              <div id="atSymPickerCard" onClick={() => setSymPickerOpen(!symPickerOpen)}
-                style={{ cursor: 'pointer', background: 'linear-gradient(135deg,#1a1030,#0d0a1a)', border: '1px solid #aa44ff33', borderRadius: '4px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '5px', transition: 'border-color .2s' }}>
-                <span style={{ color: '#aa44ff', fontSize: '8px', fontWeight: 700 }} id="atMultiSymLbl">{mscanLabel}</span>
-                <span style={{ color: '#aa44ff', fontSize: '7px' }}>▼</span>
-              </div>
-            </div>
-            {symPickerOpen && (
-              <div id="atSymPickerDrop"
-                style={{ position: 'absolute', right: 0, top: '100%', zIndex: 999, background: '#0d0a1a', border: '1px solid #aa44ff44', borderRadius: '6px', padding: '8px', minWidth: '180px', boxShadow: '0 8px 24px rgba(0,0,0,.6)', marginTop: '4px' }}
-                onClick={(e) => e.stopPropagation()}>
-                <div style={{ fontSize: '7px', color: '#aa44ff', fontWeight: 700, marginBottom: '6px', letterSpacing: '1px' }}>
-                  SELECT SYMBOLS ({mscanSyms.length}/{MSCAN_SYMS.length})
-                </div>
-                <div id="atSymPickerList" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  {MSCAN_SYMS.map((sym) => {
-                    const short = sym.replace('USDT', '')
-                    const checked = mscanSyms.includes(sym)
-                    return (
-                      <label key={sym}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '3px 4px', borderRadius: '3px', fontSize: '8px', color: '#ccd' }}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleSym(sym)}
-                          style={{ accentColor: '#aa44ff' }}
-                        />
-                        <span style={{ fontWeight: 700, color: '#fff', minWidth: '38px' }}>{short}</span>
-                        <span style={{ color: '#556', fontSize: '6px' }}>{sym}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-                <div style={{ display: 'flex', gap: '4px', marginTop: '8px', borderTop: '1px solid #1a1030', paddingTop: '6px' }}>
-                  <button
-                    onClick={() => pickAll(true)}
-                    style={{ flex: 1, background: '#aa44ff22', border: '1px solid #aa44ff44', color: '#aa44ff', fontSize: '7px', padding: '2px 0', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)' }}>
-                    ✓ TOATE
-                  </button>
-                  <button
-                    onClick={() => pickAll(false)}
-                    style={{ flex: 1, background: '#ff335511', border: '1px solid #ff335533', color: '#ff6655', fontSize: '7px', padding: '2px 0', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)' }}>
-                    ✕ NICIUNA
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* LIVE WARNING */}
-        {ui.liveWarnVisible && (
-          <div className="live-at-warn">
-            <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff8800' }}>
-              <path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" />
-            </svg> {executionEnv === 'TESTNET'
-              ? <><strong>TESTNET MODE ACTIVE:</strong> Auto trades will execute with TEST funds on {_exchLabel} Testnet.</>
-              : (executionEnv === 'REAL'
-                ? <><strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on {_exchLabel}.</>
-                : <><strong>LIVE MODE LOCKED:</strong> {executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'}</>)}
-          </div>
-        )}
-
-        {/* STATS */}
-        <div className="at-stats">
-          <div className="at-stat"><div className="at-stat-l">BALANCE</div><div className="at-stat-v" style={{ color: ui.balanceColor }}>{ui.balanceText}</div></div>
-          <div className="at-stat"><div className="at-stat-l">AUTO TRADES</div><div className="at-stat-v" style={{ color: 'var(--whi)' }}>{ui.totalTradesText}</div></div>
-          <div className="at-stat"><div className="at-stat-l">WIN RATE</div><div className="at-stat-v" style={{ color: ui.winRateColor }}>{ui.winRateText}</div></div>
-          <div className="at-stat"><div className="at-stat-l">AUTO PnL</div><div className="at-stat-v" style={{ color: ui.totalPnLColor }}>{ui.totalPnLText}</div></div>
-          <div className="at-stat"><div className="at-stat-l">{ui.dailyLabel}</div><div className="at-stat-v" style={{ color: ui.dailyLossColor }}>{ui.dailyLossText}</div></div>
-        </div>
-
-        {/* LOG */}
-        <div style={{ fontSize: '7px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '3px' }}>ACTIVITY LOG</div>
-        <div className="at-log">
-          {ui.logEntries.map((entry, idx) => (
-            <div className="at-log-row" key={idx}>
-              <span className="at-log-time">{entry.time}</span>
-              <span className={`at-log-msg ${entry.type}`}>{entry.msg}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* BRAIN VISION */}
-        <div id="brainVisionWrap" style={{ margin: '8px 0 6px', border: '1px solid rgba(120,80,220,0.25)', borderRadius: '6px', background: 'rgba(10,6,20,0.6)', overflow: 'hidden' }}>
-          <div id="brainVisionHdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setBrainVisionOpen(!brainVisionOpen)}>
-            <span style={{ fontSize: '11px', letterSpacing: '2px', color: '#aa44ff', fontWeight: 600 }}>BRAIN VISION</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span id="brainVisionCycle" style={{ fontSize: '11px', color: 'var(--dim)' }}>C0</span>
-              <span id="brainVisionChev" style={{ fontSize: '12px', color: '#aa44ff' }}>{brainVisionOpen ? '▼' : '▶'}</span>
-            </span>
-          </div>
-          {brainVisionOpen && <div id="brainVisionBody" style={{ padding: '2px 12px 10px', fontFamily: 'monospace', fontSize: '12px', lineHeight: 1.8 }}></div>}
-        </div>
-
-        {/* BRAIN DASHBOARD */}
-        <div id="brainDashWrap" style={{ margin: '8px 0 6px', border: '1px solid rgba(60,180,220,0.25)', borderRadius: '6px', background: 'rgba(6,12,20,0.7)', overflow: 'hidden' }}>
-          <div id="brainDashHdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', cursor: 'pointer', userSelect: 'none' }} onClick={() => setBrainDashOpen(!brainDashOpen)}>
-            <span style={{ fontSize: '11px', letterSpacing: '2px', color: '#3ab4dc', fontWeight: 600 }}>BRAIN DASHBOARD</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span id="brainDashScore" style={{ fontSize: '11px', color: 'var(--dim)' }}></span>
-              <span id="brainDashChev" style={{ fontSize: '12px', color: '#3ab4dc' }}>{brainDashOpen ? '▼' : '▶'}</span>
-            </span>
-          </div>
-          {brainDashOpen && <div id="brainDashBody" style={{ padding: '2px 12px 10px', fontFamily: 'monospace', fontSize: '12px', lineHeight: 1.8 }}></div>}
-        </div>
-
-        {/* SAVE SETTINGS */}
-        <button className="sbtn2 pri" style={{ width: '100%', marginBottom: 6 }} onClick={handleSaveAT}>
-          <svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE SETTINGS
-        </button>
-
-        {/* KILL SWITCH */}
-        <button className={`at-kill${killTriggered || ui.killBtnTriggered ? ' triggered' : ''}`} onClick={handleKill}>
-          <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff3355' }}>
-            <path d="M8 1v2m5 2l-1.4 1.4M3 5l1.4 1.4M2 10h2m8 0h2M5 13h6M6 10a2 2 0 014 0" />
-          </svg> EMERGENCY STOP — CLOSE ALL POSITIONS
-        </button>
-
-        {/* ACTIVE AUTO POSITIONS */}
-        <div style={{ borderTop: '1px solid #1a1030', paddingTop: '8px', marginTop: '2px' }}>
-          <div style={{ fontSize: '7px', letterSpacing: '2px', color: '#aa44ff', marginBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>ACTIVE AUTO TRADE POSITIONS</span>
-            <span style={{ color: 'var(--dim)' }}>{ui.posCountText}</span>
-          </div>
-          <div id="atActivePosPanel" style={{ minHeight: '32px' }}>
-            <div style={{ textAlign: 'center', fontSize: '8px', color: 'var(--dim)', padding: '8px' }}>No active auto positions</div>
-          </div>
-        </div>
-
+      <div style={{ flexGrow: 1 }} />
+      <div className="zi-rule" />
+      <div style={{ padding: '10px 16px 0', textAlign: 'right' }}>
+        <a href="/journal.html" className="zi-lbl" style={{ textDecoration: 'underline' }}>Full journal</a>
       </div>
+      <div style={{ padding: '10px 16px 18px', display: 'flex', gap: 8 }}>
+        <button type="button" onClick={handleToggle} disabled={toggling} style={ACTION_BTN}>
+          {armed ? 'Disarm' : 'Arm'}
+        </button>
+        {/* EMERGENCY STOP — always in the panel, never behind the drawer */}
+        <button
+          type="button"
+          onClick={handleKill}
+          style={{ ...ACTION_BTN, background: 'none', border: `1px solid ${killed ? 'var(--zi-neg)' : '#4a2630'}`, color: 'var(--zi-neg)', width: 'auto', margin: 0 }}
+        >
+          Close all
+        </button>
+      </div>
+    </ZiPanel>
     </div>
+    <AutoTradeConfigDrawer
+      visible={cfgOpen}
+      onClose={() => setCfgOpen(false)}
+      onSave={handleSaveAT}
+      form={{
+        confMin, setConfMin, sigMin, setSigMin, atSize, setAtSize, atRiskPct, setAtRiskPct,
+        atMaxDay, setAtMaxDay, atMaxPos, setAtMaxPos, atSL, setAtSL, atRR, setAtRR,
+        atKillPct, setAtKillPct, atLossStreak, setAtLossStreak, atMaxAddon, setAtMaxAddon,
+        atLev, setAtLev, commitLev, adaptEnabled, setAdaptEnabled, adaptLive, setAdaptLive,
+        smartExit, setSmartExit, mscanEnabled, setMscanEnabled, mscanSyms, toggleSym, pickAll,
+        symPickerOpen, setSymPickerOpen, mscanLabel, ui,
+      }}
+    />
     </>
   )
 }
