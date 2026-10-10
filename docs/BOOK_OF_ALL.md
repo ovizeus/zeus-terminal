@@ -43,6 +43,82 @@
 **P15 ✅ REZOLVAT (b269 v1.7.243) — desenele urmează utilizatorul** *(R5)*. Secțiune nouă `drawings` în canalul user-context (SQLite), cu plafon la **300** (`drawingScope.SYNC_MAX_DRAWINGS`). Setul local **nu e niciodată tăiat** — doar copia care călătorește — iar o tăiere o spune în consolă, ca să nu existe divergență tăcută între dispozitiv și server. Măsurat, nu estimat: 77 bytes o linie orizontală, 144 un trendline, deci 200 de desene = 21,6 KB din plafonul de 64 KB — **grija mea cu mărimea era nefondată și mi-am retras-o**. La pull desenele se re-randează imediat, fără refresh.
 
 ---
+## 📜 REGULILE DUPĂ CARE LUCRĂM — rubrică permanentă
+
+> Cerut de operator 2026-10-10: *„poti scrie si rubrica de rwguli dupa care lucram daca se intampla ceva sa le avem in book of all"*.
+> Fiecare regulă de aici e scrisă **după ce a fost încălcată și a costat ceva**. Nu sunt principii generale — sunt cicatrici. Data de lângă fiecare e incidentul care a produs-o.
+
+### 🔴 Operare — ce NU se atinge pe VPS-ul viu
+
+**R-OP-1. Un singur `pm2 reload` per sesiune de lucru, la final.** *(2026-10-10: 8 reload-uri, 5 în 50 min → **HTTP 418, ban de IP Binance 63 min**. Exista deja regula scrisă și am încălcat-o de 4 ori.)*
+Fiecare boot reface exchangeInfo, klines-init pe toate simbolurile, OI, funding, 24h tickers, markprice, watchlist — o rafală peste baza de ~345/min. Regula nu e despre *dacă* un reload e justificat, e despre **frecvență**. Patru deploy-uri corecte la rând sunt tot o rafală.
+**Înainte de ORICE reload:** `SELECT banned_until FROM binance_rate_state WHERE scope='global';` — dacă e în viitor, nu atinge nimic.
+
+**R-OP-2. Schimbările doar de client NU cer reload.** `npm run build` în `client/` rescrie bundle-ul din `public/app/`; serverul doar îl servește. Reload cer **doar** schimbările din `server/`.
+
+**R-OP-3. 503-urile din primele 120s după orice restart sunt NORMALE.** `BOOT_BLIND_MS`, presiune presupusă 85%. Nu le confunda cu un ban. Distincția se face **doar** din tabela `binance_rate_state`, nu din loguri. *(M-a costat o oră de diagnostic.)*
+
+**R-OP-4. NU rula jest/node/vitest ca root pe VPS-ul viu.** *(Artefacte root-owned → 139 EACCES, procesul zeus rupt tăcut; apoi `public/app/assets` root-owned a blocat un deploy cu EACCES.)* Totul prin `sudo -u zeus`.
+
+**R-OP-5. NU WARP pe VPS-ul Zeus.** *(2026-05-20: instalarea a rupt rețeaua.)* Problemele de rutare se fac **împreună cu operatorul**, niciodată singur.
+
+**R-OP-6. Validează `version.js` înainte de reload.** `node -e "require('./server/version.js')"`. Changelog-ul e JS cu ghilimele simple — **un singur apostrof rupe fișierul** și procesul nu mai pornește.
+
+**R-OP-7. Lucrează în worktree izolat, nu în producție.** *(2026-10-10)* `/opt/zeus-worktrees/<nume>`, cu `node_modules` legat simbolic. **NU în `/root/...`** — e `700`, userul `zeus` nu poate intra ca să ruleze testele.
+
+### 🟠 Verificare — cum se dovedește că ceva merge
+
+**R-V-1. Dovadă empirică obligatorie pentru orice „X merge".** Nu „ar trebui să meargă", nu „testele trec probabil". Rulează comanda și lipește ieșirea reală.
+
+**R-V-2. Nu lua rapoartele subagenților la valoarea nominală.** *(2026-10-10: un subagent a raportat corect, dar recunoscuse că n-a urmărit starea roșie — testele lui puteau fi goale. Le-am testat prin mutație: mușcau.)*
+
+**R-V-3. Un test care nu poate pica nu apără nimic.** După ce un test trece, **sparge codul dinadins** și confirmă că testul pică. Mutation-check pe fiecare aserțiune care contează.
+
+**R-V-4. NU pipe înainte de `$?`.** *(2026-10-10: `tsc ... | head -6; echo $?` îmi dădea exit code-ul lui `head`. Am raportat „tsc exit 0" de mai multe ori, fals.)* Redirectează în fișier, apoi citește `$?`.
+
+**R-V-5. Verifică ce verifică poarta.** *(2026-10-10: `tsc -p tsconfig.json` nu verifică NIMIC — `files: []` + referințe de proiect. Dovedit cu un identificator inexistent care a trecut.)* Comanda reală: `-p tsconfig.app.json`. Poarta nu e „exit 0" (imposibil — 67 erori preexistente), e **„fără erori NOI"**: numărul rămâne 67 și niciuna nu numește un fișier atins.
+
+**R-V-6. Citește cum funcționează codul ÎNAINTE de a scrie pasul.** *(2026-10-10: planul meu presupunea că panourile randează rândurile inline. Nu o fac — le deleagă la componente cu **11 apeluri pe calea banilor**. Pasul meu ar fi șters butonul de închidere de pe o poziție live.)*
+
+**R-V-7. Verifică de 2-3 ori înainte de commit.** Și la verdicte majore, fă un audit simetric: caută și dovada contrară.
+
+### 🔵 Cod — reguli de fond
+
+**R-C-1. TDD: testul întâi, îl vezi picând, apoi codul.** Scrierea testului și a implementării în aceeași trecere nu e TDD — nu poți arăta starea roșie, deci nu știi dacă testul testează ceva.
+
+**R-C-2. Adâncime pe calea banilor.** Orice atingere de poziții, ordine, SL/TP, închidere, sizing: citește tot drumul, nu doar diff-ul. *(Regula care a salvat Task 2.)*
+
+**R-C-3. Nu înlănțui schimbări riscante.** *(2026-05-20: Fix#1→#6 în lanț, imposibil de spus care a rupt ce.)* O schimbare, o verificare, un commit.
+
+**R-C-4. Nu conecta niciodată DOAR o jumătate de buclă.** *(2026-10-10: tipul de lumânare a părut reparat trei zile — se reparase citirea, se lăsase scrierea. Ciclul era închis, pe valoarea greșită.)* Proiecție **ȘI** hidratare **ȘI** aplicare, sau nu o face.
+
+**R-C-5. Setările TREBUIE să persiste la refresh.** Verifică toate 4 verigile: toggle salvează / serverul acceptă cheia / se hidratează / se **aplică** la boot. Plus garda `_usApplyDone`. Diagnostic: `SELECT updated_at FROM user_settings WHERE user_id=1`.
+
+**R-C-6. O cheie absentă din payload lasă valoarea stocată neatinsă.** Asta e unealta — **nu un default inventat**. *(2026-10-10: 8 chei semănate cu default-uri ștergeau valorile reale la fiecare salvare. Semnătura în DB: **zero varianță între useri** — dacă toți au exact aceeași valoare, doar codul a scris-o vreodată.)*
+
+**R-C-7. Întreabă „cine e proprietarul REAL al cheii ăsteia?" înainte să repari.** Zeus are **două canale** de persistență care se suprapun și nu sunt de acord: `/api/user/settings` (chei plate) și `/api/sync/user-context` (secțiuni, parte în SQLite, parte în fișiere JSON). O secțiune lipsă din `user_ctx_data` **nu e bug** — verifică `data/user_ctx/<uid>.json`.
+
+**R-C-8. Dacă UI-ul promite o setare, trebuie să o poată ține.** *(2026-10-10: modalul LIQ avea 23 de controale și 0 cititori; panoul S/R avea 21 și exact 1 conectat.)* Ori o conectezi, ori o scoți. **Nu o lași să mintă.**
+
+**R-C-9. Nu inventa o valoare.** Dacă ceva nu e calculat, afișează `—`. Niciodată un număr plauzibil. Pe o suprafață de bani, o celulă goală se citește ca „zero".
+
+**R-C-10. Iconițele = glyph SVG din `IND_ICONS`, nu emoji.** Emoji e doar fallback. Alege forma randând la 15px.
+
+**R-C-11. UI-ul Zeus e în engleză.** Doar conversația cu operatorul e în română.
+
+### 🟢 Proces
+
+**R-P-1. Tot în Book of All.** Orice găsim, reparăm, amânăm sau decidem.
+
+**R-P-2. Întreabă înainte de schimbări de design.** Propune 2-3 variante cu compromisuri, recomandă una, așteaptă.
+
+**R-P-3. Checkpoint git des.** Netul se taie. Commit + push după fiecare bucată verificată.
+
+**R-P-4. Backup înainte de o lucrare mare.** Tag git + branch + copii de fișiere. *(2026-10-10: `pre-institutional-redesign`.)*
+
+**R-P-5. Spune ce ai stricat, imediat și fără scuze lungi.** Raportează onest: dacă testele pică, arată ieșirea; dacă un pas a fost sărit, spune-o; dacă ceva e dovedit, spune-o simplu.
+
+---
 ## 🎨 CERUT 2026-10-10 — reproiectare „instituțională" AutoTrade + Manual Trade, diagnosticul în THEIA
 
 > Cerere operator: *„vreau sa fac o schimbare de look la autotrade si manual trade ceva mai institutional mai simplu dar sa pastram logica… activiti log brain dashboard si brain vision sa le scot sa le bagam in theia cu aceiasi tema si auto trade sa ramana gen ca manual trade doar informatiile stricte de trade si tema schimbata nu asa cu mov"*
