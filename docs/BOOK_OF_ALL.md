@@ -47,7 +47,15 @@
 
 > Cerere operator: *„vreau sa fac o schimbare de look la autotrade si manual trade ceva mai institutional mai simplu dar sa pastram logica… activiti log brain dashboard si brain vision sa le scot sa le bagam in theia cu aceiasi tema si auto trade sa ramana gen ca manual trade doar informatiile stricte de trade si tema schimbata nu asa cu mov"*
 
-**Statut: în brainstorming, NU se atinge cod până la aprobarea designului.** Logica rămâne neatinsă — e strict prezentare + relocare.
+**Statut 2026-10-10 17:07 — DESIGN APROBAT, plan scris, execuția începe diseară pe SUBAGENȚI.** Logica rămâne neatinsă; pictogramele NU se ating.
+
+- **Mockup aprobat:** https://claude.ai/artifact/HGSwWUV2HmbC4RdPoqp9pB (*„mergem așa”*)
+- **Spec:** `docs/superpowers/specs/2026-10-10-institutional-redesign-design.md`
+- **Plan:** `docs/superpowers/plans/2026-10-10-institutional-redesign.md` — 5 sarcini, fiecare livrabilă și reversibilă
+- **Backup:** tag `pre-institutional-redesign` (pushuit), branch `institutional-redesign`, copii în `/root/zeus-backups/pre-redesign-20261010-1640`
+- **Deciziile lui:** sertar separat pentru setări · culoarea doar unde înseamnă ceva · doar cele 3 suprafețe · pictogramele neatinse
+- **Cheia tehnică:** tot redesignul e închis în spatele unei singure clase CSS, `.zi`, pe 3 rădăcini. O scoți din 3 locuri și ai look-ul vechi înapoi.
+- **⚠️ UN SINGUR reload**, la Task 5. Task 1-4 sunt doar client. După banul de azi. Logica rămâne neatinsă — e strict prezentare + relocare.
 
 ### Ce există acum (verificat în cod, nu din memorie)
 
