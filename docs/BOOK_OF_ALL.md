@@ -147,7 +147,11 @@ Fiecare boot reface exchangeInfo, klines-init pe toate simbolurile, OI, funding,
 
 **✅ Și o întrebare deschisă, închisă de aceeași poză:** movul `#aa44ff` rămas în `atStore.modeLabel`/`modeDisplay` **NU ajunge** la panoul rescris — panoul citește `.text`, niciodată `.color`. Zero mov în fișierele redesignului.
 
-⚠️ **Ce rămâne doar pentru tine** (un banc de probă nu poate face login): panourile **cu date vii** — bancul de probă nu poate face login în contul tău. De verificat: rotița deschide sertarul și SAVE persistă; un ordin pe demo; `✕ CLOSE` pe o poziție; THEIA cu cele trei benzi. Revenire: `git checkout pre-institutional-redesign -- <path>` sau `/root/zeus-backups/pre-redesign-20261010-1640`.
+**A treia verificare: APLICAȚIA LIVRATĂ, în browser real.** Am încărcat `https://localhost/` în Chrome pe bundle-ul **chiar servit**: pagina randează, **zero erori JS în consolă**, iar prețurile curg live (BTC 83,068.8 · ETH 2,510.26 · SOL 110.41 · BNB 751.16). Deci deploy-ul pornește curat și Binance e sănătos după reload.
+
+**🔒 De ce nu am mers mai departe:** panourile sunt după login, nu există cont de test, mod dev sau rută demo — verificat — și toți cei 9 utilizatori sunt oameni reali. **Nu m-am autentificat în contul operatorului sau al altcuiva**: ar fi însemnat să mă dau drept o persoană reală pe un sistem de tranzacționare în producție, iar asta nu mi s-a cerut. Dacă operatorul vrea, o fac cu acordul lui explicit.
+
+⚠️ **Ce rămâne doar pentru tine** (cere login): panourile **cu date vii** — bancul de probă nu poate face login în contul tău. De verificat: rotița deschide sertarul și SAVE persistă; un ordin pe demo; `✕ CLOSE` pe o poziție; THEIA cu cele trei benzi. Revenire: `git checkout pre-institutional-redesign -- <path>` sau `/root/zeus-backups/pre-redesign-20261010-1640`.
 
 - **Mockup aprobat:** https://claude.ai/artifact/HGSwWUV2HmbC4RdPoqp9pB (*„mergem așa”*)
 - **Spec:** `docs/superpowers/specs/2026-10-10-institutional-redesign-design.md`
