@@ -12,25 +12,23 @@
 
 **P1 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**
 
-**P2 🔧 VACUUM: ~4,6 GB de recuperat.** Fişier 7,4 GB pentru 2,7 GB de pagini reale. Cere ~20s oprire — **zi-mi când şi o fac**.
+**P2 🙋 Calibrarea auto-carantinei ML.** Pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm.
 
-**P3 🙋 Calibrarea auto-carantinei ML.** Pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm.
+**P3 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange).
 
-**P4 🙋 Cheia API Bybit testnet a uid=2 (Mirela) e expirată.** Regenerezi din UI (MultiExchange).
+**P4 🙋 WebSocket-ul de futures Binance e blocat de reţea** *(A3)*. Nu e de reparat în cod — socket-ul se conectează dar primeşte zero cadre, în timp ce REST-ul merge. Soluţie de rutare, făcută împreună: un WARP pe VPS-ul ăsta a mai stricat lucruri o dată.
 
-**P5 🙋 WebSocket-ul de futures Binance e blocat de reţea** *(A3)*. Nu e de reparat în cod — socket-ul se conectează dar primeşte zero cadre, în timp ce REST-ul merge. Soluţie de rutare, făcută împreună: un WARP pe VPS-ul ăsta a mai stricat lucruri o dată.
+**P5 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Nu-l fac fără un test real de trimitere cu tine.
 
-**P6 🙋 `nodemailer` 8.0.11 → 10.0.16**, breaking, pe calea de auth. Nu-l fac fără un test real de trimitere cu tine.
+**P6 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit**, sau mutat în Vault.
 
-**P7 🙋 Keystore-ul de release Android e în git.** Scos din istoric **şi rotit**, sau mutat în Vault.
+**P7 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Decizie de produs: offline, care sursă câştigă?
 
-**P8 🙋 Precedenţa „plat vs per-mod" pe calea OFFLINE.** Decizie de produs: offline, care sursă câştigă?
+**P8 🙋 Conectarea ML-ului neconectat — plan scris, aşteaptă GO.** 74 din 284 fişiere legate, 198 din 367 tabele goale, dar **209 din 210 module neconectate AU teste**. Se poate, dar nu în bloc. Etapa 0 e ieftină şi nu atinge nimic viu.
 
-**P9 🙋 Conectarea ML-ului neconectat — plan scris, aşteaptă GO.** 74 din 284 fişiere legate, 198 din 367 tabele goale, dar **209 din 210 module neconectate AU teste**. Se poate, dar nu în bloc. Etapa 0 e ieftină şi nu atinge nimic viu.
+**P9 🙋 Cauza corupţiei WAL — rămâne deschisă.** Fără erori de disc, spaţiu suficient, proprietari corecţi, nimeni conectat. Auto-vindecarea acoperă repetarea; fişierele corupte sunt păstrate în `/root/zeus-recover/`.
 
-**P10 🙋 Cauza corupţiei WAL — rămâne deschisă.** Fără erori de disc, spaţiu suficient, proprietari corecţi, nimeni conectat. Auto-vindecarea acoperă repetarea; fişierele corupte sunt păstrate în `/root/zeus-recover/`.
-
-**P11 🙋 Confirmări vizuale:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
+**P10 🙋 Confirmări vizuale:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
@@ -273,6 +271,12 @@ Nu leg nimic la calea de decizie „ca să vedem". Dacă vrei să începem, înc
 > Aici cobor tot ce-i gata, ca lista de sus să rămână doar activ. Git + changelog au detaliul complet.
 
 ### 2026-10-10 (b262-b263)
+
+- ✅ **VACUUM făcut** *(2026-10-10 05:01, fostul P2)*. **7,859,118,080 → 2,833,174,528 bytes** (7,3 GB → 2,6 GB), adică **~4,7 GB recuperaţi** în fişier. Oprire totală: **62 de secunde** (05:01:09 → 05:02:11).
+*Cum, ca să nu fie risc:* nu VACUUM pe loc, ci `VACUUM INTO` într-un fişier nou (6 secunde), **verificat înainte de schimb** — `integrity_check` ok, 401 tabele, 791 indexuri, aceleaşi numere de rânduri (884.745 decizii brain, 763 evenimente de atribuire, 9 setări), setările tale intacte. Originalul a rămas neatins până în ultima clipă; dacă ceva nu se potrivea, pur şi simplu nu schimbam.
+*După:* brain activ, poziţia deschisă intactă, WAL nou sănătos, zero erori noi.
+⚠️ **Spaţiul pe disc NU s-a eliberat încă** — vechea bază de 7,4 GB stă lângă cea nouă, ca plasă de siguranţă. Copii vechi pe disc: `pre-vacuum-20261010` 7,4 GB (de azi), `pre-vacuum-20261007` 7,4 GB (3 zile), plus două `.bak` din iunie (2,0 + 1,8 GB). **Toate sunt acoperite de backup-urile offsite** (cel mai recent: azi 04:09). *Decizia ta:* ce ştergem. Recomandarea mea: cele din iunie şi cea din 7 octombrie acum (~11 GB), iar cea de azi după o zi de rulare liniştită.
+
 
 - ✅ **Alertă când Zeus cade** *(b263, fostul P1)*. Ce a lipsit azi-noapte: 1082 de prăbuşiri în 3,5 ore şi niciun semn. O aplicaţie căzută nu poate anunţa că e căzută, deci watchdog-ul rulează din cron, **în afara ei**, la fiecare minut. pm2 raporta „online" între prăbuşiri toată noaptea — de aia starea singură nu e semnal, ci **numărul de reporniri care urcă**. Vorbeşte când procesul nu e online, când lipseşte din pm2, şi la **peste 3 reporniri între verificări** (buclă, nu deploy). Nu se repetă în fiecare minut, revine după 30 de minute dacă tot e stricat, anunţă revenirea **o dată** şi apoi tace. Prima rulare doar învaţă numărul curent — altfel un server sănătos ar raporta „1083 de reporniri". **Dovedit pe botul real**, nu doar în teste; iar la reload-ul de deploy de după a tăcut, cum trebuie.
 - ✅ **Alertele de reflection spun acum CE a blocat tranzacţia** *(b263)*. Toate citeau `["anti_pattern","anti_pattern"]`, ca şi cum acelaşi motiv ar fi listat de două ori. Erau **două anti-pattern-uri diferite**, dar payload-ul păstra doar tipul şi arunca numele — exact câmpul care spune care. 51 de alerte ieri, niciuna lizibilă. Acum se păstrează amândouă, printr-un singur helper folosit de payload, de textul alertei şi de jurnalul de gânduri, ca să nu se mai despartă.
