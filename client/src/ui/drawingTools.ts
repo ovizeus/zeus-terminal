@@ -3,6 +3,7 @@
    Ported from drawingTools.js — IIFE runs on import.
    ─────────────────────────────────────────────────────────────── */
 import { getKlines } from '../services/stateAccessors'
+import { forSymbol, mergeForSave } from './drawingScope'
 const w = window as any; // kept for w._zMainChart, w._zCSeries, w._dtToastTimer, w.__ZEUS_DRAW__, fn calls
 
 export function drawToolActivate(tool: any): void { w.drawToolActivate(tool); }
@@ -109,18 +110,34 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   function _timeToX(time: any) { try { return _chart().timeScale().timeToCoordinate(time); } catch(_) { return null; } }
 
   // ── Persistence ──
+  // [R11 2026-10-10] The symbol the chart is showing. Drawings are scoped to it
+  // from now on; see ui/drawingScope.ts for the rules and the migration.
+  function _curSym(): string {
+    try { return (w.S && typeof w.S.symbol === 'string') ? w.S.symbol : ''; } catch (_) { return ''; }
+  }
+
+  function _readStored(): any[] {
+    try {
+      var d = JSON.parse(localStorage.getItem(LS_KEY) as any);
+      return (d && Array.isArray(d.lines)) ? d.lines : [];
+    } catch (_) { return []; }
+  }
+
+  // [R11] _lines is a VIEW of the current symbol, so this MUST merge rather
+  // than overwrite: serialising the view alone would delete every drawing
+  // belonging to every other symbol, i.e. drawing one line on ETH would
+  // destroy all the BTC work. mergeForSave keeps what is off screen, and it
+  // also guarantees a legacy (symbol-less) drawing is never re-labelled with
+  // the current symbol. Both rules are pinned in drawingScope.test.ts.
   function _save() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify({
-      lines: _lines.map(function(l: any) {
-        // [Pack G] Persist per-line width + style alongside color so the
-        // operator's individual customizations survive refresh.
-        var o: any = { id:l.id, type:l.type, color:l.color, width:l.width||2, style:l.style||0 };
-        if (l.type === 'hline') o.price = l.price;
-        if (l.type === 'tline') { o.p1 = { time:l.p1.time, price:l.p1.price }; o.p2 = { time:l.p2.time, price:l.p2.price }; }
-        return o;
-      }),
-      nextId: _nextId
-    })); } catch(_) {}
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(
+        mergeForSave(_readStored(), _lines, _curSym(), _nextId)
+      ));
+      // [P15] Tell the user-context sync this section changed, so the drawings
+      // travel to his other devices. Mirrors _indSettingsSave.
+      if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('drawings');
+    } catch (_) {}
   }
 
   // ── Handle container ──
@@ -372,7 +389,16 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   }
 
   // ── Add H-Line (native LWC price line — follows chart automatically) ──
-  function _addHLine(price: any, color?: any, existingId?: any, width?: any, style?: any) {
+  // [R11] A FRESH drawing belongs to the chart in front of you. A RESTORED one
+  // keeps whatever it was stored with, and undefined must stay undefined: a
+  // legacy drawing has no symbol and stays visible everywhere, which is the
+  // migration the operator chose. existingId is the existing signal for
+  // restore-vs-draw (it already gates whether _save runs).
+  function _symFor(existingId: any, storedSym: any) {
+    return existingId ? storedSym : (_curSym() || undefined);
+  }
+
+  function _addHLine(price: any, color?: any, existingId?: any, width?: any, style?: any, storedSym?: any) {
     var s = _series(); if (!s) return;
     // [Pack G] If color/width/style not specified by caller, use the
     // operator's saved defaults (last used in the settings popover).
@@ -386,13 +412,13 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var del = _createDeleteBtn(id);
     var cfg = _createSettingsBtn(id);
     if (_handleContainer) { _handleContainer.appendChild(h); _handleContainer.appendChild(del); _handleContainer.appendChild(cfg); }
-    _lines.push({ id:id, type:'hline', price:price, color:color, width:w0, style:st0, lwcRef:ref, handles:[h], delBtn:del, cfgBtn:cfg, selected:false });
+    _lines.push({ id:id, type:'hline', sym:_symFor(existingId, storedSym), price:price, color:color, width:w0, style:st0, lwcRef:ref, handles:[h], delBtn:del, cfgBtn:cfg, selected:false });
     _selectLine(id);
     if (!existingId) _save();
   }
 
   // ── Add Trendline (native LWC LineSeries — follows chart automatically) ──
-  function _addTLine(p1: any, p2: any, color?: any, existingId?: any, width?: any, style?: any) {
+  function _addTLine(p1: any, p2: any, color?: any, existingId?: any, width?: any, style?: any, storedSym?: any) {
     var c = _chart(); if (!c) return;
     // [Pack G] Use operator's saved defaults when caller omits.
     color = color || _defaultColor || _nextColor();
@@ -423,7 +449,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var cfg = _createSettingsBtn(id);
     if (_handleContainer) { _handleContainer.appendChild(h1); _handleContainer.appendChild(h2); _handleContainer.appendChild(del); _handleContainer.appendChild(cfg); }
 
-    _lines.push({ id:id, type:'tline', p1:{time:p1.time, price:p1.price}, p2:{time:p2.time, price:p2.price}, color:color, width:w0, style:st0, lwcSeries:lineSeries, handles:[h1,h2], delBtn:del, cfgBtn:cfg, selected:false });
+    _lines.push({ id:id, type:'tline', sym:_symFor(existingId, storedSym), p1:{time:p1.time, price:p1.price}, p2:{time:p2.time, price:p2.price}, color:color, width:w0, style:st0, lwcSeries:lineSeries, handles:[h1,h2], delBtn:del, cfgBtn:cfg, selected:false });
     _selectLine(id);
     if (!existingId) _save();
   }
@@ -939,6 +965,46 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       var b = document.getElementById(id); if (b) b.classList.toggle('on', _activeTool === id.replace('dt-',''));
     });
   }
+  // [R11] Tear the rendered drawings off the chart WITHOUT saving. _removeLine
+  // saves on every call, which during a symbol switch would write the new
+  // symbol's (empty) view over the stored set. This is the quiet counterpart.
+  function _teardownAll() {
+    _lines.slice().forEach(function(l: any) {
+      if (l.lwcRef) try { _series().removePriceLine(l.lwcRef); } catch(_) {}
+      if (l.lwcSeries) try { _chart().removeSeries(l.lwcSeries); } catch(_) {}
+      if (l.handles) l.handles.forEach(function(h: any) { if (h.parentElement) h.parentElement.removeChild(h); });
+      if (l.delBtn && l.delBtn.parentElement) l.delBtn.parentElement.removeChild(l.delBtn);
+      if (l.cfgBtn && l.cfgBtn.parentElement) l.cfgBtn.parentElement.removeChild(l.cfgBtn);
+    });
+    _lines.length = 0;
+    _selectedId = null;
+    try { _closeSettingsPanel(); } catch(_) {}
+  }
+
+  // [R11] Called by setSymbol. Before this existed the restore ran ONCE at
+  // init and setSymbol never touched drawings, so a trendline drawn on BTC
+  // stayed on the chart when you switched to ETH, sitting at BTC's price
+  // levels. Re-render from storage, filtered to the new symbol.
+  function _reloadForSymbol() {
+    if (!_chart() || !_series()) return;
+    _teardownAll();
+    var stored = _readStored();
+    forSymbol(stored, _curSym()).forEach(function(l: any) {
+      if (l.type === 'hline') _addHLine(l.price, l.color, l.id, l.width, l.style, l.sym);
+      if (l.type === 'tline' && l.p1 && l.p2) _addTLine(l.p1, l.p2, l.color, l.id, l.width, l.style, l.sym);
+    });
+    _deselectAll();
+    if (!_visible) {
+      _lines.forEach(function(l: any) {
+        if (l.lwcRef) try { l.lwcRef.applyOptions({ lineVisible:false, axisLabelVisible:false }); } catch(_) {}
+        if (l.lwcSeries) try { l.lwcSeries.applyOptions({ visible:false }); } catch(_) {}
+        l.handles.forEach(function(h: any) { h.style.display = 'none'; });
+        if (l.delBtn) l.delBtn.style.display = 'none';
+        if (l.cfgBtn) l.cfgBtn.style.display = 'none';
+      });
+    }
+  }
+
   function _clearAll() { _lines.slice().forEach(function(l: any) { _removeLine(l.id); }); _toast('All cleared'); }
   function _toggleVisibility() {
     _visible = !_visible;
@@ -959,6 +1025,8 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
 
   w.drawToolActivate = _activate;
   w.drawToolClearAll = _clearAll;
+  // [R11] setSymbol calls this so the drawings follow the chart.
+  w._zDrawReloadForSymbol = _reloadForSymbol;
   w.drawToolToggleVis = _toggleVisibility;
 
   // ── Init ──
@@ -972,10 +1040,13 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       var d = JSON.parse(localStorage.getItem(LS_KEY) as any);
       if (d && d.lines) {
         _nextId = d.nextId || 1;
-        d.lines.forEach(function(l: any) {
+        // [R11] Only the drawings that belong on THIS chart. A drawing with no
+        // symbol is a legacy one and belongs on all of them, so nothing he
+        // already drew disappears.
+        forSymbol(d.lines, _curSym()).forEach(function(l: any) {
           // [Pack G] Restore per-line width + style alongside color.
-          if (l.type === 'hline') _addHLine(l.price, l.color, l.id, l.width, l.style);
-          if (l.type === 'tline' && l.p1 && l.p2) _addTLine(l.p1, l.p2, l.color, l.id, l.width, l.style);
+          if (l.type === 'hline') _addHLine(l.price, l.color, l.id, l.width, l.style, l.sym);
+          if (l.type === 'tline' && l.p1 && l.p2) _addTLine(l.p1, l.p2, l.color, l.id, l.width, l.style, l.sym);
         });
         _deselectAll();
         // [Pack E] If _visible was restored as false from localStorage,

@@ -416,6 +416,13 @@ export function setSymbol(sym: string): void {
     if (w.S.wsK) { try { w.S.wsK.close() } catch (_) { } w.S.wsK = null }
     if (typeof clearAllSessionOverlays === 'function') clearAllSessionOverlays()
     w.S.symbol = sym
+    // [R11 2026-10-10] Re-render the chart drawings for the new symbol. Until
+    // now nothing here touched them: the restore ran once at init, so a
+    // trendline drawn on BTC stayed on screen after switching to ETH, sitting
+    // at BTC's price levels. Must run AFTER w.S.symbol is updated, since the
+    // reload reads it to decide what belongs. Drawings with no symbol are
+    // legacy and stay visible on every chart. See ui/drawingScope.ts.
+    try { if (typeof w._zDrawReloadForSymbol === 'function') w._zDrawReloadForSymbol() } catch (_) { /* never block a symbol switch */ }
     try { localStorage.setItem('zeus_chart_symbol', sym) } catch (_) { /* persist choice across reloads */ }
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SYM] \u2192 ' + sym)
     const lbl = el('chartTitleLbl'); if (lbl) lbl.textContent = sym

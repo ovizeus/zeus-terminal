@@ -28,6 +28,7 @@ import type { BrainMode } from '../types'
 // [SETTINGS-SYNC-1 2026-05-13] Sync `_lastKnownTs` cu POST response în
 // _usApplyPostResponse — filtrează own-echo WS push (no spurious GET refresh).
 import { setLastKnownSettingsTs } from '../services/settingsRealtime'
+import { capForSync } from '../ui/drawingScope'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -607,6 +608,27 @@ function _guardedArraySection(lsKey: string, parsed: any[] | null, min: number):
   return trimmed
 }
 
+// [P15 2026-10-10] The drawings payload that travels: the capped line set plus
+// the eye-toggle state. Reads localStorage directly rather than drawingTools'
+// in-memory list, because that list is a VIEW of the current symbol only (R11)
+// and the stored set is the whole truth.
+function _drawingsSection(): any {
+  try {
+    const raw = localStorage.getItem('zeus_drawings_v1')
+    if (!raw) return null
+    const d = JSON.parse(raw)
+    if (!d || !Array.isArray(d.lines)) return null
+    const { lines, trimmed } = capForSync(d.lines)
+    if (trimmed > 0) {
+      console.warn('[UC] drawings: syncing the newest ' + lines.length + ' of ' +
+        d.lines.length + ' — ' + trimmed + ' stay on this device only')
+    }
+    let vis = '1'
+    try { vis = localStorage.getItem('zeus_drawings_vis') === '0' ? '0' : '1' } catch (_) { /* */ }
+    return { lines: lines, nextId: d.nextId || 1, vis: vis }
+  } catch (_) { return null }
+}
+
 function _buildAllSections(): any {
   const _t = function (s: string) { return _ucDirtyTs[s] || 0 }
   const _g = function (k: string) { try { return localStorage.getItem(k) } catch (_) { return null } }
@@ -620,6 +642,13 @@ function _buildAllSections(): any {
     uiContext: { ts: _t('uiContext'), data: _j('zeus_ui_context') },
     panels: { ts: _t('panels'), data: { groups: _j('zeus_groups'), dslStrip: _g('zeus_dsl_strip_open'), atStrip: _g('zeus_at_strip_open'), ptStrip: _g('zeus_pt_strip_open'), mtfOpen: _g('zeus_mtf_open'), dslMode: _dslMode, adaptStrip: _g('zeus_adaptive_strip_open') } },
     indSettings: { ts: _t('indSettings'), data: _j('zeus_ind_settings') },
+    // [P15 2026-10-10] Chart drawings now follow the user to another device.
+    // They survived a refresh already (localStorage, user-scoped) but were lost
+    // on a cache clear, a new device or the APK reinstall that wipes WebView
+    // storage — which for a trader is the most expensive thing in that list.
+    // Capped at 300 (see drawingScope.SYNC_MAX_DRAWINGS); the local set is
+    // never trimmed, only the copy that travels, and a trim says so out loud.
+    drawings: { ts: _t('drawings'), data: _drawingsSection() },
     llvSettings: { ts: _t('llvSettings'), data: _j('zeus_llv_settings') },
     // [R9 2026-10-10] uiScale no longer pushed — removed feature, see the pull side.
     signalRegistry: { ts: _t('signalRegistry'), data: _j('zeus_signal_registry') },
@@ -764,6 +793,19 @@ export function _userCtxPull() {
           if (typeof w._indSettingsLoad === 'function') w._indSettingsLoad()
           if (typeof w.renderChart === 'function') w.renderChart()
           console.log('[UC] \u2705 indSettings merged from server')
+        }
+      }
+
+      // [P15 2026-10-10] Chart drawings. Written back to localStorage and then
+      // re-rendered for the symbol on screen, so they appear without a refresh.
+      if (sec.drawings && sec.drawings.data && Array.isArray(sec.drawings.data.lines)) {
+        if (sec.drawings.ts > (_ucDirtyTs.drawings || 0)) {
+          const _dw = sec.drawings.data
+          localStorage.setItem('zeus_drawings_v1', JSON.stringify({ lines: _dw.lines, nextId: _dw.nextId || 1 }))
+          if (_dw.vis === '0' || _dw.vis === '1') localStorage.setItem('zeus_drawings_vis', _dw.vis)
+          _ucDirtyTs.drawings = sec.drawings.ts; _dirty = true
+          try { if (typeof (w as any)._zDrawReloadForSymbol === 'function') (w as any)._zDrawReloadForSymbol() } catch (_) { /* */ }
+          console.log('[UC] \u2705 drawings merged from server (' + _dw.lines.length + ')')
         }
       }
 

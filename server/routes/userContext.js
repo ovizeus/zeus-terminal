@@ -31,6 +31,11 @@ const ALLOWED_SECTIONS = new Set([
     // whitelist → 7,175 silent rejections during S6-B7 soak. FS-only persistence
     // (small <1KB toggle state); NOT added to SQLITE_SECTIONS below.
     'chartExtras',
+    // [P15 2026-10-10] Chart drawings (horizontal lines + trendlines). They
+    // persisted per device in localStorage but were lost on a cache clear, a
+    // new device or an APK reinstall. Client caps the payload at 300 drawings,
+    // about 33KB against the 64KB section ceiling.
+    'drawings',
 ]);
 
 // [BE-02] Per-user write lock — prevents concurrent POST from overwriting each other
@@ -68,6 +73,9 @@ const SQLITE_SECTIONS = new Set([
     'dailyPnl', 'postmortem', 'adaptive', 'notifications',
     'scannerSyms', 'midstackOrder', 'aubData', 'ofHud',
     'teacherData', 'ariaNovaHud',
+    // [P15 2026-10-10] drawings live in SQLite like the other content sections;
+    // the FS files hold only the five fs-only ones.
+    'drawings',
 ]);
 
 // [R12] Phase 8.1 FS prune — runs once at startup. Strips any stale
@@ -277,3 +285,11 @@ setTimeout(_pruneStaleCtxFiles, 90000); // 90s after startup
 setInterval(_pruneStaleCtxFiles, CTX_PRUNE_INTERVAL);
 
 module.exports = router;
+// [P15 2026-10-10] Exported so the section lists can be pinned against what the
+// client actually emits. A section the client sends and this file does not list
+// is not an error here: it increments `rejected` and the POST still returns ok.
+// That is how chartExtras produced 7,175 silent rejections before anyone noticed
+// (see the [SEC-29] note above), so the drift is now a failing test instead of a
+// discovery months later.
+module.exports.ALLOWED_SECTIONS = ALLOWED_SECTIONS;
+module.exports.SQLITE_SECTIONS = SQLITE_SECTIONS;
