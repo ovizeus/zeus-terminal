@@ -22,6 +22,14 @@ export interface ZiMetricProps {
  * that stops a ticking price from shifting its column cannot be lost by
  * editing a panel later.
  */
+/**
+ * [2026-10-10] A value that is absent renders an em dash, never an empty cell.
+ * Found by looking at the primitives in a real browser: a metric with no value
+ * showed its label followed by nothing, and on a money surface a blank reads as
+ * zero. A measured 0 is information and stays 0; only absence becomes a dash.
+ */
+const DASH = '\u2014'
+
 export function ZiMetric({ label, value, tone = 'neutral', secondary }: ZiMetricProps) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'baseline', gap: 12 }}>
@@ -31,7 +39,7 @@ export function ZiMetric({ label, value, tone = 'neutral', secondary }: ZiMetric
           className="zi-num"
           style={{ fontSize: 14, color: toneColor(tone), fontVariantNumeric: 'tabular-nums' }}
         >
-          {value}
+          {value == null || value === '' ? DASH : value}
         </span>
         {secondary != null && (
           <span className="zi-num" style={{ fontSize: 12, color: 'var(--zi-mut)' }}>{secondary}</span>

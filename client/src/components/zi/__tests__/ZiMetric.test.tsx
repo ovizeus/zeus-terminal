@@ -31,3 +31,26 @@ describe('ZiMetric', () => {
     expect(screen.getByText('3W · 1L')).toBeTruthy()
   })
 })
+
+// [VISUAL CHECK 2026-10-10] Rendering the primitives in a real browser showed a
+// metric with no value as a label followed by NOTHING. On a money surface an
+// empty cell reads as zero, which is the failure R-C-9 exists to prevent:
+// never show a plausible-looking nothing, show an em dash.
+//
+// The tests could not catch this — they assert on values that exist. Only the
+// screenshot did.
+describe('a metric with no value says so', () => {
+  it('renders an em dash for undefined, null and empty string', () => {
+    for (const v of [undefined, null, '']) {
+      const { container, unmount } = render(<ZiMetric label="Not loaded" value={v as never} />)
+      expect(container.textContent).toContain('—')
+      unmount()
+    }
+  })
+
+  it('still renders a real zero as 0, not as an em dash', () => {
+    // A measured zero is information. Only the ABSENCE of a value is a dash.
+    render(<ZiMetric label="Open" value={0} />)
+    expect(screen.getByText('0')).toBeTruthy()
+  })
+})
