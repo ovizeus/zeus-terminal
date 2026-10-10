@@ -8,6 +8,9 @@ import { SafetyHealthCard } from './theia/SafetyHealthCard'
 import { MlDigestCard } from './theia/MlDigestCard'
 import { MemorySection } from './theia/MemorySection'
 import { RecentDecisionsCard } from './theia/RecentDecisionsCard'
+import { ActivityCard } from './theia/ActivityCard'
+import { BrainVisionCard } from './theia/BrainVisionCard'
+import { BrainDashboardCard } from './theia/BrainDashboardCard'
 import { useATStore } from '../../stores/atStore'
 
 // THEIA — read-only all-seeing oracle. Live modules read stores / the window.S bridge
@@ -78,14 +81,27 @@ export function TheiaPage() {
     typeof realizedDaily !== 'number' ? 'unknown' : realizedDaily > 0.01 ? 'up' : realizedDaily < -0.01 ? 'down' : 'flat'
 
   return (
-    <div className="theia-page">
+    <div className="theia-page zi">
+      <VerdictBand circuitOpen={ep.circuitOpen} halted={null} parityPct={ep.parityPct} testnetPnlTrend={pnlTrend} />
+
+      <div className="zi-lbl" style={{ letterSpacing: '0.2em', color: 'var(--zi-faint)', marginTop: 18 }}>State</div>
       <div className="theia-grid">
-        <VerdictBand circuitOpen={ep.circuitOpen} halted={null} parityPct={ep.parityPct} testnetPnlTrend={pnlTrend} />
         <SinceCard />
         <BrainPulseCard />
         <EnginePositionsCard />
         <SafetyHealthCard ratePressurePct={ep.ratePressurePct} circuitOpen={ep.circuitOpen} />
         <MarketLensCard />
+      </div>
+
+      <div className="zi-lbl" style={{ letterSpacing: '0.2em', color: 'var(--zi-faint)', marginTop: 18 }}>Operations</div>
+      <div className="theia-grid">
+        <ActivityCard />
+        <BrainVisionCard />
+        <BrainDashboardCard />
+      </div>
+
+      <div className="zi-lbl" style={{ letterSpacing: '0.2em', color: 'var(--zi-faint)', marginTop: 18 }}>Record</div>
+      <div className="theia-grid">
         <MlDigestCard />
         <MemorySection />
         <RecentDecisionsCard />
