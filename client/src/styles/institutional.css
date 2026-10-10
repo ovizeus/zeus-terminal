@@ -6,7 +6,9 @@
  * from those three places restores the previous appearance without touching
  * anything else — that is the agreed way back if the result is not wanted.
  *
- * Contrast was checked against --zi-card: label 5.5:1, muted 5:1, pos 6.6:1,
+ * Contrast was checked against --zi-card (#111821), the card surface. The panel
+ * ground is --zi-bg (#0a0e14), which is darker, so light-on-dark contrast there
+ * is slightly better, never worse. Ratios: label 5.5:1, muted 5:1, pos 6.6:1,
  * neg 4.6:1, warn 6.5:1. --zi-faint is for hairlines and non-essential text
  * only. Positive and negative differ in lightness as well as hue, and the sign
  * is always rendered, so nothing depends on colour alone.
@@ -42,7 +44,39 @@
   font-family: var(--zi-sans);
 }
 
-.zi-lbl {
+/* [CODE REVIEW 2026-10-10] Three fixes the review of Task 1 asked for.
+ *
+ * 1. app.css sets `font-family: var(--ff)` (Share Tech Mono) on 65 CONCRETE
+ *    selectors — .zr-at-btn, .zr-settings__input, .actfeed-row, #symSel and so
+ *    on. A direct rule beats inheritance, so every legacy-classed control
+ *    reused inside a .zi root would have kept the monospace face that the
+ *    header note above names as the main reason the old panels did not read as
+ *    institutional. The theme would have applied to half of each panel. These
+ *    two rules fix it for controls and for inherited text alike. `.zi .zi-num`
+ *    is a class on a class, so it still wins for anything explicitly numeric.
+ *
+ * 2. The utility classes are scoped under .zi. They reference tokens that only
+ *    exist inside the gate, so used outside one they silently fell back to the
+ *    app's monospace and inherited colours — which looks ALMOST right, the worst
+ *    failure mode. Scoped, they simply do not apply.
+ *
+ * 3. ZiPanel draws a rule after its header and ZiSection opens with one, so the
+ *    first section of every panel drew a 2px line. Suppressing an immediately
+ *    adjacent rule fixes it once, wherever it happens, instead of making each
+ *    call site decide.
+ */
+.zi button,
+.zi input,
+.zi select,
+.zi textarea {
+  font-family: var(--zi-sans);
+}
+
+.zi .zi-rule + .zi-rule {
+  display: none;
+}
+
+.zi .zi-lbl {
   font-size: 9px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -50,9 +84,9 @@
   font-weight: 500;
 }
 
-.zi-num {
+.zi .zi-num {
   font-family: var(--zi-mono);
   font-variant-numeric: tabular-nums;
 }
 
-.zi-rule { height: 1px; background: var(--zi-line); }
+.zi .zi-rule { height: 1px; background: var(--zi-line); }

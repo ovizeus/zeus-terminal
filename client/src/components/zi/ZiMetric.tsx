@@ -1,13 +1,10 @@
 import type { ReactNode } from 'react'
+import { toneColor, type ZiTone } from './tone'
 
-export type ZiTone = 'neutral' | 'pos' | 'neg' | 'warn'
-
-const TONE_VAR: Record<ZiTone, string> = {
-  neutral: 'var(--zi-val)',
-  pos: 'var(--zi-pos)',
-  neg: 'var(--zi-neg)',
-  warn: 'var(--zi-warn)',
-}
+// [CODE REVIEW 2026-10-10] The tone map used to live here AND in ZiTable, which
+// left ZiTable importing a type from a metric component. It is one function in
+// ./tone.ts now — see the note there for why the duplication mattered.
+export type { ZiTone }
 
 export interface ZiMetricProps {
   label: string
@@ -32,7 +29,7 @@ export function ZiMetric({ label, value, tone = 'neutral', secondary }: ZiMetric
       <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span
           className="zi-num"
-          style={{ fontSize: 14, color: TONE_VAR[tone], fontVariantNumeric: 'tabular-nums' }}
+          style={{ fontSize: 14, color: toneColor(tone), fontVariantNumeric: 'tabular-nums' }}
         >
           {value}
         </span>
