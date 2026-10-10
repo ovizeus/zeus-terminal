@@ -49,10 +49,19 @@ export const POSITION_COLUMNS: readonly ZiColumn[] = Object.freeze([
   { label: 'P&L', width: '72px', align: 'right' },
 ] as ZiColumn[])
 
-/** No header label: an action column should add no visual noise. */
+/**
+ * No header label: an action column should add no visual noise.
+ *
+ * The track is FIXED, not `auto`. Every ZiRow is its own css grid, so an `auto`
+ * track sizes to that row's own content: a row showing `✓ CONFIRM?` would size
+ * wider than one showing `✕ CLOSE`, and every column to its left would shift
+ * relative to the row above — destroying the one property this whole redesign
+ * rests on. The empty header cell would also reserve no width, so the header
+ * would line up with nothing. 96px fits the longest action label in use.
+ */
 export const ACTION_COLUMN: ZiColumn = Object.freeze({
   label: '',
-  width: 'auto',
+  width: '96px',
   align: 'right',
   numeric: false,
 } as ZiColumn)

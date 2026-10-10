@@ -4,10 +4,10 @@ import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
 import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds, _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { attachConfirmClose } from '../../engine/events'
-import { DemoPositionRow, LivePositionRow, PendingOrderRow, JournalRow, MANUAL_POSITION_COLUMNS, MANUAL_JOURNAL_COLUMNS } from './PositionRows'
+import { DemoPositionRow, LivePositionRow, PendingOrderRow, JournalRow } from './PositionRows'
 import { computeManualClosedStats } from '../../utils/manualStats'
 import type { CSSProperties } from 'react'
-import { ZiPanel, ZiSection, ZiMetric, ZiTable } from '../zi'
+import { ZiPanel, ZiSection, ZiMetric, ZiTable, POSITION_COLUMNS_WITH_ACTION, JOURNAL_COLUMNS } from '../zi'
 import type { ZiTone } from '../zi'
 
 const w = window as any
@@ -409,7 +409,7 @@ export function ManualTradePanel() {
         <div id="pendingOrdersTable">
           {pendingRender.length === 0
             ? <div style={{ fontSize: 11, color: 'var(--zi-mut)', padding: '2px 0' }}>No pending orders</div>
-            : <ZiTable columns={MANUAL_POSITION_COLUMNS}>{pendingRender.map((ord: any) => <PendingOrderRow key={ord.id} ord={ord} />)}</ZiTable>}
+            : <ZiTable columns={POSITION_COLUMNS_WITH_ACTION}>{pendingRender.map((ord: any) => <PendingOrderRow key={ord.id} ord={ord} />)}</ZiTable>}
         </div>
       </ZiSection>
 
@@ -439,7 +439,7 @@ export function ManualTradePanel() {
         <div id="demoPosTable">
           {manualDemoPositions.length === 0
             ? <div style={{ fontSize: 11, color: 'var(--zi-mut)', padding: '2px 0' }}>No open positions</div>
-            : <ZiTable columns={MANUAL_POSITION_COLUMNS}>{manualDemoPositions.map((pos: any) => <DemoPositionRow key={pos.id} pos={pos} />)}</ZiTable>}
+            : <ZiTable columns={POSITION_COLUMNS_WITH_ACTION}>{manualDemoPositions.map((pos: any) => <DemoPositionRow key={pos.id} pos={pos} />)}</ZiTable>}
         </div>
       </ZiSection>
 
@@ -458,7 +458,7 @@ export function ManualTradePanel() {
           <div id="livePositionsDemo" style={{ fontSize: 11, color: 'var(--zi-mut)' }}>
             {liveRender.length === 0
               ? <span>No exchange positions</span>
-              : <ZiTable columns={MANUAL_POSITION_COLUMNS}>{liveRender.map((pos: any) => <LivePositionRow key={pos.id} pos={pos} />)}</ZiTable>}
+              : <ZiTable columns={POSITION_COLUMNS_WITH_ACTION}>{liveRender.map((pos: any) => <LivePositionRow key={pos.id} pos={pos} />)}</ZiTable>}
           </div>
         </ZiSection>
       </div>
@@ -472,7 +472,7 @@ export function ManualTradePanel() {
         <div className="journal-wrap" id="journalBody">
           {journalSorted.length === 0
             ? <div style={{ padding: '2px 0', fontSize: 11, color: 'var(--zi-mut)' }}>No trades yet</div>
-            : <ZiTable columns={MANUAL_JOURNAL_COLUMNS}>{journalSorted.map((t: any) => <JournalRow key={(t.id || t.openTs || t.time) + ':' + (t.closedAt || '')} trade={t} />)}</ZiTable>}
+            : <ZiTable columns={JOURNAL_COLUMNS}>{journalSorted.map((t: any) => <JournalRow key={(t.id || t.openTs || t.time) + ':' + (t.closedAt || '')} trade={t} />)}</ZiTable>}
         </div>
       </ZiSection>
     </ZiPanel>

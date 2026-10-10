@@ -191,3 +191,43 @@ describe('the table is announced as a table', () => {
     expect(screen.getAllByRole('cell').length).toBe(POSITION_COLUMNS.length)
   })
 })
+
+// [TASK 2 FEEDBACK 2026-10-10] The Task 2 implementer caught a real flaw in
+// ACTION_COLUMN, and it was mine: its width was 'auto'.
+//
+// Every ZiRow is its OWN css grid. An `auto` track therefore sizes to that
+// row's own content, so a row showing "✓ CONFIRM?" would size its action track
+// wider than a row showing "✕ CLOSE" — and every column to its left would shift
+// relative to the row above. That destroys exactly the property the whole
+// redesign is built on: columns that do not move. The empty header cell would
+// also reserve no width at all, so the header would not line up with any row.
+//
+// A fixed track is the only correct answer for a per-row grid. The implementer
+// worked around it at the call site; this fixes it at the source so Tasks 3 and
+// 4 cannot fall into the same trap.
+
+describe('the action column cannot make rows disagree about their columns', () => {
+  it('uses a FIXED track, never auto', () => {
+    expect(ACTION_COLUMN.width).not.toBe('auto')
+    expect(ACTION_COLUMN.width).toMatch(/^\d+px$/)
+  })
+
+  it('gives two rows with different action content the SAME column template', () => {
+    const { container } = render(
+      <ZiTable columns={POSITION_COLUMNS_WITH_ACTION}>
+        <ZiRow
+          columns={POSITION_COLUMNS_WITH_ACTION}
+          cells={['BTCUSDT', 'LONG', '$200', '+1.0%', <button type="button" key="a">✕ CLOSE</button>]}
+        />
+        <ZiRow
+          columns={POSITION_COLUMNS_WITH_ACTION}
+          cells={['ETHUSDT', 'SHORT', '$900', '-0.7%', <button type="button" key="b">✓ CONFIRM?</button>]}
+        />
+      </ZiTable>,
+    )
+    const grids = Array.from(container.querySelectorAll<HTMLElement>('[data-zi-grid]'))
+    expect(grids).toHaveLength(3) // header + two rows
+    const templates = new Set(grids.map((g) => g.style.gridTemplateColumns))
+    expect(templates.size).toBe(1)
+  })
+})

@@ -17,7 +17,7 @@ import { _safePnl, resolveDisplayPnl } from '../../utils/guards'
 import { useUiStore } from '../../stores'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
-import { ZiRow, POSITION_COLUMNS_WITH_ACTION, JOURNAL_COLUMNS, type ZiColumn, type ZiTone } from '../zi'
+import { ZiRow, POSITION_COLUMNS_WITH_ACTION, JOURNAL_COLUMNS, type ZiTone } from '../zi'
 
 // [Phase 12.A — Batch D5] Resolve exchange chip label for a LIVE position.
 //   Prefer the position's own exchange field (if server ever attaches one),
@@ -39,16 +39,12 @@ const w = window as any
 // close / save-SL-TP / cancel / modify money-path call sites) and use ZiRow INSIDE themselves, with the action button as the last
 // cell, so the shared column template and the actions both survive.
 //
-// The action track is a fixed pixel width instead of `auto`. `auto` sizes each
-// row's own grid to its own button, so a row showing '✓ CONFIRM?' would push
-// its P&L column left of the row above it, and the (empty) header cell would
-// not reserve any space at all. The four data tracks are untouched.
-export const ACTION_TRACK = '96px'
-export const MANUAL_POSITION_COLUMNS: readonly ZiColumn[] = Object.freeze([
-  ...POSITION_COLUMNS_WITH_ACTION.slice(0, 4),
-  { ...POSITION_COLUMNS_WITH_ACTION[4], width: ACTION_TRACK },
-])
-export const MANUAL_JOURNAL_COLUMNS: readonly ZiColumn[] = JOURNAL_COLUMNS
+// [2026-10-10] This file used to define its own MANUAL_POSITION_COLUMNS, because
+// the shared ACTION_COLUMN was `auto` and an auto track sizes to each row's own
+// button — a row showing '✓ CONFIRM?' would have pushed its P&L column left of
+// the row above. That was a real flaw and it has been fixed at the source:
+// ACTION_COLUMN is a fixed 96px track now, so the shared template is used
+// directly and there is exactly ONE positions template again.
 
 const sideTone = (side: string): ZiTone => (side === 'LONG' ? 'pos' : 'neg')
 const pnlTone = (n: number): ZiTone => (n >= 0 ? 'pos' : 'neg')
@@ -116,7 +112,7 @@ export const PendingOrderRow = memo(function PendingOrderRow({ ord }: { ord: any
   return (
     <div data-zi-position-row="pending">
       <ZiRow
-        columns={MANUAL_POSITION_COLUMNS}
+        columns={POSITION_COLUMNS_WITH_ACTION}
         cells={[
           <span key="s">
             {symBase} {ord.lev}x
@@ -183,7 +179,7 @@ export const DemoPositionRow = memo(function DemoPositionRow({ pos }: { pos: any
     return (
       <div data-zi-position-row="demo">
         <ZiRow
-          columns={MANUAL_POSITION_COLUMNS}
+          columns={POSITION_COLUMNS_WITH_ACTION}
           cells={[
             `${symBase} ${pos.lev}x`,
             { value: pos.side, tone: sideTone(pos.side) },
@@ -223,7 +219,7 @@ export const DemoPositionRow = memo(function DemoPositionRow({ pos }: { pos: any
   return (
     <div data-zi-position-row="demo">
       <ZiRow
-        columns={MANUAL_POSITION_COLUMNS}
+        columns={POSITION_COLUMNS_WITH_ACTION}
         cells={[
           <span key="s">
             {symBase} {pos.lev}x
@@ -329,7 +325,7 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
     return (
       <div data-zi-position-row="live">
         <ZiRow
-          columns={MANUAL_POSITION_COLUMNS}
+          columns={POSITION_COLUMNS_WITH_ACTION}
           cells={[
             <span key="s">
               {dotRed} {symBase} {pos.lev}x
@@ -364,7 +360,7 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
   return (
     <div data-zi-position-row="live">
       <ZiRow
-        columns={MANUAL_POSITION_COLUMNS}
+        columns={POSITION_COLUMNS_WITH_ACTION}
         cells={[
           <span key="s">
             {dotRed} {symBase} {pos.lev}x
@@ -398,7 +394,7 @@ export const JournalRow = memo(function JournalRow({ trade }: { trade: any }) {
   return (
     <div data-zi-journal-row={win ? 'win' : 'loss'}>
       <ZiRow
-        columns={MANUAL_JOURNAL_COLUMNS}
+        columns={JOURNAL_COLUMNS}
         cells={[
           escHtml(trade.time || ''),
           <span key="s">
