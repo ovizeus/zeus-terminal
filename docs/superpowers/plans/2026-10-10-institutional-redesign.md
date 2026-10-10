@@ -14,6 +14,28 @@
 
 ---
 
+## ⚠️ NOTĂ DESPRE TYPECHECK — citește înainte de orice pas de verificare
+
+**`tsc --noEmit -p tsconfig.json` NU verifică nimic și iese mereu 0.** `client/tsconfig.json` are
+`"files": []` și doar referințe de proiect. Dovedit: un identificator complet inexistent pus în
+`PositionRows.tsx` a lăsat tsc să iasă tot 0. Planul ăsta instruia comanda greșită în toate sarcinile,
+și a fost raportată ca poartă trecută de mai multe ori. Greșeala mea.
+
+**Comanda reală:**
+```
+sudo -u zeus bash -c 'cd /opt/zeus-worktrees/institutional/client && npx tsc --noEmit -p tsconfig.app.json > /tmp/tsc.txt 2>&1; echo "exit: $?"; grep -c "error TS" /tmp/tsc.txt'
+```
+**Nu folosi pipe către `head`/`tail` și apoi `$?`** — ia exit code-ul lui `head`, nu al lui tsc. A fost
+a doua jumătate a aceleiași greșeli.
+
+**Poarta nu e „exit 0” — e „fără erori NOI".** Rulat corect, proiectul are **67 de erori preexistente**
+(ChartControls, ModeBar, DoctorPanel, bootstrapMisc, câteva fișiere de test). Livrează cu ele, fiindcă
+vite construiește fără typecheck. Deci:
+
+1. numărul total trebuie să rămână **67**;
+2. `grep` pe raport **nu trebuie să numească niciun fișier atins de sarcină**.
+
+---
 ## Ground rules for every task
 
 - Run client tests as the `zeus` user, never as root: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx vitest run <path>'`. Root-owned artefacts in `client/` silently break the live process.
@@ -595,8 +617,8 @@ again. A test that cannot fail is not protecting anything.
 
 - [ ] **Step 16: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; 773 tests passing (760 before + 13 new).
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); 773 tests passing (760 before + 13 new).
 
 - [ ] **Step 17: Commit**
 
@@ -768,8 +790,8 @@ Expected: PASS, 3 tests.
 
 - [ ] **Step 6: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; every existing test still green. **If a pre-existing ManualTradePanel
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); every existing test still green. **If a pre-existing ManualTradePanel
 test fails, that is a real regression in behaviour — fix the panel, not the test.**
 
 - [ ] **Step 7: Commit**
@@ -1130,8 +1152,8 @@ Expected: PASS — the 5 Auto Trade assertions, the 5 drawer assertions, the 3 M
 
 - [ ] **Step 9: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; all green. A failing pre-existing AutoTradePanel test is a real
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); all green. A failing pre-existing AutoTradePanel test is a real
 regression — fix the panel.
 
 - [ ] **Step 10: Commit**
@@ -1338,8 +1360,8 @@ Expected: no output.
 
 - [ ] **Step 8: Run the whole suite and the typechecker**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; all green.
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); all green.
 
 - [ ] **Step 9: Commit**
 
@@ -1435,8 +1457,8 @@ three surfaces rather than widening `ALLOWED`.
 
 - [ ] **Step 3: Full verification**
 
-Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.json && npx vitest run'`
-Expected: tsc exit 0; all tests green.
+Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal/client && npx tsc --noEmit -p tsconfig.app.json && npx vitest run'`
+Expected: typecheck error count UNCHANGED at 67 (see the typecheck note); all tests green.
 
 Run: `sudo -u zeus bash -c 'cd /opt/zeus-terminal && npx jest --forceExit --runInBand tests/unit/server/routes/ tests/unit/settingsValidatorParity.test.js'`
 Expected: 20 passed. (No server file changed, but confirm nothing drifted.)
