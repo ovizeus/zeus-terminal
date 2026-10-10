@@ -46,16 +46,32 @@
 - `evaluateDominance` — **reală**, dar primea praguri în loc de tabloul `hypotheses` pe care îl cere.
 *Fix:* singura analiză cu adevărat periodică (dominanţa între ipoteze concurente) primeşte acum date reale — descoperă perechile (user, mediu) cu probe recente, exact ca `mlScanCron`, ia ipotezele cu `getCompetingHypotheses` şi evaluează. Celelalte trei **le-am şters**, nu le-am lăsat să se prefacă: un strat de reflecţie care nu reflectă nimic e mai rău decât unul oprit, fiindcă pare că lucrează. Cronul raportează acum ce a făcut, iar „0 insights" e avertisment, nu tăcere.
 
-**A2. 🔥 ACTIV ACUM — Zeus depăşeşte plafonul de greutate Binance şi îşi taie singur cererile semnate.** *(descoperit 2026-10-09 16:40, în curs)*
-`binance_rate_state_log` arată **44 de intrări în SUPPRESSED azi**, faţă de 0-3 în fiecare zi precedentă. Nu e o rafală izolată: evenimentele **încep la 08:00 şi continuă neîntrerupt**, 5-6 pe oră, până acum. (Reload-urile mele de azi au fost la 04:41, 05:23 şi 06:25 — deci *înainte* de start; nu ele sunt cauza.)
-*Ce se întâmplă, din loguri:*
-- `[BINANCE_RATE] HTTP 429 from testnet.binancefuture.com/fapi/v2/positionRisk src=signer:GET /fapi/v2/positionRisk usedWeight=6010/6000` — plafonul de 6000/minut e depăşit;
-- `[BINANCE IP-CB] Tripped — refusing all signed requests for ~61s` — întrerupătorul taie **toate** cererile semnate, nu doar pe cele vinovate;
-- `[USERDATA] listenKey refresh failed uid=1 ... synthetic 503 scheduler backpressure` şi apoi `listenKey recreate failed` — **stream-ul de date utilizator nu se mai poate reînnoi**, adică actualizările de poziţii în timp real cad.
-*De ce contează deşi e testnet:* banul e pe IP, iar întrerupătorul refuză toate cererile semnate — deci atinge şi restul sistemului, nu doar contul de testnet.
-*Pistă concretă, neconfirmată:* `serverAT.js:5399` cere `positionRisk` **per poziţie** (`{ symbol: pos.symbol }`), în timp ce comentariul de la 5676 descrie costul ca „one positionRisk (w5) per user". `SERVER_AUTHORITATIVE_POSITIONS` e aprins pe testnet **şi** pe real. Dacă numărul de poziţii urmărite a crescut azi, asta ar explica exact tiparul.
-*Dinamica, măsurată:* backoff-ul escaladează cu `consecutive_ban_count`, iar contorul se resetează **doar după 4 ore curate** (`STRIKE_RESET_AFTER_MS`). Cum banurile vin la 10-20 de minute, nu se resetează niciodată: era 43 la 16:36, **47 la 16:59**. Răcirea WARM a ajuns deja la **33 de minute**. Protecţia în sine e corectă — îşi apără IP-ul — dar efectul e că sistemul rămâne tot mai mult în regim degradat: la reload-ul de la 16:48 schedulerul a tăiat explozia de boot (`fetchKlines failed`, `createListenKey failed ... reason=warm`, `RADAR /ticker/24hr HTTP 503`), deci nu-şi putea încărca nici măcar datele de piaţă. **Se opreşte doar reparând sursa, nu aşteptând.**
-*N-am atins ritmul de polling:* e cale de bani şi n-am încă o cauză dovedită — cere o investigaţie dedicată, nu o ajustare pe ghicite. **Primul lucru de făcut mâine.**
+**A2. 🔎 DIAGNOSTIC COMPLET — rate-limit-ul Binance: cauza e WebSocket-ul blocat, iar leacul mare e o singură cerere în loc de N.** *(măsurat 2026-10-10)*
+
+*Starea acum:* **NORMAL, strikes=0.** Rafala a fost un episod mărginit: 08:00 → 17:50 ieri (ultimul a fost un **418**, ban de IP, nu 429). De atunci, curat.
+
+*Măsurat pe sistemul viu* (`/api/diag/binance-rates`), consumul de bază e **345 cereri/minut — 6% din plafonul de 6000/min**. Deci ieri s-a ajuns la ~17× normalul. Clasamentul:
+
+| sursă | cereri/min | ce e |
+|---|---|---|
+| `marketFeed:altPrice` | **139,8** | înlocuitorul REST al WS-ului blocat |
+| `markprice-cache` | 60,0 | idem |
+| `wsproxy-watchlist` | 48,1 | poll watchlist |
+| `marketFeed:alt-klines` | 42,1 | înlocuitorul REST al WS-ului blocat |
+| `marketRadar:oi` | 25,1 | open interest (n-are WS oricum) |
+
+**A2 şi A3 sunt aceeaşi problemă.** Comentariul din cod o spune: pollerul de preţ merge „pe calea pe care ar fi mers bookTicker WS (blocat)". Datacenter-ul blochează WebSocket-ul de futures Binance → Zeus cade pe REST → **~70% din tot traficul către Binance există doar din cauza asta**.
+
+*Mecanismul exact al exploziei:* `ALT_PRICE_POLL_MS = 3000` — o cerere **la 3 secunde, per simbol**. Azi, 7 simboluri = 140/min. Scalează **liniar**: 50 de simboluri = 1000/min, **300 de simboluri = 6000/min, adică fix plafonul**. De asta a fost burst, nu creştere lentă: când setul de simboluri urmărite creşte (radar/watchlist), pollerul de 3 secunde loveşte tavanul.
+
+### Ce e de făcut, în ordinea raportului câştig/risc
+
+1. **🔧 O singură cerere în loc de N (cel mai mare câştig, doar cod).** `/fapi/v1/ticker/price` **fără** parametrul `symbol` întoarce **toate simbolurile într-un singur apel** — testat acum: HTTP 200, **789 de simboluri**. Pollerul devine 1 cerere/tick indiferent de câte simboluri urmărim: azi **140/min → 20/min**, iar la scară diferenţa dintre „merge" şi „ban". Greutatea scade şi ea (7×1 → 2). *Cere grijă: e calea de preţ pe care o foloseşte tranzacţionarea, deci se face cu teste, nu pe repede înainte.*
+2. **🙋 Deblocarea WebSocket-ului** *(A3)*. Ar scoate din ecuaţie ~70% din trafic, nu doar îl comprimă — şi ar readuce şi feed-ul de lichidări Binance. Dar e la nivel de reţea, iar un WARP pe VPS-ul ăsta a mai stricat lucruri o dată: **se face cu tine de faţă.**
+3. **🔧 Plafon pe numărul de simboluri pollate.** Chiar cu (1), o listă nelimitată rămâne un risc. O limită explicită + un log când se atinge.
+4. **🔧 Interval mai larg** (3s → 5s) — câştig liniar, mic. De făcut doar dacă (1) nu e suficient; 3 secunde e o prospeţime pe care o foloseşte tranzacţionarea.
+
+⚠️ *Gaură de diagnostic:* telemetria apelurilor e **doar în memorie** — la repornire se pierde. De asta nu pot spune retroactiv cine a ars cota ieri; am putut măsura doar baza de azi. Merită persistat un rezumat orar.
 
 **A3. ⚠️ RECLASIFICAT — NU e bug de cod: reţeaua datacenter-ului blochează WebSocket-ul de futures Binance.** *(reclasificat 2026-10-10)*
 Raportasem „feed-ul de lichidări Binance e conectat dar nu primeşte nimic, 551 de raportări consecutive cu `frames=0`". Faptul e real, **dar cauza nu e în codul nostru** — iar aplicaţia o spune deja singură în log:
