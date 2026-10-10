@@ -8,7 +8,7 @@
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> *(Închise azi: alerta la cădere + etichetele din reflection. Rămân 11, din care **doar 2 sunt ale mele**.)*
+> *(Închise 09-10: alerta la cădere + etichetele din reflection. **2026-10-10: auditul de persistență la refresh a adăugat P11-P15** — vezi secțiunea R1-R7. Rămân 15, din care **6 sunt ale mele**.)*
 
 **P1 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**
 
@@ -29,6 +29,72 @@
 **P9 🙋 Cauza corupţiei WAL — rămâne deschisă.** Fără erori de disc, spaţiu suficient, proprietari corecţi, nimeni conectat. Auto-vindecarea acoperă repetarea; fişierele corupte sunt păstrate în `/root/zeus-recover/`.
 
 **P10 🙋 Confirmări vizuale:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
+
+**P11 🔧 Cele nouă chei care se suprascriu cu default-uri la fiecare salvare** *(R1)*. Dovedit pe baza vie: zero varianţă la 9 din 9 utilizatori. Reparaţia e mecanică (proiecţie în ambele sensuri sau scoaterea cheilor din payload), dar atinge calea de salvare a setărilor — se face cu teste, nu pe repede înainte. **Al meu.**
+
+**P12 🔧 Tipul de lumânare nu persistă** *(R2)*. Lipseşte `ch.candleType` din `_projectFromLegacy`. E cea mai mică reparaţie din listă şi se vede imediat. **Al meu.**
+
+**P13 🔧 `LIQ CHART SETTINGS` e un modal decorativ** *(R3)*. Nu are cititori nicăieri. Două variante: îl conectăm la overlay-ul de lichidări, sau îl scoatem din UI ca să nu mintă. 🙋 *Decizia ta — nu ştiu dacă vrei funcţia sau curăţenia.*
+
+**P14 🔧 Radar Lens se resetează la refresh** *(R4)*. Serverul e gata (whitelist + validator); lipseşte doar partea de client. **Al meu.**
+
+**P15 🙋 Desenele de pe chart nu urmează utilizatorul** *(R5)*. Supravieţuiesc refresh-ului, dar se pierd pe alt dispozitiv / la reinstalare APK. De dus în sincronizarea pe server — dar desenele pot fi mari, deci vreau să stabilim un plafon împreună înainte să le pun pe fir.
+
+---
+## 🔁 AUDIT DE PERSISTENŢĂ LA REFRESH 2026-10-10 — „ce nu se menţine"
+
+> Cerut de operator: *„vreau sa mai cauti buguri la refresh de mentinere sa nu se reseteze... la indicatori chart etc tot"*.
+> Metodă: am urmărit mecanic cele **patru verigi** (salvare → whitelist server → hidratare → aplicare la boot) pentru fiecare cheie, apoi am **confirmat pe baza vie** citind `user_settings` pentru toţi cei 9 utilizatori. Nimic de aici nu e presupunere: fiecare constatare are dovada lângă ea.
+>
+> Context care contează: Zeus are **două canale** de persistare, nu unul — `/api/user/settings` (chei plate, tabela `user_settings`) şi `/api/sync/user-context` (secţiuni, construite de `_buildAllSections`). Se suprapun parţial şi **nu sunt de acord între ele**. De acolo vin aproape toate constatările de mai jos.
+
+### 🔴 GRAV
+
+**R1. Nouă chei sunt scrise-din-oficiu şi citite-de-nimeni: fiecare salvare suprascrie copia din server cu valori hardcodate.**
+`DEFAULT_SETTINGS` (`client/src/stores/settingsStore.ts:325-339`) declară `theme, uiScale, soundEnabled, chartType, timezoneOffset, liqSettings, llvSettings, zsSettings, srSettings`. `_projectFromLegacy()` (`settingsStore.ts:607`) **nu citeşte niciuna** din starea legacy, iar `_projectToLegacy()` / `_syncToWindow()` **nu scriu niciuna** înapoi. La fiecare `loadImpl` se face `merged = { ...DEFAULT_SETTINGS, ...projected }` — proiecţia nu le conţine, deci revin la default. Apoi `saveToServer` trimite `payload = { ...settings }`, iar serverul face `merged = { ...existing, ...clean }` (`server/routes/trading.js`), unde **un `null` suprascrie**.
+*Dovada, pe baza vie — zero varianţă la 9 din 9 utilizatori:*
+
+| cheie | valoare în DB la toţi | ce ar trebui |
+|---|---|---|
+| `theme` | `"native"` ×9 | alegerea userului |
+| `uiScale` | `100` ×9 | alegerea userului |
+| `soundEnabled` | `true` ×9 | alegerea userului |
+| `chartType` | `"candle"` ×8, `"candles"` ×1 | tipul de lumânare ales |
+| `timezoneOffset` | `null` ×9 | — |
+| `liqSettings` / `llvSettings` / `zsSettings` / `srSettings` | `null` ×9 | setările de overlay |
+
+`chartType` e dovada cea mai curată: 8 utilizatori încă ţin `"candle"` — valoarea despre care **comentariul propriu al codului** (`config.ts:1786`) spune că *nu e un id din `CANDLE_TYPES` şi nu putea fi aplicată niciodată*. Nimeni nu a scris vreodată valoarea aia; a pus-o salvarea. Zero varianţă la 9 utilizatori nu e coincidenţă — e semnătura unei chei pe care o scrie doar codul.
+*Atenuare parţială:* valorile reale ale lui `uiScale`, `llvSettings` şi `zsSettings` trăiesc de fapt în celălalt canal (secţiunile UC), deci acelea chiar persistă — copia din `user_settings` e un fantomă care induce în eroare. Pentru `theme`, `chartType`, `liqSettings`, `srSettings` **nu există nicio copie care funcţionează** (vezi R2, R3, R4).
+
+**R2. Tipul de lumânare NU poate persista — jumătatea de scriere a drumului lipseşte.**
+`candleTypeSwitcher.ts:196` scrie `USER_SETTINGS.chart.candleType = type` şi cheamă `_usScheduleSave`. Dar `_projectFromLegacy` **nu citeşte `ch.candleType`**, deci magazinul rămâne pe default-ul `'candles'`, salvarea trimite `chartType: 'candles'`, iar la boot `_usApplyFlatToUserSettings` (`config.ts:1784`) ia `flat.chartType` şi **scrie default-ul înapoi** în `chart.candleType`.
+Ciclul e închis — doar că pe valoarea greşită. **Simptom: alegi Heikin Ashi, dai refresh, te întorci la candles.** Reparaţia din 2026-10-07 a rezolvat jumătatea de *citire* şi a lăsat-o pe cea de *scriere*, de aceea pare reparat şi nu e. Confirmat de DB: niciun utilizator nu are vreodată altceva decât default.
+
+### 🟠 MEDII
+
+**R3. `LIQ CHART SETTINGS` nu face absolut nimic — nici în sesiune, nici după refresh.**
+`client/src/components/modals/LiqSettingsModal.tsx`: cele patru `useState` au valori **hardcodate** (`'BTC'`, `'$500'`, `'24h'`, `'$USD'`) şi nu citesc niciodată din `w.S.liqSettings` — deci modalul arată default-urile chiar şi redeschis în aceeaşi sesiune. `saveAndApply()` scrie în `w.S.liqSettings`, dă `toast('Liq settings applied')` şi se închide. Căutat în tot `client/` şi `server/`: **zero cititori** ai lui `liqSettings`, nicio scriere în localStorage, nicio secţiune UC. Modalul e decorativ. `srSettings` e şi mai gol: whitelistat pe server, dar **nici writer, nici reader** nicăieri.
+
+**R4. Radar Lens se resetează la fiecare refresh — jumătatea de client nu a fost scrisă niciodată.**
+Whitelist-ul serverului are `'radarLens'` cu comentariul *„Radar Lens (D4 persistence)"* (`trading.js:807`) şi validatorul îl acceptă. Dar `RadarLensBar` (`client/src/components/brain/BrainCockpit.tsx:18-28`) ţine lentila şi timeframe-ul în `useState('hybrid')` / `useState('5m')` simple: fără localStorage, fără save, fără load. Nimic în tot clientul nu trimite vreodată cheia — **`radarLens` e ABSENT la toţi cei 9 utilizatori din DB**. Persistenţa a fost pregătită pe server şi nu a fost niciodată conectată în UI.
+
+**R5. Desenele de pe chart, indicatorii cu stea şi tema sunt doar pe dispozitiv.**
+`zeus_drawings_v1` + `zeus_drawings_vis` (trendlinii etc.), `zeus_ind_favorites` (★) şi `zeus_theme` sunt corect user-scoped în `_USER_KEYS`, deci **supravieţuiesc refresh-ului** şi nu se mai amestecă între conturi. Dar niciuna nu apare în `_buildAllSections()` şi niciuna nu ajunge în `user_settings`: se pierd la cache-clear, pe alt dispozitiv şi la reinstalarea APK-ului. Pentru un trader, desenele pierdute sunt cel mai scump element din listă.
+*(Verificat mecanic: din cele 74 de chei user-scoped, 31 nu sunt în nicio secţiune UC. Majoritatea sunt corect locale — PIN, chei API, tab-leader, starea beacon-ului. Cele 4 de mai sus sunt cele care ar trebui să urmeze utilizatorul.)*
+
+### 🟡 MICI
+
+**R6. `zeus_dsl_parity_shadow` nu e în `_USER_KEYS`** — singura cheie `zeus_*`/`zt_*` rămasă neizolată după reparaţia de ieri, deci se împarte între două conturi pe acelaşi browser. E un jurnal de diagnostic, nu o setare; impactul e doar date de paritate amestecate.
+
+**R7. `timezoneOffset` e un duplicat mort** al lui `chartTz` (care chiar e proiectat, prin `ch.tz`). Whitelistat, validat, trimis la fiecare salvare ca `null`. De scos, nu de reparat.
+
+### ✅ Verificat şi NU e bug *(la fel de util)*
+- **Paritatea whitelist ↔ validator** e ţinută de un test (`tests/unit/settingsValidatorParity.test.js`). Clientul nu trimite nicio cheie necunoscută: zero avertismente „not in the whitelist" în loguri.
+- **Scoping-ul localStorage nu are asimetrie.** `localStorage.getItem/setItem/removeItem` sunt înlocuite global (`state.ts:149-151`), deci şi apelurile brute din `config.ts` sunt scope-uite. Am suspectat că `_indSettingsSave` scrie scope-uit şi `_indSettingsLoad` citeşte nescope-uit — **nu e aşa.**
+- **Momentul în care se află uid-ul e corect.** `_zeusUserId` vine din cookie-ul `zeus_uid` sincron, în capul lui `state.ts`, înaintea lui `_indSettingsLoad()`. Dacă ar fi venit mai târziu, TOATE setările ar fi părut resetate la fiecare boot.
+- **Cookie-urile `zeus_token` şi `zeus_uid` au acelaşi `maxAge`**, iar `/auth/me` reîmprospătează `zeus_uid`. Nu există fereastră în care eşti logat dar fără uid (care ar fi arătat exact ca o resetare totală).
+- **Parametrii per-indicator (`zeus_ind_settings`) chiar fac dus-întors** prin secţiunea UC `indSettings`, inclusiv pull-ul care îi scrie înapoi.
+- **Dubla sursă pentru timeframe** (`zeus_chart_tf` device-local vs `chartTf` din server) e deja cunoscută şi documentată în cod (`settingsStore.ts:96`).
 
 ---
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
