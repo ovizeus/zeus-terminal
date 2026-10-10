@@ -8,7 +8,7 @@
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
-> *(Închise 09-10: alerta la cădere + etichetele din reflection. **2026-10-10: auditul de persistență la refresh a adăugat P11-P15** — vezi secțiunea R1-R7. Rămân 15, din care **6 sunt ale mele**.)*
+> *(**2026-10-10:** auditul de persistență la refresh a adăugat P11-P15 și constatările R1-R9. **Închise azi: P12** (tipul de lumânare, b265) **și P11** (cele opt chei care suprascriau, b266) — P12 era o instanță din clasa lui P11. Rămân 13, din care **2 sunt ale mele**: P14 Radar Lens și R9.)*
 
 **P1 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**
 
@@ -30,7 +30,9 @@
 
 **P10 🙋 Confirmări vizuale:** TERMINATOR pe chart, kill-switch overlay, jurnalul manual „jos", widget Android, Vault download pe Chrome desktop.
 
-**P11 🔧 Cele nouă chei care se suprascriu cu default-uri la fiecare salvare** *(R1)*. Dovedit pe baza vie: zero varianţă la 9 din 9 utilizatori. Reparaţia e mecanică (proiecţie în ambele sensuri sau scoaterea cheilor din payload), dar atinge calea de salvare a setărilor — se face cu teste, nu pe repede înainte. **Al meu.**
+**P11 ✅ REZOLVAT (b266 v1.7.240) — cele opt chei care suprascriau valoarea salvată** *(R1)*. Am urmărit **fiecare cheie pe rând până la proprietarul ei real** înainte să ating ceva, și magazinul de setări nu era proprietarul niciuneia: `theme`/`soundEnabled` trăiesc în localStorage, `llvSettings`/`zsSettings` aparțin canalului user-context (verificat pe viu: 9 din 9 rânduri, respectiv `chartExtras` pe disc), `uiScale` e o funcție **scoasă în iunie**, `timezoneOffset` e duplicat mort, iar `liqSettings`/`srSettings` nu au proprietar deloc. Deci nu le-am inventat valori — **nu se mai trimit**, și o cheie absentă din payload lasă valoarea stocată neatinsă. **10 teste**, 9 picate prima dată pe cauza corectă și unul trecând de la început ca gardă că tot ce e deținut real se trimite în continuare. Client 720/720 (97 fișiere), paritate validator 4/4, tsc curat.
+
+> ⚠️ **Ce NU am făcut, intenționat:** să fac tema și sunetul să te urmeze pe alt dispozitiv. Asta cere și aplicare-la-boot, iar să conectez doar jumătatea de salvare e exact greșeala care a făcut tipul de lumânare să pară reparat trei zile. **E decizie de produs, a ta.** Și încă ceva cinstit: reparaţia oprește suprascrierea de aici înainte — valorile deja pierdute nu sunt înregistrate nicăieri, deci nu pot fi recuperate.
 
 **P12 ✅ REZOLVAT (b265 v1.7.239) — tipul de lumânare nu persista** *(R2)*. Lipsea `ch.candleType` din `_projectFromLegacy`. O linie de proiecție, **3 teste noi** picate toate prima dată pe cauza corectă, unul dintre ele parcurgând tot drumul hidratare → proiecție → salvare, ca să nu mai poată fi reparată doar o jumătate. Client 710/710, tsc curat. **De confirmat vizual la tine:** alege Heikin Ashi, refresh, trebuie să rămână.
 
@@ -50,7 +52,7 @@
 
 ### 🔴 GRAV
 
-**R1. Nouă chei sunt scrise-din-oficiu şi citite-de-nimeni: fiecare salvare suprascrie copia din server cu valori hardcodate.**
+**R1. ✅ REPARAT (b266) — Opt chei erau scrise-din-oficiu și citite-de-nimeni: fiecare salvare suprascria copia din server cu valori hardcodate.**
 `DEFAULT_SETTINGS` (`client/src/stores/settingsStore.ts:325-339`) declară `theme, uiScale, soundEnabled, chartType, timezoneOffset, liqSettings, llvSettings, zsSettings, srSettings`. `_projectFromLegacy()` (`settingsStore.ts:607`) **nu citeşte niciuna** din starea legacy, iar `_projectToLegacy()` / `_syncToWindow()` **nu scriu niciuna** înapoi. La fiecare `loadImpl` se face `merged = { ...DEFAULT_SETTINGS, ...projected }` — proiecţia nu le conţine, deci revin la default. Apoi `saveToServer` trimite `payload = { ...settings }`, iar serverul face `merged = { ...existing, ...clean }` (`server/routes/trading.js`), unde **un `null` suprascrie**.
 *Dovada, pe baza vie — zero varianţă la 9 din 9 utilizatori:*
 
@@ -87,9 +89,11 @@ Whitelist-ul serverului are `'radarLens'` cu comentariul *„Radar Lens (D4 pers
 
 **R8. `public/app/assets` era root-owned** — de la un build rulat ca root la 05:47. Deploy-ul de azi a picat cu `EACCES` până l-am dat înapoi lui `zeus`. Aceeași familie cu incidentul `migration_flags.json`: ce lasă root în urmă blochează tăcut procesul zeus — și e greșeala mea. *Reparat la deploy; de verificat la fiecare build.*
 
+**R9. Pull-ul user-context pune `fontSize` din `uiScale` — o funcție scoasă în iunie.** `config.ts:782` face `document.documentElement.style.fontSize = sec.uiScale.data + 'px'`. Dacă secţiunea ar purta `100`, rădăcina ar primi **font de 100px** și interfața ar exploda. **Nu e armată:** verificat pe viu — `uiScale.data` e `null` la uid=1 și nu există niciun rând în `user_ctx_data`, iar garda `data != null` blochează calea. Dar codul mort a rămas. *De șters, nu de reparat — n-am înlănțuit-o cu P11 ca să nu amestec două schimbări.*
+
 **R6. `zeus_dsl_parity_shadow` nu e în `_USER_KEYS`** — singura cheie `zeus_*`/`zt_*` rămasă neizolată după reparaţia de ieri, deci se împarte între două conturi pe acelaşi browser. E un jurnal de diagnostic, nu o setare; impactul e doar date de paritate amestecate.
 
-**R7. `timezoneOffset` e un duplicat mort** al lui `chartTz` (care chiar e proiectat, prin `ch.tz`). Whitelistat, validat, trimis la fiecare salvare ca `null`. De scos, nu de reparat.
+**R7. ✅ REPARAT (b266) — `timezoneOffset` era un duplicat mort** al lui `chartTz` (care chiar e proiectat, prin `ch.tz`). Nu se mai trimite. Rămâne whitelistat pe server intenționat, ca un client mai vechi să nu primească 400.
 
 ### ✅ Verificat şi NU e bug *(la fel de util)*
 - **Paritatea whitelist ↔ validator** e ţinută de un test (`tests/unit/settingsValidatorParity.test.js`). Clientul nu trimite nicio cheie necunoscută: zero avertismente „not in the whitelist" în loguri.
