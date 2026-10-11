@@ -176,6 +176,89 @@ Regime, Entry ready, Entry score și Gates arătau `—` permanent. Invizibil pe
 **870 teste / 120 fișiere**, typecheck 67 neschimbat, bundle reconstruit **fără reload** (doar client, R-OP-2).
 
 ---
+
+### 🔴 R17. **Crash-ul lui NU era R13.** Adevăratul vinovat: `DslDrivePanel` *(b271 v1.7.245)*
+
+R13 era un bug real de aceeași formă, dar **nu al lui**. Dovada: crash-ul a continuat să vină
+**după** 07:14, adică **din chiar bundle-ul care conținea reparația R13** (`index-CorJ7oIn.js`,
+confirmat în access log). Deci alt loc.
+
+**Nu o dată — de NOUĂ ori doar pe 11 oct:** 07:09:10, 07:11:53, 07:14:53, 07:15:02, 07:15:07,
+11:40:10, 11:40:15, 11:40:22, 13:58:13. Toate din aplicația lui Android (SM-S938B).
+
+**Locul:** `components/dock/DslDrivePanel.tsx:54`. Ruta trimite poziția **brută**:
+```js
+entry: p.price, sl: p.sl        // server/routes/dslDrive.js:37
+```
+iar panoul formata ambele cu un helper **fără nicio gardă**, în timp ce fratele lui, **o linie mai jos**,
+are gardă corectă:
+```ts
+const fmt = (x: number) => (Math.abs(x) >= 1000 ? x.toFixed(1) : x.toFixed(2))   // ❌ nepăzit
+const pct = (x?: number | null) => (Number.isFinite(x as number) ? ... : '—')     // ✅ păzit
+```
+O poziție deschisă **fără stop loss** stochează `sl: null`. Nu e caz-limită: din **3367** rânduri în
+`at_closed`, **303 au `sl` literal `null`** — cam 1 din 11. Cât timp o astfel de poziție e deschisă,
+panoul face poll **la fiecare 1500 ms** și crapă la **fiecare** randare — de aia o singură poziție a
+produs o zi întreagă de rapoarte. `Math.abs(null)` e `0`, deci ramura `>= 1000` nu salvează nimic:
+**ambele** ramuri cheamă `.toFixed` pe `null`.
+
+**Reparat** cu exact idiomul fratelui (`Number.isFinite` respinge `null` fără să-l convertească → un
+zero real rămâne `0.00`, doar un număr absent devine `—`). Acoperă toate 3 call-site-urile, inclusiv
+`cockpit.pivotLeft`. **6 teste**; înainte de fix testul reproduce **exact** mesajul lui, la **exact**
+linia 54.
+
+### 🔴 R18. De ce a durat o zi: serverul citea nume de câmpuri pe care **niciun client nu le trimite**
+
+R14 (de dimineață) era doar **jumătate** de reparație. Două raportoare diferite postează la **același**
+endpoint cu **nume diferite**:
+
+| raportor | trimite |
+|---|---|
+| `utils/guards.ts` (`w.onerror`) | `msg`, `src`, `line`, `col` |
+| `ErrorBoundary.tsx` | `reason`, `stack`, `componentStack`, `url` |
+
+Handler-ul live citea **doar al doilea set** → **orice** eroare necaptată de window se loga ca
+**cuvântul gol `unknown`**, fără mesaj, fără fișier, fără linie.
+
+**Și exista un AL DOILEA handler** pentru `/api/client-error`, la linia 1304, care citea corect
+`msg`/`src`/`line` — **mort din ziua în care a fost scris**, fiindcă Express răspunde cu **prima** rută
+care potrivește, iar aceea e înregistrată ~1000 de linii mai sus. Ruta duplicat e scoasă (zero
+schimbare la runtime — nu rula niciodată), cu un comentariu care păstrează lecția.
+
+**Reparat:** ambele forme sunt înțelese acum, într-o funcție de normalizare cu teste proprii
+(`server/utils/clientErrorReport.js`), iar `stack` + `componentStack` se scriu în log.
+**Dovedit live după reload**, pe sistemul viu:
+```
+msg:"VERIFY window shape probe"  filename:".../index-CnsB7JyC.js"  lineno:54  colno:70  stack:"..."
+```
+(înainte: `msg:"unknown"`, restul gol).
+
+### 🟠 R19. Throttle-ul de rapoarte de eroare era **GLOBAL**, nu per client
+
+`/api/client-error` e intenționat în `publicPaths` (ca să se poată raporta un crash chiar de pe pagina
+de login) → `req.user` **nu se populează niciodată** → cheia de throttle era **constanta `'anon'`
+pentru toți clienții de pe planetă**. Deci throttle-ul de 5s era **global**: un telefon într-o buclă de
+randare **stingea tăcut** rapoartele de crash ale **tuturor** celorlalți utilizatori, răspunzându-le
+`{ok:true, throttled:true}`. Exact asta explică logul rărit (intrările de la 07:15 sunt la >5s una de
+alta; tot ce cădea în interval s-a pierdut). Acum cheia e adresa clientului.
+
+### 🟡 R20. Sentry pe client **n-a rulat niciodată** — așteaptă decizia lui 🙋
+
+Singurul forward client→Sentry din toată aplicația trăia **în blocul mort** de la R18. Deci nu s-a
+executat niciodată. (Pe deasupra, `SENTRY_DSN` nici nu e setat — e dublu mort.) **NU l-am activat**:
+a trimite date de client către un terț e o decizie deliberată, nu un efect secundar al unei reparații
+de bug. 🙋 **Dacă vrei Sentry pe client, spune și îl conectez.**
+
+### ⚪ Rămase, aceeași clasă, **neatinse** (tipul zice `number`, realitatea nu)
+- `DslDrivePanel.tsx:150` — `ml.momentum.toFixed(2)` nepăzit. Producătorul (`serverAT.js:3541`)
+  pornește de la `_mom = 0` și rămâne finit pe acea cale, deci **nu e exploatabil azi**.
+- `brain/BrainCockpit.tsx:205-206` — `s.buyPct.toFixed(0)` / `s.sellPct.toFixed(0)` nepăzite.
+  Nu am dovedit că pot fi `null`; **nu le-am atins** ca să nu înlănțui schimbări (R-P).
+
+**879 teste / 121 fișiere**, typecheck **67 neschimbat**, **UN** reload (21:06, restart 1093),
+ban Binance `0` înainte și după.
+
+---
 ## 📜 REGULILE DUPĂ CARE LUCRĂM — rubrică permanentă
 
 > Cerut de operator 2026-10-10: *„poti scrie si rubrica de rwguli dupa care lucram daca se intampla ceva sa le avem in book of all"*.

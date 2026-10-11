@@ -43,6 +43,7 @@ const tradingRoutes = require('./server/routes/trading');
 const authRoutes = require('./server/routes/auth');
 const exchangeRoutes = require('./server/routes/exchange');
 const { createSessionAuth } = require('./server/middleware/sessionAuth');
+const { normalizeClientError, clientErrorThrottleKey } = require('./server/utils/clientErrorReport');
 const { startAutoRefresh: refreshExchangeInfo } = require('./server/services/exchangeInfo');
 const telegram = require('./server/services/telegram');
 const telegramBot = require('./server/services/telegramBot');
@@ -309,31 +310,37 @@ const _clientErrorLastTs = new Map();
 const _CLIENT_ERR_TTL_MS = 60 * 60 * 1000; // 1h — any user idle this long won't be throttled
 app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
   try {
-    const uid = (req.user && req.user.id) || 'anon';
     const now = Date.now();
-    const last = _clientErrorLastTs.get(uid) || 0;
+    // [2026-10-11] Throttle per client, not per 'anon'. This path is in
+    // sessionAuth's publicPaths, so req.user is never set and the old key was
+    // the constant string 'anon' for every client at once — making the 5s
+    // throttle global. One phone in a render loop answered everyone else
+    // {ok:true,throttled:true} and their crashes were never written down.
+    const key = clientErrorThrottleKey(req);
+    const last = _clientErrorLastTs.get(key) || 0;
     if (now - last < 5000) return res.json({ ok: true, throttled: true });
-    _clientErrorLastTs.set(uid, now);
+    _clientErrorLastTs.set(key, now);
     // [batch2-L2] Opportunistic eviction — drop entries older than TTL when map grows
     if (_clientErrorLastTs.size > 200) {
       for (const [k, ts] of _clientErrorLastTs) if (now - ts >= _CLIENT_ERR_TTL_MS) _clientErrorLastTs.delete(k);
     }
-    const body = req.body || {};
-    // [2026-10-11] Log the stack and the COMPONENT STACK too. The client has
-    // been sending them since the ErrorBoundary was taught to report, but this
-    // handler dropped them on the floor, so a real crash still logged as a bare
-    // message with no way to locate it. The component stack is the whole point:
-    // "Cannot read properties of null (reading 'toFixed')" names no file, no
-    // line and no panel on its own.
-    logger.log('WARN', 'CLIENT_ERR', String(body.reason || 'unknown').slice(0, 300), {
-      uid,
-      kind: body.kind || 'unknown',
-      filename: body.filename,
-      lineno: body.lineno,
-      url: body.url,
-      stack: body.stack ? String(body.stack).slice(0, 1500) : undefined,
-      componentStack: body.componentStack ? String(body.componentStack).slice(0, 1500) : undefined,
-      ts: body.ts,
+    // [2026-10-11] Accept BOTH reporter payload shapes and log the stack and
+    // the component stack. guards.ts sends {msg,src,line,col}; ErrorBoundary
+    // sends {reason,stack,componentStack,url}. This handler used to read only
+    // the second set, so every uncaught window error logged as the bare word
+    // "unknown" — which is how the operator's toFixed crash stayed invisible
+    // through nine reports in one day.
+    const e = normalizeClientError(req.body);
+    logger.log('WARN', 'CLIENT_ERR', e.reason, {
+      uid: (req.user && req.user.id) || 'anon',
+      kind: e.kind,
+      filename: e.filename,
+      lineno: e.lineno,
+      colno: e.colno,
+      url: e.url,
+      stack: e.stack,
+      componentStack: e.componentStack,
+      ts: e.ts,
       ua: req.get('user-agent'),
     });
   } catch (_) { /* swallow — client report must not 500 */ }
@@ -1294,24 +1301,21 @@ app.use('/api/exchange', exchangeRoutes);
 app.use('/api/market', require('./server/routes/market'));
 
 // ─── [C7] Client Error Forwarding (+ Sentry) ───
-app.post('/api/client-error', (req, res) => {
-  try {
-    const { msg, src, line, col, stack, ua } = req.body || {};
-    const userId = req.user ? req.user.id : 'anon';
-    logger.error('[CLIENT]', { userId, msg: String(msg || '').slice(0, 500), src: String(src || '').slice(0, 200), line, col, stack: String(stack || '').slice(0, 1000), ua: String(ua || '').slice(0, 200) });
-    // Forward to Sentry with user context
-    Sentry.withScope(scope => {
-      scope.setUser({ id: String(userId) });
-      scope.setTag('source', 'client');
-      scope.setExtra('file', String(src || '').slice(0, 200));
-      scope.setExtra('line', line);
-      scope.setExtra('col', col);
-      scope.setExtra('ua', String(ua || '').slice(0, 200));
-      Sentry.captureException(new Error(`[CLIENT] ${String(msg || 'Unknown error').slice(0, 500)}`));
-    });
-  } catch (_) { }
-  res.json({ ok: true });
-});
+// [2026-10-11] A SECOND app.post('/api/client-error') used to live here, and
+// it was unreachable: Express answers with the first matching route, and that
+// one is registered ~1000 lines above. It mattered because the two handlers
+// read different field names — this dead one read {msg,src,line}, which is
+// exactly what utils/guards.ts w.onerror sends, while the live one read
+// {reason,filename,lineno}. So every uncaught window error was logged as the
+// bare word "unknown" with no message, file or line. That is how the
+// operator's "Cannot read properties of null (reading 'toFixed')" stayed
+// undiagnosable through nine reports on 2026-10-11.
+//
+// The live handler now accepts both shapes (server/utils/clientErrorReport.js).
+// Note what else this means: the client->Sentry forwarding that only existed
+// in this dead block has never once run. Re-enabling it is a deliberate
+// decision about sending client data to a third party, so it is NOT being
+// switched on here as a side effect of a bug fix.
 
 // ─── /favicon.ico → native Zeus ZT logo (browsers auto-request this at root) ───
 app.get('/favicon.ico', (_req, res) => {

@@ -51,7 +51,17 @@ export function DslDrivePanel() {
     poll(); const t = setInterval(poll, 5000); return () => { alive = false; clearInterval(t) }
   }, [])
 
-  const fmt = (x: number) => (Math.abs(x) >= 1000 ? x.toFixed(1) : x.toFixed(2))
+  // [2026-10-11] Guarded like pct() below. /api/dsldrive/state passes the
+  // position through raw (entry: p.price, sl: p.sl), and a position opened
+  // with no stop loss stores sl: null — 303 of 3367 rows in at_closed do.
+  // This function used to call .toFixed straight on that null and took the
+  // whole panel down with "Cannot read properties of null (reading
+  // 'toFixed')", once per 1500ms poll, for as long as such a position was
+  // open. Number.isFinite rejects null without coercing it, so a genuine 0
+  // still prints as 0.00 and only a truly absent number becomes an em dash.
+  const fmt = (x?: number | null) => (Number.isFinite(x as number)
+    ? (Math.abs(x as number) >= 1000 ? (x as number).toFixed(1) : (x as number).toFixed(2))
+    : '\u2014')
   const pct = (x?: number | null) => (Number.isFinite(x as number) ? (x as number).toFixed(2) + '%' : '—')
   // map a trail-width % (0..2%) onto a 0..100% bar — state-driven width, animated by a
   // CSS transition (NOT a keyframe), so the pivots glide like a piston on each poll.
