@@ -24,6 +24,30 @@ function fmt1(n: number, fallback = '—'): string {
   return Number.isFinite(n) && n !== 0 ? n.toFixed(1) : fallback
 }
 
+/**
+ * [2026-10-11] Format a number that may be missing.
+ *
+ * Six numbers are shown on a card. markPrice and liqPrice already went through
+ * fmt1; size, entry, pnl and pnlPct called .toFixed() straight on the field and
+ * took the whole panel down when one was null — which is what the operator hit
+ * after opening a manual demo position ("Cannot read properties of null
+ * (reading 'toFixed')"). The type says `number`, but this is runtime data and
+ * the live database holds entryPrice: null on open rows, while a fresh
+ * position has no pnl until the first tick.
+ *
+ * Unlike fmt1 this keeps a real zero: a position at break-even has a P&L of
+ * 0.00, and showing an em dash there would hide a number we actually have.
+ * Only a genuinely absent value becomes a dash.
+ */
+function fmtNum(n: unknown, digits: number, fallback = '—'): string {
+  // null, undefined and '' are ABSENT, not zero. Number(null) is 0, so
+  // coercing first would print a confident 0.00 for a value we do not have —
+  // the one thing a money surface must never do.
+  if (n === null || n === undefined || n === '') return fallback
+  const v = typeof n === 'number' ? n : Number(n)
+  return Number.isFinite(v) ? v.toFixed(digits) : fallback
+}
+
 // [PERF-3] memo wrapper — PositionCard is rendered N times per ARES
 // positions list and re-renders on every parent state change (positions
 // array reference change OR closeAllVisible/closeAllArePositions selectors
@@ -31,7 +55,7 @@ function fmt1(n: number, fallback = '—'): string {
 // unchanged. Pos objects come from aresStore — store mutators replace
 // individual entries on update, so memo correctly invalidates only the
 // changed cards.
-const PositionCard = memo(function PositionCard({ pos }: { pos: AresPositionCard }) {
+export const PositionCard = memo(function PositionCard({ pos }: { pos: AresPositionCard }) {
   const closeArePosition = useAresStore((s) => s.closeArePosition)
   const activeExchange = useUiStore((s) => s.activeExchange)
   const exchLabel = pos.live ? _aresExchLabel(pos, activeExchange) : null
@@ -60,7 +84,7 @@ const PositionCard = memo(function PositionCard({ pos }: { pos: AresPositionCard
           <span style={{ color: 'rgba(70,200,255,0.9)' }}>[{pos.symbol}]</span>
           <span style={{ color: sideColor, fontWeight: 700 }}> {pos.side}</span>
           <span style={{ color: 'rgba(255,200,60,0.85)' }}> x{pos.leverage || 1}</span>
-          <span style={{ color: 'rgba(255,255,255,0.45)' }}> ISO  Size: {pos.size.toFixed(1)} USDT</span>
+          <span style={{ color: 'rgba(255,255,255,0.45)' }}> ISO  Size: {fmtNum(pos.size, 1)} USDT</span>
           {pos.live ? <span style={{ color: '#00ff88', fontSize: 10, letterSpacing: 1 }}> LIVE</span> : null}
           {exchLabel ? <span style={{ color: '#00d4ff', fontSize: 10, letterSpacing: 1 }}> {exchLabel}</span> : null}
           {bePill ? <span style={{ color: '#00d9ff', fontSize: 10 }}> BE</span> : null}
@@ -78,13 +102,13 @@ const PositionCard = memo(function PositionCard({ pos }: { pos: AresPositionCard
         >CLOSE</button>
       </div>
       <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 1 }}>
-        Entry {pos.entry.toFixed(1)}  Mark {mark}  Liq{' '}
+        Entry {fmtNum(pos.entry, 1)}  Mark {mark}  Liq{' '}
         <span style={{ color: 'rgba(255,120,50,0.75)' }}>{liq}</span>{'  '}
         SL <span style={{ color: 'rgba(255,60,60,0.7)' }}>{sl}</span>{'  '}
         TP <span style={{ color: 'rgba(0,255,140,0.7)' }}>{tp}</span>
       </div>
       <div style={{ fontFamily: 'monospace', fontSize: 12, color: pnlColor, fontWeight: 700, textShadow: `0 0 8px ${pnlColor}55` }}>
-        uPnL {pnlSign}{pos.pnlPct.toFixed(2)}%   {pnlSign}{pos.pnl.toFixed(2)} USDT
+        uPnL {pnlSign}{fmtNum(pos.pnlPct, 2)}%   {pnlSign}{fmtNum(pos.pnl, 2)} USDT
       </div>
       {reason ? (
         <div style={{
