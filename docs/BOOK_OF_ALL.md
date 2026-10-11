@@ -74,6 +74,54 @@ n-au persistat niciodată.
 (nu mai trimite cheia când câmpurile nu există, exact ca la b266) dar o fac doar cu acordul tău.
 
 ---
+
+## 🚨 CRASH RAPORTAT DE OPERATOR 2026-10-11 — găsit și reparat
+
+*„am deschis o pozitie manuala demo si am o eroare: Cannot read properties of null (reading 'toFixed')"* — mesaj roșu cu **Retry**, adică `ErrorBoundary`.
+
+### R13. `PositionCard` cădea pe un număr lipsă *(preexistent, NU de la redesign)*
+
+`components/dock/ares/PositionsList.tsx` formatează **șase** numere. Două (`markPrice`, `liqPrice`)
+treceau prin `fmt1()` cu gardă. **Celelalte patru, nu:**
+```
+pos.size.toFixed(1)     pos.entry.toFixed(1)
+pos.pnlPct.toFixed(2)   pos.pnl.toFixed(2)
+```
+Tipul `AresPositionCard` le declară pe toate șase `number`, de-aia n-a prins nimic. Dar sunt date de
+runtime, iar **baza vie nu e de acord**: rândurile lui deschise din `at_positions` au `entryPrice: null`,
+iar o poziție proaspăt deschisă n-are `pnl` până la primul tick. Garda a fost scrisă pentru două
+câmpuri și uitată pentru patru. **Identice la tag** → preexistent.
+
+**Reparat cu `fmtNum()`, care diferă de `fmt1` în două feluri care contează:**
+1. **păstrează un zero real** — o poziție la break-even are P&L `0.00`, iar o liniuță ar ascunde un număr pe care îl avem;
+2. **respinge `null`/`undefined`/`''` î**nainte** de conversie** — `Number(null)` e `0`, deci altfel ar tipări un `0.00`
+   încrezător pentru o valoare pe care n-o avem. Pe o suprafață de bani, exact asta nu are voie să se întâmple (**R-C-9**).
+
+6 teste, dovedite prin mutație: pun la loc un singur apel nepăzit → 3 pică.
+
+### R14. Un panou putea crăpa fără să lase urmă — reparat
+
+Crash-ul a ajuns în loguri ca **`[CLIENT_ERR] unknown`**: fără mesaj, fără fișier, fără linie. Două cauze:
+
+1. **`ErrorBoundary.componentDidCatch` doar făcea `console.error`.** Un panou putea crăpa în fața
+   operatorului pe telefon și serverul nu afla nimic. Acum trimite mesaj + stack + **component stack**
+   (partea care contează: mesajul singur nu distinge Auto Trade de Manual Trade de un card THEIA).
+2. **Raportorul global filtra după calea fișierului** (`/trading/`, `/core/`…). În producție orice script
+   e `index-<hash>.js`, deci condiția **nu e adevărată niciodată** — nicio eroare de motor n-a mai fost
+   raportată cu detalii de când aplicația e bundle-uită. Regula e inversată: raportează orice are mesaj,
+   cu două excepții numite (zgomot ResizeObserver, și `Script error.` cross-origin care n-are detalii).
+
+11 teste, inclusiv reproducerea exactă a erorii lui într-un boundary și garda că un raport eșuat nu doboără aplicația.
+
+### R15. `BrainPulseCard` citea 4 din 5 câmpuri de la nivelul greșit *(preexistent)*
+`regimeEngine`, `entryReady`, `entryScore`, `gates` stau sub `brain`, nu la rădăcina store-ului →
+Regime, Entry ready, Entry score și Gates arătau `—` permanent. Invizibil pentru compilator
+(selectoare tipate `(s: any)`) și pentru ochi (liniuța arată ca „nu sunt date încă”).
+*Un test al meu trecea degeaba la prima scriere — potrivea cuvântul din etichetă; strâns și dovedit prin mutație.*
+
+**870 teste / 120 fișiere**, typecheck 67 neschimbat, bundle reconstruit **fără reload** (doar client, R-OP-2).
+
+---
 ## 📜 REGULILE DUPĂ CARE LUCRĂM — rubrică permanentă
 
 > Cerut de operator 2026-10-10: *„poti scrie si rubrica de rwguli dupa care lucram daca se intampla ceva sa le avem in book of all"*.
