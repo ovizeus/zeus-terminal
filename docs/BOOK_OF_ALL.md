@@ -249,6 +249,33 @@ executat niciodată. (Pe deasupra, `SENTRY_DSN` nici nu e setat — e dublu mort
 a trimite date de client către un terț e o decizie deliberată, nu un efect secundar al unei reparații
 de bug. 🙋 **Dacă vrei Sentry pe client, spune și îl conectez.**
 
+### ✅ R21. Baleiere EXHAUSTIVĂ a clasei — `DslDrivePanel` era **singura** instanță neconținută
+
+Nu m-am oprit la bugul găsit. Am profilat întâi **ce e null în datele reale** (400 de rânduri din
+`at_closed`): nullabile sunt `sl`, `tp`, `closePnl`, `tpOrderId`, `tier`, `_slQueuedSL`. Apoi audit
+automat pe tot clientul: fiecare `obj.camp.toFixed(` unde `camp` e declarat nullable undeva ȘI linia
+n-are gardă → **29 de locuri**. Triate unul câte unul:
+
+| loc | verdict |
+|---|---|
+| `DslDrivePanel.tsx:54` | 🔴 **BUGUL REAL** — reparat (R17) |
+| `PositionTable.tsx:32,34,37` | ✅ cod mort (nerandat nicăieri) + `null > 0` e `false`, deci cade pe `—` |
+| `ARIAPanel.tsx:132-134` | ✅ `st.levels &&` păzește; `computePatternLevels` dă `null` (păzit) sau obiect complet din aritmetică pe klines |
+| `BrainCockpit.tsx:205-206` | ✅ default-ul store-ului e `{buyPct:50,sellPct:50}`; writer-ul face aritmetică → cel mult `NaN`, iar **`NaN.toFixed()` nu aruncă** |
+| `bootstrapPanels.ts:24,49` (Exposure) | ✅ **conținut** — e în `.then()` cu `.catch()` care scrie „Failed to load" în panou |
+| `ui/panels.ts:1121,1137` (PnL Lab) | ✅ **conținut** — tot corpul e în `try/catch` (linia 1144); datele vin local, nu din API |
+| restul (`autotrade.ts`, `orderflow.ts`, `quantmonitor/*`, `indicators.ts`) | ✅ fals-pozitive heuristice (nume de câmp împrumutat de la alt tip) sau în motor cu gardă |
+
+**Concluzia, care e partea care contează:** din toată aplicația, **un singur** loc din această clasă
+putea dobora un panou în fața operatorului, și acela era cel care chiar o făcea. Celelalte ori sunt
+păzite, ori sunt cod mort, ori dau `NaN` (care nu aruncă), ori sunt prinse de un `catch` care
+degradează vizibil în loc să crape.
+
+**O capcană găsită pe drum, meritoasă de ținut minte:** serverul face `+x.toFixed(2)` înainte de
+`res.json`. Dacă `x` ajunge `NaN`, **`JSON.stringify(NaN)` dă `null`** — deci contractul API **poate**
+livra `null` pe un câmp tipat `number`, chiar dacă serverul „garantează" un număr. Dovedit:
+`JSON.stringify({a:+(NaN).toFixed(2)})` → `{"a":null}`. De-aia garda pe client nu e paranoia.
+
 ### ⚪ Rămase, aceeași clasă, **neatinse** (tipul zice `number`, realitatea nu)
 - `DslDrivePanel.tsx:150` — `ml.momentum.toFixed(2)` nepăzit. Producătorul (`serverAT.js:3541`)
   pornește de la `_mom = 0` și rămâne finit pe acea cale, deci **nu e exploatabil azi**.
