@@ -60,3 +60,46 @@ describe('a position card survives a missing number', () => {
     expect(container.textContent).toContain('59.68')
   })
 })
+
+// [2026-10-11] The operator's ACTUAL position, as stored. Read from
+// at_positions row created 2026-10-10 21:20:53, three seconds before the first
+// CLIENT_ERR. The order itself succeeded — it is in the database, OPEN, with a
+// real qty — so the crash was purely in rendering it.
+//
+// Note what the row does and does not have: no entryPrice key at all, no
+// leverage key, and sl/tp null because he left them empty in the ticket. That
+// is the exact shape that took the panel down.
+describe('the position the operator actually opened', () => {
+  const stored = {
+    id: 'seq-1780224662037',
+    symbol: 'BTCUSDT',
+    side: 'LONG',
+    mode: 'demo',
+    sourceMode: 'manual',
+    autoTrade: false,
+    qty: 0.481,
+    // entryPrice / leverage genuinely absent on the stored row
+    sl: null,
+    tp: null,
+    live: false,
+    durationMs: 0,
+    closable: true,
+    reason: '',
+    beMoved: false,
+  }
+
+  it('renders without throwing', () => {
+    expect(() => render(<PositionCard pos={stored as never} />)).not.toThrow()
+  })
+
+  it('shows em dashes for the numbers the row does not carry', () => {
+    const { container } = render(<PositionCard pos={stored as never} />)
+    expect(container.textContent).toContain('—')
+  })
+
+  it('still identifies the position', () => {
+    const { container } = render(<PositionCard pos={stored as never} />)
+    expect(container.textContent).toContain('BTCUSDT')
+    expect(container.textContent).toContain('LONG')
+  })
+})
