@@ -15,6 +15,13 @@
 # never places a real-money order: mode is hardcoded to demo below.
 set -uo pipefail
 
+# [2026-10-11] Single-instance lock. This script OPENS A POSITION, so two
+# copies running at once would open two. That is not hypothetical: the login
+# one-liner chains this script, and anything else watching for the session
+# could fire it too. flock makes the second caller exit instead of trading.
+exec 9>/tmp/.zeus-dsl-verify.lock
+flock -n 9 || { echo "another run of this script holds the lock — refusing to open a second position"; exit 1; }
+
 JAR=/tmp/zsess.txt
 BASE=https://localhost
 OUT=/tmp/zeus-dsl-live
