@@ -319,11 +319,20 @@ app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
       for (const [k, ts] of _clientErrorLastTs) if (now - ts >= _CLIENT_ERR_TTL_MS) _clientErrorLastTs.delete(k);
     }
     const body = req.body || {};
+    // [2026-10-11] Log the stack and the COMPONENT STACK too. The client has
+    // been sending them since the ErrorBoundary was taught to report, but this
+    // handler dropped them on the floor, so a real crash still logged as a bare
+    // message with no way to locate it. The component stack is the whole point:
+    // "Cannot read properties of null (reading 'toFixed')" names no file, no
+    // line and no panel on its own.
     logger.log('WARN', 'CLIENT_ERR', String(body.reason || 'unknown').slice(0, 300), {
       uid,
       kind: body.kind || 'unknown',
       filename: body.filename,
       lineno: body.lineno,
+      url: body.url,
+      stack: body.stack ? String(body.stack).slice(0, 1500) : undefined,
+      componentStack: body.componentStack ? String(body.componentStack).slice(0, 1500) : undefined,
       ts: body.ts,
       ua: req.get('user-agent'),
     });
