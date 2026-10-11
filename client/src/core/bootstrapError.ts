@@ -46,11 +46,35 @@ function _showDegradedBanner(reason: string, meta?: Record<string, any>) {
   _reportClientError({ kind: 'engine-error', reason, ts: Date.now(), ...(meta || {}) })
 }
 
+/**
+ * [2026-10-11] Whether a window.onerror is worth reporting.
+ *
+ * This used to require the filename to contain /brain/, /core/, /trading/,
+ * /data/, /engine/ or /bridge/. That was written against the unbundled dev
+ * tree. In production every script is /app/assets/index-<hash>.js, so the test
+ * was never true and NO engine error has been reported with detail since the
+ * app was bundled. The operator's crash proved it: the server logged
+ * [CLIENT_ERR] unknown with no message, no filename and no line.
+ *
+ * So the rule is inverted: report anything that carries a real message, and
+ * name the two cases that are noise rather than faults. A little extra noise
+ * beats another silent production crash, and the server already throttles to
+ * one report per user per five seconds.
+ *
+ * Exported for its tests; nothing else should call it.
+ */
+export function _shouldReportGlobalError(message: string, _filename?: string): boolean {
+  if (!message || typeof message !== 'string') return false
+  // ResizeObserver loop warnings are browser bookkeeping, not a fault.
+  // "Script error." is what a cross-origin script gives instead of detail,
+  // so there is nothing to report even when something did break.
+  if (/resizeobserver|^script error\.?$/i.test(message.trim())) return false
+  return true
+}
+
 window.addEventListener('error', function (e: any) {
   console.error('[ZEUS][GlobalError]', e.message, e.filename, e.lineno)
-  const fn = (e.filename || '').toLowerCase()
-  const isCoreEngine = fn.indexOf('/brain/') !== -1 || fn.indexOf('/core/') !== -1 || fn.indexOf('/trading/') !== -1 || fn.indexOf('/data/') !== -1 || fn.indexOf('/engine/') !== -1 || fn.indexOf('/bridge/') !== -1
-  if (isCoreEngine && e.message && !/resizeobserver|script error/i.test(e.message)) {
+  if (_shouldReportGlobalError(e.message, e.filename)) {
     _showDegradedBanner(e.message, { filename: e.filename, lineno: e.lineno })
   }
 })
