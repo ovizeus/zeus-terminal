@@ -85,3 +85,8 @@ KEYS-BACKUP.txt
 data/book_uploads/
 data/vault/
 scripts/verify-terminator/out/
+
+# [2026-10-13] Stashed build sourcemaps. These ARE the source, de-minified, and
+# one build is ~7 MB. They live on the box so scripts/whereis.js can translate a
+# crash location; they must never enter git, which is the same reasoning as M18.
+sourcemaps/
