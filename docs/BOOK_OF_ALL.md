@@ -361,6 +361,47 @@ E **al treilea** caz din aceeași familie în două săptămâni: bucla închis�
 pornită (tipul de candelă care se citea dar nu se scria; Radar Lens cu serverul gata și clientul
 nelegat; acum paritatea cu clientul viu și serverul mut). Merită tratat ca tipar, nu ca accident.
 
+### 🔬 DIAGNOSTIC GATA — de ce tace paritatea pe server (cauză găsită, NIMIC reparat încă)
+
+`serverBrain.js:445-462`. Scriitorul `source='server'` e pe ramura **`else`**:
+
+```js
+if (_shouldRunMainCycle()) {          // SERVER_BRAIN || SERVER_BRAIN_DEMO
+    _timer = setInterval(_runCycle, ...)
+} else if (MF.PARITY_SHADOW_ENABLED) {        // ← NU se ajunge niciodata aici
+    _shadowTimer = setInterval(_runShadowCycle, ...)   // scriitorul de paritate
+}
+```
+
+`_shouldRunMainCycle()` (linia 346) = `SERVER_BRAIN === true || SERVER_BRAIN_DEMO === true`.
+**`SERVER_BRAIN_DEMO` este ON** → ramura principală câștigă → `_runShadowCycle` **nu e programat
+niciodată**. `PARITY_SHADOW_ENABLED` e aprins și **nu poate produce nimic** în configurația lui.
+
+Codul **știe**: comentariul imediat următor spune *„The demo main cycle suppresses `_runShadowCycle`
+→ testnet users get no parity rows"*, și adaugă `_runTestnetShadowCycle` ca să compenseze. Dar acela
+scrie doar pentru userii trecuți de `_isTestnetShadowTarget` (linia 375):
+
+```js
+if (serverAT.getMode(userId) !== 'live') return false;     // cere mod LIVE
+return execEnv.env === 'TESTNET';                          // SI mediu TESTNET
+```
+
+**Operatorul tranzacționează pe DEMO.** Dovada, din poziții reale închise: `mode=demo, env=DEMO`,
+**38 din 38**. Deci nu e țintă, deci nu se scrie niciun rând. Cele 7 rânduri din 10 oct 20:42:03
+sunt o fereastră scurtă în care a existat o țintă; de atunci, tăcere structurală.
+
+**Nu e defecțiune — e configurație.** Dar efectul e că poarta de dovezi pentru SERVER_BRAIN/SERVER_AT
+**nu se poate umple niciodată** cât timp el stă pe demo. Este **a patra** instanță a tiparului
+„flag aprins care nu face nimic" în două săptămâni.
+
+**Trei ieșiri, în ordinea preferinței mele:**
+1. 🟢 **Lărgește `_isTestnetShadowTarget` să includă și DEMO.** Shadow-ul e prin definiție fără
+   execuție (comentariul: *„NEVER touch serverAT, Telegram, regime history, reflection"*), deci
+   adaugă dovezi fără să schimbe nimic în felul în care se tranzacționează. Aditiv, reversibil.
+2. 🟡 Stingi temporar `SERVER_BRAIN_DEMO` ca să cadă pe ramura shadow — dar asta **schimbă**
+   cine decide pe demo. Nu e gratis.
+3. 🔴 Renunți la paritate și flipuiești pe încredere — exact ce interzice planul.
+
 ### ▶️ CE FACEM DISEARĂ, în ordine
 
 1. **Reparăm jumătatea de server a parității.** Muncă mică, doar logare, **zero influență pe
