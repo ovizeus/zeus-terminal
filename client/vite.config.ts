@@ -21,7 +21,18 @@ export default defineConfig({
   build: {
     outDir: '../public/app',
     emptyOutDir: true,
-    sourcemap: false, // [M18] never emit sourcemaps in production — prevents source disclosure
+    // [2026-10-13] 'hidden' keeps the M18 guarantee and buys back the one thing
+    // it cost us. M18 turned sourcemaps off so production would not disclose
+    // source — correct, and unchanged here: 'hidden' emits the .map files but
+    // writes NO sourceMappingURL comment into the bundle, so no browser ever
+    // learns they exist or asks for one. The maps are moved out of the served
+    // directory by scripts/stash-sourcemaps.sh right after the build, and nginx
+    // returns 404 for *.map regardless.
+    //
+    // Why bother: the operator crash on 2026-10-11 reached the log as
+    // index-CorJ7oIn.js:54:70. A hash and a column. Finding that it meant
+    // DslDrivePanel.tsx took a day. With the stashed map it is one command.
+    sourcemap: 'hidden',
   },
   server: {
     port: 5173,
