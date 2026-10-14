@@ -297,9 +297,31 @@ excluzând definiția, changelog-ul și testele.
 | `ML_HYBRID_POOLING_ENABLED` | definiție + getter + un test care listează nume | **inert** |
 | `ML_OVERRIDE_RESOLVER_ENABLED` | definiție + getter + același test | **inert** |
 
-Comentariile le descriu drept *„Cornercase A hybrid partial pooling"* și *„Cornercase B 7-layer
-effectiveStatus"* — specificate, flag-uite, **niciodată conectate**. Operatorul le-a pornit (sunt
-`MODIFIED` față de default-ul `false`) și crede că rulează. Nu rulează.
+**CORECTEZ ce scrisesem aici acum o oră.** Am zis „niciodată conectate". **Greșit** — am săpat mai
+departe și codul **există**:
+| ce promite flagul | implementarea | gardă pe flag? |
+|---|---|---|
+| Cornercase A — pooling | `ml/_ring5/pooledEvidence.js` + `banditEvidence.js` | **niciuna** |
+| Cornercase B — resolver | `ml/_ring5/effectiveStatus.js`, chemat din `routes/ring5.js:114` | **niciuna** |
+
+Deci nu e „flag aprins peste cod inexistent", ci **cod care rulează necondiționat sub un comutator
+care nu comandă nimic**. `thompsonSampler.js` și `effectiveStatus.js` nu citesc niciun flag.
+
+**Dar nici „rulează activ" nu e adevărat.** Tabelele pe care lucrează sunt goale:
+```
+ml_pooled_evidence           0 randuri
+ml_feature_global_overrides  0 randuri
+ml_bandit_posteriors        84 randuri   (bandit-ul in sine are date)
+```
+Resolverul rezolvă pe nimic, pooling-ul poolează pe nimic.
+
+**Formularea exactă, a treia oară:** flag-urile **nu comandă nimic în niciun sens** — pornite sau
+oprite, comportamentul e identic. Codul rulează, dar pe date inexistente, deci efectul e nul.
+
+**De ce contează mai mult decât un flag mort:** dacă operatorul stinge `ML_OVERRIDE_RESOLVER_ENABLED`
+crezând că a dezactivat resolverul, **nu a dezactivat nimic**. Un comutator de siguranță care nu
+comută e mai rău decât unul lipsă, fiindcă produce încredere falsă. Aceeași clasă cu panoul LIQ și
+cel S/R, pe care le-a scos în b267/b268 exact din acest motiv.
 
 Testul `tests/unit/ml/omegaFlags.test.js` afirmă doar `expect(MF).toHaveProperty(flagName)` — deci
 trece **vacuu** pentru un flag inert. Un flag care există nu e un flag care face ceva.
@@ -321,10 +343,15 @@ Apărea cu 0 referințe, dar e folosit în **mutex** (`migrationFlags.js:287`), 
 3. **`zeus` nu poate scrie în scratchpad-ul lui root** — scriptul a eșuat tăcut cu stderr ascuns și
    am analizat un fișier vechi. Dacă ascunzi stderr, verifică întâi că fișierul chiar s-a creat.
 
-### 🙋 Decizia lui
-Cele două flag-uri ML: **le conectăm** (muncă reală, specificația există în comentarii) sau **le
-scoatem** din listă, ca pagina de Flags să nu mai mintă? Momentan ele promit o funcționalitate
-inexistentă — exact ca panoul LIQ și cel S/R, pe care le-am scos în b267/b268.
+### 🙋 Decizia lui — acum e o alegere informată, nu una în ceață
+1. 🟢 **Leagă flag-urile de cod** (gardă în `effectiveStatus.resolve` și în calea de pooling) — mic,
+   și face comutatoarele să comande ce scrie pe ele.
+2. 🟡 **Scoate-le din listă** — dacă funcțiile trebuie să ruleze mereu, un comutator decorativ doar
+   minte.
+3. ⚪ **Lasă-le** — dar atunci știi că nu fac nimic în niciun sens, ceea ce acum e scris aici.
+
+*Separat de asta: tabelele sunt goale. Dacă te așteptai ca pooling-ul sau override-urile să aibă
+date, asta e o a doua întrebare — de ce nu se populează — și n-am investigat-o.*
 
 ---
 ## 🛡️ 2026-10-14, 21:05 — FIXAT CU TESTE: singurul lucru care te apără de execuție dublă
