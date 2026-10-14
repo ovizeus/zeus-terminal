@@ -7,6 +7,22 @@
 const fs = require('fs');
 const path = require('path');
 
+// [2026-10-14] Under a test runner the logger must not touch production files.
+// Suite runs were appending to data/logs/zeus.log — rows like BADCOIN and
+// "SL cancel fail" turned up in the live log, timestamped inside a full-suite
+// run, while I was reading that same log to diagnose a real incident.
+//
+// Appending is the mild half. _rotate() RENAMES the live log past 5MB and then
+// deletes every rotated file beyond the newest three, so a long test run could
+// rotate and prune the operator's forensic history. The crash watchdog reads
+// this same file.
+//
+// migrationFlags.js already guards its own state file the same way, for the
+// same reason, so this is the established pattern here rather than a new idea.
+// Console output is deliberately left alone: tests that assert on it, and
+// anyone watching a run, still see everything.
+const _UNDER_TEST = !!process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test';
+
 const LOG_DIR = path.join(__dirname, '..', '..', 'data', 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'zeus.log');
 const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB per file, then rotate
@@ -16,6 +32,7 @@ try { if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true }); }
 
 let _logStream = null;
 function _getStream() {
+    if (_UNDER_TEST) return null;          // never open the production log in a test
     if (!_logStream || _logStream.destroyed) {
         try {
             _logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
@@ -26,6 +43,7 @@ function _getStream() {
 }
 
 function _rotate() {
+    if (_UNDER_TEST) return;               // never rename or prune production logs in a test
     try {
         if (!fs.existsSync(LOG_FILE)) return;
         const stat = fs.statSync(LOG_FILE);
@@ -48,7 +66,7 @@ function _rotate() {
 }
 
 // Rotate check every 60s
-setInterval(_rotate, 60000);
+if (!_UNDER_TEST) setInterval(_rotate, 60000);
 
 /**
  * Write a structured log entry.
@@ -93,4 +111,6 @@ function warn(component, message, data) { log('WARN', component, message, data);
 function error(component, message, data) { log('ERROR', component, message, data); }
 function debug(component, message, data) { log('DEBUG', component, message, data); }
 
-module.exports = { log, info, warn, error, debug, LOG_DIR, LOG_FILE };
+module.exports = { log, info, warn, error, debug, LOG_DIR, LOG_FILE,
+    // test-only hooks: assert the production guard rather than trusting it
+    _isUnderTest: _UNDER_TEST, _getStreamForTest: _getStream, _rotateForTest: _rotate };
