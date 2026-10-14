@@ -286,6 +286,60 @@ livra `null` pe un câmp tipat `number`, chiar dacă serverul „garantează" un
 ban Binance `0` înainte și după.
 
 ---
+## 🧩 2026-10-14, 21:10 — DIAGNOSTIC ÎNCHIS: poarta de migrare e CIRCULARĂ, nu doar neîndeplinită
+
+Am dus la capăt întrebarea „de ce nu emite PRIMARY". Răspunsul e structural și schimbă campania.
+
+### Cele două emițătoare, confirmate în cod
+| | de unde | când | ce scrie |
+|---|---|---|---|
+| **COVERAGE** | `client/src/data/klines.ts:343` | scanarea multi-simbol, **doar** `if (sym !== getSymbol())` | mereu `NO_TRADE`, `confidence=0`, direcțional |
+| **PRIMARY** | `client/src/trading/autotrade.ts:717` | în `runAutoTradeCheck` (începe la 671) | simbolul de pe chart, prin `computeFusionDecision` — **oglindește pipeline-ul serverului** |
+
+Comentariul din `klines.ts` e explicit: *„S4 verdict uses PRIMARY."* Și al rutei: gate-urile
+**MUST read totals.primaryAgreementPct ONLY**.
+
+### De ce PRIMARY e mereu zero — dovedit static
+`runAutoTradeCheck` are exact trei `return`-uri înainte de blocul PRIMARY:
+```
+708  if (typeof TabLeader !== 'undefined' && !TabLeader.checkLeader()) return
+712  if (AT.running) return
+714  if (!getATEnabled() || getATKillTriggered()) return
+717  ← blocul PRIMARY
+```
+Scanarea multi-simbol (COVERAGE) e în **alt fișier** și nu trece prin ele — de-aia avem 101 rânduri
+de acoperire și **zero** PRIMARY.
+
+### 🔴 DEPENDENȚA CIRCULARĂ — ăsta e adevăratul blocaj
+Harnașamentul a fost proiectat când **clientul** rula AutoTrade. Operatorul are acum
+**`SERVER_AT_DEMO` pornit** — serverul rulează AT pe demo — deci AT-ul clientului e stins, deci
+`runAutoTradeCheck` iese la 714, deci PRIMARY nu se emite.
+
+**Ca să aduni dovezile care autorizează migrarea, îți trebuie clientul care rulează AT; dar migrarea
+s-a întâmplat deja parțial, și exact asta oprește acel client.**
+
+Poarta nu e „încă neîndeplinită". E **imposibil de îndeplinit** în configurația actuală. Oricâte zile
+am aștepta, `primaryPairs` rămâne 0.
+
+### 🙋 Trei ieșiri — DECIZIA LUI, niciuna făcută
+1. 🟢 **Pornește AT pe client temporar**, cât durează colectarea. Nu schimbă cod. Dar clientul și
+   serverul ar rula AT în paralel pe demo — trebuie verificat întâi că nu dublează intrări
+   (`SERVER_AT_DEMO` + client AT nu sunt în mutex-ul din `migrationFlags`, ceea ce **în sine merită
+   verificat**).
+2. 🟡 **Mută blocul PRIMARY deasupra lui `getATEnabled()`** (NU deasupra lui `TabLeader` — altfel
+   fiecare tab deschis emite dublat, și nici deasupra lui `AT.running` — reintrare). Paritatea e
+   shadow-only prin construcție, deci măsurarea ei nu trebuie să depindă de armarea execuției.
+   E exact mutarea pe care b93 a făcut-o deja o dată, deasupra celorlalte gate-uri. Doar client →
+   **rebuild de bundle, fără reload**.
+3. 🔴 **Renunță la poarta PRIMARY** și acceptă acoperirea (97,78% acord ajustat) — dar codul spune
+   explicit că ar umfla artificial potrivirea, fiindcă acoperirea e forțat `NO_TRADE`.
+
+**Recomandarea mea: varianta 2**, fiindcă repară cauza (un diagnostic care depinde de execuție) în
+loc să ocolească simptomul. Dar e schimbare pe fișierul de AT al clientului, deci **cere acordul lui**.
+
+**Nereparat. Nu ating `autotrade.ts` cât el doarme.**
+
+---
 ## 🔴 2026-10-14 TÂRZIU — CORECTEZ PLANUL PE CARE TOCMAI L-AM DAT: paritatea NU se poate aduna peste noapte
 
 Am testat unealta cu care urma să judecăm datele mâine (`db.queryParityReport` + `parityGate`).
