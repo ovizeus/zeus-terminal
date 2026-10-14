@@ -380,6 +380,36 @@ function _isTestnetShadowTarget(userId) {
     } catch (_) { return false; }
 }
 
+// [2026-10-14] Who gets a source='server' parity row.
+//
+// The migration gate for SERVER_BRAIN/SERVER_AT is the parity harness, and it
+// could not be fed. _runShadowCycle — the general writer — sits on the ELSE of
+// _shouldRunMainCycle(), which is SERVER_BRAIN || SERVER_BRAIN_DEMO; the demo
+// carve-out is ON, so that branch is never taken and the writer is never
+// scheduled. _runTestnetShadowCycle was added to compensate, but scoped by
+// _isTestnetShadowTarget (mode==='live' AND env==='TESTNET'). The operator
+// trades DEMO, so he was never a target: brain_parity_log held 1148 client
+// rows still growing against 7 server rows from a single second on 2026-10-10,
+// the one cycle he happened to be on testnet.
+//
+// So the parity scope widens to DEMO. It stays a separate predicate because
+// _isTestnetShadowTarget has its own meaning and its own tests, and widening
+// it in place would quietly change what 'testnet shadow' denotes elsewhere.
+//
+// This adds rows and changes no decision, which was verified rather than
+// assumed: includeUserFn is applied ONLY in the per-user loop that calls
+// db.logParityRow; _updateServerSigDir runs after the symbol loop from
+// per-SYMBOL scores and so does not depend on the user filter; and the rows
+// come from _computeFusionParity, which is shadow-pure by construction.
+//
+// REAL stays out on purpose — nothing is gained by shadowing a real-money user.
+function _isShadowParityTarget(userId) {
+    try {
+        if (_isTestnetShadowTarget(userId)) return true;
+        return serverAT.getMode(userId) === 'demo';
+    } catch (_) { return false; }
+}
+
 // ── Decision log (ring buffer) ──
 const DECISION_LOG_MAX = 200;
 const _decisionLog = [];
@@ -1736,7 +1766,7 @@ function _runTestnetShadowCycle() {
     if (!mainActive) return;
     _testnetShadowRunning = true;
     try {
-        _runShadowForUsers(_isTestnetShadowTarget);
+        _runShadowForUsers(_isShadowParityTarget);
     } catch (err) {
         logger.warn('BRAIN', '[SP1] Testnet shadow cycle error: ' + (err && err.message));
     } finally {
@@ -2759,6 +2789,7 @@ module.exports = {
     // because the test hooks seed _stcMap / override main-cycle state.
     __sp1: {
         isTestnetShadowTarget: _isTestnetShadowTarget,
+        isShadowParityTarget: _isShadowParityTarget,
         runShadowForUsers: _runShadowForUsers,
         runTestnetShadowCycle: _runTestnetShadowCycle,
         fuseDecision: _fuseDecision,

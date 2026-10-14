@@ -34,12 +34,38 @@ describe('SP1 _runTestnetShadowCycle', () => {
 
   afterEach(() => { brain.__sp1.setMainCycleActiveForTest(null); });
 
-  test('writes server rows ONLY for testnet-live users (uid=1), not demo (uid=2)', () => {
+  // [2026-10-14] This test used to assert demo users were EXCLUDED. That scope
+  // was deliberately widened, so the expectation is updated rather than deleted.
+  //
+  // Why: the parity harness is the evidence gate for SERVER_BRAIN/SERVER_AT, and
+  // it could not be fed. brain_parity_log held 1148 client rows for uid 1, still
+  // growing, against 7 server rows from a single second on 2026-10-10. The
+  // general writer _runShadowCycle sits on the ELSE of _shouldRunMainCycle()
+  // (SERVER_BRAIN || SERVER_BRAIN_DEMO) and the demo carve-out is ON, so it is
+  // never scheduled; this cycle was the only compensation and it was scoped to
+  // testnet-live users, which the operator is not — he trades demo. So no
+  // evidence could ever accumulate.
+  //
+  // What this test still protects, and what matters, is unchanged: the cycle is
+  // SCOPED (it does not write for everyone) and REAL-money users stay out.
+  test('writes server rows for demo AND testnet-live users — the parity scope', () => {
     const seen = [];
     jest.spyOn(db, 'logParityRow').mockImplementation((uid, sym, src) => seen.push([uid, src]));
     brain.__sp1.setMainCycleActiveForTest(true); // demo main cycle active
     brain.__sp1.runTestnetShadowCycle();
-    expect(seen).toEqual([[1, 'server']]);
+    expect(seen.map(r => r[0]).sort()).toEqual([1, 2]);
+    expect(seen.every(r => r[1] === 'server')).toBe(true);
+  });
+
+  test('a REAL-money user is still excluded from shadow rows', () => {
+    const seen = [];
+    jest.spyOn(db, 'logParityRow').mockImplementation((uid, sym, src) => seen.push([uid, src]));
+    // uid 1 live on REAL, uid 2 demo → only the demo user may appear.
+    serverAT.getMode.mockImplementation(uid => (uid === 1 ? 'live' : 'demo'));
+    serverAT._resolveExecutionEnv.mockReturnValue({ env: 'REAL' });
+    brain.__sp1.setMainCycleActiveForTest(true);
+    brain.__sp1.runTestnetShadowCycle();
+    expect(seen.map(r => r[0])).toEqual([2]);
   });
 
   test('is a no-op when the main cycle is NOT active (regular shadow covers it)', () => {
