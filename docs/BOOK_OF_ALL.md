@@ -586,6 +586,20 @@ Apărea cu 0 referințe, dar e folosit în **mutex** (`migrationFlags.js:287`), 
 3. **`zeus` nu poate scrie în scratchpad-ul lui root** — scriptul a eșuat tăcut cu stderr ascuns și
    am analizat un fișier vechi. Dacă ascunzi stderr, verifică întâi că fișierul chiar s-a creat.
 
+### 🧷 FIXAT CU TEST — descoperirea nu se mai poate pierde
+`tests/unit/ml/decorative-flags-pinned.test.js` afirmă **realitatea actuală**, nu cea dorită: că
+`effectiveStatus.js` **nu** citește `ML_OVERRIDE_RESOLVER_ENABLED`, că niciun fișier de pooling nu
+citește `ML_HYBRID_POOLING_ENABLED`, și că `BYBIT_PARITY_ENABLED` e numit **doar într-un comentariu**
+(testul separă codul de proză și verifică și că separarea chiar funcționează — altfel toate celelalte
+ar trece din motiv greșit).
+
+**E un fir de alarmă, nu o aprobare.** Când decide, testul se **actualizează**, nu se șterge: dacă
+cineva gatează codul, aserțiunile se inversează și îl trimit înapoi la secțiunea asta, în loc să lase
+descoperirea să se evapore. Dovedit prin mutație: adaug o citire de flag → testul se aprinde.
+
+*Motivul pentru care merită: ce am găsit azi trăiește în Book. Un Book se poate uita; un test picat
+nu.*
+
 ### 🙋 Decizia lui — acum e o alegere informată, nu una în ceață
 1. 🟢 **Leagă flag-urile de cod** (gardă în `effectiveStatus.resolve` și în calea de pooling) — mic,
    și face comutatoarele să comande ce scrie pe ele.
