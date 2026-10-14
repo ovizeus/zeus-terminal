@@ -350,8 +350,30 @@ Apărea cu 0 referințe, dar e folosit în **mutex** (`migrationFlags.js:287`), 
    minte.
 3. ⚪ **Lasă-le** — dar atunci știi că nu fac nimic în niciun sens, ceea ce acum e scris aici.
 
-*Separat de asta: tabelele sunt goale. Dacă te așteptai ca pooling-ul sau override-urile să aibă
-date, asta e o a doua întrebare — de ce nu se populează — și n-am investigat-o.*
+### 🔎 Am investigat și a doua întrebare — de ce sunt goale tabelele. Răspunsuri DIFERITE.
+
+**`ml_feature_global_overrides` — SĂNĂTOS.** Scriitorul e `R5B_governance/autoQuarantine.js:111`,
+care **e cablat**: apare în `cron/coldPathCron.js` și `cron/mlScanCron.js`. Tabela e goală pur și
+simplu fiindcă **nimic n-a fost pus în carantină**. Nu e bug. Resolverul chiar ar citi date dacă ar
+exista.
+
+**`ml_pooled_evidence` — MODUL ORFAN.** `ml/_ring5/pooledEvidence.js` exportă
+`refresh / get / incrementStaleness` și **nimic din tot serverul nu-l încarcă** — nici require
+static, nici cale dinamică, nici intrare în registrul de cron (am verificat special, fiindcă
+`autoQuarantine` e încărcat prin șir de cale și un grep naiv l-ar fi ratat).
+
+**Deci pooling-ul nu face nimic nu fiindcă flagul e stins, ci fiindcă modulul nu e chemat de
+nimeni.** Flagul era o pistă falsă.
+
+**Și partea care doare:** modulul **are teste** — `tests/unit/ml/pooledEvidence.test.js` — care trec.
+Acoperire vacuă: testele dovedesc că funcțiile sunt corecte, nu că e cineva care le cheamă. Exact
+tiparul pe care l-am întâlnit de trei ori în seara asta la propriile mele teste.
+
+**A opta instanță** din clasa serii.
+
+**🙋 Decizia lui, a doua:** `pooledEvidence` se **cablează** (undeva în ciclul Ring5, lângă
+`banditEvidence`) sau se **șterge** cu tot cu teste? Momentan e cod mort care arată viu — are teste,
+are tabelă, are migrație, și n-a rulat niciodată.
 
 ---
 ## 🛡️ 2026-10-14, 21:05 — FIXAT CU TESTE: singurul lucru care te apără de execuție dublă
