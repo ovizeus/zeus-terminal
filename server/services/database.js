@@ -2,6 +2,22 @@
 // Per-user isolation: users + exchange_accounts
 'use strict';
 
+// [2026-10-14] Background crons must not arm under a test runner.
+//
+// Five of them are scheduled from bare module-load timers below — daily backup,
+// audit retention, restore probe, restart-count check, anomaly detector. Any
+// suite that imports this module and runs past those delays started them, which
+// leaked timers past teardown and wrote real database copies into test temp
+// dirs (/tmp/r7-tracer-*/db_backups).
+//
+// The serious part is that ALL FIVE can send Telegram. A long test run could
+// put genuine-looking production alerts on the operator's phone — a restart
+// spike, a trading anomaly, a failed backup — none of them real.
+//
+// Only the SCHEDULING is gated; the crons themselves are untouched. Same guard
+// as migrationFlags.js, logger.js and the serverAT watchdog.
+const _UNDER_TEST = !!process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test';
+
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -11124,8 +11140,8 @@ function _runDailyBackup() {
     }
 }
 // Run backup check every hour + once at startup (after 30s)
-setTimeout(_runDailyBackup, 30000);
-setInterval(_runDailyBackup, 3600000);
+if (!_UNDER_TEST) setTimeout(_runDailyBackup, 30000);
+if (!_UNDER_TEST) setInterval(_runDailyBackup, 3600000);
 
 // ─── [OPS-7] audit_log retention cron ───────────────────────────────
 // Audit_log was unbounded — 47,988 rows în 52 days at audit time would
@@ -11150,8 +11166,8 @@ function _runAuditLogRetention() {
         try { require('./telegram').send(`⚠️ Audit log retention failed: ${err.message}`); } catch (_) { }
     }
 }
-setTimeout(_runAuditLogRetention, 60000);   // 60s post-boot
-setInterval(_runAuditLogRetention, 3600000); // hourly check, day-tracked
+if (!_UNDER_TEST) setTimeout(_runAuditLogRetention, 60000);   // 60s post-boot
+if (!_UNDER_TEST) setInterval(_runAuditLogRetention, 3600000); // hourly check, day-tracked
 
 // ─── [OPS-3] DB restore probe cron ──────────────────────────────────
 // Backups were Schrödinger's — created daily but never tested. Weekly
@@ -11195,8 +11211,8 @@ function _runRestoreProbe() {
         try { require('./telegram').send(`⚠️ DB restore probe error: ${err.message}`); } catch (_) { }
     }
 }
-setTimeout(_runRestoreProbe, 90000);    // 90s post-boot (after backup cron settled)
-setInterval(_runRestoreProbe, 3600000); // hourly check; day-tracked + DOW-gated
+if (!_UNDER_TEST) setTimeout(_runRestoreProbe, 90000);    // 90s post-boot (after backup cron settled)
+if (!_UNDER_TEST) setInterval(_runRestoreProbe, 3600000); // hourly check; day-tracked + DOW-gated
 
 // ─── [OPS-5] PM2 restart count alert cron ───────────────────────────
 // PM2 was at 167 restarts în 20 days at audit baseline = ~8/day. Pattern
@@ -11227,8 +11243,8 @@ function _runRestartCountCheck() {
         console.error('[DB] Restart count check failed:', err.message);
     }
 }
-setTimeout(_runRestartCountCheck, 120000);   // 2min post-boot
-setInterval(_runRestartCountCheck, 3600000); // hourly day-tracked
+if (!_UNDER_TEST) setTimeout(_runRestartCountCheck, 120000);   // 2min post-boot
+if (!_UNDER_TEST) setInterval(_runRestartCountCheck, 3600000); // hourly day-tracked
 
 // ─── [SEC-22] Trading anomaly detector ──────────────────────────────
 // Sudden volume spikes (100 trades/min) = compromised account or runaway
@@ -11259,8 +11275,8 @@ function _runAnomalyDetector() {
         console.error('[DB] Anomaly detector failed:', err.message);
     }
 }
-setTimeout(_runAnomalyDetector, 150000);    // 2.5min post-boot
-setInterval(_runAnomalyDetector, 5 * 60 * 1000); // every 5min
+if (!_UNDER_TEST) setTimeout(_runAnomalyDetector, 150000);    // 2.5min post-boot
+if (!_UNDER_TEST) setInterval(_runAnomalyDetector, 5 * 60 * 1000); // every 5min
 
 process.on('exit', closeDb);
 
