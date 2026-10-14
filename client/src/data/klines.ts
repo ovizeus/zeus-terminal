@@ -15,6 +15,28 @@ import { _getCooldownMs, isArmAssistValid , brainThink } from '../engine/brain'
 import { macroAdjustEntryScore } from '../trading/risk'
 import { isCurrentTimeOK } from '../ui/render'
 import { placeAutoTrade , atLog } from '../trading/autotrade'
+import { computeFusionDecision } from '../trading/autotrade'
+
+// [2026-10-14] Should the scanner emit the PRIMARY parity row for the chart
+// symbol? Only when autotrade.ts has stood down, i.e. when the SERVER owns
+// execution. Otherwise runAutoTradeCheck emits it and we would double the
+// PRIMARY sample — silently biasing the very evidence the harness exists to
+// collect.
+//
+// Mirrors _isServerDemoATActive in autotrade.ts exactly: a strict true on the
+// flag plus mode === 'demo'. Strict, because w._serverATEnabled is undefined
+// until the AT-state sync lands and a loose check would emit during the boot
+// window against nothing.
+export function shouldEmitPrimaryParity(
+  serverATEnabled: unknown, serverATDemoEnabled: unknown, atMode: unknown,
+): boolean {
+  try {
+    if (serverATEnabled === true) return true
+    if (serverATDemoEnabled !== true) return false
+    return String(atMode || '').toLowerCase() === 'demo'
+  } catch (_) { return false }
+}
+
 import { _isDegradedOnly } from '../utils/guards'
 import { MSCAN_SYMS } from '../core/config'
 import { useBrainStore } from '../stores/brainStore'
@@ -340,6 +362,30 @@ export async function runMultiSymbolScan() {
         // so the report can cleanly separate PRIMARY agreement (chart symbol
         // via computeFusionDecision, mirrors server pipeline) from COVERAGE
         // agreement (per-symbol directional-only). S4 verdict uses PRIMARY.
+        // [2026-10-14] PRIMARY for the chart symbol. klines.ts already documents
+        // the intent — "PRIMARY agreement (chart symbol via
+        // computeFusionDecision, mirrors server pipeline)" — and excluded it
+        // only because autotrade.ts was expected to cover it. It cannot: with
+        // the server owning AT, runAutoTradeCheck returns before its emit, so
+        // primaryPairs stayed 0 and the migration gate could never be met.
+        // Emitted here ONLY when the server owns AT, so the two emitters are
+        // mutually exclusive.
+        if (sym === getSymbol() && shouldEmitPrimaryParity(w._serverATEnabled, w._serverATDemoEnabled, getATMode())) {
+          try {
+            const _fc = computeFusionDecision()
+            if (_fc) {
+              api.raw<any>('POST', '/api/brain/parity/client', {
+                symbol: sym,
+                dir: _fc.dir || 'neutral',
+                decision: _fc.decision || 'NO_TRADE',
+                confidence: _fc.confidence != null ? _fc.confidence : 0,
+                score: _fc.score != null ? _fc.score : 0,
+                reasons: Array.isArray(_fc.reasons) ? _fc.reasons.slice(0, 8) : [],
+                ts: Date.now(),
+              }).catch(() => { /* parity harness is best-effort */ })
+            }
+          } catch (_) { /* never let a diagnostic disturb the scan */ }
+        }
         if (sym !== getSymbol()) {
           try {
             const _isDir = dir === 'bull' || dir === 'bear'
