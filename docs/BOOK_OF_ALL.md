@@ -419,8 +419,8 @@ candidati initiali                                    30
 **Orfani reali: 2.**
 | fișier | linii | dovadă |
 |---|---|---|
-| `services/tabSync.ts` | 134 | singura mențiune în tot clientul e un **comentariu** în `utils/tabVisibility.ts:5` („see tabSync.ts") |
-| `components/trading/PositionTable.tsx` | 87 | două mențiuni, ambele **comentarii** (`liveApi.ts:466`, `marketDataTrading.ts:556`) |
+| `services/tabSync.ts` | 70 | singura mențiune în tot clientul e un **comentariu** în `utils/tabVisibility.ts:5` („see tabSync.ts") |
+| `components/trading/PositionTable.tsx` | 102 | două mențiuni, ambele **comentarii** (`liveApi.ts:466`, `marketDataTrading.ts:556`) |
 
 `PositionTable` îl știam: l-am întâlnit pe 11 oct vânând crash-ul `toFixed`, unde avea
 `pos.price.toFixed(2)` nepăzit și l-am clasat „cod mort, nerandat". **Acum e confirmat printr-a doua
@@ -440,7 +440,7 @@ mort un modal pe care-l deschizi din interfață.**
 **Un „orfan" e o afirmație care cere trei metode de căutare, nu una.**
 
 ### 🙋 Decizia lui
-Cele două fișiere (221 de linii) se **șterg** sau se **păstrează**? `PositionTable` e deja de două ori
+Cele două fișiere (172 de linii) se **șterg** sau se **păstrează**? `PositionTable` e deja de două ori
 confirmat mort. Nu le-am atins — ștergerea de cod e decizia proprietarului, iar lecția din b267/b268
 (panourile LIQ și S/R) e că el vrea să vadă lista înainte.
 
