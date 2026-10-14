@@ -909,7 +909,11 @@ trecută" nu e dovadă că e sigur. Pe felii: **9426 trecute, 0 picate**.
   cauți ceva în ele. **Nereparat.**
 
 ---
-## ✅ 2026-10-14 — BUG TELEGRAM REPARAT (în working tree; **așteaptă reload**)
+## ✅ 2026-10-14 — BUG TELEGRAM REPARAT ȘI LIVRAT (b273, reload 20:54 — **zero eșecuri de atunci**)
+
+> **Actualizat 21:50:** livrat în b273 la reload-ul de 20:54. Verificat: **0 eșecuri** în cele ~55
+> de minute de atunci, față de ~9-10/oră înainte. Titlul inițial spunea „așteaptă reload" și a rămas
+> în urmă — corectat, fiindcă te-ar fi făcut să crezi mâine că fixul nu e aplicat.
 
 ~500 trimiteri eșuate în 3 zile (209 / 86 / 212). `parse_mode='Markdown'` tratează `_ * \`` drept
 delimitatori; string-urile-mașină interpolate în șabloane (`LIVE_NO_SL`, `SMART_CUT`, orice
