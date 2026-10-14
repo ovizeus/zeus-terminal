@@ -427,10 +427,28 @@ Ultima zonă. Un endpoint înregistrat pe care nu-l cheamă nimeni e aceeași cl
 `/api/dashboard`, `/api/diag/liq-feed`, `/api/userdatastream/health` — sunt endpointuri de operare,
 chemate prin curl/monitorizare, nu din client. Zero apeluri din client **nu** înseamnă moarte acolo.
 
-### 🟠 `/api/panic` merită o privire separată
-E butonul de panică și **n-a fost apelat niciodată** în fereastra de loguri. Asta nu e un bug — o
-urgență e rară. Dar e o cale pe care te-ai baza exact în cel mai prost moment, și care n-a fost
-exercitată niciodată. **Merită un test, nu o ștergere.**
+### ✅ `/api/panic` — VERIFICAT ȘI FIXAT CU TESTE (nu doar semnalat)
+E butonul de panică și **n-a fost apelat niciodată** în fereastra de loguri. Nu e un bug — o urgență
+e rară — dar e calea pe care te-ai baza în cel mai prost moment, și nu era nici exercitată, nici
+fixată.
+
+**Întrebarea care conta nu era dacă endpointul răspunde, ci dacă armarea chiar BLOCHEAZĂ.** Un buton
+de panică ce setează un flag pe care nimic nu-l citește ar fi exact clasa serii — dar aici
+catastrofal, nu doar neglijent.
+
+**Verificat: ESTE aplicat, în 7 locuri** — 3 în rutele de plasare a ordinelor (`routes/trading.js`)
+și 4 pe căile de intrare din `serverAT.js`. Iar citirea e **fail-closed**: dacă starea nu se poate
+citi, răspunde *„defaulting to HALTED for safety"*. Era să dau o a cincea alarmă falsă în seara asta.
+
+**`tests/unit/panic-halt-enforced.test.js` fixează asta** — fiindcă aplicarea e împrăștiată în 7
+locuri și nimic nu afirma că există. Scoți unul și butonul merge **pe jumătate**; ai afla fix în
+urgența pe care trebuia s-o oprească.
+
+Cele 6 teste verifică: armarea e **doar pentru admin**; nu se armează cu o valoare „adevărată" care
+nu e boolean; oprirea e aplicată pe rutele de ordine **și** pe căile motorului; citirea eșuează
+**închis**; plus o gardă că fișierele chiar au fost citite (altfel toate ar trece vacuu).
+
+**Mutație dublă:** scot o gardă din rutele de plasare → pică; rup fail-closed → pică.
 
 ### 🙋 Decizia lui
 Cele 8 (fără `/api/panic`) se **scot** sau rămân? `/api/at/reset` și `/api/at/resume` mută stare de
