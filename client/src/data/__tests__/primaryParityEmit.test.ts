@@ -67,3 +67,46 @@ describe('PRIMARY parity is emitted exactly once', () => {
     expect(shouldEmitPrimaryParity(1 as never, false, 'demo')).toBe(false)
   })
 })
+
+// A decision helper nothing calls is the same bug as a balancer nothing calls —
+// which is exactly what bit me earlier tonight in telegram.js. These assert the
+// WIRING at the emit site, not just the decision in isolation.
+describe('the emit site actually uses the decision', () => {
+  const SRC = require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'klines.ts'), 'utf8')
+
+  it('the PRIMARY branch is guarded by shouldEmitPrimaryParity', () => {
+    expect(SRC).toMatch(/sym === getSymbol\(\)\s*&&\s*shouldEmitPrimaryParity\(/)
+  })
+
+  it('it passes the real runtime inputs, not constants', () => {
+    expect(SRC).toMatch(/shouldEmitPrimaryParity\(w\._serverATEnabled,\s*w\._serverATDemoEnabled,\s*getATMode\(\)\)/)
+  })
+
+  it('it posts to the parity endpoint via computeFusionDecision', () => {
+    const i = SRC.indexOf('shouldEmitPrimaryParity(w._serverATEnabled')
+    const block = SRC.slice(i, i + 900)
+    expect(block).toMatch(/computeFusionDecision\(\)/)
+    expect(block).toMatch(/'\/api\/brain\/parity\/client'/)
+  })
+
+  it('the PRIMARY payload carries NO MultiScan_coverage tag', () => {
+    // That tag is what classifies a row as COVERAGE. If it leaked into this
+    // payload the row would be filed on the wrong track and primaryPairs would
+    // stay 0 — the bug would look fixed and not be.
+    const i = SRC.indexOf('shouldEmitPrimaryParity(w._serverATEnabled')
+    const block = SRC.slice(i, i + 900)
+    expect(block).not.toMatch(/MultiScan_coverage/)
+  })
+
+  it('the COVERAGE branch still excludes the chart symbol — no overlap', () => {
+    expect(SRC).toMatch(/if \(sym !== getSymbol\(\)\) \{/)
+  })
+
+  it('a failing POST cannot disturb the scan', () => {
+    const i = SRC.indexOf('shouldEmitPrimaryParity(w._serverATEnabled')
+    const block = SRC.slice(i, i + 900)
+    expect(block).toMatch(/\.catch\(/)
+    expect(block).toMatch(/try \{/)
+  })
+})
