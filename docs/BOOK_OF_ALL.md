@@ -911,7 +911,7 @@ trecută" nu e dovadă că e sigur. Pe felii: **9426 trecute, 0 picate**.
 ---
 ## ✅ 2026-10-14 — BUG TELEGRAM REPARAT ȘI LIVRAT (b273, reload 20:54 — **zero eșecuri de atunci**)
 
-> **Actualizat 21:50:** livrat în b273 la reload-ul de 20:54. Verificat: **0 eșecuri** în cele ~47
+> **Actualizat 21:41:** livrat în b273 la reload-ul de 20:54. Verificat: **0 eșecuri** în cele ~47
 > de minute de atunci (20:54 → 21:41), față de ~9-10/oră înainte. Titlul inițial spunea „așteaptă reload" și a rămas
 > în urmă — corectat, fiindcă te-ar fi făcut să crezi mâine că fixul nu e aplicat.
 
