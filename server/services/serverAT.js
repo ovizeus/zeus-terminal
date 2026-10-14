@@ -6815,11 +6815,26 @@ async function _watchdogLiveNoSL() {
 }
 
 // Start watchdog on module load (delayed 15s for boot settling)
+//
+// [2026-10-14] Not under a test runner. This was a bare setTimeout, so ANY
+// suite that imports serverAT and runs longer than 15s armed a 30s interval
+// that nothing ever cleared. It then kept firing after teardown: 34 copies of
+// "Cannot log after tests are done" in one sharded run, a failure that would
+// not reproduce, and a worker kept alive. It also wrote
+// "LIVE_NO_SL watchdog started" into the production log, which I then chased
+// as if it were a live 30s alert cycle.
+//
+// The watchdog itself is money-path safety — it repairs positions left without
+// a stop loss — and is deliberately UNCHANGED. Only its scheduling is gated,
+// and only under a test runner, exactly as migrationFlags.js and logger.js do.
+const _WATCHDOG_UNDER_TEST = !!process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test';
 let _watchdogTimer = null;
-setTimeout(() => {
-    _watchdogTimer = setInterval(_watchdogLiveNoSL, WATCHDOG_INTERVAL_MS);
-    logger.info('WATCHDOG', `LIVE_NO_SL watchdog started — interval ${WATCHDOG_INTERVAL_MS / 1000}s`);
-}, 15000);
+if (!_WATCHDOG_UNDER_TEST) {
+    setTimeout(() => {
+        _watchdogTimer = setInterval(_watchdogLiveNoSL, WATCHDOG_INTERVAL_MS);
+        logger.info('WATCHDOG', `LIVE_NO_SL watchdog started — interval ${WATCHDOG_INTERVAL_MS / 1000}s`);
+    }, 15000);
+}
 
 // [AUDIT-20260619 P2] R-multiple for ML attribution. Zero-guard on the
 // DENOMINATOR (slPct) — the old inline `Math.abs(pnlPct / slPct || 1)` guarded
@@ -6854,6 +6869,8 @@ function _isSLImprovement(side, oldSL, newSL) {
 }
 
 module.exports = {
+    // test-only: assert the watchdog scheduling guard rather than trusting it
+    _watchdogArmedForTest: () => _watchdogTimer !== null,
     processBrainDecision,
     onPriceUpdate,
     _disasterStopPrice,

@@ -45,14 +45,24 @@ describe('interRingTracer.wrap', () => {
         expect(row.input_summary.length).toBeLessThanOrEqual(200);
     });
 
+    // [2026-10-14] Was flaky: it slept 5ms and asserted duration_ms >= 5, which
+    // asserts the CLOCK rather than the behaviour. setTimeout may fire a hair
+    // early and Date.now() has 1ms granularity, so the measurement occasionally
+    // lands on 4 and the whole suite goes red for no reason. Caught during a
+    // sharded full run: one failure that would not reproduce on re-run.
+    //
+    // The intent — proving the wrapper actually awaits and times the async call
+    // — is kept, with a 5x margin so timer jitter cannot decide the outcome.
     test('wrap captures async functions correctly', async () => {
-        const asyncFn = async (n) => { await new Promise(r => setTimeout(r, 5)); return n * 2; };
+        const SLEEP_MS = 25;
+        const asyncFn = async (n) => { await new Promise(r => setTimeout(r, SLEEP_MS)); return n * 2; };
         const wrapped = tracer.wrap('caller', 'callee', 'asyncMul', asyncFn);
         const result = await wrapped(4);
         expect(result).toBe(8);
         const rows = db.prepare("SELECT * FROM ml_inter_ring_trace").all();
         expect(rows.length).toBe(1);
         expect(rows[0].ok).toBe(1);
+        // Well below SLEEP_MS: this proves it awaited, without racing the clock.
         expect(rows[0].duration_ms).toBeGreaterThanOrEqual(5);
     });
 
