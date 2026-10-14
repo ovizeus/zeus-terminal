@@ -286,6 +286,47 @@ livra `null` pe un câmp tipat `number`, chiar dacă serverul „garantează" un
 ban Binance `0` înainte și după.
 
 ---
+## 🔍 2026-10-14, 21:10 — AUDIT: două flag-uri PORNITE care nu fac nimic
+
+Am baleiat toate cele **34 de flag-uri ON** (din API-ul viu, 38 total) și am numărat cine le citește,
+excluzând definiția, changelog-ul și testele.
+
+### 🔴 Două flag-uri ON cu ZERO cititori funcționali
+| flag | unde apare | verdict |
+|---|---|---|
+| `ML_HYBRID_POOLING_ENABLED` | definiție + getter + un test care listează nume | **inert** |
+| `ML_OVERRIDE_RESOLVER_ENABLED` | definiție + getter + același test | **inert** |
+
+Comentariile le descriu drept *„Cornercase A hybrid partial pooling"* și *„Cornercase B 7-layer
+effectiveStatus"* — specificate, flag-uite, **niciodată conectate**. Operatorul le-a pornit (sunt
+`MODIFIED` față de default-ul `false`) și crede că rulează. Nu rulează.
+
+Testul `tests/unit/ml/omegaFlags.test.js` afirmă doar `expect(MF).toHaveProperty(flagName)` — deci
+trece **vacuu** pentru un flag inert. Un flag care există nu e un flag care face ceva.
+
+**A șasea și a șaptea instanță** din clasa serii: aprins și inert.
+
+### ✅ Verificat și NEGAT: `BYBIT_TESTNET_ENABLED` NU e inert
+Apărea cu 0 referințe, dar e folosit în **mutex** (`migrationFlags.js:287`), unde **blochează**
+`BYBIT_LIVE_ENABLED`. E un interblocaj de siguranță, nu un flag mort. **Nu-l atinge.**
+
+### 🎓 Trei capcane de măsurare pe care le-am călcat în 10 minute — de evitat la următorul audit
+1. **`JEST_WORKER_ID=1` face flag-urile să citească DEFAULT-URILE.** Îl setasem ca să nu pornesc
+   cron-urile (garda adăugată tot azi), dar `migrationFlags.js` folosește sub test un fișier
+   temporar și pornește de la `DEFAULTS` — deci primul meu audit măsura altceva decât realitatea.
+   **Sursa autoritară e API-ul viu:** `curl -s http://127.0.0.1:3000/api/migration/flags`.
+2. **`grep -vi "test"`** (ca să exclud testele) elimină orice linie care conține „test" — **inclusiv
+   numele flag-urilor cu `TESTNET`**, care apăreau fals cu zero cititori. Exclude după **cale**
+   (`__tests__/`, `/tests/`, `.test.`), nu după conținut.
+3. **`zeus` nu poate scrie în scratchpad-ul lui root** — scriptul a eșuat tăcut cu stderr ascuns și
+   am analizat un fișier vechi. Dacă ascunzi stderr, verifică întâi că fișierul chiar s-a creat.
+
+### 🙋 Decizia lui
+Cele două flag-uri ML: **le conectăm** (muncă reală, specificația există în comentarii) sau **le
+scoatem** din listă, ca pagina de Flags să nu mai mintă? Momentan ele promit o funcționalitate
+inexistentă — exact ca panoul LIQ și cel S/R, pe care le-am scos în b267/b268.
+
+---
 ## 🛡️ 2026-10-14, 21:05 — FIXAT CU TESTE: singurul lucru care te apără de execuție dublă
 
 Descoperit în timpul diagnosticului de mai jos, și e mai important decât el.
