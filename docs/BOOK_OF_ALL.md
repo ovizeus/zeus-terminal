@@ -406,6 +406,38 @@ autoritate (ieșirea 2 recomandată), rândurile de server devin **imediat** uti
 să se formeze. A îngusta acum scopul ar trebui refăcut mâine. Risipa e mărginită; munca inutilă nu.
 
 ---
+## 🔌 2026-10-14, 22:15 — RUTE API MOARTE: 9 din 43, confirmate prin 3 metode
+
+Ultima zonă. Un endpoint înregistrat pe care nu-l cheamă nimeni e aceeași clasă.
+
+**Metodă triplă**, fiindcă oricare singură ar fi mințit:
+1. zero referințe în `client/src` — *dar clientul putea construi URL-ul dinamic*;
+2. nicio construcție dinamică (`'/api/at/' +`, `` `/api/at/${` ``) — *dar putea chema aplicația Android*;
+3. **zero apeluri în ~14 zile de loguri nginx** — asta închide discuția.
+
+| rută | observație |
+|---|---|
+| `/api/at/positions`, `/api/at/balance`, `/api/at/log` | citiri, înlocuite de WS/sync |
+| `/api/at/reset`, `/api/at/resume` | **mută stare AT** — suprafață de atac fără utilizator |
+| `/api/brain/status`, `/api/brain/log` | citiri |
+| `/api/tc/current` | citire |
+| `/api/panic` | 🟠 **niciodată apelat în 14 zile** |
+
+**NU sunt moarte** (le-am exclus deliberat): `/api/health/full`, `/api/sd/health`, `/api/ws/health`,
+`/api/dashboard`, `/api/diag/liq-feed`, `/api/userdatastream/health` — sunt endpointuri de operare,
+chemate prin curl/monitorizare, nu din client. Zero apeluri din client **nu** înseamnă moarte acolo.
+
+### 🟠 `/api/panic` merită o privire separată
+E butonul de panică și **n-a fost apelat niciodată** în fereastra de loguri. Asta nu e un bug — o
+urgență e rară. Dar e o cale pe care te-ai baza exact în cel mai prost moment, și care n-a fost
+exercitată niciodată. **Merită un test, nu o ștergere.**
+
+### 🙋 Decizia lui
+Cele 8 (fără `/api/panic`) se **scot** sau rămân? `/api/at/reset` și `/api/at/resume` mută stare de
+AutoTrade — o rută care schimbă starea și n-are niciun utilizator e suprafață de atac fără beneficiu.
+Nu le-am atins: ștergerea de rute e decizia proprietarului.
+
+---
 ## ⏰ 2026-10-14, 22:10 — CRON-URILE: toate 7 sănătoase (verificat prin date, nu prin loguri)
 
 Ultima zonă: cron-uri înregistrate care nu pornesc ar fi aceeași clasă — întreținere care tace.
