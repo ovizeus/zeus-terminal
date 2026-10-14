@@ -324,6 +324,17 @@ SELECT source, COUNT(*) FROM brain_parity_log WHERE created_at > <acum-10min> GR
 Trebuie să apară rânduri `client` **fără** eticheta `MultiScan_coverage`.
 Apoi: `node -e "..."` pe `queryParityReport` → `totals.primaryPairs` trebuie să crească de la 0.
 
+### ✅ Verificat în OCTEȚII LIVRAȚI, nu doar în sursă
+Construisem bundle-ul fără să confirm că pornește — un gol real: o eroare la nivel de modul i-ar fi
+dat aplicația moartă dimineața. Verificat acum:
+- bundle-ul **parsează** ca JS valid (`node --check`, ESM);
+- garda a supraviețuit minificării, intactă:
+  `t === on() && Lc(Rc._serverATEnabled, Rc._serverATDemoEnabled, An())` → `C_()` →
+  `POST /api/brain/parity/client`, unde `t === on()` e `sym === getSymbol()`, `Lc` e
+  `shouldEmitPrimaryParity` și `C_` e `computeFusionDecision`;
+- **3** POST-uri de paritate în bundle — cele două din `autotrade.ts` plus cel nou. Exact cât trebuie:
+  dacă ar fi fost 4, aș fi dublat emitul fără să-mi dau seama.
+
 **Revenire, dacă nu-ți place:** `git revert <commit>` + `npm run build`. Nu atinge serverul.
 
 ---
