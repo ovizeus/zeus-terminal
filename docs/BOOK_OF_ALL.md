@@ -299,16 +299,27 @@ Am dus la capăt întrebarea „de ce nu emite PRIMARY". Răspunsul e structural
 Comentariul din `klines.ts` e explicit: *„S4 verdict uses PRIMARY."* Și al rutei: gate-urile
 **MUST read totals.primaryAgreementPct ONLY**.
 
-### De ce PRIMARY e mereu zero — dovedit static
-`runAutoTradeCheck` are exact trei `return`-uri înainte de blocul PRIMARY:
+### De ce PRIMARY e mereu zero — linia exactă, dovedită static
+**CORECTEZ o presupunere proprie:** bănuisem `getATEnabled()` (linia 714). **Nu e el.**
+`runAutoTradeCheck` iese cu **două linii mai sus de ce credeam**:
 ```
-708  if (typeof TabLeader !== 'undefined' && !TabLeader.checkLeader()) return
+687  if (w._serverATEnabled) { ...UI... return }            // [AT-UNIFY] serverul e sursa de adevar
+701  if (_isServerDemoATActive()) { ...UI... return }        // [S6-B5] serverul are autoritate pe DEMO  ← IESE AICI
+708  if (!TabLeader.checkLeader()) return
 712  if (AT.running) return
 714  if (!getATEnabled() || getATKillTriggered()) return
-717  ← blocul PRIMARY
+717  ← blocul PRIMARY (nu se atinge niciodata)
 ```
-Scanarea multi-simbol (COVERAGE) e în **alt fișier** și nu trece prin ele — de-aia avem 101 rânduri
-de acoperire și **zero** PRIMARY.
+El tradează **demo** cu `SERVER_AT_DEMO` pornit → `_isServerDemoATActive()` e adevărat → ieșire la
+**705**. Scanarea multi-simbol (COVERAGE) e în **alt fișier** și nu trece prin niciuna — de-aia avem
+101 rânduri de acoperire și **zero** PRIMARY.
+
+### ✅ Verificat și LINIȘTITOR: nu există risc de execuție dublă
+Am verificat dacă `SERVER_AT_DEMO` + `CLIENT_AT` (ambele ON acum) pot tranzacționa în paralel.
+**Mutex-ul NU acoperă perechea asta** — dar clientul se dă singur la o parte, în trei locuri:
+`autotrade.ts:687`, `:940` (*„[LOCKED] Server AT active — client trade blocked"*) și `:1486`.
+Deci configurația actuală e sigură. *(Că protecția e în cod și nu în mutex rămâne o fragilitate:
+cine citește doar `migrationFlags.js` ar crede că e permisă dubla execuție.)*
 
 ### 🔴 DEPENDENȚA CIRCULARĂ — ăsta e adevăratul blocaj
 Harnașamentul a fost proiectat când **clientul** rula AutoTrade. Operatorul are acum
@@ -326,8 +337,10 @@ am aștepta, `primaryPairs` rămâne 0.
    serverul ar rula AT în paralel pe demo — trebuie verificat întâi că nu dublează intrări
    (`SERVER_AT_DEMO` + client AT nu sunt în mutex-ul din `migrationFlags`, ceea ce **în sine merită
    verificat**).
-2. 🟡 **Mută blocul PRIMARY deasupra lui `getATEnabled()`** (NU deasupra lui `TabLeader` — altfel
-   fiecare tab deschis emite dublat, și nici deasupra lui `AT.running` — reintrare). Paritatea e
+2. 🟡 **Mută blocul PRIMARY deasupra ieșirilor de la 687 și 701** — nu doar deasupra lui
+   `getATEnabled()`, cum scrisesem înainte de a găsi linia exactă. **NU** deasupra lui `TabLeader`
+   (altfel fiecare tab deschis emite dublat) și **nu** deasupra lui `AT.running` (reintrare).
+   Adică: imediat după `TabLeader`/`AT.running`, înainte de orice gardă de autoritate. Paritatea e
    shadow-only prin construcție, deci măsurarea ei nu trebuie să depindă de armarea execuției.
    E exact mutarea pe care b93 a făcut-o deja o dată, deasupra celorlalte gate-uri. Doar client →
    **rebuild de bundle, fără reload**.
