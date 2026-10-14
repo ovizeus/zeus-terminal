@@ -286,6 +286,65 @@ livra `null` pe un câmp tipat `number`, chiar dacă serverul „garantează" un
 ban Binance `0` înainte și după.
 
 ---
+## 🔴 2026-10-14 — INCIDENT PROVOCAT DE MINE: suita de teste a mâncat 6,6 GB și a fost ucisă de OOM
+
+Am rulat `npx jest` (toată suita, 9415 teste) pe VPS-ul **viu**. Kernelul a omorât procesul:
+```
+Out of memory: Killed process 2850387 (node) anon-rss:6620116kB UID:999
+```
+**6,6 GB din 7,7 GB.** Zeus a scăpat — online, 256 MB, fără restart, site 302 — dar **doar din noroc**:
+dacă nucleul alegea `zeus`, pica serverul de tranzacționare în timp ce ținea poziții deschise.
+
+Regula existentă („NU rula jest ca root pe VPS viu") acoperea **artefactele root**, nu **memoria**.
+Acum o acoperă și pe asta.
+
+### ➕ REGULĂ NOUĂ — R-OP-8: suita completă NU se rulează monolitic pe VPS-ul viu
+Se rulează **în felii**, care țin vârful sub ~2 GB:
+```bash
+for i in 1 2 3 4; do npx jest --forceExit --runInBand --silent --shard=$i/4; done
+```
+Prima dată aceeași suită trecuse în 247s — deci e **la limită**, nu imposibil. Faptul că „a mers data
+trecută" nu e dovadă că e sigur. Pe felii: **9426 trecute, 0 picate**.
+
+### 👀 Două observații colaterale
+- **Un test e flaky.** O felie a dat 1 eșec, iar re-rularea aceleiași felii a dat 145/145. În output
+  apare `Cannot log after tests are done` → scurgere async într-un test. Preexistent, nereparat.
+- **Testele scriu în logul de PRODUCȚIE.** `BADCOIN`, `seq=1`, `SL cancel fail` au apărut în
+  `data/logs/zeus.log` exact în fereastra rulării mele (20:03:36). Logger-ul nu e redirecționat sub
+  test. **Baza de date NU a fost atinsă** (verificat: cele mai noi rânduri din `emergency_close_queue`
+  sunt din 18 august, toate rezolvate). Impactul e că logurile devin nedemne de încredere exact când
+  cauți ceva în ele. **Nereparat.**
+
+---
+## ✅ 2026-10-14 — BUG TELEGRAM REPARAT (în working tree; **așteaptă reload**)
+
+~500 trimiteri eșuate în 3 zile (209 / 86 / 212). `parse_mode='Markdown'` tratează `_ * \`` drept
+delimitatori; string-urile-mașină interpolate în șabloane (`LIVE_NO_SL`, `SMART_CUT`, orice
+`err.message`) aduc un număr **impar** → entitate deschisă care nu se închide → 400 pe tot mesajul.
+
+**Aceeași clasă fusese reparată O DATĂ**, la `serverAT.js:380` pe 7 oct, unde comentariul scrie
+*„149× într-o singură zi"*. Reparația s-a aplicat **într-un singur loc**; alte **25** de șabloane
+interpolează nespălat, deci clasa a revenit.
+
+**Reparat la graniță, nu în cele 25 de locuri** (dintre care multe sunt în fișierul cu calea banilor):
+`_balanceMarkdown` numără delimitatorii **neescapați** și, dacă unul are număr **impar**, îl
+neutralizează peste tot. Formatarea echilibrată — `*bold*`, `` `cod` `` — trece neatinsă. Se aplică
+**înainte de prima încercare**; fallback-ul text-simplu trimite textul **original**, fiindcă fără
+`parse_mode` escape-urile s-ar vedea ca backslash-uri.
+
+**O corectură a mea, instructivă:** primul test cerea ca `DEAD_MAN_SWITCH` să fie escapat. Greșit —
+are **două** underscore-uri, număr par, deci Telegram îl **acceptă** și-l randează cu italice. Urât,
+dar **se trimite**. Doar numărul impar dă 400. Deci graniță = repară **eșecurile de trimitere**;
+cosmetica (string-uri-mașină randate italic) se repară la apelant, cum face deja `serverAT.js:380`.
+**Testul era greșit, nu codul.**
+
+14 teste, inclusiv 3 care verifică **legătura** (un balansator pe care nu-l cheamă nimeni ar fi exact
+bugul pe care-l reparăm). Mutație dublă: scot aplicarea → 2 pică; escapez și când e echilibrat → 5 pică.
+
+**NU pierdeai alerte** — `_sendWithRetry` reîncearcă text simplu. Câștigul real: coada e serializată,
+deci ~212 eșecuri/zi însemnau ~7 minute/zi de întârziere în fața alertei următoare.
+
+---
 ## ✅ 2026-10-14 — PASUL 1 LIVRAT: paritatea scrie din nou (b272 v1.7.246)
 
 Primul pas din campania de flag-uri. **Reparat, livrat, dovedit.**

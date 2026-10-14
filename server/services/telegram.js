@@ -101,10 +101,19 @@ async function _processSendQueue() {
 // [CFG-8] All sends go through _enqueueSend (rate-limit serialized).
 async function _sendWithRetry(token, chatId, text, parseMode) {
     const pm = parseMode || 'Markdown';
-    const ok = await _enqueueSend(token, chatId, text, pm);
+    // [2026-10-14] Repair unbalanced delimiters before the FIRST attempt. An odd
+    // _ * or ` from an interpolated machine string (LIVE_NO_SL, SMART_CUT, any
+    // err.message) opens an entity Telegram cannot close, so it 400s the whole
+    // message and we pay the 2s plain-text retry below. ~500 sends hit that over
+    // three days. Balanced formatting is untouched, so intentional *bold* and
+    // `code` still render.
+    const body = (pm === 'Markdown') ? _balanceMarkdown(text) : text;
+    const ok = await _enqueueSend(token, chatId, body, pm);
     if (ok) return true;
     // Fallback: retry as plain text (handles Markdown parse errors)
     await new Promise(r => setTimeout(r, 2000));
+    // Fallback sends the ORIGINAL text: with no parse_mode there are no
+    // entities, so the escapes would show up as literal backslashes.
     return _enqueueSend(token, chatId, text, null);
 }
 
@@ -284,9 +293,56 @@ function escapeMarkdown(text) {
     return String(text).replace(/([_*`\[])/g, '\\$1');
 }
 
+// [2026-10-14] Repair unbalanced legacy-Markdown delimiters before sending.
+//
+// parse_mode='Markdown' treats _ * and ` as entity delimiters. Alert templates
+// interpolate machine strings that are full of them — DEAD_MAN_SWITCH,
+// LIVE_NO_SL, exit types like SMART_CUT, anything inside err.message. An ODD
+// count opens an entity that never closes and Telegram rejects the whole
+// message with "can't parse entities ... byte offset N". That cost ~500 failed
+// sends over 2026-10-12..14 (209 / 86 / 212 a day).
+//
+// The same bug was found and fixed once before, at serverAT.js:380 on
+// 2026-10-07 ("149x in a single day"), by escaping at that ONE call site.
+// Twenty-five other templates still interpolate unescaped values, so it came
+// back. Fixing it here covers all of them without touching the money-path
+// callers, and without the sweeping escapeMarkdown() — which would also escape
+// the INTENTIONAL formatting those templates rely on.
+//
+// The rule is deliberately narrow: a delimiter is escaped throughout only when
+// its unescaped count is odd, i.e. only when it is already broken. Balanced
+// *bold* and `code` pass through untouched.
+//
+// No alert was ever lost to this — _sendWithRetry falls back to plain text —
+// but the send queue is serialized, so each failure put 2s in front of whatever
+// alert came next.
+function _balanceMarkdown(text) {
+    if (text == null) return '';
+    const src = String(text);
+    const DELIMS = ['_', '*', '`'];
+    const count = { '_': 0, '*': 0, '`': 0 };
+    // Count only UNESCAPED delimiters; a backslash neutralises the next char,
+    // so escapeMarkdown() having run first must not be undone or double-counted.
+    for (let i = 0; i < src.length; i++) {
+        const c = src[i];
+        if (c === '\\') { i++; continue; }
+        if (DELIMS.indexOf(c) !== -1) count[c]++;
+    }
+    const odd = DELIMS.filter((c) => count[c] % 2 === 1);
+    if (odd.length === 0) return src;      // every delimiter is balanced
+    let out = '';
+    for (let i = 0; i < src.length; i++) {
+        const c = src[i];
+        if (c === '\\') { out += c + (src[i + 1] || ''); i++; continue; }
+        out += (odd.indexOf(c) !== -1) ? ('\\' + c) : c;
+    }
+    return out;
+}
+
 module.exports = {
     send,
     escapeMarkdown,
+    _balanceMarkdown,
     sendToUser,
     sendToAll,
     getAllUserIds,
