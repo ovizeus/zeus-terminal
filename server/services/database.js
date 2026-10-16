@@ -11343,6 +11343,24 @@ function logHandover(userId, fromOwner, toOwner, reason) {
 // must use primaryAgreementPct for unlock decisions.
 const COVERAGE_TAG = 'MultiScan_coverage';
 
+// [2026-10-16] Which users have produced a CLIENT parity row recently?
+//
+// Used to stop the server emitting parity for users who cannot pair. A client
+// row only exists while that user has the app open, so this is the honest
+// signal for "emitting here can produce a pair". Indexed by (source, created_at).
+function getRecentClientParityUserIds(sinceMs) {
+    try {
+        const since = Number(sinceMs);
+        if (!Number.isFinite(since)) return null;
+        const rows = db.prepare(
+            "SELECT DISTINCT user_id FROM brain_parity_log WHERE source = 'client' AND created_at >= ?"
+        ).all(since);
+        return rows.map((r) => r.user_id);
+    } catch (_) {
+        return null;   // null = unknown → caller stays permissive
+    }
+}
+
 function queryParityReport(opts) {
     opts = opts || {};
     const since = opts.since != null && !isNaN(Number(opts.since)) ? Number(opts.since) : (Date.now() - 24 * 3600 * 1000);
@@ -11765,6 +11783,7 @@ module.exports = {
     listAuditLogByTarget,
     // [Phase 2 S3] Parity harness
     logParityRow,
+    getRecentClientParityUserIds,
     queryParityReport,
     // [SP2 Task 8] Handover observability
     logHandover,

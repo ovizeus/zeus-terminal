@@ -32,6 +32,16 @@ describe('SP1 _runTestnetShadowCycle', () => {
     jest.spyOn(serverAT, '_resolveExecutionEnv').mockReturnValue({ env: 'TESTNET' });
   });
 
+  // [2026-10-16] These tests are about the SCOPE (demo + testnet-live, REAL
+  // excluded). A second, orthogonal condition was added since: the server only
+  // emits for users who have produced a client parity row recently, because
+  // the others cannot pair. That filter correctly made every assertion here
+  // return an empty set — the tests caught a real behaviour change, which is
+  // the system working. Neutralised to 'unknown' (permissive) so these keep
+  // testing the one thing they are about; the activity filter has its own
+  // suite in parity-scope-active-users.test.js.
+  beforeEach(() => { brain.__sp1.setActiveParityUsersForTest(null); });
+
   afterEach(() => { brain.__sp1.setMainCycleActiveForTest(null); });
 
   // [2026-10-14] This test used to assert demo users were EXCLUDED. That scope

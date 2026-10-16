@@ -406,6 +406,52 @@ autoritate (ieșirea 2 recomandată), rândurile de server devin **imediat** uti
 să se formeze. A îngusta acum scopul ar trebui refăcut mâine. Risipa e mărginită; munca inutilă nu.
 
 ---
+## ✂️ 2026-10-16 — ÎNGUSTAT SCOPUL PARITĂȚII (comis; **așteaptă reload**)
+
+Cu cifra de 98,2% risipă, decizia a încetat să fie intuiție. Serverul emite acum paritate **doar
+pentru userii care au produs un rând de client recent** — singurii cu care se poate forma o pereche.
+
+**Două direcții, deliberat ASIMETRICE:**
+- **necunoscut** (`null`, înainte de prima interogare) → **permisiv**. O pornire la rece nu are voie
+  să piardă tăcut singura pereche care contează; câteva rânduri în plus e greșeala ieftină.
+- **cunoscut și gol** → **nimeni**. A citi „gol" ca „fără filtru" ar fi reintrodus risipa de 56×
+  fără urmă — exact clasa de bug de care e plin fișierul ăsta. **Mutația o confirmă:** inversez
+  direcția → testul pică.
+
+Interogarea e una indexată la 5 minute, nu una per user per ciclu. Verificată pe date reale, direct
+pe bază: ultimele 30 min → **nimeni** (aplicația e închisă); ultimele 72h → **uid 1**.
+Comportament rezultat: cât timp aplicația e închisă nu se scrie nimic; la ~5 minute după ce o
+deschizi, revin.
+
+**Două teste existente au picat — și au avut DREPTATE.** Cele din 14 oct verificau *scopul*
+(demo + testnet-live, REAL exclus); filtrul nou le golise rezultatul. Nu le-am mușamalizat: am
+neutralizat condiția ortogonală în ele (`setActiveParityUsersForTest(null)`), ca fiecare suită să
+testeze un singur lucru. **Sistemul a funcționat: testele au prins o schimbare reală de comportament.**
+
+**Și o greșeală de construcție a mea, prinsă tot de ele:** cârligul de test punea setul, dar
+`_runShadowForUsers` îl reîmprospăta la începutul fiecărui ciclu și îl suprascria înainte de
+aserțiune. Am adăugat o înghețare explicită.
+
+**9476 teste pe felii, 0 picate.**
+
+---
+## 🔴 2026-10-16 — INCIDENT PROVOCAT DE MINE: am pornit cron-urile într-un al doilea proces
+
+Ca să dovedesc interogarea, am rulat `node -e` cu **`NODE_ENV=production`** — ceea ce **armează
+cron-urile** din `database.js` (backup, detector de anomalii, probă de restaurare, verificare
+restarturi), **toate putând trimite Telegram**. Exact ce garda adăugată pe 14 oct trebuia să
+prevină, ocolită de mine cu un `NODE_ENV`.
+
+Procesul a atârnat **5 minute** (nu putea ieși: `setInterval`-urile țineau event loop-ul viu — chiar
+simptomul pe care l-am reparat atunci) până l-am observat și l-am omorât.
+
+**Daune: zero.** Verificat: niciun backup nou, niciun eșec Telegram, zeus intact la 1095 restarturi.
+
+**Lecția:** pentru o verificare pe baza de date, folosește `sqlite3` direct, **nu** încărca modulele
+aplicației. Am refăcut-o așa și a durat o secundă. Un `NODE_ENV=production` scris din reflex pe un
+VPS viu pornește tot ce pornește și serverul.
+
+---
 ## ✅ 2026-10-16 — POARTA CIRCULARĂ: CONFIRMATĂ PE DATE REALE
 
 Verificarea de după fixul din 14 oct. **Funcționează.**

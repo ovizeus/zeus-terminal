@@ -403,8 +403,54 @@ function _isTestnetShadowTarget(userId) {
 // come from _computeFusionParity, which is shadow-pure by construction.
 //
 // REAL stays out on purpose — nothing is gained by shadowing a real-money user.
+// [2026-10-16] Which users can a parity row actually pair with?
+//
+// Measured waste before this: the server emitted for ALL symbols x ALL users
+// every 30s — 8 x 7 = 161,280 rows a day, 304,136 in 48h — while the client
+// emits PRIMARY only for ONE user's chart symbol. One of 56 combinations could
+// pair; the rest could not BY CONSTRUCTION. A user with a closed browser emits
+// no client row, so a server row for them has nothing to meet, ever.
+//
+// Refreshed on a slow cadence (one query per window, not per user per cycle),
+// so this costs a single indexed lookup every few minutes.
+//
+// Two directions matter and they are NOT symmetric:
+//   • unknown (null, before the first refresh) → PERMISSIVE. A cold start must
+//     not silently drop the one pair that matters; a few extra rows is the
+//     cheap mistake.
+//   • known and empty → nobody. Reading "empty" as "no filter" would restore
+//     the 56x waste without a trace, which is exactly the bug class this file
+//     has been full of.
+const _ACTIVE_PARITY_WINDOW_MS = 30 * 60 * 1000;   // a client row this recent means the app is open
+const _ACTIVE_PARITY_REFRESH_MS = 5 * 60 * 1000;
+let _activeParityUsers = null;     // null = not yet known
+let _activeParityTs = 0;
+let _activeParityFrozen = false;   // test-only: pin the set so the cycle cannot refresh over it
+
+function _refreshActiveParityUsers(nowTs) {
+    if (_activeParityFrozen) return;
+    if (_activeParityUsers !== null && (nowTs - _activeParityTs) < _ACTIVE_PARITY_REFRESH_MS) return;
+    try {
+        const rows = db.getRecentClientParityUserIds
+            ? db.getRecentClientParityUserIds(nowTs - _ACTIVE_PARITY_WINDOW_MS)
+            : null;
+        if (Array.isArray(rows)) {
+            _activeParityUsers = new Set(rows.map(Number));
+            _activeParityTs = nowTs;
+        }
+    } catch (_) { /* leave the previous value; never break the cycle */ }
+}
+
+function _hasRecentClientParity(userId) {
+    try {
+        if (_activeParityUsers === null) return true;   // unknown → permissive
+        return _activeParityUsers.has(Number(userId));
+    } catch (_) { return true; }
+}
+
 function _isShadowParityTarget(userId) {
     try {
+        if (!_hasRecentClientParity(userId)) return false;
         if (_isTestnetShadowTarget(userId)) return true;
         return serverAT.getMode(userId) === 'demo';
     } catch (_) { return false; }
@@ -1674,6 +1720,9 @@ function _runShadowCycle() {
 // (userId) => boolean, or null to include all _stcMap users. Writes
 // source='server' parity rows ONLY — no execution / telegram / persist.
 function _runShadowForUsers(includeUserFn) {
+    // [2026-10-16] Refresh which users can actually pair, before the filter is
+    // applied. Cheap: one indexed query per 5-minute window, not per user.
+    try { _refreshActiveParityUsers(Date.now()); } catch (_) { /* never break the cycle */ }
     const readySymbols = serverState.getReadySymbols();
     if (!readySymbols || readySymbols.length === 0) return;
     if (_stcMap.size === 0) return;
@@ -2790,6 +2839,15 @@ module.exports = {
     __sp1: {
         isTestnetShadowTarget: _isTestnetShadowTarget,
         isShadowParityTarget: _isShadowParityTarget,
+        hasRecentClientParity: _hasRecentClientParity,
+        refreshActiveParityUsers: _refreshActiveParityUsers,
+        setActiveParityUsersForTest: (v) => {
+            // Freeze too: _runShadowForUsers refreshes at the top of every
+            // cycle and would otherwise overwrite the seed with the live query
+            // before the assertion runs — which is exactly what happened.
+            _activeParityUsers = v; _activeParityTs = Date.now(); _activeParityFrozen = true;
+        },
+        unfreezeActiveParityForTest: () => { _activeParityFrozen = false; },
         runShadowForUsers: _runShadowForUsers,
         runTestnetShadowCycle: _runTestnetShadowCycle,
         fuseDecision: _fuseDecision,
