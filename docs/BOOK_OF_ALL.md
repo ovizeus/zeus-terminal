@@ -441,6 +441,29 @@ culorile normale.** Pe `candles` se potrivesc toate. Asta e singura diferență 
 pe heikin* — e singura susținută de cod și de setarea lui reală, **dar nu i-am cerut confirmarea**.
 Dacă el vede altceva (de ex. verde unde ar trebui mov), e alt drum.
 
+### ✅ REPARAT ȘI LIVRAT (bundle `index-M8NRyFwi.js`, FĂRĂ reload)
+Tint și pe Heikin Ashi, aplicat **după** transformare — trendul e per-bară și aliniat pe index, deci
+aceleași culori merg pe barele pe care chart-ul chiar le afișează. Acoperă ambele căi: randarea în
+masă (`indicators.ts`) **și** tick-ul viu (`candleTypeSwitcher`, care re-setează seria întreagă la
+fiecare tick, deci avea nevoie de **tot** vectorul de trend, nu de o singură culoare).
+
+**Un ciclu de import pe care l-am făcut și l-am desfăcut:** prima variantă punea transformarea HA în
+`candleTypeSwitcher` și o importa din `indicators`, care la rândul lui importa constantele de culoare
+înapoi — `indicators → candleTypeSwitcher → indicators`. ES modules tolerează ciclul, dar constantele
+ar fi fost `undefined` la inițializare, adică **exact culori lipsă**, ironic. Mutată în
+`indicatorCalc`, neutru, importat de ambele. Un test afirmă acum că switcher-ul **nu** importă din
+`indicators`, ca ciclul să nu revină.
+
+**Și o singură implementare:** copia locală a transformării HA din switcher deleghează acum la cea
+din `indicatorCalc`. Două copii ale unei transformări cu care tint-ul trebuie să fie de acord e
+fix felul în care culorile ar fi divergat din nou peste câteva luni.
+
+**Typecheck a prins o greșeală a mea pe drum:** 68 în loc de 67, din învelișul rămas după mutare.
+Scos; înapoi la baseline.
+
+**Mutație:** pun la loc excluderea heikin → testul pică. **Client 906/906 (124 fișiere)**,
+typecheck **67**, bundle parsează, site 302, **zero reload-uri de server**.
+
 ### ▶️ Reparația propusă
 Tint și pe Heikin Ashi. Trendul TERMINATOR e un vector per-bară aliniat pe index cu klines, deci se
 poate aplica peste barele HA **după** transformare — nu peste klines brute, ceea ce era motivul

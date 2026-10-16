@@ -5,6 +5,7 @@
 
 import { api } from '../services/api'
 import { terminator as _terminatorCalc, terminatorTintBars as _terminatorTint } from './indicatorCalc'
+import { heikinAshiBars } from './indicatorCalc'
 import { fmtTime, fmtDate, fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
 import { sendAlert } from '../data/marketDataWS'
 import { liveApiSyncState } from '../trading/liveApi'
@@ -4314,7 +4315,22 @@ export function updateTerminator(): void {
     const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
     if (w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
       w.cSeries.setData(_terminatorTint(kl, t.trend, TERMINATOR_UP, TERMINATOR_DN))
+    } else if (w.cSeries && ctype === 'heikin') {
+      // [2026-10-16] Heikin Ashi used to be excluded here, on the correct
+      // objection that its data is transformed and not raw klines. The answer
+      // was to tint AFTER the transform: the trend array is per-bar and
+      // index-aligned, so the same colours apply to the HA bars the chart
+      // actually shows. Without this the operator saw a green/magenta
+      // TERMINATOR line over ordinary-coloured candles — "the colours do not
+      // match" — on the one candle type he uses.
+      w.cSeries.setData(_terminatorTint(heikinAshiBars(kl) as any, t.trend, TERMINATOR_UP, TERMINATOR_DN))
     }
+    // Hand the live-tick path the whole trend vector so it can keep the tint
+    // on Heikin Ashi, where a single colour is not enough (it re-sets the FULL
+    // series on every tick).
+    w._termTrend = t.trend
+    w._termUpColor = TERMINATOR_UP
+    w._termDnColor = TERMINATOR_DN
     // Hand the live-tick path the active trend colour so the newest candle
     // keeps the tint between full renders (candleTypeSwitcher._applyLatestBar).
     let _lastTrend: 1 | -1 | null = null

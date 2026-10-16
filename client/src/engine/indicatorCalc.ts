@@ -3065,6 +3065,32 @@ export interface TintedBar {
   wickColor?: string
 }
 
+// [2026-10-16] Heikin Ashi transform lives here, not in the UI switcher, so
+// both the chart renderer and the TERMINATOR tint can use it without importing
+// each other. Putting it in candleTypeSwitcher created a cycle:
+// indicators -> candleTypeSwitcher -> indicators, which ES modules tolerate but
+// which would have left the colour constants undefined at init.
+export function heikinAshiBars(klines: any[]): any[] {
+  if (!klines || !klines.length) return []
+  const out: any[] = []
+  let prevO = klines[0].open
+  let prevC = klines[0].close
+  for (let i = 0; i < klines.length; i++) {
+    const k = klines[i]
+    const haClose = (k.open + k.high + k.low + k.close) / 4
+    const haOpen = i === 0 ? (k.open + k.close) / 2 : (prevO + prevC) / 2
+    out.push({
+      time: k.time, open: haOpen,
+      high: Math.max(k.high, haOpen, haClose),
+      low: Math.min(k.low, haOpen, haClose),
+      close: haClose,
+    })
+    prevO = haOpen
+    prevC = haClose
+  }
+  return out
+}
+
 export function terminatorTintBars(
   bars: { time: number; open: number; high: number; low: number; close: number }[],
   trend: (1 | -1 | null)[],

@@ -3,6 +3,7 @@
 // Supported types: candles, hollow, heikin, bars, line, line-markers, step, area, volume-candles.
 
 import { USER_SETTINGS, _usScheduleSave } from '../core/config'
+import { terminatorTintBars, heikinAshiBars } from '../engine/indicatorCalc'
 
 const w = window as any
 
@@ -39,23 +40,10 @@ function _colors() {
   }
 }
 
-function _heikinAshi(klines: any[]): any[] {
-  if (!klines.length) return []
-  const out: any[] = []
-  let prevO = klines[0].open
-  let prevC = klines[0].close
-  for (let i = 0; i < klines.length; i++) {
-    const k = klines[i]
-    const haClose = (k.open + k.high + k.low + k.close) / 4
-    const haOpen = i === 0 ? (k.open + k.close) / 2 : (prevO + prevC) / 2
-    const haHigh = Math.max(k.high, haOpen, haClose)
-    const haLow = Math.min(k.low, haOpen, haClose)
-    out.push({ time: k.time, open: haOpen, high: haHigh, low: haLow, close: haClose })
-    prevO = haOpen
-    prevC = haClose
-  }
-  return out
-}
+// [2026-10-16] Delegates to the single implementation in indicatorCalc. There
+// used to be a copy here; two copies of a transform the TERMINATOR tint must
+// agree with is exactly how the colours would drift apart again later.
+function _heikinAshi(klines: any[]): any[] { return heikinAshiBars(klines) }
 
 function _removeOldSeries() {
   try {
@@ -214,7 +202,15 @@ function _installUpdateHook() {
       if (_currentType === 'heikin') {
         // recompute entire HA — cheap for 1500 bars
         const klines = (w.S && w.S.klines) || []
-        series.setData(_heikinAshi(klines))
+        const _ha = _heikinAshi(klines)
+        // [2026-10-16] Carry the TERMINATOR tint here too. Without it the live
+        // path handed back untinted bars on every tick and Heikin Ashi lost the
+        // colours the other candle types keep.
+        if (w._termActive && Array.isArray(w._termTrend) && w._termTrend.length === _ha.length) {
+          series.setData(terminatorTintBars(_ha as any, w._termTrend, w._termUpColor, w._termDnColor) as any)
+        } else {
+          series.setData(_ha)
+        }
       } else if (_currentType === 'line' || _currentType === 'line-markers' || _currentType === 'step' || _currentType === 'area') {
         series.update({ time: bar.time, value: bar.close })
       } else if (_currentType === 'volume-candles') {
