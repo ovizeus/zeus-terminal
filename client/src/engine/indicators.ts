@@ -4211,15 +4211,28 @@ export function removeTerminatorSeries(): void {
   // Stop the live-tick path tinting too.
   w._termActive = false
   w._termLastTrendColor = null
-  // Hand the candles back: re-setting the raw klines drops the per-bar colour
-  // fields, so the series falls back to the user's own candle colours.
+  w._termTrend = null
+  // Hand the candles back: re-setting the bars without per-bar colour fields
+  // makes the series fall back to the user's own candle colours.
+  //
+  // [2026-10-16] Heikin Ashi included. This restore used to cover only
+  // candles|hollow|bars — the SAME exclusion that caused the original
+  // complaint. Once the tint learned to paint HA bars, leaving the restore
+  // behind meant switching TERMINATOR off on Heikin Ashi left the colours on
+  // screen until some later full render. Fixing one half of a pair and not its
+  // twin is the pattern this whole file keeps teaching.
   try {
     const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
-    if (w.cSeries && w.S && w.S.klines && w.S.klines.length
-      && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
-      w.cSeries.setData(w.S.klines.map((k: any) => ({
-        time: k.time, open: k.open, high: k.high, low: k.low, close: k.close,
-      })))
+    const kl = (w.S && w.S.klines) || []
+    if (w.cSeries && kl.length) {
+      if (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars') {
+        w.cSeries.setData(kl.map((k: any) => ({
+          time: k.time, open: k.open, high: k.high, low: k.low, close: k.close,
+        })))
+      } else if (ctype === 'heikin') {
+        // Same shared transform the tint uses — never a second copy.
+        w.cSeries.setData(heikinAshiBars(kl))
+      }
     }
   } catch (_) { /* best-effort */ }
 }

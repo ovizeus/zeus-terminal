@@ -151,3 +151,34 @@ describe('a newly forming bar must not flicker the whole series', () => {
     expect(branch).not.toMatch(/_termTrend\.length === _ha\.length/)      // the flickering one is not
   })
 })
+
+// [2026-10-16] The other half of the pair, which I missed first time round.
+//
+// Tinting Heikin Ashi is only half the job: removeTerminatorSeries() hands the
+// candles back by re-setting them WITHOUT colour fields, and it did that only
+// for candles|hollow|bars — the very same exclusion that caused the original
+// complaint. So after my fix, switching TERMINATOR off on Heikin Ashi would
+// have left the tinted bars on screen until some later full render.
+//
+// Fixing one side of a pair and not its twin is the exact pattern this Book
+// has been full of for two days, and I walked straight into it.
+describe('turning TERMINATOR off clears the tint on Heikin Ashi too', () => {
+  const IND = readFileSync(join(__dirname, '..', 'indicators.ts'), 'utf8')
+  const body = (() => {
+    const i = IND.indexOf('export function removeTerminatorSeries')
+    return IND.slice(i, IND.indexOf('\n}', i))
+  })()
+
+  it('the cleanup covers heikin, not just the raw candle types', () => {
+    expect(body).toMatch(/heikin/)
+  })
+
+  it('it restores HA bars through the shared transform, not a second copy', () => {
+    expect(body).toMatch(/heikinAshiBars\(/)
+  })
+
+  it('it still clears the live-tick flags', () => {
+    expect(body).toMatch(/_termActive = false/)
+    expect(body).toMatch(/_termTrend/)
+  })
+})

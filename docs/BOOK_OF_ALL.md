@@ -481,7 +481,21 @@ Reparate să taie **până la sfârșitul ramurii** (`indexOf('} else if')`), nu
 **Un test care se rupe când documentezi codul pe care-l testează e un test care pedepsește
 comportamentul corect** — iar unul care nu ajunge la linia afirmată nu testează nimic.
 
-**Mutație:** pun la loc excluderea heikin → testul pică. Pun la loc condiția strictă → pică. **Client 906/906 (124 fișiere)**,
+### 🪞 ȘI CEALALTĂ JUMĂTATE A PERECHII — pe care o ratasem
+Tint-ul pe Heikin Ashi era doar jumătate din treabă. `removeTerminatorSeries()` redă lumânările
+re-setându-le **fără** câmpuri de culoare — dar făcea asta **doar** pentru `candles|hollow|bars`,
+exact aceeași excludere care a produs reclamația inițială.
+
+Deci după primul meu fix: **stingi TERMINATOR pe Heikin Ashi și culorile rămâneau pe ecran** până la
+o randare completă ulterioară. **Am reparat o jumătate a perechii și nu geamăna ei** — fix tiparul pe
+care acest Book îl documentează de două zile, călcat de mine la două ore după ce l-am scris.
+
+Reparat: curățenia acoperă acum și heikin, prin **aceeași** transformare partajată (niciodată o a
+doua copie), și curăță și `_termTrend`. **Mutație:** scot ramura heikin din curățenie → 2 teste pică.
+
+**Client 911/911**, typecheck **67**, bundle `index-BjJoKbHZ.js`, zero reload-uri de server.
+
+**Mutație (fixul principal):** pun la loc excluderea heikin → pică. Pun la loc condiția strictă → pică. **Client 906/906 (124 fișiere)**,
 typecheck **67**, bundle parsează, site 302, **zero reload-uri de server**.
 
 ### ▶️ Reparația propusă
