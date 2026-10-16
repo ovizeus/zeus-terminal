@@ -574,7 +574,7 @@ Ultima zonă. Un endpoint înregistrat pe care nu-l cheamă nimeni e aceeași cl
 | rută | observație |
 |---|---|
 | `/api/at/positions`, `/api/at/balance`, `/api/at/log` | citiri, înlocuite de WS/sync |
-| `/api/at/reset`, `/api/at/resume` | **mută stare AT** — suprafață de atac fără utilizator |
+| `/api/at/reset`, `/api/at/resume` | ✅ **CORECTAT** — vezi mai jos |
 | `/api/brain/status`, `/api/brain/log` | citiri |
 | `/api/tc/current` | citire |
 | `/api/panic` | 🟠 **niciodată apelat în 14 zile** |
@@ -606,10 +606,23 @@ nu e boolean; oprirea e aplicată pe rutele de ordine **și** pe căile motorulu
 
 **Mutație dublă:** scot o gardă din rutele de plasare → pică; rup fail-closed → pică.
 
+### ✅ CORECTARE 2026-10-16 — NU e o problemă de securitate, cum lăsasem să se înțeleagă
+Scrisesem că `/api/at/reset` și `/api/at/resume` „mută stare AT — suprafață de atac fără
+utilizator". **Am verificat și m-am înșelat pe amândouă:**
+- `/api/at/resume` e un **GET** care citește starea propriului cont. **Nu mută nimic.** Dedusesem din
+  nume, fără să citesc.
+- `/api/at/reset` e POST, dar cheamă `serverAT.reset(_req.user.id)` — **scopat la contul
+  apelantului**. Autentificarea la nivel de user e exact potrivită; admin ar fi greșit aici.
+
+**Toate cele 8 au gardă de autentificare**; cele două de brain cer și `role === 'admin'`. Niciuna nu
+e accesibilă neautentificat.
+
+Deci rămâne **curățenie, nu securitate** — ceea ce o coboară în prioritate. „Rută moartă" nu implică
+„rută periculoasă", iar eu am sărit de la una la alta fără să citesc codul.
+
 ### 🙋 Decizia lui
-Cele 8 (fără `/api/panic`) se **scot** sau rămân? `/api/at/reset` și `/api/at/resume` mută stare de
-AutoTrade — o rută care schimbă starea și n-are niciun utilizator e suprafață de atac fără beneficiu.
-Nu le-am atins: ștergerea de rute e decizia proprietarului.
+Cele 8 (fără `/api/panic`) se **scot** sau rămân? Nu le-am atins: ștergerea de rute e decizia
+proprietarului, iar acum se știe că nu e urgentă.
 
 ---
 ## ⏰ 2026-10-14, 22:10 — CRON-URILE: toate 7 sănătoase (verificat prin date, nu prin loguri)
