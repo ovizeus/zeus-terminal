@@ -406,6 +406,48 @@ autoritate (ieșirea 2 recomandată), rândurile de server devin **imediat** uti
 să se formeze. A îngusta acum scopul ar trebui refăcut mâine. Risipa e mărginită; munca inutilă nu.
 
 ---
+## 🎨 2026-10-16 — RAPORTAT DE OPERATOR: „TERMINATOR nu bate culorile corespunzătoare"
+
+A treia oară când raportează ceva la culorile TERMINATOR (b260 „dispar la refresh" — cauza reală era
+că **toate** salvările erau respinse; b261 „se resetează la schimbarea timeframe-ului"). De data asta
+spune că **nu se potrivesc**, nu că lipsesc. **Diagnostic terminat; reparația urmează.**
+
+### Fapt stabilit: pe setarea LUI, TERMINATOR nu colorează deloc lumânările
+```
+uid 1 (el) : chartType = heikin      (actualizat azi 18:02:44)
+uid 2      : chartType = candles
+```
+`indicators.ts:4314` aplică tint-ul **doar** pentru `candles | hollow | bars`, excluzând explicit
+heikin, cu motivul scris în cod: *„data is Heikin-Ashi transformed, not raw klines"*.
+Și `candleTypeSwitcher._applyLatestBar` ramifică pe tip: pentru `heikin` recalculează întreaga serie
+HA și **nu ajunge niciodată** la ramura care aplică tint-ul.
+
+**Deci pe Heikin Ashi: linia și marcajele TERMINATOR sunt verde/mov, dar lumânările rămân cu
+culorile normale.** Pe `candles` se potrivesc toate. Asta e singura diferență reală de comportament
+între cele două tipuri și explică exact formularea lui.
+
+### 🔍 Două ipoteze proprii, verificate și RESPINSE (notate ca să nu le reia nimeni)
+1. **„Setările oferă culori pe care renderer-ul le ignoră."** NU. `state.ts:1918` dă terminatorului
+   doar `{ period: 10, mult: 3 }` — nicio culoare. Culorile sunt constante hardcodate
+   (`TERMINATOR_UP = '#05E17F'`, `TERMINATOR_DN = '#E547FC'`).
+2. **„Garda citește calea greșită, deci nu detectează heikin."** Părea tare: valoarea e stocată
+   **plat** (`$.chartType`), iar garda citește **imbricat** (`USER_SETTINGS.chart.candleType`). Dar
+   `config.ts:1831` chiar mapează plat → imbricat la hidratare. Garda vede corect `heikin`.
+3. **„Tick-ul viu colorează ultima lumânare, deci una iese din rând."** NU — ramura `heikin` din
+   `_applyLatestBar` iese înainte de codul de tint. Eram pe punctul de a raporta un bug inexistent.
+
+### ⚠️ Ce NU e încă stabilit
+„Nu bat culorile" admite mai multe citiri. Am eliminat trei; cea rămasă — *lumânările nu se colorează
+pe heikin* — e singura susținută de cod și de setarea lui reală, **dar nu i-am cerut confirmarea**.
+Dacă el vede altceva (de ex. verde unde ar trebui mov), e alt drum.
+
+### ▶️ Reparația propusă
+Tint și pe Heikin Ashi. Trendul TERMINATOR e un vector per-bară aliniat pe index cu klines, deci se
+poate aplica peste barele HA **după** transformare — nu peste klines brute, ceea ce era motivul
+original al excluderii. Atinge `indicators.ts` (tint masiv) și `candleTypeSwitcher` (ramura heikin),
+ambele doar prezentare, zero logică de tranzacționare. **Client-only → rebuild, fără reload.**
+
+---
 ## 🧹 2026-10-16 — CEA MAI MARE TABELĂ: curățenia ei era anulată de fiecare restart
 
 Am verificat o promisiune proprie („retenția mărginește risipa") și am ajuns la ceva mai mare.
