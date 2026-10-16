@@ -550,7 +550,25 @@ function start() {
         setTimeout(_runTestnetShadowCycle, 7000);
     }
     // [ML] Daily prune of old decision snapshots
-    setInterval(() => { try { brainLogger.prune(); } catch (_) {} }, 86400000);
+    // [2026-10-16] Run once shortly after boot, THEN daily.
+    //
+    // This was a bare 24h setInterval with no startup run, so the prune only
+    // happened if the process survived a full day — and every reload or crash
+    // restarted the countdown. On a process that restarts daily it never ran
+    // at all; during the 1082-restart outage it certainly did not.
+    //
+    // The residue was measurable, not theoretical: 6,684 NO_TRADE rows past
+    // their 30-day retention and 6,618 blocked_* past 90, all matching the
+    // delete criteria and all still present. brain_decisions is the largest
+    // object in the database — 1372.9 MB of 2.8 GB — so its retention is the
+    // one that matters most.
+    //
+    // Mirrors the parity prune a few lines above: a delayed boot run plus the
+    // interval. Delayed rather than immediate because boot is busy and this is
+    // maintenance, not safety.
+    const _runBrainDecisionsPrune = () => { try { brainLogger.prune(); } catch (_) {} };
+    setTimeout(_runBrainDecisionsPrune, 180000);
+    setInterval(_runBrainDecisionsPrune, 86400000);
     // [PERF-2 2026-06-01] Parity-log retention prune (keep 7 days) — batched + yielding,
     // never blocks the live writer, NO VACUUM. Runs every 30 min so the existing backlog
     // (~2.9M dsl rows) drains over a few runs, then maintains. First run 2 min after boot.
