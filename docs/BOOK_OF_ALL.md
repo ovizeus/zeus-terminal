@@ -434,6 +434,21 @@ aserțiune. Am adăugat o înghețare explicită.
 
 **9476 teste pe felii, 0 picate.**
 
+### ✅ LIVRAT ȘI MĂSURAT PE SISTEMUL VIU (reload 17:43, restart 1096)
+Fereastră de 100 de secunde, aceeași lungime, înainte vs după:
+| | useri | rânduri |
+|---|---|---|
+| înainte de reload | 8 | **224** |
+| după reload | **0** | **0** |
+
+Zero fiindcă aplicația operatorului e închisă — exact rândurile care nu puteau forma nicio pereche.
+Se auto-corectează: deschide aplicația → apar rânduri de client → în ~5 minute revin cele de server,
+dar **doar pentru el**.
+
+Fereastra de reload a fost ideală și aleasă, nu nimerită: ban `0`, warm expirat de mult,
+`consecutive_ban_count` coborât 19 → 1, **44,8h** de la reload-ul anterior și **zero poziții
+deschise**.
+
 ---
 ## 🔴 2026-10-16 — INCIDENT PROVOCAT DE MINE: am pornit cron-urile într-un al doilea proces
 
