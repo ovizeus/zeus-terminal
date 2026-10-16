@@ -99,9 +99,55 @@ describe('the heikin path is actually wired to the tint', () => {
     expect(SW).not.toMatch(/from '\.\.\/engine\/indicators'/)
   })
 
+  // Slices a window to the END of the branch, not a fixed 500 characters. The
+  // fixed window broke the moment I added an explanatory comment — the code it
+  // was checking got pushed past the cut. A test that fails when you document
+  // the thing it tests is a test that punishes the right behaviour.
   it('the live heikin branch tints too, so the newest bar does not drop out', () => {
     const i = SW.indexOf("_currentType === 'heikin'")
-    const branch = SW.slice(i, i + 500)
-    expect(branch).toMatch(/_termActive|terminatorTintBars/)
+    const end = SW.indexOf("} else if", i)
+    const branch = SW.slice(i, end > i ? end : i + 1500)
+    expect(branch).toMatch(/terminatorTintBars\(/)
+    expect(branch).toMatch(/_termActive/)
+  })
+})
+
+// [2026-10-16] A flaw I introduced in my own fix, caught before he saw it.
+//
+// The live-tick branch first required w._termTrend.length === haBars.length.
+// But a new candle makes klines grow by one while the trend vector is still
+// the one from the last full render, so the lengths differ for exactly the
+// moment a bar forms — and the whole series would fall back to untinted.
+// Every new bar would have flickered the colours off.
+//
+// terminatorTintBars already handles a short trend array: trend[i] is
+// undefined, which is neither 1 nor -1, so that bar simply gets no colour.
+// That is the right behaviour — the new bar stays uncoloured until the next
+// full render, and every bar before it keeps its tint.
+describe('a newly forming bar must not flicker the whole series', () => {
+  it('a trend vector SHORTER than the bars tints what it covers', () => {
+    const bars = heikinAshiBars([
+      { time: 1, open: 10, high: 12, low: 9, close: 11 },
+      { time: 2, open: 11, high: 14, low: 10, close: 13 },
+      { time: 3, open: 13, high: 13.5, low: 11, close: 11.5 },
+    ]) as Bar[]
+    const shortTrend = [1, -1] as (1 | -1 | null)[]   // one bar behind
+    const out = terminatorTintBars(bars, shortTrend, UP, DN)
+    expect(out[0].color).toBe(UP)
+    expect(out[1].color).toBe(DN)
+    expect(out[2].color).toBeUndefined()   // the new bar, not the whole series
+  })
+
+  // Same fixed-window trap as its sibling, and I walked into it twice: the
+  // branch is ~1150 characters and the condition sits near the end, so a
+  // 700-character slice stopped short of the very line being asserted. It
+  // passed against the mutated code. Slice to the branch end instead.
+  it('the live branch does not demand an exact length match', () => {
+    const SW = readFileSync(join(__dirname, '..', '..', 'ui', 'candleTypeSwitcher.ts'), 'utf8')
+    const i = SW.indexOf("_currentType === 'heikin'")
+    const end = SW.indexOf("} else if", i)
+    const branch = SW.slice(i, end > i ? end : i + 2000)
+    expect(branch).toMatch(/_termTrend\.length > 0/)                      // the safe form IS there
+    expect(branch).not.toMatch(/_termTrend\.length === _ha\.length/)      // the flickering one is not
   })
 })

@@ -206,7 +206,14 @@ function _installUpdateHook() {
         // [2026-10-16] Carry the TERMINATOR tint here too. Without it the live
         // path handed back untinted bars on every tick and Heikin Ashi lost the
         // colours the other candle types keep.
-        if (w._termActive && Array.isArray(w._termTrend) && w._termTrend.length === _ha.length) {
+        // [2026-10-16] No exact length match. A forming bar makes klines grow by
+        // one while _termTrend is still from the last full render, so demanding
+        // equality would drop the tint from the ENTIRE series for exactly the
+        // moment a candle appears — a flicker on every new bar. terminatorTintBars
+        // leaves bars beyond the trend vector uncoloured, which is what we want:
+        // the new bar waits for the next render, everything before it keeps its
+        // colour.
+        if (w._termActive && Array.isArray(w._termTrend) && w._termTrend.length > 0) {
           series.setData(terminatorTintBars(_ha as any, w._termTrend, w._termUpColor, w._termDnColor) as any)
         } else {
           series.setData(_ha)

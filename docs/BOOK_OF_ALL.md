@@ -461,7 +461,27 @@ fix felul în care culorile ar fi divergat din nou peste câteva luni.
 **Typecheck a prins o greșeală a mea pe drum:** 68 în loc de 67, din învelișul rămas după mutare.
 Scos; înapoi la baseline.
 
-**Mutație:** pun la loc excluderea heikin → testul pică. **Client 906/906 (124 fișiere)**,
+### 🐛 Un defect în PROPRIUL meu fix, prins înainte să-l vadă el
+Prima variantă a căii de tick viu cerea `w._termTrend.length === _ha.length`. Dar când se formează o
+lumânare nouă, klines crește cu 1 iar vectorul de trend e încă cel de la randarea anterioară — deci
+lungimile diferă **exact în momentul apariției barei**, condiția pică, și **toată seria** ar fi
+pierdut tint-ul. O pâlpâire la fiecare bară nouă.
+
+`terminatorTintBars` tolerează deja un vector mai scurt (`trend[i]` e `undefined`, deci bara rămâne
+necolorată), ceea ce e fix comportamentul dorit: bara nouă așteaptă randarea următoare, tot ce e
+înaintea ei își păstrează culoarea. Condiția e acum `length > 0`. Livrat în `index-C5Xvc6sV.js`.
+
+### 🎓 A ZECEA oară: două teste ale mele treceau pe cod nereparat, din aceeași cauză
+Ambele tăiau o **fereastră fixă** din sursă (500 și 700 de caractere) pornind de la începutul ramurii
+heikin. Ramura are ~1150 de caractere, iar codul verificat stă spre final — deci fereastra se oprea
+**înainte** de linia afirmată. Unul a picat abia când i-am adăugat un comentariu care a împins codul
+afară; celălalt trecea senin peste mutație.
+
+Reparate să taie **până la sfârșitul ramurii** (`indexOf('} else if')`), nu la un număr de caractere.
+**Un test care se rupe când documentezi codul pe care-l testează e un test care pedepsește
+comportamentul corect** — iar unul care nu ajunge la linia afirmată nu testează nimic.
+
+**Mutație:** pun la loc excluderea heikin → testul pică. Pun la loc condiția strictă → pică. **Client 906/906 (124 fișiere)**,
 typecheck **67**, bundle parsează, site 302, **zero reload-uri de server**.
 
 ### ▶️ Reparația propusă
