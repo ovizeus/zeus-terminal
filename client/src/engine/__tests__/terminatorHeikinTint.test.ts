@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { terminatorTintBars } from '../indicatorCalc'
+import { terminatorTintBars, heikinAshiBars } from '../indicatorCalc'
 
 // [2026-10-16] The operator reported for the third time that TERMINATOR's
 // colours "don't match". The first two reports were about colours vanishing
@@ -31,12 +31,11 @@ const kl: Bar[] = [
   { time: 2, open: 11, high: 14, low: 10, close: 13 },
   { time: 3, open: 13, high: 13.5, low: 11, close: 11.5 },
 ]
-// what _heikinAshi produces for the above, computed by the same formula
-const ha: Bar[] = [
-  { time: 1, open: 10.5, high: 12, low: 9, close: 10.5 },
-  { time: 2, open: 10.5, high: 14, low: 10, close: 12 },
-  { time: 3, open: 11.25, high: 13.5, low: 11, close: 12.25 },
-]
+// Derived from the REAL transform, not hand-copied. I did hand-compute these
+// first and they happened to be right — but a fixture written by the same
+// person who writes the assertion proves only that the two agree with each
+// other. Deriving it means the test cannot drift from the implementation.
+const ha: Bar[] = heikinAshiBars(kl) as Bar[]
 
 const UP = '#05E17F'
 const DN = '#E547FC'
