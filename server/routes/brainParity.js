@@ -47,6 +47,10 @@ router.post('/client', (req, res) => {
         score: body.score,
         reasons: body.reasons,
     }, body.cycle);
+    // [2026-10-18] Tell the brain this user is live, so the next shadow cycle
+    // emits for them instead of waiting out the 5-minute refresh. Without it the
+    // first row of every session has no server counterpart.
+    try { require('../services/serverBrain').noteClientParityActivity(req.user.id); } catch (_) { /* best-effort */ }
     return res.status(200).json({ ok: true, logged: true });
 });
 

@@ -441,6 +441,25 @@ function _refreshActiveParityUsers(nowTs) {
     } catch (_) { /* leave the previous value; never break the cycle */ }
 }
 
+// [2026-10-18] A client parity row IS the proof the user is back, so it clears
+// the staleness directly instead of waiting out the refresh interval.
+//
+// Measured why this matters: in his first session after the narrowing, of
+// eleven PRIMARY rows exactly one was unpaired — the first, because the server
+// had not yet re-queried its active set. unpairedRatio is a gate threshold
+// (<= 5%) and one warm-up row made that sample 9%. Adding the user optimistically
+// as well means the very next cycle emits for them, with the periodic re-query
+// still the source of truth for who has gone away.
+function _noteClientParityActivity(userId) {
+    try {
+        const id = Number(userId);
+        if (!Number.isFinite(id)) return;
+        if (_activeParityUsers === null) _activeParityUsers = new Set();
+        _activeParityUsers.add(id);
+        _activeParityTs = 0;              // force the next refresh to re-query
+    } catch (_) { /* never let a diagnostic hook break the request */ }
+}
+
 function _hasRecentClientParity(userId) {
     try {
         if (_activeParityUsers === null) return true;   // unknown → permissive
@@ -2854,11 +2873,13 @@ module.exports = {
     // but never referenced by any runtime path (start/_runCycle/shadow cycles
     // use the local function symbols, not these exports). Mutable (not frozen)
     // because the test hooks seed _stcMap / override main-cycle state.
+    noteClientParityActivity: _noteClientParityActivity,
     __sp1: {
         isTestnetShadowTarget: _isTestnetShadowTarget,
         isShadowParityTarget: _isShadowParityTarget,
         hasRecentClientParity: _hasRecentClientParity,
         refreshActiveParityUsers: _refreshActiveParityUsers,
+        isActiveParityStale: () => _activeParityTs === 0 || (Date.now() - _activeParityTs) >= _ACTIVE_PARITY_REFRESH_MS,
         setActiveParityUsersForTest: (v) => {
             // Freeze too: _runShadowForUsers refreshes at the top of every
             // cycle and would otherwise overwrite the seed with the live query

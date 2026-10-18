@@ -107,3 +107,49 @@ describe('the active-user filter is actually refreshed and queried', () => {
     expect(body).toMatch(/return null/);
   });
 });
+
+// [2026-10-18] Eliminating the warm-up gap, which I predicted and then measured.
+//
+// When the server narrowed its parity emission to users with a recent client
+// row, I wrote that it would "self-correct within ~5 minutes" because the
+// active-user set refreshes on that cadence. Observed live during his first
+// session after the change: of eleven PRIMARY rows, exactly one was unpaired —
+// the FIRST, at 23:24:00. Every row after it paired.
+//
+// That one row is not free. unpairedRatio is a gate threshold (<= 5%), and a
+// short session makes a single warm-up row a large fraction of it: this sample
+// came out at 9%.
+//
+// The client row itself is the signal that the user is back, so it can
+// invalidate the cache directly and the very next cycle picks them up. No
+// polling, no shorter interval, no extra query — the event that proves
+// activity is the one that clears the staleness.
+
+describe('a returning user is picked up on the next cycle, not in five minutes', () => {
+  let brain;
+  beforeEach(() => {
+    jest.resetModules();
+    brain = require('../../server/services/serverBrain');
+  });
+
+  test('noteClientParityActivity forces the next refresh to re-query', () => {
+    brain.__sp1.setActiveParityUsersForTest(new Set([99]));
+    expect(brain.__sp1.hasRecentClientParity(1)).toBe(false);
+    brain.noteClientParityActivity(1);
+    // the set is now considered stale; the next refresh must not be skipped
+    expect(brain.__sp1.isActiveParityStale()).toBe(true);
+  });
+
+  test('it never throws on a malformed id', () => {
+    expect(() => brain.noteClientParityActivity(undefined)).not.toThrow();
+    expect(() => brain.noteClientParityActivity(null)).not.toThrow();
+  });
+
+  test('the parity route calls it when a client row arrives', () => {
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '..', '..', 'server', 'routes', 'brainParity.js'), 'utf8');
+    const i = src.indexOf('logParityRow');
+    const around = src.slice(i, src.indexOf('});', i));
+    expect(around).toMatch(/noteClientParityActivity\(/);
+  });
+});
