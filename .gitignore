@@ -90,3 +90,12 @@ scripts/verify-terminator/out/
 # one build is ~7 MB. They live on the box so scripts/whereis.js can translate a
 # crash location; they must never enter git, which is the same reasoning as M18.
 sourcemaps/
+
+# [BACKUP-ZEUS 2026-10-19] Operator backups: encrypted full dumps of the whole
+# database (exchange keys, password hashes, every user). They must never be
+# committed, and a `git add -A` would have taken them straight to GitHub.
+data/admin_backups/
+# Rotated audit logs — data/audit.jsonl was ignored but its rotations were not,
+# so 20+ of them are already in history. See the Book: removing them needs a
+# history rewrite, which is the operator decision.
+data/audit.jsonl.*

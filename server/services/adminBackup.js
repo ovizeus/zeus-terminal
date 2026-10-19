@@ -133,14 +133,43 @@ function _quickCheck(snapPath) {
     }
 }
 
-// Online snapshot of a live database. Uses the SQLite backup API through
-// better-sqlite3, which is WAL-safe for THIS connection — the 2026-10-18
-// corruption came from a second process doing the same thing concurrently,
-// not from the API itself.
-async function _snapshot(srcPath, destPath) {
-    const Database = require('better-sqlite3');
-    const db = new Database(srcPath, { readonly: true, fileMustExist: true });
-    try { await db.backup(destPath); } finally { try { db.close(); } catch (_) { /* */ } }
+// Online snapshot of a live database.
+//
+// [BACKUP-ZEUS-FIX 2026-10-19] This used `db.backup(destPath)` (the SQLite
+// online backup API). On the real 2,9 GB live database that NEVER FINISHES:
+// SQLite restarts the copy from page 0 whenever the source is written, and
+// Zeus writes on every brain tick, so the backup livelocks. Measured on the
+// first real press of the button: 18 minutes, destination stuck at exactly
+// 1 815 756 800 bytes with its mtime still advancing (the restart signature),
+// no resolve, no reject, no audit DONE row.
+//
+// VACUUM INTO does the same job in ONE statement under a single read
+// transaction, so concurrent writers go to the WAL and cannot restart it.
+// Measured on the same live database, read-only: 30,3 s → 2,69 GB →
+// quick_check ok.
+//
+// But better-sqlite3 is SYNCHRONOUS, so running it here would freeze the event
+// loop for those 30 s — exactly what took Zeus down on 2026-10-07 (a PRAGMA
+// integrity_check inline in the doctor tick). So it runs in a child process,
+// scripts/zeus-snapshot.js, on a READ-ONLY connection. The 2026-10-18
+// corruption came from a second process WRITING the database and running crons
+// beside the live server, not from a second reader.
+function _snapshot(srcPath, destPath) {
+    const { execFile } = require('child_process');
+    const script = path.join(__dirname, '..', '..', 'scripts', 'zeus-snapshot.js');
+    return new Promise((resolve, reject) => {
+        execFile(process.execPath, [script, srcPath, destPath], {
+            // A 2,9 GB VACUUM INTO measured 30,3 s. Ten minutes is room for a
+            // database several times larger on a loaded disk, and still a bound
+            // rather than the unbounded wait that hid the livelock.
+            timeout: 10 * 60 * 1000,
+            maxBuffer: 1 << 20,
+        }, (err, _stdout, stderr) => {
+            if (!err) return resolve();
+            const why = (stderr || '').trim() || err.message || 'snapshot failed';
+            reject(new Error(why));
+        });
+    });
 }
 
 // ─── encrypt / decrypt ───────────────────────────────────────────────────────
@@ -268,6 +297,7 @@ async function createBackup({ srcPath, dir, passphrase, nowMs, verify, verifyEnc
 
 module.exports = {
     createBackup, listBackups, deleteBackup, resolveBackup, decryptToFile,
+    _snapshot, // [BACKUP-ZEUS-FIX 2026-10-19] exposed for the livelock regression test
     issueDownloadToken, verifyDownloadToken,
     ID_RE, MIN_PASSPHRASE, MAGIC, HEADER_LEN, TAG_LEN,
 };

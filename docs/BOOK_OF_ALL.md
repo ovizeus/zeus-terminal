@@ -10,7 +10,9 @@
 
 > *(**2026-10-10:** auditul de persistență la refresh → P11-P15 și constatările R1-R10. **Închise azi: P11, P12, P13, P14** și **R1, R2, R3, R4, R7, R9, R10** — b265 → b268. Rămân 10, și **niciunul nu e al meu**: toate așteaptă o decizie sau o acțiune de la tine.)*
 
-**P1 🔥 Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**
+**P1 ✅ ÎNCHIS 2026-10-19 — era o atribuire greșită, nu un bug al nostru.** Vezi secțiunea *„P1 era o atribuire greșită”* de la finalul Book-ului: 418-ul vine pe `testnet.binancefuture.com` **cu `usedWeight=0/6000`**, iar ipoteza din textul de mai jos (`serverAT.js:5399` cere `positionRisk` per poziție) e falsă — linia aia e în calea de **addon**, o dată per addon, nu în bucla de recon. Fuzionat în **R16**. Textul original, păstrat pentru istoric:
+
+> ~~**Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**~~
 
 **P2 🙋 Calibrarea auto-carantinei ML.** Pragul e `min_trades: 100` pe fereastră de **24h**, la ~11 evenimente/zi — matematic inaccesibil. *Decizia ta:* (a) fereastră 7-30 zile, prag 100 — **recomandarea mea**; (b) prag mai mic; (c) o lăsăm.
 
@@ -2570,3 +2572,235 @@ Mutatia nu e opcionala.
 
 Teste: server **9500** pe 4 felii (0 eșecuri), client **911**, typecheck **67** neschimbat,
 4 mutanti ucisi pe gardurile critice (verificare, parola, traversare, round-trip).
+
+---
+
+## 🧾 2026-10-19 — P1 era o atribuire greșită, și am dovada într-o singură linie de log
+
+P1 stătea prima pe lista de priorități de nouă zile, cu eticheta *„singurul lucru mare rămas care e al meu"*.
+Era greșit. Linia care închide subiectul:
+
+```
+04:01:30 [WARN] [BINANCE_RATE] HTTP 418 from testnet.binancefuture.com/fapi/v2/balance
+                src=signer:GET /fapi/v2/balance  usedWeight=0/6000 — IP BAN response
+```
+
+**`usedWeight=0/6000`.** Contorul propriu al lui Zeus era la **zero** în momentul în care am fost banați.
+Nu există nicio cantitate de throttling care să scadă zero. Asta nu mai e „probabil vecinii de NAT" — e
+dovedit pe cererea care a primit 418-ul.
+
+**Și ipoteza tehnică din P1 era falsă.** P1 zicea că `serverAT.js:5399` cere `positionRisk` *per poziție*
+în loc de per user. Am citit linia: e în calea de **addon** (`AT_ADDON`, reconciliere de cantitate după ce
+un addon s-a umplut), se execută **o dată per addon**, nu în buclă. Bucla de recon de la 5676 cheamă
+`exchangeOps.getPositions(userId)` **o dată per (user, exchange)** — exact ce spunea comentariul.
+Un grep îngust m-a dus la o linie care arată ca problema fără să fie problema. A treia oară în campania asta.
+
+### Cât consumă Zeus de fapt — măsurat, nu estimat
+
+Din `/api/diag/binance-rates`, după **15,6h** de uptime curat:
+
+| host | cereri Zeus | greutate Zeus | contor IP (ultim / vârf) | partea lui Zeus |
+|---|---|---|---|---|
+| `testnet.binancefuture.com` ← **aici cad banurile** | 76 | 380 total | 1804 / **4089** din 6000 | **~0,4 greutate/min = 0,02%** |
+| `fapi.binance.com` (date de piață) | 20 642 | 57 032 | 654 / 1107 din 6000 | ~61/min = **9,3%**, fără risc |
+
+Citirea onestă: pe testnet, unde ne banează, Zeus e **eroare de rotunjire**. Pe prod, unde Zeus
+chiar polează mult, IP-ul stă la **11% din plafon** — acolo nu e niciun pericol.
+
+### ⚠️ CORECTEZ CE ȚI-AM RAPORTAT IERI
+
+Ți-am escaladat R16 cu cifra *„5 banuri distincte pe 18 oct = 10,9h = 45% din zi"*. **Greșit.**
+Fișierele rotite sunt numite după ziua în care au fost *rotite*, deci `pm2-error__2026-10-18` conține
+datele de pe **17 octombrie**. Ziua cu 4 banuri a fost **17 oct**, nu 18.
+
+Numărătoarea reală, din `binance_rate_state_log` (tranziții de stare) încrucișată cu valorile distincte
+de `banned until` din logurile text:
+
+| zi | banuri distincte | timp banat |
+|---|---|---|
+| 14 oct | 1 | — |
+| 15 oct | 1 | — |
+| 16 oct | **0** | 0 |
+| 17 oct | **4** | 01:28→04:41, 05:06→08:40, 10:44→10:58, 14:48→18:21 = **10h34m (44%)** |
+| 18 oct | 1 | 23:37→sfârșitul zilei = **22 min (1,5%)** |
+| 19 oct | 1 | 00:00→03:34 și 04:01→08:19 = **7h52m**, apoi **8h curate** |
+
+Deci media reală e **~1,3 banuri/zi** pe 6 zile, cu o zi rea (17 oct, 44%) și o zi complet curată (16 oct).
+Cifra „45%" exista, dar pe altă zi. Lecția, pentru a nu se repeta: **numele fișierului rotit nu e ziua
+conținutului** — verifică întotdeauna cu `head -1`.
+
+### Ce rămâne din cele trei remedii
+
+Remediul **C** pe care ți l-am recomandat (date de piață din producție, testnet doar pentru ordine)
+**e deja arhitectura actuală** — 76 de cereri pe testnet față de 20 642 pe prod în 15,6h. Nu e o
+îmbunătățire disponibilă, e starea de fapt. Deci decizia ta se reduce la **două** opțiuni:
+
+- **A — nu facem nimic.** Costul: ~1,3 banuri/zi × ~4h, în care Zeus nu poate deschide sau închide
+  poziții pe exchange. Pozițiile existente rămân protejate de SL-ul server-side. Bani reali: **zero**,
+  totul e testnet/demo.
+- **B — IP de egress dedicat** (**NU WARP** — un WARP a stricat VPS-ul o dată). Singurul remediu care
+  atinge cauza, pentru că elimină vecinii de pe IP-ul nostru.
+
+### Bonus măsurat azi: care WebSocket merge, de fapt
+
+Test direct de pe VPS, 12 secunde fiecare:
+
+```
+PROD    fstream.binance.com      open=true  frames=0    ← blocat (P4, neschimbat din mai)
+TESTNET stream.binancefuture.com open=true  frames=6    ← MERGE
+SPOT    stream.binance.com:9443  open=true  frames=41   ← MERGE
+```
+
+Deci blocajul e **specific** pe WS-ul de futures de producție. `marketFeed.js` și `wsMarketProxy.js`
+sunt hardcodate pe `fstream.binance.com` (zero conștiență de testnet), de unde `ALT_WS_FEEDS` și
+pollingul REST la 10s care produce cele 20 642 de cereri. **Nu l-am schimbat**: a trece pe prețuri de
+testnet sau de spot pentru un brain de futures e decizie de produs, nu de implementare — basis-ul
+diferă. O las scrisă aici ca opțiune, nu ca recomandare.
+
+---
+
+## 🔎 2026-10-19 — REPARAT: 20 265 de eșecuri care spuneau „HTTP 503" și nimic altceva (b275 v1.7.249)
+
+Căutând cauza banului am dat peste altceva, real și separat:
+
+```
+20265 × [FEED] [ALT_WS_FEEDS] kline poll failed [<simbol> <tf>]: HTTP 503
+```
+
+965 de eșecuri pe fiecare dintre cele **21 de serii** (7 simboluri × 3 timeframe-uri), continuu de pe
+**18 oct 21:00** până pe **19 oct 08:24** — 11,4h în care brain-ul multi-simbol nu a primit lumânări.
+Pe 16 octombrie, zi fără ban, au fost **2**. Deci nu e zgomot de fond.
+
+**De ce nu se putea diagnostica:** `binanceGateway` sintetizează 503 **înainte** de fetch, pentru două
+motive diferite — `circuit_open` (întrerupătorul deschis) și `rate_limit` (limitatorul a refuzat). Fiind
+generat înainte de fetch, răspunsul **nu trece prin wrapper-ul de telemetrie**, deci `errors5xx` a rămas
+`0` pentru `marketFeed:alt-klines` în tot intervalul. Telemetria nu mințea — pur și simplu nu le-a văzut.
+Iar motivul *era* pe obiectul răspunsului, în `res._reason` și `res._backoffMs`, și era aruncat o linie
+mai jos:
+
+```js
+if (!res.ok) throw new Error(`HTTP ${res.status}`);   // _reason, aruncat
+```
+
+**Reparat** cu un helper local `_httpError(res)`, aplicat în **ambele** locuri care aruncau așa:
+`fetchKlines` (`klines-init`, linia 259) și `_altFetchKlinesLatest` (`alt-klines`, linia 493). L-am pus și
+în al doilea, deși numai primul a țipat, pentru că altfel ar fi rămas orb exact la fel — e aceeași clasă.
+
+**Ce NU am făcut:** nu am ghicit *care* dintre cele două motive a fost. Nu se poate afla retroactiv, iar
+a inventa o cauză ca să pot „repara" ceva ar fi exact greșeala pe care regulile de aici o interzic.
+Fixul face ca următoarea apariție să se explice singură.
+
+**Dovezi:** 4 teste noi (`tests/unit/marketFeedAltKlineReason.test.js`), toate picate prima dată pe cauza
+corectă. **Doi mutanți omorâți:** `why` golit → 2 teste pică; ramura de backoff ștearsă → 1 test pică.
+Backoff-ul e asertat explicit, pentru că o ramură neasertată e decor — a cincea oară în campania asta când
+verific asta și a doua oară când găsesc decor. Server **9504 teste pe 4 felii, 0 eșecuri** (9500 baseline + 4 noi).
+
+**Observație lăsată deschisă, nereparată:** `_altStartPricePoller` (cel mai mare consumator, 8393 cereri)
+face `if (!res.ok) return;` — eșec **complet silențios**. În aceleași 11,4h prețurile puteau fi învechite
+fără nicio urmă în log. Nu l-am atins în același commit: regula „nu înlănțui schimbări riscante" și e
+cale de prețuri. Candidat pentru următorul lot.
+
+---
+
+## 🧹 2026-10-19 — Proprietatea fișierelor: 21 813 → 0
+
+Ieri am reparat `.git` (781 de fișiere root). Arborele de lucru rămăsese: **21 813 fișiere root-owned**
+(20 548 în `node_modules`, 974 în `android`, 82 în `tests`, 80 în `client`, 64 în `server`, restul risipite).
+Le-am descoperit pentru că un `python3` rulat ca zeus a dat `PermissionError` pe `server/services/marketFeed.js`
+— fișier root din 19 iunie.
+
+Conform regulii stabilite ieri: **repari proprietatea, nu escaladezi la root ca să dispară eroarea.**
+`chown -R zeus:zeus .` → 0 rămase, 0,4 secunde. `git fsck` curat, HEAD neschimbat, zeus online, 1098 restarts.
+
+### 🔴 Și un incident al meu, prins în 2 minute în loc de 11 zile
+
+Ca să validez că `marketFeed.js` încă se încarcă, am rulat `node -e "require('./server/services/marketFeed.js')"`.
+Modulul pornește timere — procesul **nu a ieșit**. Exact clasa de orfan care, pe 7 octombrie, a rulat 11,2 zile
+în paralel cu serverul viu și a corupt patru backup-uri nocturne.
+
+De data asta l-am verificat: `ps -eo pid,user,cmd | grep "node -e"` → doi PID (sudo + copilul), omorâți,
+re-verificat → curat. **Lecția concretă:** `require()` pe un modul de serviciu Zeus nu e un test de sintaxă,
+e o pornire de serviciu. Pentru „se încarcă?" se folosește suita de teste, care face mock la gateway și
+închide ce pornește — nu un `node -e` pe modulul viu.
+
+---
+
+## 🔴 2026-10-19 16:23 — AI APĂSAT BUTONUL ȘI NU S-A TERMINAT NICIODATĂ. Cauză găsită, reparat (b276 v1.7.250)
+
+Nu mi-ai spus, l-am găsit căutând altceva. În `data/admin_backups/`:
+
+```
+.zeus-full-1792427032255-3054096.snap.tmp   1 815 756 800 bytes
+audit_log:  16:23:52  ADMIN_BACKUP_START  {"note":"Backup 19 oct 2026"}
+```
+
+`ADMIN_BACKUP_START`, dar **niciun `DONE` și niciun `FAILED`**. După 18 minute fișierul era blocat la
+exact aceiași 1 815 756 800 bytes din 2,9 GB — măsurat de șase ori la 10 secunde, zero creștere — **dar
+`mtime` continua să avanseze**. Aia nu e „blocat", e **repornire**: se scrie întruna peste aceleași pagini.
+
+**Cauza.** SQLite reia copia **de la pagina 0** de fiecare dată când **sursa** e scrisă. Zeus scrie la
+fiecare tick de brain, adică aproape continuu. Deci `db.backup(dest)` — API-ul de backup online, pe care
+l-am ales ieri — **nu converge niciodată pe baza vie**. Promisiunea nici nu se rezolvă, nici nu se respinge,
+deci nici gărzile mele de verificare nu se activează: ele se execută *după* snapshot.
+
+Serverul a rămas sănătos tot timpul — 302, loguri curgând, 14 stream-uri, 42% CPU. Nu era o avarie, era un
+job care nu termina. Dar pentru tine arăta ca un spinner infinit, și singurul lucru pe care îl puteai face
+era să aștepți.
+
+### Ce am măsurat, nu presupus
+
+Pe **aceeași bază vie**, conexiune readonly, o singură instrucțiune:
+
+```
+VACUUM INTO  →  30,3 s  →  2,69 GB  →  quick_check: ok  →  sursa neatinsă
+```
+
+30 de secunde față de 18 minute fără sfârșit. `VACUUM INTO` rulează sub **o singură tranzacție de citire**,
+deci scriitorii concurenți aterizează în WAL și **nu o pot reporni**.
+
+### Dar nu se putea pune direct — și de ce
+
+`better-sqlite3` e **sincron**. Un `VACUUM INTO` în proces ar fi **înghețat event loop-ul 30 de secunde** —
+exact greșeala care a oprit Zeus pe **7 octombrie**, când un `PRAGMA integrity_check` rula inline în tick-ul
+doctorului. Aș fi schimbat un backup care nu se termină pe un server care se oprește 30 de secunde.
+
+Deci: `VACUUM INTO` într-un **proces copil** — `scripts/zeus-snapshot.js`, nou, doar module native plus
+`better-sqlite3`, conexiune **readonly**, plafon 10 minute, cod de ieșire separat pentru destinație existentă.
+
+**De ce un al doilea proces e în regulă aici, când tocmai asta a corupt backup-urile pe 18 octombrie:**
+coruperea a venit de la un proces care **SCRIA** baza și rula cron-uri lângă serverul viu. Un al doilea
+**cititor** e exact ceea ce WAL e construit să suporte. Dovada e în măsurătoare: sursa a trecut `quick_check`
+nealterată după operație.
+
+### ⚠️ Onestitate despre testul de regresie — mutantul mi-a trecut testul
+
+Prima versiune a testului se numea *„the livelock regression"*, lovea o sursă de 4000 de rânduri cu un
+scriitor și trecea verde. Am pus mutantul — `db.backup()` înapoi — și **a trecut testul**. Deci testul era
+**decor**, exact ce caut la alții.
+
+Am măsurat de ce: la **82 MB**, cu un scriitor care comite continuu, `db.backup()` termină în **0,2 s**.
+Livelock-ul apare **numai la scară reală** și la rata reală de scriere. Un test unitar care pretinde că-l
+prinde minte.
+
+Testul a fost rescris să fixeze **ce poate fixa determinist**:
+- snapshot-ul **nu blochează event loop-ul** — invariantul care previne clasa „7 octombrie";
+- rezistă la scrieri concurente și rămâne consistent;
+- lasă sursa neatinsă;
+- refuză o destinație existentă în loc să fuzioneze în ea.
+
+**5 teste, doi mutanți omorâți:** `VACUUM INTO` readus în proces → 2 teste pică; garda pe destinație
+ștearsă → 1 test pică. **Dovada livelock-ului rămâne măsurătoarea vie de mai sus, nu un test unitar** —
+și e scrisă aici tocmai ca să nu pretind altceva.
+
+A cincea oară în campania asta când verific dacă garda proprie e reală, și a treia oară când nu era.
+
+### 🔐 Și o gaură pe care o lăsasem deschisă ieri
+
+**`data/admin_backups/` NU era în `.gitignore`.** Backup-urile criptate ale bazei întregi — chei de exchange,
+hash-uri de parole, datele tuturor — ar fi intrat într-un `git add -A` și de acolo pe GitHub. Criptate, deci
+nu o catastrofă, dar un dump complet al tuturor utilizatorilor pe un remote nu are ce căuta acolo. Închis.
+
+**Și una preexistentă, pe care NU o repar singur:** `data/audit.jsonl` era ignorat, dar **rotațiile lui nu**.
+Sunt deja **peste 20 de fișiere `data/audit.jsonl.2026-07-*` … `2026-08-*` în istoricul git**, adică loguri
+de audit cu activitatea utilizatorilor, împinse pe GitHub din iulie. Le-am adăugat în `.gitignore` de aici
+înainte, dar **scoaterea lor din istoric e rescriere de istorie** — nu fac asta fără tine. 🙋 **Decizia ta.**

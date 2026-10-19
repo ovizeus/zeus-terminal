@@ -35,6 +35,18 @@ async function _telemFetch(url, opts) {
     catch (_) { return fetch(url, opts); }
 }
 
+// [ALT-503-REASON 2026-10-19] The gateway synthesises 503 BEFORE the fetch for
+// two different reasons (`circuit_open` / `rate_limit`), so neither the
+// telemetry ring (which never sees them) nor the warn line could tell them
+// apart — 20.265 kline failures over 11,4h all read "HTTP 503". Carry the
+// reason into the message so the next occurrence diagnoses itself.
+function _httpError(res) {
+    const why = res && res._reason
+        ? ` (${res._reason}${res._backoffMs ? `, backoff ${res._backoffMs}ms` : ''})`
+        : '';
+    return new Error(`HTTP ${res ? res.status : 0}${why}`);
+}
+
 // ── Active streams ──
 const _streams = {};    // { streamKey: { ws, reconnects, timer, alive } }
 const _activeSymbols = new Set();  // [MULTI-SYM] all subscribed symbols (uppercase)
@@ -256,7 +268,7 @@ async function fetchKlines(symbol, interval, limit) {
     const url = `${BINANCE_REST}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
     try {
         const res = await _telemFetch(url, { signal: AbortSignal.timeout(10000), __src: 'marketFeed:klines-init', __weight: 5 });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw _httpError(res);
         const raw = await res.json();
         return raw.map(k => ({
             time: k[0] / 1000,
@@ -490,7 +502,7 @@ function _connectStream(streamName, onMessage) {
 async function _altFetchKlinesLatest(symbol, interval, limit) {
     const url = `${BINANCE_REST}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
     const res = await _telemFetch(url, { signal: AbortSignal.timeout(8000), __src: 'marketFeed:alt-klines', __weight: 1 });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw _httpError(res);
     const raw = await res.json();
     return raw.map(k => ({
         time: k[0] / 1000,
@@ -832,6 +844,7 @@ function getPollerStats() {
 
 module.exports = {
     _parseTickerPrice, // [LAG-FIX 2026-05-31] exposed for unit test
+    _altFetchKlinesLatest, // [ALT-503-REASON 2026-10-19] exposed for unit test
     subscribe,
     subscribeMulti,    // [MULTI-SYM]
     subscribeMultiWithBootRef,  // [BIN-TELEM Phase B 2026-05-19]
