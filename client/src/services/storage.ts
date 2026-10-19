@@ -109,7 +109,11 @@ export function trackOIDelta(): void {
   const oi = getOI().oi
   if (!oi) return
   const now = Date.now()
-  oiHistory.push({ oi: oi, ts: now })
+  // [FLOW-ALIGN 2026-10-19] Pretul intra odata cu OI-ul, in ACEEASI inregistrare.
+  // AION compara variatia de open interest cu variatia de pret; fara pretul de
+  // la momentul citirii ar fi comparat OI pe 30 de mostre cu pretul de pe ultimul
+  // tick — doua ferestre de timp diferite, deci un regim raportat gresit.
+  oiHistory.push({ oi: oi, ts: now, price: (w.S && w.S.price) || null })
   if (typeof w.ZT_capArr === 'function') w.ZT_capArr(oiHistory, 2000)
   while (oiHistory.length > 0 && oiHistory[0].ts < now - 1200000) oiHistory.shift()
   const t5 = now - 300000

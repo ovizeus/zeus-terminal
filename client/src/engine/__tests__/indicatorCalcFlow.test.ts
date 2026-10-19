@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   hecate, thanatos, aion, hypnos, notos, HECATE_BANDS,
-  flowPulseTargets, FLOW_PULSE_IDS,
+  flowPulseTargets, FLOW_PULSE_IDS, flowBucketTime, flowAnchorSeries,
 } from '../indicatorCalcFlow'
 
 // ═══════════════════════════ HECATE ═══════════════════════════
@@ -391,5 +391,55 @@ describe('flowPulseTargets — de ce THANATOS nu afisa nimic', () => {
     const all = flowPulseTargets({ hecate: true, thanatos: true, aion: true, hypnos: true, notos: true })
     expect(all).toHaveLength(5)
     expect([...all].sort()).toEqual([...FLOW_PULSE_IDS].sort())
+  })
+})
+
+// ═══════════════════════════ ALINIEREA ═══════════════════════════
+
+describe('alinierea panourilor de flux cu chartul', () => {
+  // Raportat de operator cu doua capturi: panourile „se trag in spate".
+  // `_syncSubChartsToMain` aliniaza prin setVisibleLogicalRange, adica prin
+  // INDICI DE BARE, iar jurnalul era indexat pe secunde de ceas — deci un panou
+  // cu 30 de puncte primea intervalul logic al unui chart cu sute de bare.
+  // Cele doua axe nu aveau nimic in comun.
+
+  const bars = (n: number) => Array.from({ length: n }, (_, i) => ({ time: 1000 + i * 300 }))
+
+  it('o citire de acum se asaza in ULTIMA bara, nu la ceasul de perete', () => {
+    expect(flowBucketTime(bars(5))).toBe(1000 + 4 * 300)
+  })
+
+  it('fara bare nu exista bucket — panoul nu isi inventeaza o axa paralela', () => {
+    expect(flowBucketTime([])).toBeNull()
+    expect(flowBucketTime(null)).toBeNull()
+    expect(flowBucketTime(undefined)).toBeNull()
+    expect(flowBucketTime([{ time: NaN }])).toBeNull()
+  })
+
+  it('ANCORA ARE EXACT O VALOARE PE FIECARE BARA — invariantul alinierii', () => {
+    // Asta e ce lipsea. Daca numarul de puncte difera de al chartului,
+    // intervalul logic inseamna altceva in panou si se trage in spate.
+    const k = bars(250)
+    const a = flowAnchorSeries(k, 0)
+    expect(a).toHaveLength(k.length)
+    expect(a[0].time).toBe(k[0].time)
+    expect(a[a.length - 1].time).toBe(k[k.length - 1].time)
+  })
+
+  it('ancora pastreaza nivelul cerut (0 pentru zero, 1 pentru rata normala)', () => {
+    expect(flowAnchorSeries(bars(3), 1).every(x => x.value === 1)).toBe(true)
+    expect(flowAnchorSeries(bars(3), 0).every(x => x.value === 0)).toBe(true)
+  })
+
+  it('barele stricate nu rup ancora, dar nici nu se numara', () => {
+    const k = [{ time: 100 }, { time: NaN }, { time: 300 }] as any
+    const a = flowAnchorSeries(k, 0)
+    expect(a.map(x => x.time)).toEqual([100, 300])
+  })
+
+  it('fara bare ancora e goala, nu arunca', () => {
+    expect(flowAnchorSeries(null, 0)).toEqual([])
+    expect(flowAnchorSeries(undefined, 0)).toEqual([])
+    expect(flowAnchorSeries([], 0)).toEqual([])
   })
 })

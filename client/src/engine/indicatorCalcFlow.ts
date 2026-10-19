@@ -485,3 +485,42 @@ export function flowPulseTargets(activeInds: Record<string, any> | null | undefi
     if (!activeInds) return []
     return FLOW_PULSE_IDS.filter(id => !!activeInds[id])
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Alinierea panourilor de flux cu chartul
+//
+// [FLOW-ALIGN 2026-10-19] Raportat de operator cu doua capturi: panourile „se
+// trag in spate", nu stau in linie cu lumanarile. Cauza: `_syncSubChartsToMain`
+// aliniaza panourile prin `setVisibleLogicalRange`, adica prin INDICI DE BARE.
+// Jurnalul panourilor de flux era indexat pe SECUNDE DE CEAS, deci un panou cu
+// 30 de puncte primea intervalul logic al unui chart cu sute de bare. Nu era o
+// nepotrivire de cativa pixeli — cele doua axe nu aveau nimic in comun.
+//
+// Regula, de acum: o valoare se asaza in BARA in care a fost citita, iar panoul
+// emite o linie de ancorare pe FIECARE bara. Atunci numarul de puncte e identic
+// cu al chartului si intervalul logic inseamna acelasi lucru in ambele.
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface FlowBar { time: number }
+
+/** Bara in care cade o citire de acum: ultima bara din chart. */
+export function flowBucketTime(bars: ReadonlyArray<FlowBar> | null | undefined): number | null {
+    if (!Array.isArray(bars) || !bars.length) return null
+    const t = bars[bars.length - 1]?.time
+    return Number.isFinite(t) ? (t as number) : null
+}
+
+/**
+ * Linia de ancorare: exact o valoare pe fiecare bara a chartului. Asta e ce
+ * face panoul sa aiba aceeasi lungime logica — fara ea se trage in spate.
+ */
+export function flowAnchorSeries(
+    bars: ReadonlyArray<FlowBar> | null | undefined, level: number,
+): Array<{ time: number; value: number }> {
+    if (!Array.isArray(bars)) return []
+    const out: Array<{ time: number; value: number }> = []
+    for (const b of bars) {
+        if (b && Number.isFinite(b.time)) out.push({ time: b.time, value: level })
+    }
+    return out
+}

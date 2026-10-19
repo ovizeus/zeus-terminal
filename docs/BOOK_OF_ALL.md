@@ -3095,3 +3095,43 @@ typecheck 67 neschimbat.
 **Lecția, scrisă ca să nu se repete:** un indicator alimentat de evenimente rare are nevoie de ceas, nu
 doar de evenimente — altfel panoul minte prin omisiune. Și dacă operatorul spune „nu afișează nimic",
 prima mișcare e să măsor rata sursei, nu să-i explic că trebuie să aștepte.
+
+### 🔴 Și imediat: panourile „se trăgeau în spate" — reparat (b281 v1.7.255)
+
+> *„sa stea in linie cu chartul … se trag in spate vechea problema … gen cum e astrape"*
+> *„hypnos e bun dar restul asa sunt facuti sa stea in spate ?"*
+
+**Răspunsul la întrebare, scris ca să fie clar: NU, nu așa erau făcuți. Era defectul meu.**
+
+Observația operatorului — *HYPNOS e bun, ceilalți nu* — a fost chiar cheia diagnosticului.
+
+**Cauza.** `_syncSubChartsToMain` aliniază panourile prin `setVisibleLogicalRange`, adică prin **indici
+de bare**. HYPNOS desenează pe timpii **barelor**, pentru că are serie proprie pe bare — deci stătea
+perfect. Ceilalți patru își țineau jurnalul pe **secunde de ceas**: un panou cu 30 de puncte primea
+intervalul logic al unui chart cu sute de bare, deci datele ajungeau **în afara ferestrei vizibile**,
+lipite în extrema stângă. Nu era o nepotrivire de câțiva pixeli — **cele două axe nu aveau nimic în
+comun**, deci nu se puteau alinia niciodată.
+
+Capturile arătau exact asta: HECATE cu o singură bară în stânga (dar cu valoarea corectă, 80,93, în
+legendă — calculul mergea), NOTOS la fel cu −3,45, THANATOS și AION goale, iar HYPNOS pe toată lățimea.
+
+**Reparat.** O citire se așază în **bara** în care a fost făcută (`flowBucketTime`), iar fiecare panou
+emite o linie de ancorare pe **fiecare bară** din chart (`flowAnchorSeries`) — tiparul ATLAS/HYPERION.
+Atunci numărul de puncte e identic cu al chartului, intervalul logic înseamnă același lucru în ambele, și
+panoul stă fix sub bara lui. Ancora se desenează și când n-a intrat nicio valoare, deci panoul **se vede
+că e viu** în loc să pară rupt.
+
+### 🔎 Găsit pe drum: AION compara două ferestre de timp diferite
+
+Înregistrările din `oiHistory` **nu purtau prețul**. Deci AION compara variația de open interest pe 30 de
+mostre cu variația de preț de pe **ultimul tick** — două ferestre de timp diferite, adică un regim
+raportat greșit, plauzibil și fals. Acum prețul intră în aceeași înregistrare cu OI-ul și se folosesc
+**perechi aliniate în timp**, cu întoarcere la capetele reale cât timp înregistrările vechi n-au preț.
+
+**Și o corecție a mea, în aceeași oră:** am spus întâi că *nimeni nu scrie în `oiHistory`*. Fals — scrie
+`trackOIDelta` din `services/storage.ts`. Grep-ul meu fusese prea îngust. **A doua oară în campania asta**
+când un grep prea îngust mă duce la o concluzie greșită; prima dată a produs „poarta moartă".
+
+**6 teste noi** pe invariantul alinierii, **doi mutanți omorâți**: ancora doar pe ultimele bare, și
+întoarcerea bucket-ului la ceasul de perete — adică exact bug-ul raportat. Client **978 teste / 126
+fișiere**, typecheck 67 neschimbat.

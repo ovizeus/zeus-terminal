@@ -14,7 +14,7 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT, astrape as _calcASTRAPE, phoebe as _calcPHOEBE } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
-import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets } from './indicatorCalcFlow'
+import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets, flowBucketTime, flowAnchorSeries } from './indicatorCalcFlow'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -4394,21 +4394,50 @@ export function updateTerminator(): void {
 // ═══════════════════════════════════════════════════════════════════════════
 
 
-/** Jurnal in memorie pentru valorile care nu au serie pe bare. */
+/** Jurnal in memorie pentru valorile care nu au serie proprie pe bare. */
 type FlowTrail = Array<{ time: number; value: number; color: string }>
-const FLOW_MAX = 240
+const FLOW_MAX = 1200
+
+// [FLOW-ALIGN 2026-10-19] Raportat de operator: panourile nu stăteau in linie cu
+// chartul si „se trageau in spate".
+//
+// Cauza: `_syncSubChartsToMain` aliniaza panourile prin `setVisibleLogicalRange`,
+// adica prin INDICI DE BARE. Jurnalul de aici era indexat pe SECUNDE DE CEAS,
+// deci un panou cu 60 de puncte primea intervalul logic al unui chart cu 1000 de
+// bare. Nu era o nepotrivire de cateva pixeli — cele doua axe nu aveau nimic in
+// comun, deci nu se puteau alinia niciodata.
+//
+// Acum fiecare valoare se asaza in BARA in care a fost citita, iar randarea
+// emite o linie de ancorare pe FIECARE bara din chart (tiparul ATLAS/HYPERION).
+// Numarul de puncte devine identic cu al chartului principal, deci intervalul
+// logic inseamna acelasi lucru in ambele si panoul sta fix sub bara lui.
+
+/** Timpul barei curente din chartul principal, sau null cand nu avem bare. */
+function _flowBarTime(): number | null {
+  return flowBucketTime(w.S?.klines)
+}
 
 function _flowPush(key: string, value: number, color: string): FlowTrail {
   const store = (w._flowTrails = w._flowTrails || {})
   const arr: FlowTrail = store[key] = store[key] || []
-  // Lightweight-charts cere timp strict crescator. Tick-urile pot veni de mai
-  // multe ori in aceeasi secunda, deci ultima valoare din secunda curenta se
-  // inlocuieste in loc sa fie adaugata.
-  const t = Math.floor(Date.now() / 1000)
+  const t = _flowBarTime()
+  // Fara bare nu inventam o axa paralela: panoul rămâne gol pana are pe ce sta.
+  if (t == null) return arr
+  // O bara, o valoare: tick-urile din interiorul barei o inlocuiesc, deci ce
+  // vezi pe bara in formare e ultima citire reala, nu o medie inventata.
   if (arr.length && arr[arr.length - 1].time === t) arr[arr.length - 1] = { time: t, value, color }
+  else if (arr.length && arr[arr.length - 1].time > t) { /* bara mai veche decat ultima: ignora */ }
   else arr.push({ time: t, value, color })
   if (arr.length > FLOW_MAX) arr.splice(0, arr.length - FLOW_MAX)
   return arr
+}
+
+/**
+ * Linia de ancorare: o valoare pe FIECARE bara din chart, ca panoul sa aiba
+ * exact aceeasi lungime logica. Fara ea, panoul se trage in spate.
+ */
+function _flowAnchor(level: number): Array<{ time: number; value: number }> {
+  return flowAnchorSeries(w.S?.klines, level)
 }
 
 // ─────────────────────────── HECATE ───────────────────────────
@@ -4441,10 +4470,10 @@ export function updateHecate(): void {
       : r.pressure > -18 ? '#546e7a'
         : r.pressure > -55 ? '#ef5350' : '#ff1744'
   const trail = _flowPush('hecate', r.pressure, col)
-  const zero = trail.map(x => ({ time: x.time, value: 0 }))
   try {
     w._hecateSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
-    if (w._hecateZeroS) w._hecateZeroS.setData(zero)
+    if (w._hecateZeroS) w._hecateZeroS.setData(_flowAnchor(0))
+    _syncSubChartsToMain()
   } catch (_) { }
   // Zidurile, pe chartul principal, ca linii de pret.
   try {
@@ -4489,11 +4518,13 @@ export function updateThanatos(): void {
     : r.state === 'CASCADE_SHORTS' ? '#00e676'
       : r.state === 'ELEVATED' ? '#ff8f00' : '#455a64'
   const trail = _flowPush('thanatos', r.acceleration, col)
-  // Linia de referinta e 1 (rata normala), nu zero: panoul arata multipli.
-  const one = trail.map(x => ({ time: x.time, value: 1 }))
   try {
     w._thanatosSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
-    if (w._thanatosOneS) w._thanatosOneS.setData(one)
+    // Referinta e 1 (rata normala), nu zero: panoul arata multipli. Si e
+    // desenata pe FIECARE bara, deci panoul se vede ca viu chiar si cand nu a
+    // intrat nicio lichidare — exact ce lipsea cand parea rupt.
+    if (w._thanatosOneS) w._thanatosOneS.setData(_flowAnchor(1))
+    _syncSubChartsToMain()
   } catch (_) { }
 }
 
@@ -4506,6 +4537,7 @@ export function initAionChart(): void {
   w._aionChart = _createSubChart('aionChart', 60)
   if (!w._aionChart) return
   w._aionSeries = w._aionChart.addHistogramSeries({ color: '#ab47bc', priceLineVisible: false, lastValueVisible: true, title: 'AION' })
+  w._aionZeroS = w._aionChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
   w._aionInited = true
   updateAion()
 }
@@ -4516,11 +4548,23 @@ export function updateAion(): void {
   const lookback = Math.max(2, Math.round(+cfg.lookback || 30))
   const hist = Array.isArray(w.oiHistory) ? w.oiHistory : []
   // oiHistory tine {ts, oi} sau numere, in functie de calea care l-a umplut.
-  const oiSeries = hist.slice(-lookback).map((x: any) => (typeof x === 'number' ? x : (x?.oi ?? x?.v ?? NaN)))
-  const pxSeries = hist.slice(-lookback).map((x: any) => (typeof x === 'number' ? NaN : (x?.price ?? NaN)))
-  // Daca istoricul nu purta preturi, folosim capetele reale pe care le avem.
-  const px = pxSeries.filter((v: number) => Number.isFinite(v)).length >= 2
-    ? pxSeries
+  // Perechi din ACEEASI inregistrare: OI si pretul citite in acelasi moment.
+  // Altfel s-ar compara OI pe 30 de mostre cu pretul de pe ultimul tick, adica
+  // doua ferestre de timp diferite, si regimul ar iesi gresit.
+  const win = hist.slice(-lookback)
+  const pairs = win
+    .map((x: any) => ({
+      oi: typeof x === 'number' ? x : (x?.oi ?? x?.v ?? NaN),
+      px: typeof x === 'number' ? NaN : (x?.price ?? NaN),
+    }))
+    .filter((r: any) => Number.isFinite(r.oi) && Number.isFinite(r.px))
+  const oiSeries = pairs.length >= 2
+    ? pairs.map((r: any) => r.oi)
+    : win.map((x: any) => (typeof x === 'number' ? x : (x?.oi ?? x?.v ?? NaN)))
+  // Inregistrarile vechi nu purtau pret. Pana se aduna unele noi, folosim
+  // capetele reale pe care le avem, in loc sa raportam un regim inventat.
+  const px = pairs.length >= 2
+    ? pairs.map((r: any) => r.px)
     : [w.S?.prevPrice || w.S?.price || NaN, w.S?.price || NaN]
   const r = aion(oiSeries, px, +(w.S?.fr ?? 0), Math.max(0, +cfg.deadzonePct || 0.05))
   if (r.regime === 'QUIET' && r.squeezeRisk === 0 && oiSeries.filter((v: number) => Number.isFinite(v)).length < 2) {
@@ -4532,7 +4576,11 @@ export function updateAion(): void {
       : r.regime === 'LONG_UNWIND' ? '#ef5350'
         : r.regime === 'SHORT_COVER' ? '#26a69a' : '#455a64'
   const trail = _flowPush('aion', r.squeezeRisk, col)
-  try { w._aionSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color }))) } catch (_) { }
+  try {
+    w._aionSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
+    if (w._aionZeroS) w._aionZeroS.setData(_flowAnchor(0))
+    _syncSubChartsToMain()
+  } catch (_) { }
 }
 
 // ─────────────────────────── HYPNOS ───────────────────────────
@@ -4616,10 +4664,10 @@ export function updateNotos(): void {
       : r.state === 'PERP_RICH' ? '#26a69a'
         : r.state === 'PERP_CHEAP' ? '#5c6bc0' : '#455a64'
   const trail = _flowPush('notos', r.premiumBps, col)
-  const zero = trail.map(x => ({ time: x.time, value: 0 }))
   try {
     w._notosSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
-    if (w._notosZeroS) w._notosZeroS.setData(zero)
+    if (w._notosZeroS) w._notosZeroS.setData(_flowAnchor(0))
+    _syncSubChartsToMain()
   } catch (_) { }
 }
 
