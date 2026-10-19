@@ -2914,3 +2914,14 @@ Zero atingeri pe calea de bani sau de ordine — e strict layout client-side.
 **Ce rămâne de confirmat de tine, pe ecran:** apasă butonul cu câțiva indicatori aprinși și spune-mi dacă
 se vede tot și dacă iese curat cu Esc. Aritmetica e dovedită în teste, dar cum arată la tine pe ecran e
 singurul lucru pe care nu îl pot verifica din afară.
+
+### 👀 Observat în timpul lucrului, nereparat: trei 429-uri de alt tip (19 oct, 17:30–17:57)
+
+Nu sunt ban-urile de 4 ore din R16 și **nu sunt de la reload-urile mele** (au venit la 37–53 de minute
+după ele). Sunt `HTTP 429: Too many requests; current limit of IP(15.158.242.112) is 60` — limitări de
+**60 de secunde**, auto-recuperate, trei în 16 minute, apoi liniște.
+
+Mesajul spune *„limit ... is 60"*, adică un plafon pe **număr de cereri**, nu pe greutate — alt contor
+decât cel de 6000 pe care îl urmărim. Nu l-am investigat: ar fi însemnat să înlănțuiesc o investigație
+peste o livrare, exact ce interzice regula. **De urmărit** dacă revine; dacă da, merită aflat care endpoint
+are plafon 60.
