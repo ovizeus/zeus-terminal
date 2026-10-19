@@ -451,3 +451,37 @@ export function notos(
     aligned, state, squeezeFuel,
   }
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Puls comun pentru panourile de flux
+//
+// [FLOW-PULSE 2026-10-19] Raportat de operator: THANATOS nu afisa nimic.
+// Nu era „asteapta date" — era defectul meu. Masurat pe feed-ul viu: 7
+// evenimente de lichidare in 7 minute (Binance futures WS e blocat, doar OKX
+// livreaza). Panoul se redesena DOAR la sosirea unui eveniment, deci o data pe
+// minut, iar intre ele acceleratia e 0 si o histograma de zerouri nu deseneaza
+// nimic. La deschidere: exact un punct invizibil. Operatorul nu putea distinge
+// „merge si e liniste" de „e rupt".
+//
+// Si e si incorect pe fond: ferestrele de 1m/5m/15m se scurg in timp, deci
+// valoarea se schimba si FARA evenimente noi. Un panou care nu se misca intre
+// evenimente arata o valoare veche ca fiind actuala.
+//
+// Deci panourile care depind de date rare primesc un puls: se reactualizeaza
+// pe ceas, nu doar pe eveniment. Cele care primesc date dese (carte de ordine,
+// preț) nu au nevoie, dar nu stric nimic daca intra si ele — pulsul respecta
+// aceeasi limita de o data pe secunda.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Panourile de flux care trebuie reactualizate pe ceas, dupa ce e aprins. */
+export const FLOW_PULSE_IDS = ['hecate', 'thanatos', 'aion', 'hypnos', 'notos'] as const
+export type FlowPulseId = typeof FLOW_PULSE_IDS[number]
+
+/**
+ * Care panouri de flux sunt aprinse. Intoarce lista goala cand niciunul nu e,
+ * ca apelantul sa poata opri ceasul in loc sa bata in gol.
+ */
+export function flowPulseTargets(activeInds: Record<string, any> | null | undefined): FlowPulseId[] {
+    if (!activeInds) return []
+    return FLOW_PULSE_IDS.filter(id => !!activeInds[id])
+}

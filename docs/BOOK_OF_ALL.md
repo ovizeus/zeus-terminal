@@ -3065,3 +3065,33 @@ Zero atingeri pe calea de bani sau de ordine.
 
 **Ce rămâne de confirmat de tine:** aprinde-le pe rând din lista de indicatori. HECATE și THANATOS au
 nevoie de câteva secunde ca să adune jurnalul — e normal, nu e defect.
+
+### 🔴 Imediat după: THANATOS nu afișa nimic — și nu era „așteaptă date" (b280 v1.7.254)
+
+> *„thanatos trebuie sa astept date sa intre ca nu afiseaza nimic"*
+
+Mi-a fost ușor să zic „da, așteaptă". Am măsurat în loc de asta, și era **defectul meu**.
+
+**Diagnostic, pe feed-ul viu:** de la reload, **7 evenimente de lichidare în 7 minute** — Binance futures
+WS e blocat de rețeaua datacenterului din mai (P4), deci livrează doar OKX. Iar panoul se redesena **doar
+la sosirea unui eveniment**. Între ele acceleraţia e 0, iar o histogramă de zerouri **nu desenează nimic**.
+La deschidere: exact **un punct invizibil**. Nu puteai distinge „merge și e liniște" de „e rupt".
+
+**Și era greșit pe fond, nu doar urât:** ferestrele de 1m/5m/15m **se scurg în timp**, deci valoarea se
+schimbă și *fără* evenimente noi. Un panou îngheţat arăta o valoare veche ca fiind actuală.
+
+**AION avea aceeași boală din alt motiv:** se reactualiza numai din dispecerul pe bară — pe un chart de
+5m, o dată la cinci minute — în timp ce open interest-ul se schimbă între.
+
+**Reparat cu un puls comun.** `flowPulseTargets()` spune care panouri de flux sunt aprinse; ceasul bate o
+secundă și **se oprește singur** când niciunul nu mai e aprins — nu las un interval să bată în gol toată
+sesiunea. Un panou care aruncă nu oprește ceasul celorlalte. Tick-urile pe eveniment rămân, cu aceeași
+limită de o dată pe secundă, deci cartea de ordine și premium-ul nu devin mai scumpe.
+
+**5 teste noi, doi mutanți omorâți:** pulsul care întoarce mereu toate cele cinci (ceasul nu s-ar mai opri)
+→ 3 teste pică; lipsa gărzii pe stare lipsă → 1 test pică. Client **972 teste / 126 fișiere** (de la 967),
+typecheck 67 neschimbat.
+
+**Lecția, scrisă ca să nu se repete:** un indicator alimentat de evenimente rare are nevoie de ceas, nu
+doar de evenimente — altfel panoul minte prin omisiune. Și dacă operatorul spune „nu afișează nimic",
+prima mișcare e să măsor rata sursei, nu să-i explic că trebuie să aștepte.

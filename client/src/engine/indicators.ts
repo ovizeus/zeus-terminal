@@ -14,7 +14,7 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT, astrape as _calcASTRAPE, phoebe as _calcPHOEBE } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
-import { hecate, thanatos, aion, hypnos, notos } from './indicatorCalcFlow'
+import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets } from './indicatorCalcFlow'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -402,19 +402,19 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     // [FLOW 2026-10-19] Cele cinci panouri de flux.
     case 'hecate':
-      { const hx = document.getElementById('hecateChart'); if (hx) hx.style.display = show ? '' : 'none'; if (show) initHecateChart() }
+      { const hx = document.getElementById('hecateChart'); if (hx) hx.style.display = show ? '' : 'none'; if (show) initHecateChart(); if (show) startFlowPulse(); else stopFlowPulse() }
       break
     case 'thanatos':
-      { const tx = document.getElementById('thanatosChart'); if (tx) tx.style.display = show ? '' : 'none'; if (show) initThanatosChart() }
+      { const tx = document.getElementById('thanatosChart'); if (tx) tx.style.display = show ? '' : 'none'; if (show) initThanatosChart(); if (show) startFlowPulse(); else stopFlowPulse() }
       break
     case 'aion':
-      { const ax = document.getElementById('aionChart'); if (ax) ax.style.display = show ? '' : 'none'; if (show) initAionChart() }
+      { const ax = document.getElementById('aionChart'); if (ax) ax.style.display = show ? '' : 'none'; if (show) initAionChart(); if (show) startFlowPulse(); else stopFlowPulse() }
       break
     case 'hypnos':
-      { const yx = document.getElementById('hypnosChart'); if (yx) yx.style.display = show ? '' : 'none'; if (show) initHypnosChart() }
+      { const yx = document.getElementById('hypnosChart'); if (yx) yx.style.display = show ? '' : 'none'; if (show) initHypnosChart(); if (show) startFlowPulse(); else stopFlowPulse() }
       break
     case 'notos':
-      { const nx = document.getElementById('notosChart'); if (nx) nx.style.display = show ? '' : 'none'; if (show) initNotosChart() }
+      { const nx = document.getElementById('notosChart'); if (nx) nx.style.display = show ? '' : 'none'; if (show) initNotosChart(); if (show) startFlowPulse(); else stopFlowPulse() }
       break
     case 'eos':
       if (show) initEosSeries()
@@ -4621,4 +4621,42 @@ export function updateNotos(): void {
     w._notosSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
     if (w._notosZeroS) w._notosZeroS.setData(zero)
   } catch (_) { }
+}
+
+// ─────────────────── PULSUL PANOURILOR DE FLUX ───────────────────
+// [FLOW-PULSE 2026-10-19] Vezi nota din indicatorCalcFlow: THANATOS si AION
+// depind de date rare (o lichidare pe minut, OI la cateva minute), deci fara
+// ceas stăteau inghetate si pareau rupte. Ceasul bate o secunda si se opreste
+// singur cand niciun panou de flux nu mai e aprins — nu lasam un interval sa
+// bata in gol toata sesiunea.
+
+const _FLOW_UPDATERS: Record<string, () => void> = {
+  hecate: () => updateHecate(),
+  thanatos: () => updateThanatos(),
+  aion: () => updateAion(),
+  hypnos: () => updateHypnos(),
+  notos: () => updateNotos(),
+}
+
+export function flowPulseTick(): void {
+  const targets = flowPulseTargets(w.S?.activeInds)
+  if (!targets.length) { stopFlowPulse(); return }
+  for (const id of targets) {
+    const fn = _FLOW_UPDATERS[id]
+    // Un panou care nu se poate desena nu are voie sa opreasca ceasul
+    // celorlalte, nici sa arunce in afara intervalului.
+    if (fn) { try { fn() } catch (_) { /* */ } }
+  }
+}
+
+export function startFlowPulse(): void {
+  if (w._flowPulseTimer) return
+  if (!flowPulseTargets(w.S?.activeInds).length) return
+  w._flowPulseTimer = setInterval(flowPulseTick, 1000)
+}
+
+export function stopFlowPulse(): void {
+  if (!w._flowPulseTimer) return
+  clearInterval(w._flowPulseTimer)
+  w._flowPulseTimer = null
 }

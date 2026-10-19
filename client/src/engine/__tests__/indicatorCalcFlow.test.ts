@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   hecate, thanatos, aion, hypnos, notos, HECATE_BANDS,
+  flowPulseTargets, FLOW_PULSE_IDS,
 } from '../indicatorCalcFlow'
 
 // ═══════════════════════════ HECATE ═══════════════════════════
@@ -353,5 +354,42 @@ describe('NOTOS — premium-ul perpetual', () => {
     expect(r.premiumBps).toBeLessThan(0)        // perpetualul e sub index
     expect(r.state).toBe('DIVERGENT_CHEAP')     // ieftin, dar funding pozitiv
     expect(r.squeezeFuel).toBeGreaterThan(0)
+  })
+})
+
+// ═══════════════════════════ PULSUL ═══════════════════════════
+
+describe('flowPulseTargets — de ce THANATOS nu afisa nimic', () => {
+  // Raportat de operator. Nu era „asteapta date": panoul se redesena DOAR la
+  // sosirea unei lichidari, iar pe feed-ul viu sunt ~7 evenimente in 7 minute
+  // (Binance futures WS blocat, doar OKX livreaza). Intre evenimente
+  // acceleratia e 0 si o histograma de zerouri nu deseneaza nimic, deci la
+  // deschidere era exact un punct invizibil. Si e incorect pe fond: ferestrele
+  // de 1m/5m/15m se scurg in timp, deci valoarea se schimba FARA evenimente
+  // noi — un panou inghetat arata o valoare veche ca fiind actuala.
+
+  it('intoarce doar panourile de flux aprinse', () => {
+    expect(flowPulseTargets({ thanatos: true, hecate: false, rsi14: true })).toEqual(['thanatos'])
+  })
+
+  it('intoarce lista GOALA cand niciunul nu e aprins, ca ceasul sa se poata opri', () => {
+    expect(flowPulseTargets({ rsi14: true, macd: true })).toEqual([])
+    expect(flowPulseTargets({})).toEqual([])
+  })
+
+  it('nu arunca pe stare lipsa', () => {
+    expect(flowPulseTargets(null)).toEqual([])
+    expect(flowPulseTargets(undefined)).toEqual([])
+  })
+
+  it('ignora indicatorii care nu sunt de flux', () => {
+    const t = flowPulseTargets({ ema: true, terminator: true, phoebe: true, aion: true })
+    expect(t).toEqual(['aion'])
+  })
+
+  it('acopera toate cele cinci panouri de flux', () => {
+    const all = flowPulseTargets({ hecate: true, thanatos: true, aion: true, hypnos: true, notos: true })
+    expect(all).toHaveLength(5)
+    expect([...all].sort()).toEqual([...FLOW_PULSE_IDS].sort())
   })
 })
