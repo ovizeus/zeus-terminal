@@ -14,6 +14,7 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT, astrape as _calcASTRAPE, phoebe as _calcPHOEBE } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
+import { hecate, thanatos, aion, hypnos, notos } from './indicatorCalcFlow'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -398,6 +399,22 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'atlas':
       { const atx = document.getElementById('atlasChart'); if (atx) atx.style.display = show ? '' : 'none'; if (show) initAtlasChart() }
+      break
+    // [FLOW 2026-10-19] Cele cinci panouri de flux.
+    case 'hecate':
+      { const hx = document.getElementById('hecateChart'); if (hx) hx.style.display = show ? '' : 'none'; if (show) initHecateChart() }
+      break
+    case 'thanatos':
+      { const tx = document.getElementById('thanatosChart'); if (tx) tx.style.display = show ? '' : 'none'; if (show) initThanatosChart() }
+      break
+    case 'aion':
+      { const ax = document.getElementById('aionChart'); if (ax) ax.style.display = show ? '' : 'none'; if (show) initAionChart() }
+      break
+    case 'hypnos':
+      { const yx = document.getElementById('hypnosChart'); if (yx) yx.style.display = show ? '' : 'none'; if (show) initHypnosChart() }
+      break
+    case 'notos':
+      { const nx = document.getElementById('notosChart'); if (nx) nx.style.display = show ? '' : 'none'; if (show) initNotosChart() }
       break
     case 'eos':
       if (show) initEosSeries()
@@ -999,7 +1016,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, w._astrapeChart, w._phoebeChart, w._eunomiaChart, w._metisChart, w._kronosChart, w._mentorChart, w._apolloChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._adxChart, w._willrChart, w._rocChart, w._cmfChart, w._aoChart, w._aroonChart, w._trixChart, w._uoChart, w._chopChart, w._heliosChart, w._atlasChart, w._pantheonChart, w._seleneChart, w._themisChart, w._erebusChart, w._anemoiChart, w._cerberusChart, w._proteusChart, w._typhonChart, w._styxChart, w._gerasChart, w._kairosChart, w._nyxChart, w._psycheChart, w._hyperionChart, w._astrapeChart, w._hecateChart, w._thanatosChart, w._aionChart, w._hypnosChart, w._notosChart, w._phoebeChart, w._eunomiaChart, w._metisChart, w._kronosChart, w._mentorChart, w._apolloChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -3601,6 +3618,12 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.hermes) safe(updateHermes)
   if (w.S.activeInds.charon) safe(updateCharon)
   if (w.S.activeInds.atlas && w._atlasInited) safe(updateAtlas)
+  // [FLOW 2026-10-19] Panourile de flux.
+  if (w.S.activeInds.hecate && w._hecateInited) safe(updateHecate)
+  if (w.S.activeInds.thanatos && w._thanatosInited) safe(updateThanatos)
+  if (w.S.activeInds.aion && w._aionInited) safe(updateAion)
+  if (w.S.activeInds.hypnos && w._hypnosInited) safe(updateHypnos)
+  if (w.S.activeInds.notos && w._notosInited) safe(updateNotos)
   if (w.S.activeInds.eos) safe(updateEos)
   if (w.S.activeInds.pantheon && w._pantheonInited) safe(updatePantheon)
   if (w.S.activeInds.aegis) safe(updateAegis)
@@ -4351,4 +4374,251 @@ export function updateTerminator(): void {
     w._termActive = true
     w._termLastTrendColor = _lastTrend === 1 ? TERMINATOR_UP : (_lastTrend === -1 ? TERMINATOR_DN : null)
   } catch (_) { /* never let the tint break the indicator */ }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLOW PANES — HECATE · THANATOS · AION · HYPNOS · NOTOS
+//
+// [FLOW 2026-10-19] Cerut de operator: cinci indicatori „total diferiti", pe
+// date reale. Masurat inainte de a scrie o linie: toti cei 91 de indicatori
+// existenti citesc EXCLUSIV OHLCV — referintele la S.bids, S.asks, S.buckets
+// si oiHistory in indicatorCalc.ts erau ZERO. Deci acestia cinci stau pe
+// datele pe care Zeus le primeste si nu le folosea nimeni.
+//
+// Trei dintre ele (HECATE, THANATOS, NOTOS) descriu PREZENTUL, nu istoricul:
+// cartea de ordine, ultimul minut de lichidari si premium-ul de acum nu au
+// serie pe bare. Ca sa nu desenez un trecut inventat, fiecare isi tine propriul
+// jurnal in memorie, alimentat de tick-urile reale, si deseneaza doar ce a
+// vazut efectiv. Un panou gol la pornire e corect; unul plin de date fabricate
+// nu ar fi.
+// ═══════════════════════════════════════════════════════════════════════════
+
+
+/** Jurnal in memorie pentru valorile care nu au serie pe bare. */
+type FlowTrail = Array<{ time: number; value: number; color: string }>
+const FLOW_MAX = 240
+
+function _flowPush(key: string, value: number, color: string): FlowTrail {
+  const store = (w._flowTrails = w._flowTrails || {})
+  const arr: FlowTrail = store[key] = store[key] || []
+  // Lightweight-charts cere timp strict crescator. Tick-urile pot veni de mai
+  // multe ori in aceeasi secunda, deci ultima valoare din secunda curenta se
+  // inlocuieste in loc sa fie adaugata.
+  const t = Math.floor(Date.now() / 1000)
+  if (arr.length && arr[arr.length - 1].time === t) arr[arr.length - 1] = { time: t, value, color }
+  else arr.push({ time: t, value, color })
+  if (arr.length > FLOW_MAX) arr.splice(0, arr.length - FLOW_MAX)
+  return arr
+}
+
+// ─────────────────────────── HECATE ───────────────────────────
+// Presiunea cartii de ordine. Histograma = presiunea compusa (-100..100),
+// verde cand cumpararea domina, roșu cand vanzarea domina. Liniile de pe
+// chartul principal marcheaza zidurile.
+
+export function initHecateChart(): void {
+  if (w._hecateInited && w._hecateChart) { updateHecate(); return }
+  w._hecateChart = _createSubChart('hecateChart', 70)
+  if (!w._hecateChart) return
+  w._hecateSeries = w._hecateChart.addHistogramSeries({ color: '#22d3ee', priceLineVisible: false, lastValueVisible: true, title: 'HECATE' })
+  w._hecateZeroS = w._hecateChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._hecateInited = true
+  updateHecate()
+}
+
+export function updateHecate(): void {
+  if (!w._hecateInited || !w._hecateSeries) return
+  const cfg = w.IND_SETTINGS?.hecate || {}
+  const r = hecate(w.S?.bids || [], w.S?.asks || [], Math.max(1.5, +cfg.wallRatio || 4))
+  // Fara carte de ordine nu desenam nimic — nu „zero", care ar arata ca
+  // echilibru perfect si ar fi o minciuna despre o carte pe care nu o avem.
+  if (r.mid == null) {
+    try { w._hecateSeries.setData([]); if (w._hecateZeroS) w._hecateZeroS.setData([]) } catch (_) { }
+    return
+  }
+  const col = r.pressure >= 55 ? '#00e676'
+    : r.pressure >= 18 ? '#26a69a'
+      : r.pressure > -18 ? '#546e7a'
+        : r.pressure > -55 ? '#ef5350' : '#ff1744'
+  const trail = _flowPush('hecate', r.pressure, col)
+  const zero = trail.map(x => ({ time: x.time, value: 0 }))
+  try {
+    w._hecateSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
+    if (w._hecateZeroS) w._hecateZeroS.setData(zero)
+  } catch (_) { }
+  // Zidurile, pe chartul principal, ca linii de pret.
+  try {
+    const old = (w._hecateWallLines = w._hecateWallLines || [])
+    if (w.cSeries) {
+      for (const ln of old) { try { w.cSeries.removePriceLine(ln) } catch (_) { } }
+      old.length = 0
+      for (const wall of r.walls.slice(0, 4)) {
+        old.push(w.cSeries.createPriceLine({
+          price: wall.price,
+          color: wall.side === 'bid' ? 'rgba(0,230,118,0.55)' : 'rgba(255,23,68,0.55)',
+          lineWidth: 1, lineStyle: 2, axisLabelVisible: true,
+          title: (wall.side === 'bid' ? 'BID ' : 'ASK ') + Math.round(wall.ratio) + 'x',
+        }))
+      }
+    }
+  } catch (_) { }
+}
+
+// ─────────────────────────── THANATOS ───────────────────────────
+// Cascade de lichidari. Histograma = acceleratia (rata minutului curent fata
+// de rata implicata de ultimele 15 minute). Culoarea spune partea.
+
+export function initThanatosChart(): void {
+  if (w._thanatosInited && w._thanatosChart) { updateThanatos(); return }
+  w._thanatosChart = _createSubChart('thanatosChart', 64)
+  if (!w._thanatosChart) return
+  w._thanatosSeries = w._thanatosChart.addHistogramSeries({ color: '#ff8f00', priceLineVisible: false, lastValueVisible: true, title: 'THANATOS' })
+  w._thanatosOneS = w._thanatosChart.addLineSeries({ color: 'rgba(255,255,255,0.22)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._thanatosInited = true
+  updateThanatos()
+}
+
+export function updateThanatos(): void {
+  if (!w._thanatosInited || !w._thanatosSeries) return
+  const cfg = w.IND_SETTINGS?.thanatos || {}
+  const r = thanatos(
+    w.S?.buckets || [], w.S?.w1m || { l: 0, s: 0 }, w.S?.w5m || { l: 0, s: 0 }, w.S?.w15m || { l: 0, s: 0 },
+    Math.max(1.5, +cfg.cascadeMult || 3),
+  )
+  const col = r.state === 'CASCADE_LONGS' ? '#ff1744'
+    : r.state === 'CASCADE_SHORTS' ? '#00e676'
+      : r.state === 'ELEVATED' ? '#ff8f00' : '#455a64'
+  const trail = _flowPush('thanatos', r.acceleration, col)
+  // Linia de referinta e 1 (rata normala), nu zero: panoul arata multipli.
+  const one = trail.map(x => ({ time: x.time, value: 1 }))
+  try {
+    w._thanatosSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
+    if (w._thanatosOneS) w._thanatosOneS.setData(one)
+  } catch (_) { }
+}
+
+// ─────────────────────────── AION ───────────────────────────
+// Regimul de pozitionare din derivate. Histograma = riscul de squeeze (0..100),
+// colorata dupa regim. AION are serie reala: oiHistory se aduna in timp.
+
+export function initAionChart(): void {
+  if (w._aionInited && w._aionChart) { updateAion(); return }
+  w._aionChart = _createSubChart('aionChart', 60)
+  if (!w._aionChart) return
+  w._aionSeries = w._aionChart.addHistogramSeries({ color: '#ab47bc', priceLineVisible: false, lastValueVisible: true, title: 'AION' })
+  w._aionInited = true
+  updateAion()
+}
+
+export function updateAion(): void {
+  if (!w._aionInited || !w._aionSeries) return
+  const cfg = w.IND_SETTINGS?.aion || {}
+  const lookback = Math.max(2, Math.round(+cfg.lookback || 30))
+  const hist = Array.isArray(w.oiHistory) ? w.oiHistory : []
+  // oiHistory tine {ts, oi} sau numere, in functie de calea care l-a umplut.
+  const oiSeries = hist.slice(-lookback).map((x: any) => (typeof x === 'number' ? x : (x?.oi ?? x?.v ?? NaN)))
+  const pxSeries = hist.slice(-lookback).map((x: any) => (typeof x === 'number' ? NaN : (x?.price ?? NaN)))
+  // Daca istoricul nu purta preturi, folosim capetele reale pe care le avem.
+  const px = pxSeries.filter((v: number) => Number.isFinite(v)).length >= 2
+    ? pxSeries
+    : [w.S?.prevPrice || w.S?.price || NaN, w.S?.price || NaN]
+  const r = aion(oiSeries, px, +(w.S?.fr ?? 0), Math.max(0, +cfg.deadzonePct || 0.05))
+  if (r.regime === 'QUIET' && r.squeezeRisk === 0 && oiSeries.filter((v: number) => Number.isFinite(v)).length < 2) {
+    try { w._aionSeries.setData([]) } catch (_) { }
+    return
+  }
+  const col = r.regime === 'LONGS_CROWDED' ? '#ff6d00'
+    : r.regime === 'SHORTS_CROWDED' ? '#00b0ff'
+      : r.regime === 'LONG_UNWIND' ? '#ef5350'
+        : r.regime === 'SHORT_COVER' ? '#26a69a' : '#455a64'
+  const trail = _flowPush('aion', r.squeezeRisk, col)
+  try { w._aionSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color }))) } catch (_) { }
+}
+
+// ─────────────────────────── HYPNOS ───────────────────────────
+// Ceasul de volatilitate. Are serie adevarata pe bare: pentru fiecare bara se
+// compara intervalul ei cu norma ORII ei, construita din istoricul incarcat.
+// Singurul indicator din Zeus care intreaba „cand", nu „incotro".
+
+export function initHypnosChart(): void {
+  if (w._hypnosInited && w._hypnosChart) { updateHypnos(); return }
+  w._hypnosChart = _createSubChart('hypnosChart', 64)
+  if (!w._hypnosChart) return
+  w._hypnosSeries = w._hypnosChart.addHistogramSeries({ color: '#7e57c2', priceLineVisible: false, lastValueVisible: true, title: 'HYPNOS' })
+  w._hypnosOneS = w._hypnosChart.addLineSeries({ color: 'rgba(255,255,255,0.22)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._hypnosInited = true
+  updateHypnos()
+}
+
+export function updateHypnos(): void {
+  if (!w._hypnosInited || !w._hypnosSeries || !w.S?.klines?.length) return
+  const cfg = w.IND_SETTINGS?.hypnos || {}
+  const minSamples = Math.max(2, Math.round(+cfg.minSamples || 3))
+  const k = w.S.klines
+  const times = k.map((b: any) => b.time)
+  const highs = k.map((b: any) => b.high)
+  const lows = k.map((b: any) => b.low)
+  const closes = k.map((b: any) => b.close)
+
+  // Profilul orar, construit o data din tot istoricul.
+  const full = hypnos(times, highs, lows, closes, minSamples)
+  const out: any[] = [], one: any[] = []
+  if (!full.profile.length) { try { w._hypnosSeries.setData([]) } catch (_) { } return }
+
+  const toHour = (t: number): number => new Date((t < 1e11 ? t * 1000 : t)).getUTCHours()
+  for (let i = 0; i < k.length; i++) {
+    const b = k[i]
+    if (!b || !Number.isFinite(b.close) || b.close <= 0) continue
+    one.push({ time: b.time, value: 1 })
+    const prof = full.profile[toHour(b.time)]
+    if (!prof || prof.samples < minSamples || prof.meanRangePct <= 0) continue
+    const r = ((b.high - b.low) / b.close) * 100
+    if (!Number.isFinite(r)) continue
+    const ratio = r / prof.meanRangePct
+    const col = ratio >= 2 ? '#ff1744'
+      : ratio >= 1.3 ? '#ff8f00'
+        : ratio > 0.7 ? '#7e57c2'
+          : ratio > 0.5 ? '#3949ab' : '#263238'
+    out.push({ time: b.time, value: Math.round(ratio * 1000) / 1000, color: col })
+  }
+  try {
+    w._hypnosSeries.setData(out)
+    if (w._hypnosOneS) w._hypnosOneS.setData(one)
+    _syncSubChartsToMain()
+  } catch (_) { }
+}
+
+// ─────────────────────────── NOTOS ───────────────────────────
+// Premium-ul perpetualului fata de index, in puncte de baza, plus alinierea cu
+// funding-ul. S.basisRate se calcula din 2026 si nu il citea nimeni.
+
+export function initNotosChart(): void {
+  if (w._notosInited && w._notosChart) { updateNotos(); return }
+  w._notosChart = _createSubChart('notosChart', 60)
+  if (!w._notosChart) return
+  w._notosSeries = w._notosChart.addHistogramSeries({ color: '#00bcd4', priceLineVisible: false, lastValueVisible: true, title: 'NOTOS' })
+  w._notosZeroS = w._notosChart.addLineSeries({ color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+  w._notosInited = true
+  updateNotos()
+}
+
+export function updateNotos(): void {
+  if (!w._notosInited || !w._notosSeries) return
+  const cfg = w.IND_SETTINGS?.notos || {}
+  const r = notos(+(w.S?.markPrice ?? 0), +(w.S?.indexPrice ?? 0), +(w.S?.fr ?? 0), Math.max(0, +cfg.fairBps || 2))
+  if (r.premiumBps == null) {
+    try { w._notosSeries.setData([]); if (w._notosZeroS) w._notosZeroS.setData([]) } catch (_) { }
+    return
+  }
+  // Divergenta e ce conteaza, deci ea primeste culorile tari.
+  const col = r.state === 'DIVERGENT_RICH' ? '#ff1744'
+    : r.state === 'DIVERGENT_CHEAP' ? '#d500f9'
+      : r.state === 'PERP_RICH' ? '#26a69a'
+        : r.state === 'PERP_CHEAP' ? '#5c6bc0' : '#455a64'
+  const trail = _flowPush('notos', r.premiumBps, col)
+  const zero = trail.map(x => ({ time: x.time, value: 0 }))
+  try {
+    w._notosSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
+    if (w._notosZeroS) w._notosZeroS.setData(zero)
+  } catch (_) { }
 }

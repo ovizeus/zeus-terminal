@@ -117,6 +117,13 @@ export const IND_ICONS: Record<string, string> = {
   // `st`'s bare step (same maths, different indicator) nor `kratos`'s diagonal
   // crosshair / `argus`'s eye: corner brackets + the flip step read as the
   // name while still showing what it draws.
+  // ── [FLOW 2026-10-19] Cele cinci instrumente pe date de flux: carte de
+  // ordine, lichidari, open interest, sezonalitate orara, premium perp. ──
+  hecate: g(p('M8 2v12') + p('M8 4H4M8 6H6M8 8H3') + p('M8 10h3M8 12h5')),                      // scara cartii de ordine, asimetrica
+  thanatos: g(p('M2 3h3v3h3v3h3') + p('M13 9v4M11 11l2 2 2-2')),                                 // trepte in cascada + prabusire
+  aion: g(p('M2 13h12') + dot(4, 10.5) + dot(6.2, 10.5) + dot(5.1, 8.2) + p('M11 10.5V5M9 7l2-2 2 2')), // aglomerare + evadare (squeeze)
+  hypnos: g(p('M8 2a6 6 0 100 12 6 6 0 000-12z') + p('M4.6 9.2l1.9-2.6 1.5 3 2-4 1.4 2')),       // cadran de ceas cu urma de volatilitate
+  notos: g(p('M2 5h12') + p('M2 11h12') + p('M8 5v6') + p('M6.6 6.6L8 5l1.4 1.6')),              // doua sine si prima dintre ele
   terminator: g(p('M2 5V2h3') + p('M11 2h3v3') + p('M14 11v3h-3') + p('M5 14H2v-3') + p('M4.5 10.5h3V6h4')),
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──

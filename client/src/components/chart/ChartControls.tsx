@@ -721,6 +721,14 @@ const IND_LIST: IndMeta[] = [
   { id: 'zs',  ico: '👑', name: 'SUPREMUS',    desc: 'Zone Supremus S/R',       settingsModal: 'supremus', isOverlay: true },
   { id: 'sr',  ico: '📐', name: 'S/R Levels',  desc: 'Auto support/resistance', settingsModal: 'sr',       isOverlay: true },
   { id: 'llv', ico: '💢', name: 'LLV Volume', desc: 'Large Liquidation Vols',  settingsModal: 'llv',      isOverlay: true },
+  // ── [FLOW 2026-10-19] Cinci instrumente pe date de flux. Fiecare are intrare
+  // in IND_SETTINGS cu exact campurile pe care calculul le citeste — lectia
+  // TERMINATOR: o rotita care deschide un panou fara efect e mai rea ca niciuna. ──
+  { id: 'hecate',   ico: '\u{1F9F1}', name: 'HECATE',         desc: 'Order-book pressure — depth imbalance across 4 distance bands + wall detection, from the live book', hasGenericSettings: true },
+  { id: 'thanatos', ico: '\u2620\uFE0F', name: 'THANATOS',   desc: 'Liquidation cascade — intensity vs normal, side dominance and acceleration, from the live liquidation feed', hasGenericSettings: true },
+  { id: 'aion',     ico: '\u267E\uFE0F', name: 'AION',       desc: 'Positioning regime — open interest vs price vs funding: crowded longs, crowded shorts, unwind or short cover, with squeeze risk', hasGenericSettings: true },
+  { id: 'hypnos',   ico: '\u{1F570}\uFE0F', name: 'HYPNOS',  desc: 'Volatility clock — hour-of-day profile from real history; rates this hour against its OWN norm, not the day average', hasGenericSettings: true },
+  { id: 'notos',    ico: '\u{1FA81}', name: 'NOTOS',          desc: 'Perp premium — mark vs index in basis points plus funding alignment; flags the divergence that fuels a squeeze', hasGenericSettings: true },
 ]
 
 export function ChartControls() {

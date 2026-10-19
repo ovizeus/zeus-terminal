@@ -197,6 +197,15 @@ export const INDICATORS: any[] = [
   { id: 'morpheus', ico: _ZI.dia, name: 'MORPHEUS', desc: 'Recolours candles in 4 regime colours + signals + prints 🎨', cat: 'trend', def: false },
   { id: 'harmonia', ico: _ZI.wave, name: 'HARMONIA', desc: 'Rainbow spectrum candle painter + dual-degree swing arrows 🌈', cat: 'trend', def: false },
   { id: 'daimon', ico: _ZI.scope, name: 'DAIMON', desc: 'A chart wizard that walks, reads the market & calls trades 🧙', cat: 'trend', def: false },
+  // ── [FLOW 2026-10-19] Cinci instrumente pe date pe care niciunul dintre
+  // ceilalti 91 nu le citeste: carte de ordine, lichidari, open interest,
+  // sezonalitate orara, premium perp. Masurat inainte de a scrie: referintele
+  // la S.bids / S.asks / S.buckets / oiHistory in indicatorCalc.ts erau ZERO. ──
+  { id: 'hecate', ico: _ZI.ruler, name: 'HECATE', desc: 'Order-book pressure — depth imbalance across 4 distance bands + wall detection, from the live book', cat: 'volume', def: false },
+  { id: 'thanatos', ico: _ZI.skull, name: 'THANATOS', desc: 'Liquidation cascade — intensity vs normal, side dominance and acceleration, from the live liquidation feed', cat: 'volume', def: false },
+  { id: 'aion', ico: _ZI.scope, name: 'AION', desc: 'Positioning regime — open interest vs price vs funding: crowded longs, crowded shorts, unwind or short cover, with squeeze risk', cat: 'momentum', def: false },
+  { id: 'hypnos', ico: _ZI.clock, name: 'HYPNOS', desc: 'Volatility clock — hour-of-day volatility profile from real history; rates this hour against its OWN norm, not the day average', cat: 'vol', def: false },
+  { id: 'notos', ico: _ZI.drop, name: 'NOTOS', desc: 'Perp premium — mark vs index in basis points plus funding alignment; flags the divergence that fuels a squeeze', cat: 'momentum', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

@@ -4,6 +4,7 @@
 // modals, alerts, cloud, chart settings, sound
 
 import { getTPObject } from '../services/stateAccessors'
+import { updateHecate, updateThanatos, updateNotos } from '../engine/indicators'
 import { BM, BRAIN as BR } from '../core/config'
 import { useBrainStore } from '../stores/brainStore'
 import { fmtTime, toast } from './marketDataHelpers'
@@ -23,6 +24,28 @@ import { resetBackfill } from './chartBackfill'
 import { renderATPositions } from '../trading/autotrade'
 import { _soundBadgeClick, _updateAudioBadge } from '../ui/dom2'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
+// [FLOW 2026-10-19] HECATE, THANATOS si NOTOS descriu PREZENTUL: cartea de
+// ordine, ultimul minut de lichidari si premium-ul de acum. Daca s-ar
+// reactualiza numai la bara noua, un panou de carte de ordine ar sta inghetat
+// minute intregi pe un chart de 5m. Deci se reactualizeaza din tick-ul propriu,
+// dar NUMAI cand indicatorul e aprins, si cu o limita de o data pe secunda —
+// depth20 poate veni de mai multe ori pe secunda si nu are rost sa redesenam
+// de fiecare data.
+const _flowLast: Record<string, number> = {}
+function _flowTick(which: 'hecate' | 'thanatos' | 'notos'): void {
+  try {
+    if (!w.S?.activeInds?.[which]) return
+    const now = Date.now()
+    if (now - (_flowLast[which] || 0) < 1000) return
+    _flowLast[which] = now
+    // Import direct, nu un global: `window.toggleFS` era exact genul de punte
+    // care nu a existat niciodata si a lasat o scurtatura moarta luni de zile.
+    if (which === 'hecate') updateHecate()
+    else if (which === 'thanatos') updateThanatos()
+    else if (which === 'notos') updateNotos()
+  } catch (_) { /* un panou care nu se poate desena nu opreste feed-ul */ }
+}
+
 
 // ===== WS RECONNECT BACKOFF =====
 const _wsBackoff: any = { bnb: 0, byb: 0, wl: 0 }
@@ -57,6 +80,7 @@ function _connectBNBProxy(): void {
     if (msg.symbol !== sym) return
     if (w.ingestPrice(String(msg.price), 'BNB')) {
       w.S.fr = msg.fr || 0; w.S.frCd = msg.frCd || 0
+      _flowTick('notos')
       updatePriceDisplay(); updateMainMetrics()
       if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
     }
@@ -65,6 +89,7 @@ function _connectBNBProxy(): void {
     if (msg.symbol !== sym) return
     w.S.bids = msg.bids || []; w.S.asks = msg.asks || []
     renderOB()
+    _flowTick('hecate')
   }))
   _proxyUnsubs.push(on('market.liq', (msg: any) => {
     if (msg.exchange !== 'binance') return
@@ -151,6 +176,7 @@ export function connectBNB(): void {
           w.S.bids = (d.b || []).map(([p, q]: any) => ({ p: +p, q: +q }))
           w.S.asks = (d.a || []).map(([p, q]: any) => ({ p: +p, q: +q }))
           renderOB()
+          _flowTick('hecate')
         } else if (st.includes('forceOrder')) {
           if (Array.isArray(d)) d.forEach((o: any) => procLiq(o.o || o, 'bnb'))
           else procLiq(d.o || d, 'bnb')
@@ -286,6 +312,7 @@ export function procLiq(o: any, src?: string, ts?: number): void {
   w.S.events.unshift({ sym, usd, isLong, price, ts: now, src, dup: dupFlag })
   if (w.S.events.length > 100) w.S.events.pop()
   updLiqStats(); renderFeed()
+  _flowTick('thanatos')
   if (sym === 'BTC' || sym === w.S.symbol.replace('USDT', '').substring(0, 3)) {
     const _bkt = w.S.llvSettings.bucketPct || 0.3
     const _step = price * _bkt / 100

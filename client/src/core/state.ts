@@ -1906,6 +1906,14 @@ export let boreasUpS: any = null, boreasDnS: any = null, boreasGlowUpS: any = nu
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
+  // [FLOW 2026-10-19] Cele cinci instrumente de flux. Fiecare camp de aici e
+  // CITIT de calculul respectiv — vezi lectia TERMINATOR mai jos: un camp care
+  // nu schimba nimic ar fi mai rau decat niciun camp.
+  hecate: { wallRatio: 4 },
+  thanatos: { cascadeMult: 3 },
+  aion: { lookback: 30, deadzonePct: 0.05 },
+  hypnos: { minSamples: 3 },
+  notos: { fairBps: 2 },
   ema: { p1: 50, p2: 200, p3: 20, p4: 100 },
   wma: { p1: 20, p2: 50 },
   st: { period: 10, mult: 3 },

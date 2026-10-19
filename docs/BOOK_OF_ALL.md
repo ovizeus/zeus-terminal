@@ -2949,3 +2949,119 @@ Mesajul spune *„limit ... is 60"*, adică un plafon pe **număr de cereri**, n
 decât cel de 6000 pe care îl urmărim. Nu l-am investigat: ar fi însemnat să înlănțuiesc o investigație
 peste o livrare, exact ce interzice regula. **De urmărit** dacă revine; dacă da, merită aflat care endpoint
 are plafon 60.
+
+---
+
+## 🌊 2026-10-19 — CINCI INDICATORI NOI, pe date pe care nimeni nu le citea (b279 v1.7.253)
+
+> *„sa te uiti in lista de indicatori sa vezi ce am sa mai faci 5 diferiti total culori tot frumos etc …
+> nu uita de icoane dedicate ca la ceilalti … dar vreau date reale totul wow si bun"*
+
+### Întâi inventarul, apoi proiectarea
+
+Erau **91** de indicatori. 34 clasici, 57 inventați cu nume grecești. Dacă m-aș fi apucat direct de
+scris, ți-aș fi dat cinci variații pe ceva ce ai deja. Deci am măsurat ce **citesc** cei 91:
+
+```
+referinte in indicatorCalc.ts:   S.bids → 0    S.asks → 0    S.buckets → 0    oiHistory → 0
+```
+
+**Toți cei 91 citesc exclusiv OHLCV.** Iar `S.basisRate` (premium-ul perpetualului) se calculează din
+iunie 2026 și **nu îl citește nimeni**. Adică Zeus primește carte de ordine, feed de lichidări, open
+interest și premium perp — date reale, plătite, vii — și le aruncă.
+
+Acolo stau cei cinci. **Niciunul nu e o variație pe o medie mobilă.**
+
+| indicator | sursa reală | ce întreabă |
+|---|---|---|
+| **HECATE** 🧱 | cartea de ordine (`S.bids`/`S.asks`) | cât apasă cumpărarea vs vânzarea, pe **patru benzi de distanță**, plus unde sunt zidurile |
+| **THANATOS** ☠️ | bucket-urile de lichidări (Bybit+OKX, vii) | se **accelerează** lichidările, și pe care parte |
+| **AION** ♾️ | open interest + funding | **cine** e aglomerat: longuri noi, shorturi noi, ieșiri sau acoperiri — plus risc de squeeze |
+| **HYPNOS** 🕰️ | marcajele de timp din klines | **când**, nu încotro: profilul volatilității pe oră |
+| **NOTOS** 🪁 | mark vs index + funding | cât de scump e perpetualul față de spot, și **când se contrazice cu funding-ul** |
+
+### 🔴 Două bug-uri ale mele, prinse de teste înainte de livrare
+
+**1. HECATE înclina tăcut cartea de ordine.** Benzile se calculau ca `mid * (1 + pct)` și `mid * (1 - pct)`.
+Acelea **nu sunt simetrice în virgulă mobilă**: pentru `mid = 100` și `pct = 0,005`, limita de sus iese
+`100.49999999999999`, deci un nivel exact la 100,5 cădea **afară**, în timp ce oglinda lui la 99,5 intra.
+O carte perfect simetrică raporta presiune **+5,4** în loc de 0. Un indicator de presiune care minte cu
+5 puncte pe o carte echilibrată e mai rău decât niciunul. Reparat prin măsurarea distanței **ca raport**.
+
+**2. HYPNOS se autoamortiza, și mințea de-a dreptul la variație zero.** Norma orei includea și bara
+curentă, deci un salt de trei ori peste normal se citea ca 2,6. Mai rău: cu deviație standard zero — o oră
+care a fost mereu identică — z-score-ul ieșea 0, deci **o oră perfect stabilă care se triplează raporta
+`NORMAL`**. Reparat: norma se construiește fără bara curentă, iar în cazul degenerat decide raportul.
+
+Pe amândouă le-au găsit testele, nu ochii mei. Al doilea e exact genul de lucru care ar fi stat ascuns
+luni de zile, pentru că panoul ar fi arătat plauzibil.
+
+### Cum am evitat să-ți desenez un trecut inventat
+
+Trei dintre ele (HECATE, THANATOS, NOTOS) descriu **prezentul**: cartea de ordine de acum, ultimul minut
+de lichidări, premium-ul de acum. Nu au serie pe bare. Puteam să le „reconstruiesc" un istoric din preț
+— ar fi arătat impresionant și ar fi fost fals.
+
+În schimb fiecare **își ține propriul jurnal în memorie**, alimentat de tick-urile reale, și desenează
+doar ce a văzut efectiv. **Un panou gol la pornire e corect**; unul plin de date fabricate nu ar fi.
+Se reactualizează din tick propriu (carte / lichidare / funding), **o dată pe secundă cel mult**, și numai
+când indicatorul e aprins — prin **import direct, nu printr-un global**, pentru că `window.toggleFS` a fost
+exact genul de punte care nu a existat niciodată și a lăsat o scurtătură moartă luni de zile.
+
+AION și HYPNOS au serie adevărată: `oiHistory` se adună în timp, iar HYPNOS are tot istoricul de bare.
+
+### ✅ Dovada pe date vii — nu doar teste
+
+Rulat chiar acum, pe datele serverului:
+
+```
+HYPNOS   500 bare 1h · ora 19 UTC · interval acum 0,163% vs norma OREI 0,383%
+         raport 0,426 · z −1,13 → QUIET · 24/24 ore acoperite
+         cele mai volatile ore gasite: 14h=0,86%  13h=0,73%  15h=0,70%  (UTC)
+
+NOTOS    mark 81848,4 · index 81886,28 → premium −4,63 bps · funding +1 bps
+         aliniat=false → DIVERGENT_CHEAP · combustibil 49
+
+AION     OI 95392,802 → 95392,802 (0%) · pret 0% → QUIET, aglomerat=null
+```
+
+**Partea care mi-a plăcut:** nu i-am spus lui HYPNOS nimic despre sesiuni de tranzacționare. A primit
+500 de bare și a găsit singur că cele mai volatile ore sunt **13–15 UTC** — adică exact deschiderea
+pieței americane. Profilul nu e o presupunere, e măsurat din datele tale.
+
+Și AION a spus corect **QUIET** pe un OI neschimbat în 6 secunde, în loc să inventeze un regim din
+zgomot. Zona moartă funcționează.
+
+### Iconițe și integrare
+
+Cinci **glyph-uri SVG dedicate** în `IND_ICONS` — nu emoji, conform regulii: scara cărții de ordine
+asimetrică, trepte în cascadă, aglomerare cu evadare, cadran de ceas cu urmă de volatilitate, două șine
+cu prima dintre ele. Emoji-ul din listă rămâne doar rezervă, cum e la toți ceilalți.
+
+Cele **trei liste** (`INDICATORS`, `IND_LIST`, `IND_ICONS`) rămân în pas — testul de paritate trece.
+Fiecare are intrare în `IND_SETTINGS` cu **exact câmpurile pe care calculul le citește** (`wallRatio`,
+`cascadeMult`, `lookback`/`deadzonePct`, `minSamples`, `fairBps`) — lecția TERMINATOR: o rotiță care
+deschide un panou fără efect e mai rea decât niciuna.
+
+### Dovezi
+
+**40 de teste noi**, toate picate prima dată. **Zece mutanți omorâți**, acoperind toate cele cinci:
+
+| mutant | ce pică |
+|---|---|
+| HECATE revine la limitele calculate (asimetria de virgulă mobilă) | 1 test |
+| HECATE mediană → medie (zidul se ascunde pe sine) | 1 test |
+| THANATOS ignoră pragul de cascadă | 2 teste |
+| THANATOS inventează normalitate dintr-un bucket | 1 test |
+| AION fără zonă moartă | 1 test |
+| AION dă cost de squeeze fără să conteze semnul funding-ului | 1 test |
+| HYPNOS include bara curentă în norma ei | 2 teste |
+| HYPNOS fără rezervă pe z-score degenerat | 2 teste |
+| NOTOS aliniere calculată greșit | 4 teste |
+| NOTOS fără bandă de paritate | 1 test |
+
+**Client 967 teste / 126 fișiere** (de la 927 / 125), **typecheck 67 neschimbat**, build curat.
+Zero atingeri pe calea de bani sau de ordine.
+
+**Ce rămâne de confirmat de tine:** aprinde-le pe rând din lista de indicatori. HECATE și THANATOS au
+nevoie de câteva secunde ca să adune jurnalul — e normal, nu e defect.
