@@ -256,6 +256,105 @@ router.delete('/uploads/:id', _requireAuth, _requireAdmin, (req, res) => {
     catch (e) { return res.status(500).json({ ok: false, error: 'delete failed' }); }
 });
 
+// ─── Backup Zeus — operator-triggered, encrypted, downloadable ───────────────
+// Sits next to Uploads in the admin panel. The operator types a passphrase, the
+// server snapshots the live DB, PROVES it reads back, encrypts it with a key
+// derived from that passphrase, and forgets the passphrase. See
+// server/services/adminBackup.js for why every step verifies (2026-10-18).
+const _adminBackup = require('../services/adminBackup');
+const _BACKUP_DIR = require('path').join(__dirname, '..', '..', 'data', 'admin_backups');
+const _LIVE_DB = require('path').join(__dirname, '..', '..', 'data', 'zeus.db');
+
+// One at a time: two concurrent snapshots of the same live DB is exactly what
+// corrupted the nightly backups on 2026-10-18.
+let _backupJob = null; // { startedAt, by, state, error, id }
+
+function _auditSafe(userId, action, details, ip) {
+    try { require('../services/database').auditLog(userId, action, details, ip); } catch (_) { /* audit must never break the route */ }
+}
+
+// POST /api/admin/backups — start a backup. Returns immediately; poll the list.
+router.post('/backups', _requireAuth, _requireAdmin, (req, res) => {
+    const pass = (req.body && req.body.passphrase) || '';
+    const note = (req.body && typeof req.body.note === 'string') ? req.body.note.slice(0, 200) : null;
+    if (String(pass).trim().length < _adminBackup.MIN_PASSPHRASE) {
+        return res.status(400).json({ ok: false, error: `Passphrase must be at least ${_adminBackup.MIN_PASSPHRASE} characters` });
+    }
+    if (_backupJob && _backupJob.state === 'running') {
+        return res.status(409).json({ ok: false, error: 'A backup is already running' });
+    }
+    _backupJob = { startedAt: Date.now(), by: req.user.id, state: 'running', error: null, id: null };
+    _auditSafe(req.user.id, 'ADMIN_BACKUP_START', { note }, req.ip);
+
+    // Fire and forget — the operator polls GET /backups for the outcome.
+    _adminBackup.createBackup({ srcPath: _LIVE_DB, dir: _BACKUP_DIR, passphrase: String(pass), note })
+        .then((out) => {
+            _backupJob = {
+                startedAt: _backupJob.startedAt, by: _backupJob.by,
+                state: out.ok ? 'done' : 'failed', error: out.ok ? null : out.error, id: out.id || null,
+                finishedAt: Date.now(),
+            };
+            _auditSafe(_backupJob.by, out.ok ? 'ADMIN_BACKUP_DONE' : 'ADMIN_BACKUP_FAILED',
+                { id: out.id || null, error: out.error || null, encBytes: out.encBytes || null }, null);
+        })
+        .catch((e) => {
+            _backupJob = { startedAt: _backupJob.startedAt, by: _backupJob.by, state: 'failed', error: (e && e.message) || 'failed', id: null, finishedAt: Date.now() };
+            _auditSafe(_backupJob.by, 'ADMIN_BACKUP_FAILED', { error: (e && e.message) || 'failed' }, null);
+        });
+
+    return res.json({ ok: true, started: true });
+});
+
+// GET /api/admin/backups — list + current job state
+router.get('/backups', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        return res.json({ ok: true, items: _adminBackup.listBackups(_BACKUP_DIR), job: _backupJob });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: 'list error' });
+    }
+});
+
+// POST /api/admin/backups/:id/token — mint a single-use, 5-minute download token.
+// The URL alone is therefore useless once used or once it ages out, so it does
+// not become a standing liability in history, proxies or a screenshot.
+router.post('/backups/:id/token', _requireAuth, _requireAdmin, (req, res) => {
+    const full = _adminBackup.resolveBackup(req.params.id, _BACKUP_DIR);
+    const fs = require('fs');
+    if (!full || !fs.existsSync(full)) return res.status(404).json({ ok: false, error: 'not found' });
+    const items = _adminBackup.listBackups(_BACKUP_DIR).filter((i) => i.id === req.params.id);
+    if (!items.length || items[0].verified !== true) {
+        return res.status(409).json({ ok: false, error: 'refusing to hand over an unverified backup' });
+    }
+    const token = _adminBackup.issueDownloadToken(req.params.id);
+    _auditSafe(req.user.id, 'ADMIN_BACKUP_TOKEN', { id: req.params.id }, req.ip);
+    return res.json({ ok: true, token, expiresInSec: 300 });
+});
+
+// GET /api/admin/backups/:id/download?t=... — admin session AND a live token.
+// Both, deliberately: the session proves who, the token keeps the link from
+// outliving the click.
+router.get('/backups/:id/download', _requireAuth, _requireAdmin, (req, res) => {
+    const tokenId = _adminBackup.verifyDownloadToken(String((req.query && req.query.t) || ''));
+    if (!tokenId || tokenId !== req.params.id) return res.status(403).json({ ok: false, error: 'invalid or spent download token' });
+    const full = _adminBackup.resolveBackup(req.params.id, _BACKUP_DIR);
+    const fs = require('fs');
+    if (!full || !fs.existsSync(full)) return res.status(404).json({ ok: false, error: 'not found' });
+    _auditSafe(req.user.id, 'ADMIN_BACKUP_DOWNLOAD', { id: req.params.id, size: fs.statSync(full).size }, req.ip);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', String(fs.statSync(full).size));
+    res.setHeader('Content-Disposition', `attachment; filename="${req.params.id}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return fs.createReadStream(full).pipe(res);
+});
+
+// DELETE /api/admin/backups/:id
+router.delete('/backups/:id', _requireAuth, _requireAdmin, (req, res) => {
+    const ok = _adminBackup.deleteBackup(req.params.id, _BACKUP_DIR);
+    if (!ok) return res.status(404).json({ ok: false, error: 'not found' });
+    _auditSafe(req.user.id, 'ADMIN_BACKUP_DELETE', { id: req.params.id }, req.ip);
+    return res.json({ ok: true });
+});
+
 // ─── Zero-knowledge Vault ────────────────────────────────────────────────────
 // All admin-gated. The server only ever stores ciphertext + the wrapped private
 // key; the vault password never reaches the server, so a session/server breach

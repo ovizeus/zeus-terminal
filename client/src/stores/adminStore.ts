@@ -3,6 +3,7 @@ import { create } from 'zustand'
 export type AdminSection =
   | 'book'
   | 'uploads'
+  | 'backup'
   | 'vault'
   | 'dashboard'
   | 'users'

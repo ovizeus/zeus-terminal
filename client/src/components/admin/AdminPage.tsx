@@ -4,6 +4,7 @@ import { AdminSidebar } from './AdminSidebar'
 import { AdminHeader } from './AdminHeader'
 import { BookSection } from './sections/BookSection'
 import { UploadsSection } from './sections/UploadsSection'
+import { BackupSection } from './sections/BackupSection'
 import { VaultSection } from './sections/VaultSection'
 import { DashboardSection } from './sections/DashboardSection'
 import { UsersSection } from './sections/UsersSection'
@@ -61,6 +62,7 @@ export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () 
       <main className="zac-main">
         {currentSection === 'book' && <BookSection />}
         {currentSection === 'uploads' && <UploadsSection />}
+        {currentSection === 'backup' && <BackupSection />}
         {currentSection === 'vault' && <VaultSection />}
         {currentSection === 'dashboard' && <DashboardSection />}
         {currentSection === 'users' && <UsersSection />}
