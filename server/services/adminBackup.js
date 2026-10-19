@@ -247,6 +247,34 @@ async function _verifyEncrypted(encPath, passphrase) {
     return { ok: bytes > 0, plainBytes: bytes };
 }
 
+// [BACKUP-ZEUS-FIX 2026-10-19] Temporaries left behind by a job that died with
+// its process. The 16:23 backup was killed mid-snapshot by a pm2 reload and
+// left a 2,2 GB `.snap.tmp` — an UNENCRYPTED partial copy of the whole database
+// — plus its journal, which nothing would ever have removed. The owning pid is
+// in the filename precisely so this sweep can tell a corpse from a live job.
+const _TMP_RE = /^\.zeus-full-(\d{1,16})-(\d{1,10})\.(snap|enc)\.tmp(-journal|-wal|-shm)?$/;
+
+function _pidAlive(pid) {
+    try { process.kill(pid, 0); return true; }
+    catch (e) { return e && e.code === 'EPERM'; }
+}
+
+function sweepStaleTemps(dir, opts) {
+    const isAlive = (opts && opts.isAlive) || _pidAlive;
+    const removed = [];
+    let names;
+    try { names = fs.readdirSync(dir); } catch (_) { return removed; }
+    for (const name of names) {
+        const m = _TMP_RE.exec(name);
+        if (!m) continue;
+        const pid = parseInt(m[2], 10);
+        // Never touch a temporary that a running job still owns, including our own.
+        if (pid === process.pid || isAlive(pid)) continue;
+        try { fs.unlinkSync(path.join(dir, name)); removed.push(name); } catch (_) { /* */ }
+    }
+    return removed;
+}
+
 // ─── create ──────────────────────────────────────────────────────────────────
 async function createBackup({ srcPath, dir, passphrase, nowMs, verify, verifyEncrypted, note }) {
     const now = nowMs != null ? nowMs : Date.now();
@@ -256,6 +284,8 @@ async function createBackup({ srcPath, dir, passphrase, nowMs, verify, verifyEnc
     }
 
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) { /* */ }
+    // Reclaim what a killed job left behind before adding another 2,9 GB beside it.
+    sweepStaleTemps(dir);
     const id = `zeus-full-${now}.db.gz.enc`;
     const finalPath = path.join(dir, id);
     const snapTmp = path.join(dir, `.zeus-full-${now}-${process.pid}.snap.tmp`);
@@ -297,7 +327,8 @@ async function createBackup({ srcPath, dir, passphrase, nowMs, verify, verifyEnc
 
 module.exports = {
     createBackup, listBackups, deleteBackup, resolveBackup, decryptToFile,
-    _snapshot, // [BACKUP-ZEUS-FIX 2026-10-19] exposed for the livelock regression test
+    _snapshot, // [BACKUP-ZEUS-FIX 2026-10-19] exposed for the snapshot tests
+    sweepStaleTemps,
     issueDownloadToken, verifyDownloadToken,
     ID_RE, MIN_PASSPHRASE, MAGIC, HEADER_LEN, TAG_LEN,
 };

@@ -2804,3 +2804,30 @@ nu o catastrofă, dar un dump complet al tuturor utilizatorilor pe un remote nu 
 Sunt deja **peste 20 de fișiere `data/audit.jsonl.2026-07-*` … `2026-08-*` în istoricul git**, adică loguri
 de audit cu activitatea utilizatorilor, împinse pe GitHub din iulie. Le-am adăugat în `.gitignore` de aici
 înainte, dar **scoaterea lor din istoric e rescriere de istorie** — nu fac asta fără tine. 🙋 **Decizia ta.**
+
+### 🧹 Urmarea imediată: reload-ul a lăsat un cadavru de 2,2 GB (b277 v1.7.251)
+
+Reload-ul care a livrat fixul a omorât jobul blocat — corect — și a lăsat pe disc
+`.zeus-full-1792427032255-3054096.snap.tmp`, **2,2 GB**, plus jurnalul. **Nimic nu l-ar fi șters
+vreodată:** `cleanup()` rulează doar în procesul care a eșuat, iar un proces omorât nu rulează nimic.
+
+Și nu era doar spațiu: era o copie **parțială și NECRIPTATĂ** a bazei întregi, uitată pe disc. Exact
+obiectul pe care tot mecanismul de criptare există ca să-l evite.
+
+Adăugat `sweepStaleTemps(dir)`, apelat la începutul fiecărui `createBackup`, **înainte** de a pune
+alți 2,9 GB lângă. Pid-ul proprietar e în numele fișierului exact pentru asta, deci mătură **numai
+cadavre**: un temporar al unui job care încă rulează, sau al propriului pid, e lăsat în pace.
+
+**6 teste noi. Mutanți:** garda de pid viu ștearsă → 2 teste pică; sweep-ul scos din `createBackup` →
+1 test pică; regexul lărgit să prindă și backup-urile publicate → 1 test pică. **Doi mutanți cosmetici
+pe regex au supraviețuit** — îi scriu, nu îi ascund: păstrează punctul inițial și segmentul de pid, deci
+niciun nume real de fișier publicat nu se potrivește. Sunt echivalenți, nu găuri.
+
+Spațiu recuperat manual acum: **2,2 GB** (80G → 82G liberi). Server **9515 teste pe 4 felii, 0 eșecuri**.
+
+> **Corecție la propria mea analiză, în aceeași oră:** am scris mai sus „blocat", pe baza a șase
+> măsurători la 10 secunde care arătau zero creștere. La reload fișierul ajunsese de la 1 815 756 800
+> la 2 230 272 000 bytes — deci **avansa, în salturi, cu ~0,5 MB/s**. Nu e livelock strict, e progres
+> patologic: 2,9 GB ar fi luat peste o oră și jumătate, față de 30,3 s cu `VACUUM INTO`, și fiecare
+> scriere îl putea da înapoi. Concluzia nu se schimbă, formularea da. Șase măsurători pe 60 de secunde
+> nu sunt o rată — sunt o fereastră.
