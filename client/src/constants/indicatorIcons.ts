@@ -126,6 +126,8 @@ export const IND_ICONS: Record<string, string> = {
   notos: g(p('M2 5h12') + p('M2 11h12') + p('M8 5v6') + p('M6.6 6.6L8 5l1.4 1.6')),              // doua sine si prima dintre ele
   // [PULSAR 2026-10-19] Colaps spre centru, apoi puls in afara.
   pulsar: g(dot(8, 8, 1.4) + p('M8 2v2.4M8 11.6V14M2 8h2.4M11.6 8H14') + p('M4.6 4.6l1.5 1.5M11.4 4.6l-1.5 1.5M4.6 11.4l1.5-1.5M11.4 11.4l-1.5-1.5')),
+  // [ARACHNE 2026-10-19] Panza: raze plus doua fire diagonale.
+  arachne: g(p('M8 8L2 3M8 8l6-5M8 8l-6 5M8 8l6 5') + p('M4.6 5.2c2 1.4 4.8 1.4 6.8 0') + p('M3.2 7.6c3 2 6.6 2 9.6 0')),
   terminator: g(p('M2 5V2h3') + p('M11 2h3v3') + p('M14 11v3h-3') + p('M5 14H2v-3') + p('M4.5 10.5h3V6h4')),
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──

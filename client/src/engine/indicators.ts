@@ -16,6 +16,7 @@ import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calc
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets, flowBucketTime, flowAnchorSeries } from './indicatorCalcFlow'
 import { pulsar, pulsarCandleColor } from './indicatorCalcPulsar'
+import { arachne, lineValueAt } from './indicatorCalcArachne'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -420,6 +421,10 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     // [PULSAR 2026-10-19] Indicator de chart principal: nu are panou propriu.
     case 'pulsar':
       { if (show) { initPulsarSeries(); updatePulsar() } else clearPulsar() }
+      break
+    // [ARACHNE 2026-10-19] Tot chart principal: linii si marcaje, fara panou.
+    case 'arachne':
+      { if (show) { initArachneSeries(); updateArachne() } else clearArachne() }
       break
     case 'eos':
       if (show) initEosSeries()
@@ -3630,6 +3635,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.hypnos && w._hypnosInited) safe(updateHypnos)
   if (w.S.activeInds.notos && w._notosInited) safe(updateNotos)
   if (w.S.activeInds.pulsar) safe(updatePulsar)
+  if (w.S.activeInds.arachne) safe(updateArachne)
   if (w.S.activeInds.eos) safe(updateEos)
   if (w.S.activeInds.pantheon && w._pantheonInited) safe(updatePantheon)
   if (w.S.activeInds.aegis) safe(updateAegis)
@@ -4888,4 +4894,133 @@ export function clearPulsar(): void {
   try {
     if (w.cSeries && w.S?.klines?.length && typeof w.renderChart === 'function') w.renderChart()
   } catch (_) { /* */ }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ARACHNE — tesatoarea de linii. Instrument de CHART PRINCIPAL.
+//
+// [ARACHNE 2026-10-19] Cerut de operator cu doua poze de pe TradingView:
+// diagonale rosii descendente, diagonale verzi ascendente, orizontale, fiecare
+// etichetata, plus semnalul cand se rupe si unde poti intra.
+//
+// Deseneaza:
+//   * NIVELURI orizontale ca linii de pret, cu eticheta „RES 3x" / „SUP 2x",
+//     si „✕ RUPT" cand pretul a inchis dincolo;
+//   * LINII DIAGONALE prin pivoti reali, PRELUNGITE pana la bara curenta —
+//     prelungirea e chiar rostul lor;
+//   * MARCAJE de intrare: LONG ▲ / SHORT ▼, cu sursa (rupere de linie, rupere
+//     de nivel, sau retest).
+//
+// Liniile rupte se deseneaza punctat si stins: raman pe chart pentru ca un
+// nivel rupt conteaza mai departe (isi schimba rolul), dar nu mai au voie sa
+// arate ca o linie valida.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function _arachneClear(): void {
+  const segs = (w._arachneSeries = w._arachneSeries || [])
+  for (const s of segs) { try { w.mainChart.removeSeries(s) } catch (_) { /* */ } }
+  segs.length = 0
+  const pls = (w._arachnePriceLines = w._arachnePriceLines || [])
+  for (const l of pls) { try { w.cSeries.removePriceLine(l) } catch (_) { /* */ } }
+  pls.length = 0
+}
+
+export function initArachneSeries(): void {
+  if (!w.mainChart) return
+  w._arachneSeries = w._arachneSeries || []
+  w._arachnePriceLines = w._arachnePriceLines || []
+  if (!w._arachneMarkS) {
+    // Marcajele se ancoreaza de timpi care exista in PROPRIA serie — lectia
+    // TERMINATOR, altfel se ingramadesc la marginea din stanga.
+    w._arachneMarkS = w.mainChart.addLineSeries({
+      color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false,
+      lastValueVisible: false, crosshairMarkerVisible: false,
+    })
+  }
+}
+
+export function updateArachne(): void {
+  if (!w.mainChart || !w.S?.klines?.length) return
+  initArachneSeries()
+  const kl = w.S.klines
+  const cfg = (w.IND_SETTINGS && w.IND_SETTINGS.arachne) || {}
+  const r = arachne(
+    kl.map((b: any) => b.high), kl.map((b: any) => b.low), kl.map((b: any) => b.close),
+    {
+      pivotWidth: Math.round(cfg.pivotWidth) || 3,
+      tolAtr: cfg.tolAtr > 0 ? cfg.tolAtr : 0.35,
+      minTouches: Math.round(cfg.minTouches) || 2,
+      maxLevels: Math.round(cfg.maxLevels) || 6,
+      maxLinesPerSide: Math.round(cfg.maxLinesPerSide) || 2,
+    },
+  )
+
+  try {
+    _arachneClear()
+
+    // ── Niveluri orizontale ──
+    if (w.cSeries) {
+      for (const lv of r.levels) {
+        const isRes = lv.role === 'resistance'
+        const col = lv.broken
+          ? 'rgba(255,214,0,0.45)'                       // rupt: galben stins
+          : (isRes ? 'rgba(255,82,82,0.9)' : 'rgba(0,230,118,0.9)')
+        w._arachnePriceLines.push(w.cSeries.createPriceLine({
+          price: lv.price, color: col,
+          lineWidth: lv.broken ? 1 : 2,
+          lineStyle: lv.broken ? 2 : 0,
+          axisLabelVisible: true,
+          title: lv.label,
+        }))
+      }
+    }
+
+    // ── Diagonale, prelungite pana la ultima bara ──
+    for (const tl of r.trendlines) {
+      const pts: any[] = []
+      // Prelungirea se opreste unde spune linia, nu la marginea chartului.
+      const to = Math.min(kl.length - 1, tl.extendTo)
+      for (let i = tl.fromIndex; i <= to; i++) {
+        if (!kl[i]) continue
+        pts.push({ time: kl[i].time, value: lineValueAt(tl, i) })
+      }
+      if (pts.length < 2) continue
+      const isRes = tl.kind === 'resistance'
+      const s = w.mainChart.addLineSeries({
+        color: tl.broken
+          ? 'rgba(255,214,0,0.5)'
+          : (isRes ? 'rgba(255,82,82,0.95)' : 'rgba(0,230,118,0.95)'),
+        lineWidth: tl.broken ? 1 : 2,
+        lineStyle: tl.broken ? 2 : 0,
+        priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
+        title: tl.label + ' ' + tl.touches + 'x',
+      })
+      s.setData(pts)
+      w._arachneSeries.push(s)
+    }
+
+    // ── Marcajele de intrare ──
+    if (w._arachneMarkS) {
+      w._arachneMarkS.setData(kl.map((b: any) => ({ time: b.time, value: b.close })))
+      const marks = r.signals
+        .filter((sg: any) => kl[sg.index])
+        .map((sg: any) => ({
+          time: kl[sg.index].time,
+          position: sg.dir === 'long' ? 'belowBar' : 'aboveBar',
+          shape: sg.dir === 'long' ? 'arrowUp' : 'arrowDown',
+          color: sg.dir === 'long' ? '#00e676' : '#ff1744',
+          text: sg.label,
+        }))
+      w._arachneMarkS.setMarkers(marks)
+    }
+  } catch (_) { /* chartul poate fi in mijlocul unei reconstructii */ }
+
+  w._arachnePanel = r.panel
+}
+
+/** Stinge ARACHNE: scoate toate liniile si marcajele. */
+export function clearArachne(): void {
+  try { _arachneClear() } catch (_) { /* */ }
+  try { if (w._arachneMarkS) w._arachneMarkS.setMarkers([]) } catch (_) { /* */ }
+  w._arachnePanel = null
 }

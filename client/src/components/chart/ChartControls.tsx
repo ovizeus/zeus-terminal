@@ -730,6 +730,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'hypnos',   ico: '\u{1F570}\uFE0F', name: 'HYPNOS',  desc: 'Volatility clock — hour-of-day profile from real history; rates this hour against its OWN norm, not the day average', hasGenericSettings: true },
   { id: 'notos',    ico: '\u{1FA81}', name: 'NOTOS',          desc: 'Perp premium — mark vs index in basis points plus funding alignment; flags the divergence that fuels a squeeze', hasGenericSettings: true },
   { id: 'pulsar',   ico: '\u{1F4A5}', name: 'PULSAR',          desc: 'Compression box, measured move and candle recolour — draws the coil on the chart, projects the box height as target on release, marks the invalidation', hasGenericSettings: true },
+  { id: 'arachne',  ico: '\u{1F578}\uFE0F', name: 'ARACHNE',         desc: 'Auto trendlines and S/R — diagonal lines through real pivots, horizontal levels by touch count, each labelled, with break and entry markers', hasGenericSettings: true },
 ]
 
 export function ChartControls() {
