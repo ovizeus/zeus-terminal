@@ -10,7 +10,7 @@
 
 > *(**2026-10-10:** auditul de persistență la refresh → P11-P15 și constatările R1-R10. **Închise azi: P11, P12, P13, P14** și **R1, R2, R3, R4, R7, R9, R10** — b265 → b268. Rămân 10, și **niciunul nu e al meu**: toate așteaptă o decizie sau o acțiune de la tine.)*
 
-**P1 ✅ ÎNCHIS 2026-10-19 — era o atribuire greșită, nu un bug al nostru.** Vezi secțiunea *„P1 era o atribuire greșită”* de la finalul Book-ului: 418-ul vine pe `testnet.binancefuture.com` **cu `usedWeight=0/6000`**, iar ipoteza din textul de mai jos (`serverAT.js:5399` cere `positionRisk` per poziție) e falsă — linia aia e în calea de **addon**, o dată per addon, nu în bucla de recon. Fuzionat în **R16**. Textul original, păstrat pentru istoric:
+**P1 ✅ ÎNCHIS 2026-10-19 — era o atribuire greșită, nu un bug al nostru.** Vezi secțiunea *„P1 era o atribuire greșită”* de la finalul Book-ului: 418-ul vine pe `testnet.binancefuture.com` **cu `usedWeight=0/6000`**, iar ipoteza din textul de mai jos (`serverAT.js:5399` cere `positionRisk` per poziție) e falsă — linia aia e în calea de **addon**, o dată per addon, nu în bucla de recon. Fuzionat în **R16**, iar R16 e **decis de operator pe 19 oct: A, nu facem nimic (provizoriu)**. Textul original, păstrat pentru istoric:
 
 > ~~**Rafala de rate-limit Binance** *(A2)*. 44 de intrări în SUPPRESSED, continuu din ora 08:00 ieri. Depăşeşte 6000/min pe `positionRisk`, declanşează întrerupătorul de IP (taie **toate** cererile semnate 61s) şi rupe reînnoirea `listenKey`. Backoff-ul escaladează şi nu se resetează. Pistă: `serverAT.js:5399` cere `positionRisk` **per poziţie**, deşi comentariul de la 5676 zice per user. N-am atins pollingul — cale de bani, vreau cauza dovedită. **Singurul lucru mare rămas care e al meu.**~~
 
@@ -78,6 +78,30 @@ n-au persistat niciodată.
 ---
 
 
+
+## ⏸️ R16 — **DECIZIA OPERATORULUI 2026-10-19: A, nu facem nimic (provizoriu)**
+
+> *„lasa asa R16 nu facem nimic de moment dar laso acolo in carte"*
+
+**Inchis ca sarcina, deschis ca dosar.** Nu mai propun remedii si nu mai escaladez. Cifrele rămân aici
+intacte pentru cand te razgandesti.
+
+**Ce accepti, explicit, ca sa fie scris:** ~1,3 banuri/zi, in medie, fiecare de pana la ~4h, in care Zeus
+**nu poate deschide sau inchide pozitii pe exchange**. Pozitiile deja deschise rămân protejate de SL-ul
+server-side. **Bani reali afectati: zero** — toate conturile uid=1 sunt `testnet` si toate pozitiile
+deschise sunt `demo`.
+
+**Ce ar schimba decizia** (singurele doua lucruri de urmarit, fara sa le verific activ):
+- daca banurile urca peste ~3/zi sau depasesc ~12h/zi cumulat;
+- daca vreodata se trece pe bani reali pe Binance — atunci A nu mai e acceptabil, pentru ca o fereastra de
+  4h fara acces la exchange pe bani reali e alt lucru decat pe demo.
+
+Remediul **B** (IP de egress dedicat, **NU WARP**) rămâne singurul care atinge cauza. Remediul **C** era
+deja arhitectura actuala, deci nu exista ca imbunatatire.
+
+---
+
+### Istoricul dosarului (textul original, pastrat)
 
 ## 🔴 R16 — banurile Binance sunt pe TESTNET, iar protecția noastră e oarbă acolo (2026-10-11)
 
