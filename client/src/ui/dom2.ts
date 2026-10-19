@@ -1,7 +1,7 @@
 import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { applyIndVisibility, renderActBar, getMacdChart, _reportActiveIndicators } from '../engine/indicators'
+import { applyIndVisibility, renderActBar, getMacdChart, _reportActiveIndicators, noteCandleTintToggle } from '../engine/indicators'
 import { closeM } from '../data/marketDataWS'
 import { _usSave, _userCtxPush, _userCtxPushNow, INDICATORS } from '../core/config'
 import { renderChart } from '../data/marketDataChart'
@@ -235,6 +235,16 @@ export function togInd(id: any, btn: any): void {
   S.indicators[id] = newVal;
   if (btn) btn.classList.toggle('act', newVal);
   applyIndVisibility(id, newVal);
+  // [CANDLE-TINT 2026-10-19] Opt indicatori isi disputa culoarea lumanarilor.
+  // Regula „ultimul aprins castiga" trebuie sa stea AICI, pentru ca asta e
+  // calea pe care o foloseste panoul React — cealalta, toggleInd din
+  // engine/indicators.ts, serveste doar panoul legacy.
+  {
+    const lost = noteCandleTintToggle(id, newVal);
+    if (lost.length) {
+      try { w.toast?.(String(id).toUpperCase() + ' coloreaza lumanarile (' + lost.join(', ').toUpperCase() + ' pastreaza liniile)'); } catch (_) { /* */ }
+    }
+  }
   if (newVal) renderChart();
   renderActBar();
   // [P5 FIX] Persist indicator state so it survives refresh

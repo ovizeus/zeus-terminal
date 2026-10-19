@@ -3369,3 +3369,36 @@ o concluzie greșită.
 
 **19 teste noi, șase mutanți omorâți.** Client **1053 teste / 129 fișiere** (de la 1034), typecheck 67
 neschimbat, build curat.
+
+### 🔴 Și imediat după: fixul meu de acum o oră stătea în cod mort (b286 v1.7.260)
+
+Continuarea auditului, și cea mai utilă parte din el.
+
+Regula de proprietate asupra culorii lumânărilor, livrată în b285, o pusesem în **`toggleInd`** din
+`engine/indicators.ts`. Dar există **două** căi prin care se aprinde un indicator:
+
+| cale | cine o folosește |
+|---|---|
+| `toggleInd` (`engine/indicators.ts`) | panoul **legacy** |
+| `togInd` (`ui/dom2.ts`) | panoul **React** — ăsta e cel pe care îl apeși tu |
+
+Deci regula „ultimul aprins câștigă" și mesajul către tine **nu se executau niciodată**. Fixul parțial tot
+funcționa — `_mayTint` revendică locul la prima cerere, deci conflictul se rezolva — dar determinist după
+**ordinea din dispecer**, nu după ce ai apăsat tu, și fără să-ți spună nimic.
+
+**E exact clasa de bug TERMINATOR:** o schimbare care trăiește într-o listă pe care nimeni nu o deschide.
+A treia oară când arhitectura asta cu două liste paralele mușcă.
+
+### Cum am găsit-o — și de ce contează metoda
+
+Nu din citit cod. Am căutat **șirul mesajului în bundle-ul servit** și **nu era acolo** — deși era în sursă,
+și deși bundle-ul era mai nou decât fișierul (20:44:31 față de 20:42:54). Singura explicație: funcția
+fusese eliminată la build ca **nefolosită**.
+
+> **Lecție, pentru data viitoare:** sursa spune ce ai scris, bundle-ul spune ce rulează. Când un fix pare
+> livrat dar nu se vede, caută-l în fișierul servit. Dacă lipsește, nu e o problemă de randare — e cod mort.
+
+**Reparat:** logica scoasă într-un `noteCandleTintToggle` exportat, chemat din **ambele** căi. Confirmat
+pe bundle: șirul apare acum în fișierul servit.
+
+Client **1053 teste / 129 fișiere**, typecheck 67 neschimbat, build curat.

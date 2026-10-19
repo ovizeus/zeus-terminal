@@ -165,13 +165,10 @@ export function toggleInd(id: string, toggleEl: HTMLElement): void {
   w.S.indicators[id] = w.S.activeInds[id]
   // [CANDLE-TINT 2026-10-19] Ultimul aprins ia culoarea lumanarilor, si i se
   // SPUNE cine a pierdut-o — altfel un indicator aprins ar parea stricat.
-  if (isCandleTinter(id)) {
-    w._candleTintOwner = nextTintOwner(w._candleTintOwner, id, w.S.activeInds[id])
-    if (w.S.activeInds[id]) {
-      const lost = tintRivals(id, w.S.activeInds)
-      if (lost.length) {
-        try { toast(id.toUpperCase() + ' coloreaza lumanarile (' + lost.join(', ').toUpperCase() + ' pastreaza liniile)') } catch (_) { /* */ }
-      }
+  {
+    const lost = noteCandleTintToggle(id, w.S.activeInds[id])
+    if (lost.length) {
+      try { toast(id.toUpperCase() + ' coloreaza lumanarile (' + lost.join(', ').toUpperCase() + ' pastreaza liniile)') } catch (_) { /* */ }
     }
   }
   if (w.S.activeInds[id]) toggleEl.classList.add('on')
@@ -1042,6 +1039,23 @@ function _createSubChart(containerId: string, height?: number): any {
  * Doar proprietarul — altfel un indicator care nici nu colora ar sterge
  * culoarea celui care o detine, iar aceasta ar reveni abia la urmatorul tick.
  */
+/**
+ * [CANDLE-TINT 2026-10-19] Anunta ca `id` a fost aprins sau stins, ca sa se
+ * mute proprietatea culorii lumanarilor.
+ *
+ * Exportata pentru ca exista DOUA cai de comutare: `toggleInd` de aici (panoul
+ * legacy) si `togInd` din ui/dom2.ts (panoul React, cel pe care il foloseste
+ * operatorul). Prima versiune a acestui fix statea doar in prima — adica fix
+ * clasa de bug TERMINATOR, unde o schimbare traia intr-o lista pe care nimeni
+ * nu o deschide. Gasita pentru ca sirul mesajului lipsea din bundle-ul servit.
+ */
+export function noteCandleTintToggle(id: string, show: boolean): string[] {
+  if (!isCandleTinter(id)) return []
+  w._candleTintOwner = nextTintOwner(w._candleTintOwner, id, show)
+  if (!show) return []
+  return tintRivals(id, w.S?.activeInds)
+}
+
 function _releaseTint(id: string): boolean {
   if (w._candleTintOwner && w._candleTintOwner !== id) return false
   if (w._candleTintOwner === id) w._candleTintOwner = null
