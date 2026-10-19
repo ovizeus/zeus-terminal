@@ -1906,6 +1906,8 @@ export let boreasUpS: any = null, boreasDnS: any = null, boreasGlowUpS: any = nu
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
+  // [PULSAR 2026-10-19] Fiecare camp e citit de calcul (vezi lectia TERMINATOR).
+  pulsar: { window: 20, atrPeriod: 14, tightPct: 25, chargedBars: 8, expandMult: 1.1 },
   // [FLOW 2026-10-19] Cele cinci instrumente de flux. Fiecare camp de aici e
   // CITIT de calculul respectiv — vezi lectia TERMINATOR mai jos: un camp care
   // nu schimba nimic ar fi mai rau decat niciun camp.

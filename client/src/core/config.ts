@@ -206,6 +206,7 @@ export const INDICATORS: any[] = [
   { id: 'aion', ico: _ZI.scope, name: 'AION', desc: 'Positioning regime — open interest vs price vs funding: crowded longs, crowded shorts, unwind or short cover, with squeeze risk', cat: 'momentum', def: false },
   { id: 'hypnos', ico: _ZI.clock, name: 'HYPNOS', desc: 'Volatility clock — hour-of-day volatility profile from real history; rates this hour against its OWN norm, not the day average', cat: 'vol', def: false },
   { id: 'notos', ico: _ZI.drop, name: 'NOTOS', desc: 'Perp premium — mark vs index in basis points plus funding alignment; flags the divergence that fuels a squeeze', cat: 'momentum', def: false },
+  { id: 'pulsar', ico: _ZI.boom, name: 'PULSAR', desc: 'Compression box, measured move and candle recolour — draws the coil on the chart, projects the box height as target on release, marks the invalidation', cat: 'vol', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
 export let _macdInited = false

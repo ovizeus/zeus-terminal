@@ -15,6 +15,7 @@ import { _ZI } from '../constants/icons'
 import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT, astrape as _calcASTRAPE, phoebe as _calcPHOEBE } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
 import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets, flowBucketTime, flowAnchorSeries } from './indicatorCalcFlow'
+import { pulsar, pulsarCandleColor } from './indicatorCalcPulsar'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -415,6 +416,10 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'notos':
       { const nx = document.getElementById('notosChart'); if (nx) nx.style.display = show ? '' : 'none'; if (show) initNotosChart(); if (show) startFlowPulse(); else stopFlowPulse() }
+      break
+    // [PULSAR 2026-10-19] Indicator de chart principal: nu are panou propriu.
+    case 'pulsar':
+      { if (show) { initPulsarSeries(); updatePulsar() } else clearPulsar() }
       break
     case 'eos':
       if (show) initEosSeries()
@@ -3624,6 +3629,7 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.aion && w._aionInited) safe(updateAion)
   if (w.S.activeInds.hypnos && w._hypnosInited) safe(updateHypnos)
   if (w.S.activeInds.notos && w._notosInited) safe(updateNotos)
+  if (w.S.activeInds.pulsar) safe(updatePulsar)
   if (w.S.activeInds.eos) safe(updateEos)
   if (w.S.activeInds.pantheon && w._pantheonInited) safe(updatePantheon)
   if (w.S.activeInds.aegis) safe(updateAegis)
@@ -4723,4 +4729,163 @@ export function stopFlowPulse(): void {
   if (!w._flowPulseTimer) return
   clearInterval(w._flowPulseTimer)
   w._flowPulseTimer = null
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PULSAR — colaps, incarcare, puls. Instrument de CHART PRINCIPAL.
+//
+// [PULSAR 2026-10-19] Cerut de operator: un indicator care schimba culorile pe
+// chartul mare, cu compresie, zona de extindere, masuratori si linii.
+//
+// Deseneaza patru lucruri, toate masurate:
+//   1. CUTIA de compresie — sus si jos, pe exact barele in care s-a strans.
+//   2. Lumanarile recolorate pe faze: violet adanc cand se incarca (cu atat mai
+//      adanc cu cat e mai incarcat), flash cu contur alb pe bara de iesire,
+//      aprins pe expansiune, palid pe epuizare.
+//   3. TINTELE miscarii masurate: inaltimea cutiei proiectata din punctul de
+//      iesire, plus extensia 1,618.
+//   4. Nivelul de INVALIDARE: marginea opusa a cutiei.
+//
+// Regula pe care o pastrez de la TERMINATOR: barele fara faza NU primesc campuri
+// de culoare, deci culorile proprii ale operatorului rămân acolo, iar stingerea
+// indicatorului le restaureaza peste tot.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function _pulsarTint(bars: any[], ph: any[], ch: any[]): any[] {
+  return bars.map((b: any, i: number) => {
+    const base = { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }
+    const col = pulsarCandleColor(ph[i] ?? null, ch[i] ?? null, b.close >= b.open)
+    return col ? { ...base, ...col } : base
+  })
+}
+
+function _pulsarClearLines(): void {
+  const keep = (w._pulsarSeries = w._pulsarSeries || [])
+  for (const s of keep) { try { w.mainChart.removeSeries(s) } catch (_) { /* */ } }
+  keep.length = 0
+  const pl = (w._pulsarPriceLines = w._pulsarPriceLines || [])
+  for (const l of pl) { try { w.cSeries.removePriceLine(l) } catch (_) { /* */ } }
+  pl.length = 0
+}
+
+export function initPulsarSeries(): void {
+  if (!w.mainChart) return
+  w._pulsarSeries = w._pulsarSeries || []
+  w._pulsarPriceLines = w._pulsarPriceLines || []
+  if (!w._pulsarMarkS) {
+    // Purtator invizibil pentru marcajele de iesire: marcajele se ancoreaza de
+    // timpi care exista in PROPRIA serie — lectia TERMINATOR, altfel se
+    // ingramadesc la marginea din stanga.
+    w._pulsarMarkS = w.mainChart.addLineSeries({
+      color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false,
+      lastValueVisible: false, crosshairMarkerVisible: false,
+    })
+  }
+}
+
+export function updatePulsar(): void {
+  if (!w.mainChart || !w.S?.klines?.length) return
+  initPulsarSeries()
+  const kl = w.S.klines
+  const cfg = (w.IND_SETTINGS && w.IND_SETTINGS.pulsar) || {}
+  const r = pulsar(
+    kl.map((b: any) => b.high), kl.map((b: any) => b.low),
+    kl.map((b: any) => b.close), kl.map((b: any) => b.volume || 0),
+    {
+      window: Math.round(cfg.window) || 20,
+      atrPeriod: Math.round(cfg.atrPeriod) || 14,
+      tightPct: cfg.tightPct > 0 ? cfg.tightPct : 25,
+      chargedBars: Math.round(cfg.chargedBars) || 8,
+      expandMult: cfg.expandMult > 0 ? cfg.expandMult : 1.1,
+    },
+  )
+
+  // ── Cutia si tintele ──
+  try {
+    _pulsarClearLines()
+    const box = r.activeBox || (r.boxes.length ? r.boxes[r.boxes.length - 1] : null)
+    if (box) {
+      const pts = (level: number) => {
+        const out: any[] = []
+        for (let i = box.startIndex; i <= Math.min(box.endIndex, kl.length - 1); i++) {
+          if (kl[i]) out.push({ time: kl[i].time, value: level })
+        }
+        return out
+      }
+      for (const [lvl, lbl] of [[box.top, 'PULSAR ▲'], [box.bottom, 'PULSAR ▼']] as const) {
+        const s = w.mainChart.addLineSeries({
+          color: 'rgba(124,77,255,0.85)', lineWidth: 2, lineStyle: 0,
+          priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
+          title: lbl,
+        })
+        s.setData(pts(lvl as number))
+        w._pulsarSeries.push(s)
+      }
+    }
+
+    // Tintele miscarii masurate, ca linii de pret pe seria de lumanari.
+    // Tintele se deseneaza DOAR pentru o iesire inca valida: un scenariu care
+    // si-a rupt nivelul de invalidare nu are voie sa mai arate tinte.
+    if (r.release && !r.release.invalidated && w.cSeries) {
+      const up = r.release.dir === 'up'
+      const defs: Array<[number, string, string]> = [
+        [r.release.target1, up ? 'rgba(0,230,118,0.9)' : 'rgba(255,23,68,0.9)', 'T1 ' + (up ? '▲' : '▼')],
+        [r.release.target2, up ? 'rgba(0,230,118,0.45)' : 'rgba(255,23,68,0.45)', 'T2 1.618'],
+        [r.release.invalid, 'rgba(255,167,38,0.8)', 'INVALID'],
+      ]
+      for (const [price, color, title] of defs) {
+        if (!Number.isFinite(price)) continue
+        w._pulsarPriceLines.push(w.cSeries.createPriceLine({
+          price, color, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title,
+        }))
+      }
+    }
+
+    // Marcajul barei de iesire.
+    if (w._pulsarMarkS) {
+      w._pulsarMarkS.setData(kl.map((b: any) => ({ time: b.time, value: b.close })))
+      const marks: any[] = []
+      if (r.release && kl[r.release.index]) {
+        const up = r.release.dir === 'up'
+        marks.push({
+          time: kl[r.release.index].time,
+          position: up ? 'belowBar' : 'aboveBar',
+          shape: up ? 'arrowUp' : 'arrowDown',
+          color: up ? '#00e676' : '#ff1744',
+          text: 'PULSE ' + (up ? '↑' : '↓') + ' ' + r.release.boxHeight.toFixed(2),
+        })
+      }
+      w._pulsarMarkS.setMarkers(marks)
+    }
+  } catch (_) { /* chartul poate fi in mijlocul unei reconstructii */ }
+
+  // ── Recolorarea lumanarilor ──
+  // Aceeasi regula ca la TERMINATOR: doar tipurile ale caror date SUNT klines
+  // brute, plus Heikin Ashi colorat DUPA transformare (fazele sunt per bara si
+  // aliniate pe indice, deci aceleasi culori se aplica barelor HA afisate).
+  try {
+    const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
+    if (w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
+      w.cSeries.setData(_pulsarTint(kl, r.phase, r.charge))
+    } else if (w.cSeries && ctype === 'heikin') {
+      w.cSeries.setData(_pulsarTint(heikinAshiBars(kl) as any, r.phase, r.charge))
+    }
+    w._pulsarActive = true
+    w._pulsarPhase = r.phase
+    w._pulsarCharge = r.charge
+  } catch (_) { /* */ }
+
+  w._pulsarPanel = r.panel
+}
+
+/** Stinge PULSAR: scoate liniile si lasa lumanarile asa cum le stie operatorul. */
+export function clearPulsar(): void {
+  try { _pulsarClearLines() } catch (_) { /* */ }
+  try { if (w._pulsarMarkS) w._pulsarMarkS.setMarkers([]) } catch (_) { /* */ }
+  w._pulsarActive = false
+  w._pulsarPhase = null
+  w._pulsarCharge = null
+  try {
+    if (w.cSeries && w.S?.klines?.length && typeof w.renderChart === 'function') w.renderChart()
+  } catch (_) { /* */ }
 }

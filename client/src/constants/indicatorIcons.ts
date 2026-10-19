@@ -124,6 +124,8 @@ export const IND_ICONS: Record<string, string> = {
   aion: g(p('M2 13h12') + dot(4, 10.5) + dot(6.2, 10.5) + dot(5.1, 8.2) + p('M11 10.5V5M9 7l2-2 2 2')), // aglomerare + evadare (squeeze)
   hypnos: g(p('M8 2a6 6 0 100 12 6 6 0 000-12z') + p('M4.6 9.2l1.9-2.6 1.5 3 2-4 1.4 2')),       // cadran de ceas cu urma de volatilitate
   notos: g(p('M2 5h12') + p('M2 11h12') + p('M8 5v6') + p('M6.6 6.6L8 5l1.4 1.6')),              // doua sine si prima dintre ele
+  // [PULSAR 2026-10-19] Colaps spre centru, apoi puls in afara.
+  pulsar: g(dot(8, 8, 1.4) + p('M8 2v2.4M8 11.6V14M2 8h2.4M11.6 8H14') + p('M4.6 4.6l1.5 1.5M11.4 4.6l-1.5 1.5M4.6 11.4l1.5-1.5M11.4 11.4l-1.5-1.5')),
   terminator: g(p('M2 5V2h3') + p('M11 2h3v3') + p('M14 11v3h-3') + p('M5 14H2v-3') + p('M4.5 10.5h3V6h4')),
   // ── Support / pivots ──
   // ── Overlay/heatmap modals ──
