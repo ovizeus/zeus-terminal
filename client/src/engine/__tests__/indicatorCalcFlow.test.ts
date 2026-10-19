@@ -443,3 +443,49 @@ describe('alinierea panourilor de flux cu chartul', () => {
     expect(flowAnchorSeries([], 0)).toEqual([])
   })
 })
+
+// ═══════════════════ CE DESENEAZA PANOURILE ═══════════════════
+
+describe('THANATOS — fluxul net, nu acceleratia', () => {
+  // Raportat de operator: THANATOS si AION stau pe 0. Masurat pe feed-ul viu:
+  // ~o lichidare pe minut (Binance futures WS blocat, livreaza doar OKX), deci
+  // acceleratia e 0 aproape tot timpul si panoul nu spunea nimic. Fluxul net
+  // e diferit de zero ori de cate ori chiar se lichideaza ceva.
+
+  const b20 = (v: number) => Array.from({ length: 20 }, () => ({ l: v, s: v }))
+
+  it('pozitiv cand longurile sunt lichidate, negativ cand shorturile', () => {
+    expect(thanatos(b20(1000), { l: 9000, s: 1000 }, { l: 0, s: 0 }, { l: 0, s: 0 }).netUsd1m).toBe(8000)
+    expect(thanatos(b20(1000), { l: 1000, s: 9000 }, { l: 0, s: 0 }, { l: 0, s: 0 }).netUsd1m).toBe(-8000)
+  })
+
+  it('e diferit de zero chiar si cand acceleratia e zero — exact cazul raportat', () => {
+    // 15m gol → acceleratia iese 1 sau 0, dar s-au lichidat bani reali in minutul asta.
+    const r = thanatos(b20(0), { l: 5000, s: 0 }, { l: 5000, s: 0 }, { l: 0, s: 0 })
+    expect(r.netUsd1m).toBe(5000)
+  })
+
+  it('zero curat cand nu s-a lichidat nimic', () => {
+    expect(thanatos(b20(0), { l: 0, s: 0 }, { l: 0, s: 0 }, { l: 0, s: 0 }).netUsd1m).toBe(0)
+  })
+
+  it('valorile stricate nu se scurg in flux', () => {
+    expect(thanatos(b20(0), { l: NaN, s: 500 } as any, { l: 0, s: 0 }, { l: 0, s: 0 }).netUsd1m).toBe(-500)
+  })
+})
+
+describe('AION — variatia reala de OI e ce se deseneaza', () => {
+  it('raporteaza variatia chiar si sub zona moarta, unde regimul rămâne QUIET', () => {
+    // Masurat pe viu: OI se misca ~0,009% in 70s. Sub zona moarta de 0,05%
+    // regimul e corect QUIET, dar variatia EXISTA si trebuie sa se vada.
+    const r = aion([95355.171, 95346.282], [81900, 81905], 0.0001)
+    expect(r.regime).toBe('QUIET')
+    expect(r.oiChangePct).toBeLessThan(0)
+    expect(r.oiChangePct).not.toBe(0)
+  })
+
+  it('variatia are semn: OI in crestere pozitiv, in scadere negativ', () => {
+    expect(aion([100, 110], [50000, 51000], 0).oiChangePct).toBeGreaterThan(0)
+    expect(aion([110, 100], [50000, 51000], 0).oiChangePct).toBeLessThan(0)
+  })
+})

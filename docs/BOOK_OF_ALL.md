@@ -3135,3 +3135,33 @@ când un grep prea îngust mă duce la o concluzie greșită; prima dată a prod
 **6 teste noi** pe invariantul alinierii, **doi mutanți omorâți**: ancora doar pe ultimele bare, și
 întoarcerea bucket-ului la ceasul de perete — adică exact bug-ul raportat. Client **978 teste / 126
 fișiere**, typecheck 67 neschimbat.
+
+### 🔴 Și ultima: THANATOS și AION stăteau pe zero — desenau valoarea greșită (b282 v1.7.256)
+
+> *„e ok acum dar thanatos si aion asteapta date de sunt 0 asa-i?"*
+
+Întrebare bună. Am măsurat în loc să răspund „da, așteaptă" — **și nu era normal.**
+
+| panou | ce desena | de ce stătea pe 0 |
+|---|---|---|
+| THANATOS | **acceleraţia** | pe feed-ul viu e **o lichidare pe minut**, și numai de la OKX de când Binance e blocat → acceleraţia e 0 aproape tot timpul |
+| AION | **riscul de squeeze** | e 0 până se aglomerează cineva, iar OI-ul se mișcă **0,009% în 70 de secunde** — sub zona moartă |
+
+Două panouri care stau pe zero aproape mereu **nu sunt panouri, sunt decor** — exact clasa pe care o
+vânez la alții. Nu era „așteaptă date", era alegerea mea greșită a mărimii desenate.
+
+**Reparat.** THANATOS desenează acum **fluxul net al minutului, cu semn** — pozitiv când au fost
+lichidate longuri, negativ când shorturi — diferit de zero ori de câte ori chiar se lichidează ceva.
+AION desenează **variația reală de open interest, cu semn**, care există și sub zona moartă.
+
+**Informația veche nu s-a pierdut, s-a mutat în culoare:** starea de cascadă și regimul colorează barele,
+iar riscul de squeeze rămâne în legendă. Valorile se țin **la vârf** în interiorul barei, nu la ultima
+citire, ca o rafală de la mijlocul barei să nu fie ștearsă de liniștea de la final.
+
+Zona moartă **rămâne** pentru *eticheta* de regim — zgomotul tot nu are voie să fie numit poziționare —
+dar nu mai șterge variația din desen. Distincția asta contează: a numi zgomotul „regim" ar fi o minciună;
+a nu-l desena deloc e o omisiune.
+
+**6 teste noi, doi mutanți omorâți:** fluxul net care își pierde semnul (nu mai arată partea lichidată),
+și variația de OI pierdută sub zona moartă — adică exact bug-ul raportat. Client **984 teste / 126
+fișiere**, typecheck 67 neschimbat.

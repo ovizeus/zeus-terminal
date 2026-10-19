@@ -4417,7 +4417,7 @@ function _flowBarTime(): number | null {
   return flowBucketTime(w.S?.klines)
 }
 
-function _flowPush(key: string, value: number, color: string): FlowTrail {
+function _flowPush(key: string, value: number, color: string, mode: 'last' | 'peak' = 'last'): FlowTrail {
   const store = (w._flowTrails = w._flowTrails || {})
   const arr: FlowTrail = store[key] = store[key] || []
   const t = _flowBarTime()
@@ -4425,7 +4425,13 @@ function _flowPush(key: string, value: number, color: string): FlowTrail {
   if (t == null) return arr
   // O bara, o valoare: tick-urile din interiorul barei o inlocuiesc, deci ce
   // vezi pe bara in formare e ultima citire reala, nu o medie inventata.
-  if (arr.length && arr[arr.length - 1].time === t) arr[arr.length - 1] = { time: t, value, color }
+  if (arr.length && arr[arr.length - 1].time === t) {
+    // `peak` pastreaza cea mai mare valoare absoluta vazuta in bara, ca o
+    // rafala de la mijlocul barei sa nu fie stearsa de linistea de la final.
+    const prevV = arr[arr.length - 1].value
+    const keepPrev = mode === 'peak' && Math.abs(prevV) > Math.abs(value)
+    arr[arr.length - 1] = keepPrev ? arr[arr.length - 1] : { time: t, value, color }
+  }
   else if (arr.length && arr[arr.length - 1].time > t) { /* bara mai veche decat ultima: ignora */ }
   else arr.push({ time: t, value, color })
   if (arr.length > FLOW_MAX) arr.splice(0, arr.length - FLOW_MAX)
@@ -4517,13 +4523,19 @@ export function updateThanatos(): void {
   const col = r.state === 'CASCADE_LONGS' ? '#ff1744'
     : r.state === 'CASCADE_SHORTS' ? '#00e676'
       : r.state === 'ELEVATED' ? '#ff8f00' : '#455a64'
-  const trail = _flowPush('thanatos', r.acceleration, col)
+  // [FLOW-SIGNAL 2026-10-19] Se deseneaza FLUXUL NET al minutului, cu semn, nu
+  // acceleratia. Masurat pe feed-ul viu: acceleratia e 0 aproape tot timpul
+  // (~o lichidare pe minut, si numai de la OKX de cand Binance e blocat), deci
+  // panoul statea pe zero si nu spunea nimic. Culoarea pastreaza starea de
+  // cascada, deci informatia veche nu se pierde — se muta in culoare.
+  const trail = _flowPush('thanatos', r.netUsd1m, col, 'peak')
   try {
     w._thanatosSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
     // Referinta e 1 (rata normala), nu zero: panoul arata multipli. Si e
     // desenata pe FIECARE bara, deci panoul se vede ca viu chiar si cand nu a
     // intrat nicio lichidare — exact ce lipsea cand parea rupt.
-    if (w._thanatosOneS) w._thanatosOneS.setData(_flowAnchor(1))
+    // Referinta e zero: fluxul net are semn (longuri sus, shorturi jos).
+    if (w._thanatosOneS) w._thanatosOneS.setData(_flowAnchor(0))
     _syncSubChartsToMain()
   } catch (_) { }
 }
@@ -4567,7 +4579,7 @@ export function updateAion(): void {
     ? pairs.map((r: any) => r.px)
     : [w.S?.prevPrice || w.S?.price || NaN, w.S?.price || NaN]
   const r = aion(oiSeries, px, +(w.S?.fr ?? 0), Math.max(0, +cfg.deadzonePct || 0.05))
-  if (r.regime === 'QUIET' && r.squeezeRisk === 0 && oiSeries.filter((v: number) => Number.isFinite(v)).length < 2) {
+  if (oiSeries.filter((v: number) => Number.isFinite(v)).length < 2) {
     try { w._aionSeries.setData([]) } catch (_) { }
     return
   }
@@ -4575,7 +4587,11 @@ export function updateAion(): void {
     : r.regime === 'SHORTS_CROWDED' ? '#00b0ff'
       : r.regime === 'LONG_UNWIND' ? '#ef5350'
         : r.regime === 'SHORT_COVER' ? '#26a69a' : '#455a64'
-  const trail = _flowPush('aion', r.squeezeRisk, col)
+  // [FLOW-SIGNAL 2026-10-19] Se deseneaza variatia REALA de open interest, cu
+  // semn, nu riscul de squeeze. Masurat: OI-ul se misca ~0,009% in 70 de
+  // secunde, iar riscul de squeeze e 0 pana cand chiar se aglomereaza cineva —
+  // deci panoul statea pe zero. Regimul si riscul rămân in culoare si in legenda.
+  const trail = _flowPush('aion', r.oiChangePct, col, 'peak')
   try {
     w._aionSeries.setData(trail.map(x => ({ time: x.time, value: x.value, color: x.color })))
     if (w._aionZeroS) w._aionZeroS.setData(_flowAnchor(0))

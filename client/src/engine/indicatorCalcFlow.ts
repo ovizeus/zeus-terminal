@@ -157,6 +157,15 @@ export interface Thanatos {
   state: 'CALM' | 'ELEVATED' | 'CASCADE_LONGS' | 'CASCADE_SHORTS'
   usd1m: number
   usd15m: number
+  /**
+   * [FLOW-SIGNAL 2026-10-19] Fluxul net al ultimului minut, cu semn: pozitiv
+   * cand longurile au fost lichidate, negativ cand shorturile. Asta e ce
+   * deseneaza panoul, nu acceleratia — masurat pe feed-ul viu, acceleratia e 0
+   * aproape tot timpul (o lichidare pe minut, si numai de la OKX), deci panoul
+   * statea pe zero si nu spunea nimic. Fluxul net e diferit de zero ori de cate
+   * ori chiar se lichideaza ceva.
+   */
+  netUsd1m: number
   bucketsSeen: number
 }
 
@@ -194,7 +203,9 @@ export function thanatos(
     intensity: Math.round(intensity * 100) / 100,
     dominance: Math.round(dominance),
     acceleration: Math.round(acceleration * 100) / 100,
-    state, usd1m, usd15m, bucketsSeen: totals.length,
+    state, usd1m, usd15m,
+    netUsd1m: safe(w1m?.l) - safe(w1m?.s),
+    bucketsSeen: totals.length,
   }
 }
 
