@@ -10,6 +10,10 @@ import { _demoTick } from '../engine/aresUI'
 import { clearHeatmap, clearSR } from './marketDataOverlays'
 import { resetBackfill } from './chartBackfill'
 import { getChartH } from './marketDataChart'
+import {
+  FS_CLASS, measureOccupiedHeight, resolveChartHeight,
+  enterNativeFullscreen, exitNativeFullscreen, isNativeFullscreen,
+} from './chartFullscreen'
 import { updateMainMetrics, sendAlert } from './marketDataWS'
 import { updateLiveLiqPrice } from './marketDataTrading'
 import { updateDeepDive } from '../engine/indicators'
@@ -82,22 +86,93 @@ document.addEventListener('click', function (e: any) {
 })()
 
 // ===== FULLSCREEN =====
-export function toggleFS(): void {
-  const sec = el('csec'); const btn = el('fsbtn') || el('fsBtn')
+// [CHART-FS 2026-10-19] Cerut de operator: la apasarea butonului, tot panoul
+// chart (toolbar, chart, legenda, TOATE panourile de indicatori aprinse) sa
+// umple ecranul ca TradingView, ca si cum ar fi alta aplicatie.
+//
+// Ce era inainte, si de ce nu arata asa:
+//   * fara API nativ de fullscreen → bara de browser rămânea pe ecran;
+//   * `window.innerHeight - 100`, o constanta ghicita, fara sa scada toolbar,
+//     legenda si panourile → cu indicatori aprinsi ultimele panouri erau
+//     TAIATE de `overflow: hidden`;
+//   * `#cc` (CVD) era ASCUNS in fullscreen, exact opusul cerintei;
+//   * `_resizeCharts` dadea `getChartH()` = 400px fix, deci orice resize
+//     (sau bara de browser pe Android) anula fullscreen-ul.
+
+/** Chartul principal plus sub-chart-urile, in starea curenta (fullscreen sau nu). */
+export function applyChartLayout(): void {
+  const sec = el('csec')
   if (!sec) return
-  const isFull = sec.classList.toggle('fsm')
-  if (btn) btn.textContent = isFull ? '\u2291' : '\u26F6'
+  const fullscreen = sec.classList.contains(FS_CLASS)
+  const h = resolveChartHeight({
+    fullscreen,
+    viewportH: window.innerHeight,
+    occupiedH: measureOccupiedHeight(sec as HTMLElement, 'mc'),
+    normalH: getChartH(),
+  })
+  try { if (w.mainChart) w.mainChart.applyOptions({ height: h }) } catch (_) { /* */ }
+  try { if (w.cvdChart) w.cvdChart.applyOptions({ height: 60 }) } catch (_) { /* */ }
+  // Panourile de indicatori rămân exact cum le-a lasat utilizatorul. In
+  // fullscreen NU ascundem nimic — ele sunt parte din „tot panoul chart".
   const cc = el('cc')
-  if (isFull) {
-    const h = window.innerHeight - 100
-    if (w.mainChart) w.mainChart.applyOptions({ height: h })
-    if (cc) cc.style.display = 'none'
-  } else {
-    if (w.mainChart) w.mainChart.applyOptions({ height: getChartH() })
-    if (w.cvdChart) w.cvdChart.applyOptions({ height: 60 })
-    if (cc) cc.style.display = (w.S.activeInds && w.S.activeInds.cvd) ? '' : 'none'
+  if (cc && !fullscreen) {
+    cc.style.display = (w.S && w.S.activeInds && w.S.activeInds.cvd) ? '' : 'none'
   }
+  const btn = el('fsbtn') || el('fsBtn')
+  if (btn) btn.textContent = fullscreen ? '\u2291' : '\u26F6'
+  // React tine propriul `fsMode` pentru glifa butonului; il anuntam ca sa nu
+  // rămână desincronizat cand se iese cu Esc sau F11.
+  try {
+    window.dispatchEvent(new CustomEvent('zeusChartFullscreen', { detail: { fullscreen } }))
+  } catch (_) { /* CustomEvent lipsa in medii foarte vechi */ }
 }
+
+export function toggleFS(): void {
+  const sec = el('csec')
+  if (!sec) return
+  const goingFull = !sec.classList.contains(FS_CLASS)
+  if (goingFull) {
+    sec.classList.add(FS_CLASS)
+    // Fullscreen nativ — asta scoate si bara de browser. Un refuz nu rupe
+    // nimic: clasa CSS acopera oricum tot viewportul paginii.
+    void enterNativeFullscreen(sec as HTMLElement).then(function () { applyChartLayout() })
+  } else {
+    sec.classList.remove(FS_CLASS)
+    void exitNativeFullscreen().then(function () { applyChartLayout() })
+  }
+  applyChartLayout()
+}
+
+// Iesirea din fullscreen nativ se poate face si cu Esc sau F11, fara sa treaca
+// prin butonul nostru. Fara asta, clasa `fsm` rămânea pusa si panoul stătea
+// peste pagina la dimensiune de ecran plin intr-o fereastra normala.
+;(function _bindFullscreenChange() {
+  if (typeof document === 'undefined' || !document.addEventListener) return
+  // Garda de inregistrare unica: fara ea, un re-import (HMR in dezvoltare) ar
+  // lega a doua oara aceiasi listeneri si Esc ar rula de doua ori.
+  if ((w as any).__ZEUS_CHART_FS_BOUND__) return
+  ;(w as any).__ZEUS_CHART_FS_BOUND__ = true
+  const onChange = function () {
+    const sec = el('csec')
+    if (!sec) return
+    if (!isNativeFullscreen() && sec.classList.contains(FS_CLASS)) {
+      sec.classList.remove(FS_CLASS)
+    }
+    applyChartLayout()
+  }
+  for (const ev of ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange']) {
+    try { document.addEventListener(ev, onChange) } catch (_) { /* */ }
+  }
+  // Esc cand fullscreen-ul nativ a fost refuzat (deci nu exista eveniment nativ).
+  try {
+    document.addEventListener('keydown', function (e: any) {
+      if (e && e.key === 'Escape' && !isNativeFullscreen()) {
+        const sec = el('csec')
+        if (sec && sec.classList.contains(FS_CLASS)) { sec.classList.remove(FS_CLASS); applyChartLayout() }
+      }
+    })
+  } catch (_) { /* */ }
+})()
 
 // ===== PRICE UPDATE =====
 export function updatePriceDisplay(): void {

@@ -12,6 +12,7 @@ import { connectBNB } from '../data/marketDataWS'
 import { getMacdChart } from '../engine/indicators'
 import { connectWatchlist } from '../services/symbols'
 import { getChartH, getChartW } from '../data/marketDataChart'
+import { FS_CLASS, measureOccupiedHeight, resolveChartHeight } from '../data/chartFullscreen'
 import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
 import { useBrainStore } from '../stores/brainStore'
@@ -287,7 +288,19 @@ if (!w._closeAllBtnInited) {
   let _rzTimer: any = null
   function _resizeCharts() {
     if (typeof w.mainChart === 'undefined' || !w.mainChart) return
-    const width = getChartW(); const h = getChartH()
+    // [CHART-FS 2026-10-19] `getChartH()` intoarce 400/340 FIX. In fullscreen
+    // asta readucea chartul la 400px in mijlocul ecranului plin la fiecare
+    // resize, orientationchange sau colaps de bara de browser pe Android —
+    // adica fullscreen-ul se auto-anula. resolveChartHeight e singurul loc
+    // care decide inaltimea, in ambele stari.
+    const width = getChartW()
+    const _sec = document.getElementById('csec')
+    const h = resolveChartHeight({
+      fullscreen: !!(_sec && _sec.classList.contains(FS_CLASS)),
+      viewportH: window.innerHeight,
+      occupiedH: _sec ? measureOccupiedHeight(_sec, 'mc') : 0,
+      normalH: getChartH(),
+    })
     try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { const _mc = getMacdChart(); if (_mc) _mc.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
   }
   // [BUG-T8 2026-05-13] Mobile viewport desync fix.

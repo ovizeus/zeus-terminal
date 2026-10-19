@@ -3,6 +3,8 @@
  * Pure UI overlay — calls existing toggle functions only.
  */
 
+import { toggleFS as _toggleChartFS } from '../data/marketDataFeeds'
+
 const w = window as any
 
 // ── Guard: load only once ──
@@ -241,7 +243,11 @@ const w = window as any
     if (!alt && !ctrl) {
       if (key === 'f' || key === 'F') {
         e.preventDefault()
-        _call('toggleFS')
+        // [CHART-FS 2026-10-19] `_call` caută `window.toggleFS`, care NU a
+        // existat niciodată — toggleFS e un export de modul, deci tasta F era
+        // moartă. Chemăm direct funcția și păstrăm `_call` doar ca punte pentru
+        // un eventual global din bundle-ul legacy.
+        if (!_call('toggleFS')) _toggleChartFS()
         _toast('Fullscreen')
         return
       }

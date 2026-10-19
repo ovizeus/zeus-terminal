@@ -1029,6 +1029,26 @@ export function ChartControls() {
     setFsMode(sec ? sec.classList.contains('fsm') : false)
   }
 
+  // [CHART-FS 2026-10-19] Fullscreen-ul se poate inchide si cu Esc sau F11,
+  // fara sa treaca prin butonul nostru. Fara asta glifa rămânea pe „ieși din
+  // fullscreen" intr-o fereastra deja normala.
+  useEffect(() => {
+    function onFsEvent(e: any) {
+      const fromDetail = e && e.detail && typeof e.detail.fullscreen === 'boolean'
+        ? e.detail.fullscreen
+        : null
+      if (fromDetail !== null) { setFsMode(fromDetail); return }
+      const sec = document.getElementById('csec')
+      setFsMode(sec ? sec.classList.contains('fsm') : false)
+    }
+    window.addEventListener('zeusChartFullscreen', onFsEvent)
+    document.addEventListener('fullscreenchange', onFsEvent)
+    return () => {
+      window.removeEventListener('zeusChartFullscreen', onFsEvent)
+      document.removeEventListener('fullscreenchange', onFsEvent)
+    }
+  }, [])
+
   // Session toggles — delegate to old JS toggleSession(sess, btn)
   function handleSession(key: 'asia' | 'london' | 'ny', btn: HTMLButtonElement) {
     if (typeof toggleSessionFn === 'function') {
