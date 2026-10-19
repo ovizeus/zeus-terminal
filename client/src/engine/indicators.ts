@@ -14,9 +14,10 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { sma as _calcSMA, hma as _calcHMA, keltner as _calcKC, donchian as _calcDC, parabolicSAR as _calcPSAR, adx as _calcADX, williamsR as _calcWILLR, roc as _calcROC, cmf as _calcCMF, awesomeOscillator as _calcAO, vwma as _calcVWMA, aroon as _calcAROON, trix as _calcTRIX, ultimateOscillator as _calcUO, choppiness as _calcCHOP, keraunos as _calcKERA, aether as _calcAETHER, marketStructure as _calcMS, dolos as _calcDOLOS, nemesis as _calcNEM, pythia as _calcPYTHIA, ema as _calcEMA, plutus as _calcPLUTUS, helios as _calcHELIOS, hermes as _calcHERMES, charon as _calcCHARON, atlas as _calcATLAS, eos as _calcEOS, pantheon as _calcPANTHEON, aegis as _calcAEGIS, selene as _calcSELENE, kratos as _calcKRATOS, pantheon as _calcPANTHEON2, prometheus as _calcPROM, mnemosyne as _calcMNEMO, themis as _calcTHEMIS, erebus as _calcEREBUS, anemoi as _calcANEMOI, cerberus as _calcCERBERUS, proteus as _calcPROTEUS, typhon as _calcTYPHON, styx as _calcSTYX, geras as _calcGERAS, ouranos as _calcOURANOS, hades as _calcHADES, athena as _calcATHENA, echo as _calcECHO, kairos as _calcKAIROS, tyche as _calcTYCHE, nyx as _calcNYX, olympus as _calcOLYMPUS, gaia as _calcGAIA, ananke as _calcANANKE, psyche as _calcPSYCHE, hubris as _calcHUBRIS, okeanos as _calcOKEANOS, aurora as _calcAURORA, argus as _calcARGUS, orion as _calcORION, phoenix as _calcPHOENIX, nephele as _calcNEPHELE, morpheus as _calcMORPHEUS, harmonia as _calcHARMONIA, daimon as _calcDAIMON, hyperion as _calcHYPERION, kronos as _calcKRONOS, boreas as _calcBOREAS, magnes as _calcMAGNES, magnesHeat as _calcMAGNESHEAT, mentor as _calcMENTOR, eunomia as _calcEUNOMIA, metis as _calcMETIS, apollo as _calcAPOLLO, apolloHeat as _calcAPOLLOHEAT, astrape as _calcASTRAPE, phoebe as _calcPHOEBE } from './indicatorCalc'
 import { IND_ICONS } from '../constants/indicatorIcons'
-import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets, flowBucketTime, flowAnchorSeries } from './indicatorCalcFlow'
+import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets, flowBucketTime, flowAnchorSeries, flowTrailKey } from './indicatorCalcFlow'
 import { pulsar, pulsarCandleColor } from './indicatorCalcPulsar'
 import { arachne, lineValueAt } from './indicatorCalcArachne'
+import { canTintCandles, nextTintOwner, isCandleTinter, tintRivals } from './candleTint'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
@@ -162,6 +163,17 @@ export function closeIndPanel(): void {
 export function toggleInd(id: string, toggleEl: HTMLElement): void {
   w.S.activeInds[id] = !w.S.activeInds[id]
   w.S.indicators[id] = w.S.activeInds[id]
+  // [CANDLE-TINT 2026-10-19] Ultimul aprins ia culoarea lumanarilor, si i se
+  // SPUNE cine a pierdut-o — altfel un indicator aprins ar parea stricat.
+  if (isCandleTinter(id)) {
+    w._candleTintOwner = nextTintOwner(w._candleTintOwner, id, w.S.activeInds[id])
+    if (w.S.activeInds[id]) {
+      const lost = tintRivals(id, w.S.activeInds)
+      if (lost.length) {
+        try { toast(id.toUpperCase() + ' coloreaza lumanarile (' + lost.join(', ').toUpperCase() + ' pastreaza liniile)') } catch (_) { /* */ }
+      }
+    }
+  }
   if (w.S.activeInds[id]) toggleEl.classList.add('on')
   else toggleEl.classList.remove('on')
   applyIndVisibility(id, w.S.activeInds[id])
@@ -367,7 +379,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'metis':
       { const mtx = document.getElementById('metisChart'); if (mtx) mtx.style.display = show ? '' : 'none' }
       if (show) { initMetisChart(); updateMetis() }
-      else { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } }
+      else { if (_releaseTint('metis')) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } } }
       break
     case 'eunomia':
       { const ex = document.getElementById('eunomiaChart'); if (ex) ex.style.display = show ? '' : 'none'; if (show) initEunomiaChart() }
@@ -375,19 +387,19 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'apollo':
       { const ax = document.getElementById('apolloChart'); if (ax) ax.style.display = show ? '' : 'none' }
       if (show) { initApolloChart(); updateApollo() }
-      else { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } }
+      else { if (_releaseTint('apollo')) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } } }
       break
     case 'mentor':
       { const mx = document.getElementById('mentorChart'); if (mx) mx.style.display = show ? '' : 'none' }
       if (show) { initMentorSeries(); initMentorChart(); updateMentor() }
       else {
         if (w.mentorMaS) try { w.mentorMaS.setData([]) } catch (_) { }
-        try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { }
+        if (_releaseTint('mentor')) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } }
       }
       break
     case 'kronos':
       { const kx = document.getElementById('kronosChart'); if (kx) kx.style.display = show ? '' : 'none'; if (show) initKronosChart() }
-      if (!show) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } }
+      if (!show) { if (_releaseTint('kronos')) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } } }
       break
     case 'hermes':
       if (show) initHermesSeries()
@@ -574,7 +586,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (show) { initMorpheusSeries(); updateMorpheus() }
       else {
         // revert candle colours: re-set plain OHLC so the series default up/down colours return
-        try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { }
+        if (_releaseTint('morpheus')) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } }
         try { (w._morphLines || []).forEach((pl: any) => w.morphCarrierS && w.morphCarrierS.removePriceLine(pl)) } catch (_) { } w._morphLines = []
         if (w.morphMaS) try { w.morphMaS.applyOptions({ visible: false }); w.morphMaS.setData([]) } catch (_) { }
         if (w.morphMarkS) try { w.morphMarkS.setMarkers([]); w.morphMarkS.setData([]) } catch (_) { }
@@ -585,7 +597,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       if (show) { initHarmoniaSeries(); updateHarmonia() }
       else {
         // revert candle colours: re-set plain OHLC so the series default up/down colours return
-        try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { }
+        if (_releaseTint('harmonia')) { try { if (w.cSeries) w.cSeries.setData(w.S.klines.map((b: any) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }))) } catch (_) { } }
         try { (w._harmLines || []).forEach((pl: any) => w.harmMarkS && w.harmMarkS.removePriceLine(pl)) } catch (_) { } w._harmLines = []
         if (w.harmMarkS) try { w.harmMarkS.setMarkers([]); w.harmMarkS.setData([]) } catch (_) { }
       }
@@ -1019,6 +1031,30 @@ function _createSubChart(containerId: string, height?: number): any {
     } catch (_) { }
   }
   return chart
+}
+
+
+// [CANDLE-TINT 2026-10-19] Vezi nota din candleTint.ts: opt indicatori voiau sa
+// coloreze lumanarile si scriau necondiționat unul peste altul. Acum culoarea
+// are un proprietar, iar ceilalti isi pastreaza liniile si marcajele.
+/**
+ * La stingere, are voie `id` sa dea lumanarile inapoi la culorile implicite?
+ * Doar proprietarul — altfel un indicator care nici nu colora ar sterge
+ * culoarea celui care o detine, iar aceasta ar reveni abia la urmatorul tick.
+ */
+function _releaseTint(id: string): boolean {
+  if (w._candleTintOwner && w._candleTintOwner !== id) return false
+  if (w._candleTintOwner === id) w._candleTintOwner = null
+  return true
+}
+
+function _mayTint(id: string): boolean {
+  const ok = canTintCandles(id, w._candleTintOwner, w.S?.activeInds)
+  // La boot indicatorii se restaureaza din setari FARA sa treaca prin toggle,
+  // deci nimeni nu ar fi proprietar si garda nu ar avea efect. Primul care
+  // cere si are voie il revendica, deci regula tine si dupa un refresh.
+  if (ok) w._candleTintOwner = id
+  return ok
 }
 
 export function _syncSubChartsToMain(): void {
@@ -1793,7 +1829,7 @@ export function updateMetis(): void {
   // bar colouring — numeric candleState mapped to 4 colours (never string-compared)
   const CC = (st: number | null) => st === 2 ? '#00e676' : st === 1 ? '#9cff8a' : st === -2 ? '#ff1744' : st === -1 ? '#ff9d9d' : undefined
   const colored = k.map((b: any, i: number) => { const c = CC(r.candleState[i]); return c ? { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: c, borderColor: c, wickColor: c } : { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close } })
-  try { w.cSeries.setData(colored) } catch (_) { }
+  if (_mayTint('metis')) { try { w.cSeries.setData(colored) } catch (_) { } }
   // pane (only if open)
   if (w._metisInited && w._metisGreenS) {
     const g: any[] = [], rd: any[] = [], yl: any[] = [], wh: any[] = [], up: any[] = [], lo: any[] = [], marks: any[] = [], mid: any[] = []
@@ -1846,7 +1882,7 @@ export function updateApollo(): void {
     const c = _calcAPOLLOHEAT((v as number) / 100)
     return { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: c, borderColor: c, wickColor: c }
   })
-  try { w.cSeries.setData(colored) } catch (_) { }
+  if (_mayTint('apollo')) { try { w.cSeries.setData(colored) } catch (_) { } }
   // lower pane (only if open)
   if (w._apolloInited && w._apolloUpS) {
     const up: any[] = [], dn: any[] = [], f236: any[] = [], f382: any[] = [], f618: any[] = [], f786: any[] = [], marks: any[] = []
@@ -1960,7 +1996,7 @@ export function updateMentor(): void {
       ? { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: col, borderColor: col, wickColor: col }
       : { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }
   })
-  try { w.cSeries.setData(colored) } catch (_) { }
+  if (_mayTint('mentor')) { try { w.cSeries.setData(colored) } catch (_) { } }
   // 50MA blue line
   const ma: any[] = []
   for (let i = 0; i < r.ma.length; i++) { if (r.ma[i] != null && k[i]) ma.push({ time: k[i].time, value: r.ma[i] }) }
@@ -2039,7 +2075,7 @@ export function updateKronos(): void {
       }
       return { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: col, borderColor: col, wickColor: col }
     })
-    try { w.cSeries.setData(colored) } catch (_) { }
+    if (_mayTint('kronos')) { try { w.cSeries.setData(colored) } catch (_) { } }
   }
   _syncSubChartsToMain()
 }
@@ -3415,7 +3451,7 @@ export function updateMorpheus(): void {
     const col = up ? (barUp ? '#00e676' : '#29b6f6') : (barUp ? '#ffd600' : '#ff3b30')
     return { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: col, borderColor: col, wickColor: col }
   })
-  try { w.cSeries.setData(colored) } catch (_) { }
+  if (_mayTint('morpheus')) { try { w.cSeries.setData(colored) } catch (_) { } }
   // MA line
   const ma: any[] = []
   for (let i = 0; i < r.ma.length; i++) { if (r.ma[i] == null || !k[i]) continue; ma.push({ time: k[i].time, value: r.ma[i] }) }
@@ -3462,7 +3498,7 @@ export function updateHarmonia(): void {
   const r = _calcHARMONIA(k.map((b: any) => b.high), k.map((b: any) => b.low), k.map((b: any) => b.close), Math.round(s.shortLB) || 2, Math.round(s.intLB) || 5, Math.round(s.maPeriod) || 20)
   // RAINBOW recolour: every bar a vivid cycling spectrum colour
   const colored = k.map((b: any, i: number) => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, color: r.colors[i], borderColor: r.colors[i], wickColor: r.colors[i] }))
-  try { w.cSeries.setData(colored) } catch (_) { }
+  if (_mayTint('harmonia')) { try { w.cSeries.setData(colored) } catch (_) { } }
   // dual-degree swing arrows + bullseye circles on short-term pivots
   const marks: any[] = []
   for (const p of r.shortHighs) { const b = k[p.index]; if (!b) continue; marks.push({ time: b.time, position: 'aboveBar', shape: 'arrowDown', color: '#ff3b30' }); marks.push({ time: b.time, position: 'aboveBar', shape: 'circle', color: r.colors[p.index] }) }
@@ -4247,6 +4283,8 @@ export function removeTerminatorSeries(): void {
   w._termActive = false
   w._termLastTrendColor = null
   w._termTrend = null
+  // Elibereaza culoarea lumanarilor daca el o detinea (vezi _releaseTint).
+  const _ownedTint = _releaseTint('terminator')
   // Hand the candles back: re-setting the bars without per-bar colour fields
   // makes the series fall back to the user's own candle colours.
   //
@@ -4259,7 +4297,7 @@ export function removeTerminatorSeries(): void {
   try {
     const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
     const kl = (w.S && w.S.klines) || []
-    if (w.cSeries && kl.length) {
+    if (_ownedTint && w.cSeries && kl.length) {
       if (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars') {
         w.cSeries.setData(kl.map((k: any) => ({
           time: k.time, open: k.open, high: k.high, low: k.low, close: k.close,
@@ -4361,9 +4399,10 @@ export function updateTerminator(): void {
   // show there, and turning the indicator off restores them everywhere.
   try {
     const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
-    if (w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
+    const _tintOk = _mayTint('terminator')
+    if (_tintOk && w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
       w.cSeries.setData(_terminatorTint(kl, t.trend, TERMINATOR_UP, TERMINATOR_DN))
-    } else if (w.cSeries && ctype === 'heikin') {
+    } else if (_tintOk && w.cSeries && ctype === 'heikin') {
       // [2026-10-16] Heikin Ashi used to be excluded here, on the correct
       // objection that its data is transformed and not raw klines. The answer
       // was to tint AFTER the transform: the trend array is per-bar and
@@ -4429,8 +4468,11 @@ function _flowBarTime(): number | null {
   return flowBucketTime(w.S?.klines)
 }
 
-function _flowPush(key: string, value: number, color: string, mode: 'last' | 'peak' = 'last'): FlowTrail {
+function _flowPush(id: string, value: number, color: string, mode: 'last' | 'peak' = 'last'): FlowTrail {
   const store = (w._flowTrails = w._flowTrails || {})
+  // Cheia poarta simbolul si timeframe-ul: altfel valorile unui simbol ajung pe
+  // barele altuia la prima schimbare. Vezi nota de la flowTrailKey.
+  const key = flowTrailKey(id, w.S?.symbol, w.S?.chartTf)
   const arr: FlowTrail = store[key] = store[key] || []
   const t = _flowBarTime()
   // Fara bare nu inventam o axa paralela: panoul rămâne gol pana are pe ce sta.
@@ -4871,9 +4913,10 @@ export function updatePulsar(): void {
   // aliniate pe indice, deci aceleasi culori se aplica barelor HA afisate).
   try {
     const ctype = (w.USER_SETTINGS && w.USER_SETTINGS.chart && w.USER_SETTINGS.chart.candleType) || 'candles'
-    if (w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
+    const _tintOk = _mayTint('pulsar')
+    if (_tintOk && w.cSeries && (ctype === 'candles' || ctype === 'hollow' || ctype === 'bars')) {
       w.cSeries.setData(_pulsarTint(kl, r.phase, r.charge))
-    } else if (w.cSeries && ctype === 'heikin') {
+    } else if (_tintOk && w.cSeries && ctype === 'heikin') {
       w.cSeries.setData(_pulsarTint(heikinAshiBars(kl) as any, r.phase, r.charge))
     }
     w._pulsarActive = true
@@ -4891,9 +4934,14 @@ export function clearPulsar(): void {
   w._pulsarActive = false
   w._pulsarPhase = null
   w._pulsarCharge = null
-  try {
-    if (w.cSeries && w.S?.klines?.length && typeof w.renderChart === 'function') w.renderChart()
-  } catch (_) { /* */ }
+  // Doar proprietarul culorii da chartul inapoi: altfel PULSAR ar sterge
+  // culorile altui indicator care le detine, iar ele ar reveni abia la
+  // urmatorul tick — un palpait inutil.
+  if (_releaseTint('pulsar')) {
+    try {
+      if (w.cSeries && w.S?.klines?.length && typeof w.renderChart === 'function') w.renderChart()
+    } catch (_) { /* */ }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

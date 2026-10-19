@@ -535,3 +535,24 @@ export function flowAnchorSeries(
     }
     return out
 }
+
+/**
+ * Cheia jurnalului unui panou de flux.
+ *
+ * [FLOW-KEY 2026-10-19] Gasit la auditul cerut de operator: jurnalul era cheiat
+ * DOAR pe id-ul indicatorului si nu se golea niciodata. Treceai de pe BTC pe ETH
+ * cu HECATE aprins si vedeai presiunea cartii de ordine a BTC-ului asezata pe
+ * barele ETH-ului. La fel la schimbarea de timeframe: intrarile stampilate pe
+ * bare de 5m se amestecau intre bare de 1h si stricau chiar alinierea.
+ *
+ * Cheia include simbolul si timeframe-ul, deci o schimbare porneste un jurnal
+ * nou de la sine — iar intoarcerea la simbolul dinainte il regaseste pe al lui,
+ * ceea ce e corect: acele valori chiar au fost ale lui.
+ */
+export function flowTrailKey(
+    indicatorId: string,
+    symbol: string | null | undefined,
+    timeframe: string | null | undefined,
+): string {
+    return `${indicatorId}|${symbol || '?'}|${timeframe || '?'}`
+}

@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   hecate, thanatos, aion, hypnos, notos, HECATE_BANDS,
-  flowPulseTargets, FLOW_PULSE_IDS, flowBucketTime, flowAnchorSeries,
+  flowPulseTargets, FLOW_PULSE_IDS, flowBucketTime, flowAnchorSeries, flowTrailKey,
 } from '../indicatorCalcFlow'
 
 // ═══════════════════════════ HECATE ═══════════════════════════
@@ -487,5 +487,34 @@ describe('AION — variatia reala de OI e ce se deseneaza', () => {
   it('variatia are semn: OI in crestere pozitiv, in scadere negativ', () => {
     expect(aion([100, 110], [50000, 51000], 0).oiChangePct).toBeGreaterThan(0)
     expect(aion([110, 100], [50000, 51000], 0).oiChangePct).toBeLessThan(0)
+  })
+})
+
+describe('cheia jurnalului — valorile unui simbol nu ajung pe barele altuia', () => {
+  // Gasit la auditul cerut de operator: jurnalul era cheiat DOAR pe id-ul
+  // indicatorului si nu se golea niciodata. BTC → ETH cu HECATE aprins si
+  // vedeai presiunea BTC-ului asezata pe barele ETH-ului.
+
+  it('simboluri diferite = jurnale diferite', () => {
+    expect(flowTrailKey('hecate', 'BTCUSDT', '5m')).not.toBe(flowTrailKey('hecate', 'ETHUSDT', '5m'))
+  })
+
+  it('timeframe-uri diferite = jurnale diferite', () => {
+    // Intrarile stampilate pe bare de 5m stricau alinierea intre bare de 1h.
+    expect(flowTrailKey('hecate', 'BTCUSDT', '5m')).not.toBe(flowTrailKey('hecate', 'BTCUSDT', '1h'))
+  })
+
+  it('indicatori diferiti nu se amesteca intre ei', () => {
+    expect(flowTrailKey('hecate', 'BTCUSDT', '5m')).not.toBe(flowTrailKey('notos', 'BTCUSDT', '5m'))
+  })
+
+  it('aceeasi combinatie da aceeasi cheie — intorcandu-te, iti regasesti jurnalul', () => {
+    expect(flowTrailKey('aion', 'BTCUSDT', '1h')).toBe(flowTrailKey('aion', 'BTCUSDT', '1h'))
+  })
+
+  it('simbol sau timeframe lipsa nu produc o cheie care se ciocneste cu alta reala', () => {
+    const a = flowTrailKey('hecate', null, undefined)
+    expect(a).not.toBe(flowTrailKey('hecate', 'BTCUSDT', '5m'))
+    expect(a).toBe(flowTrailKey('hecate', '', ''))
   })
 })
