@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-20 · build b289 v1.7.263
+> **Ultima actualizare:** 2026-10-20 · build b290 v1.7.264
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -14,8 +14,8 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 |---|---|---|---|
 | 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **0 deschise** |
 | 🙋 | **AȘTEAPTĂ DE LA TINE** | decizie, chei, sau ochii tăi — eu nu pot continua singur | **11 deschise** |
-| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b289** |
-| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **34** |
+| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b290** |
+| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **35** |
 
 **Cum folosesc coșurile:** nimic nu intră în ✅ pe baza faptului că am scris codul — intră când am o
 dovadă pe sistemul viu. Dacă o reparație e livrată dar neverificată, rămâne în 🔧 cu motivul la vedere.
@@ -1899,6 +1899,9 @@ O plasă care cade în liniște **nu e o plasă** — e doar impresia de plasă,
 
 **R-V-8. Un mutant care nu se aplică arată IDENTIC cu un test care prinde.** *(2026-10-20: primul mutant de azi a „supraviețuit" și m-am bucurat degeaba — harnessul înlănțuia un `sed` înaintea unei înlocuiri `python`, textul se schimbase, iar mutantul nu se mai aplicase deloc. Testul era bun; harnessul mințea.)*
 Ambele cazuri dau „teste verzi pe cod stricat", dar unul înseamnă *testul e decor* și celălalt *n-am stricat nimic*. Regula: harnessul de mutație **afirmă** că șablonul s-a găsit exact o dată (`assert s.count(old)==1`) înainte de a înlocui, și nu înlănțuie două mecanisme de editare pe același fișier. Fără afirmația aia, o rulare de mutație nu dovedește nimic.
+
+**R-V-9. O probă care schimbă starea nu e o probă.** *(2026-10-20: am rulat testul de acceptare al propriei mele regule R-OP-9 — „stinge-l intenționat și vezi dacă sună telefonul" — și proba a trecut, dar următoarea a tăcut când trebuia să țipe. Nu era logica nouă: `writeState` era necondiționat, deci `--dry` scria starea persistentă.)*
+Două daune, amândouă reale: proba seta fereastra de suprimare și **înăbușea o alertă adevărată 24 de ore**; iar rulată de un user care nu putea citi pm2, scria `alerting: true` în starea vie, deci rularea următoare ar fi trimis un „✅ revenit" complet fals. Regula: un flag de probă **nu scrie nimic** — nici stare, nici marcaje, nici jurnal persistent. Și corolarul care m-a prins: **când adaugi o fereastră de suprimare, orice bug preexistent de scriere a stării capătă dinți** — suprimarea transformă o scriere inofensivă într-o alertă pierdută.
 
 ### 🔵 Cod — reguli de fond
 
@@ -3801,3 +3804,65 @@ nu l-am atins — dar dacă te așteptai la activitate `live`, acolo s-a oprit.
 identic cu un test care prinde — propria mea greșeală de azi) · **R-C-12** (pasul care face loc rulează
 înainte de pasul care are nevoie de loc; retenția pe număr e oarbă la mărime; ștergerea în coș nu
 eliberează nimic). Plus **R-OP-8** mutată în rubrică, fiindcă o regulă care nu e în rubrică nu se citește.
+
+
+---
+
+## 🔧 Paznicul nu păzea plasa — 2026-10-20 (b290 v1.7.264)
+
+Continuare directă a b289. Îmi scrisesem regula **R-OP-9** *(orice plasă de siguranță care poate cădea
+trebuie să ȚIPE)* — și am aplicat-o peste **toate cele 5 cron-uri**, nu doar peste cel pe care tocmai
+îl reparasem. Așa am văzut ce lipsea.
+
+### 🔴 BUG 1 — paznicul se uita doar la proces, nu la plasă
+
+`health-watchdog` verifică starea pm2 și contorul de reporniri. **N-a observat deloc** că offsite-ul
+murise 7 zile — nu era treaba lui, și tocmai asta era problema.
+
+Iar alerta pe care o pusesem în b289 în scriptul de backup are o limită pe care trebuie s-o spun:
+acoperă **doar** cazul în care scriptul *rulează* și raportează `FATAL`. Nu acoperă cron-ul oprit, nici
+scriptul care moare înainte să ajungă la alertă. Și fereastra aia **nu e teoretică** — pe 10 octombrie
+scriptul picase cu `Permission denied` chiar pe scrierea în propriul log.
+
+**Reparat:** scriptul scrie un **marcaj de reușită**, iar paznicul citește *vârsta* marcajului, din afară.
+Prag **36h** (cron zilnic la 03:30 → o zi ratată nu alarmează, două la rând da), **o alertă pe zi** ca să
+nu bată la fiecare minut, și **fail-closed**: marcaj lipsă = nicio reușită dovedită = alertă, fiindcă
+exact tăcerea a fost problema. Problemele de proces au **prioritate** peste backup vechi, ca să nu
+primești două mesaje despre două lucruri în același minut.
+
+**Dovedit pe viu, toate trei cazurile:** marcaj proaspăt → tace; marcaj îmbătrânit cu 7 zile →
+*„backup offsite vechi de 7 zile (168h)"*; marcaj șters → *„nicio reușită dovedită"*.
+
+### 🔴 BUG 2 — proba își strica propria dovadă
+
+Asta e partea care merită reținută. Am rulat testul de acceptare al propriei mele reguli — *stinge-l
+intenționat și vezi dacă sună telefonul* — prima probă a trecut, iar **a doua a tăcut când trebuia să țipe**.
+
+Prima reacție ar fi fost să caut vina în logica nouă. Nu era acolo: **`writeState` era necondiționat**,
+deci `--dry` scria starea persistentă. Bug **preexistent**, dar fereastra nouă de suprimare de 24h i-a dat
+dinți:
+
+- o simplă rulare de probă seta `lastBackupAlertAt` și **înăbușea o alertă adevărată o zi întreagă**;
+- mai rău, rulată de un user care nu poate citi pm2, proba scria **`alerting: true`** în starea vie —
+  deci rularea următoare ar fi trimis un *„✅ ZEUS: revenit"* complet fals.
+
+**Reparat:** `--dry` nu mai scrie nimic. Și am curățat starea pe care **propriile mele probe** o poluaseră.
+→ **R-V-9**, cu corolarul: *când adaugi o fereastră de suprimare, orice bug preexistent de scriere a
+stării capătă dinți.*
+
+### 🧹 Igienă — stare de rulare scoasă din git
+
+`data/health-watchdog-state.json` era **urmărit în git și comis de 5 ori**, deși e stare de rulare care
+se schimbă la fiecare minut, și deși surorile lui (`riskState.json`, `metrics_snapshot.json`) sunt deja
+ignorate. Riscul concret: un `pull` peste starea vie o resetează și poate declanșa o alertă falsă.
+Scos din urmărire; fișierul rămâne pe disc.
+
+### ✅ Restul cron-urilor — verificate, sănătoase
+
+`m1-burnin` exit 0 · `mem-monitor` scrie la fiecare 15 min (rss 368 MB) · `health-watchdog` viu
+(stare scrisă în minutul curent, `restarts: 1111` corect) și **alertarea lui e dovedită** din 10 oct,
+când a trimis și alarma și revenirea. Un fals alarmă pe care l-am verificat înainte să-l raportez:
+`health-watchdog-cron.log` are 0 octeți din 10 oct — **nu e mort**, scrie în log-ul lui propriu.
+
+**Fără reload:** sunt doar scripturi de cron, nu `server/`, deci n-am mai dat o a doua rafală de boot (R-OP-1).
+9 teste noi, 4 mutanți omorâți, 158 de teste de regresie verzi pe 13 suite.

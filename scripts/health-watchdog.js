@@ -17,6 +17,11 @@ const { decide } = require('./health-watchdog-decide');
 const ROOT = path.join(__dirname, '..');
 const STATE_FILE = path.join(ROOT, 'data', 'health-watchdog-state.json');
 const LOG_FILE = path.join(ROOT, 'data', 'logs', 'health-watchdog.log');
+// [2026-10-20 b290] Marcajul de reusita al backup-ului offsite. Scris de
+// scripts/offsite-backup.sh la fiecare urcare reusita; citit de aici ca sa
+// alertam daca disaster recovery nu mai are copie proaspata — vezi comentariul
+// din health-watchdog-decide.js pentru de ce verificarea sta AICI, afara.
+const BACKUP_MARKER = path.join(ROOT, 'data', 'logs', 'offsite-last-success');
 const DRY = process.argv.includes('--dry');
 
 function log(msg) {
@@ -69,9 +74,22 @@ function sendTelegram(text) {
     } catch (e) { log('telegram send failed: ' + e.message); }
 }
 
+function readBackupMarker() {
+    try {
+        const raw = fs.readFileSync(BACKUP_MARKER, 'utf8').trim();
+        const ms = Number(raw) * 1000;  // marcajul e in secunde epoch
+        return { lastSuccessMs: Number.isFinite(ms) && ms > 0 ? ms : null };
+    } catch (_) { return { lastSuccessMs: null }; }
+}
+
 const proc = readProc();
 const prev = readState();
-const d = decide(proc, prev, Date.now());
+const d = decide(proc, prev, Date.now(), readBackupMarker());
 if (d.alert) sendTelegram(d.message);
-writeState(d.state);
+// [2026-10-20 b290] `--dry` NU scrie starea. Era necondiţionat, si fereastra
+// noua de suprimare a alertei de backup (24h) i-a dat dinti: o rulare de proba
+// seta `lastBackupAlertAt` si inabusea o alerta adevarata o zi intreaga. Mai
+// rau, rulat de un user care nu poate citi pm2, scria `alerting: true` in
+// starea reala -> urmatoarea rulare ar fi trimis un "revenit" fals.
+if (!DRY) writeState(d.state);
 if (DRY && !d.alert) log(`quiet — status=${proc ? proc.status : 'MISSING'} restarts=${proc ? proc.restarts : '?'}`);

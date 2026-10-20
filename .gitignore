@@ -20,6 +20,10 @@ data/sync_user/
 data/metrics_snapshot.json
 data/marketRadar-snapshot.json
 data/riskState.json
+# [2026-10-20 b290] Stare de rulare a paznicului, se schimba la fiecare minut.
+# Era urmarita in git (comisa de 5 ori) desi surorile ei de mai sus nu sunt:
+# un pull peste starea vie o reseteaza si poate declansa o alerta falsa.
+data/health-watchdog-state.json
 data/config_overrides.json
 data/audit.jsonl
 data/user_ctx/

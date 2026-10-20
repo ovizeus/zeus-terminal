@@ -170,6 +170,12 @@ for attempt in 1 2 3; do
 done
 [ "$UPLOAD_OK" = "1" ] || fatal "rclone upload a picat spre $REMOTE_PATH (3 incercari)"
 log "OK: uploaded $(basename "$ENC") (db $SZ → gz $GZSZ) → $REMOTE_PATH"
+# [2026-10-20 b290] Marcaj de reusita, citit de health-watchdog din afara.
+# Alerta de mai sus prinde doar esecul unui script care RULEAZA; marcajul
+# prinde si cron-ul oprit sau scriptul mort inainte de alerta (pe 10 oct a
+# picat chiar pe scrierea in propriul log).
+date -u +%s > "$ZEUS_DIR/data/logs/offsite-last-success" 2>/dev/null || \
+  log "WARN: nu am putut scrie marcajul de reusita"
 
 # 4. retention — keep the last KEEP_N offsite copies
 OLD=$(rclone lsf "$REMOTE_PATH" 2>/dev/null | grep -E '^zeus-offsite-.*\.db\.enc$' | sort | head -n "-${KEEP_N}" || true)
