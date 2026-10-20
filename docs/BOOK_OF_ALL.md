@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-20 · build b290 v1.7.264
+> **Ultima actualizare:** 2026-10-20 · build b291 v1.7.265
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -14,8 +14,8 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 |---|---|---|---|
 | 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **0 deschise** |
 | 🙋 | **AȘTEAPTĂ DE LA TINE** | decizie, chei, sau ochii tăi — eu nu pot continua singur | **11 deschise** |
-| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b290** |
-| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **35** |
+| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b291** |
+| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **36** |
 
 **Cum folosesc coșurile:** nimic nu intră în ✅ pe baza faptului că am scris codul — intră când am o
 dovadă pe sistemul viu. Dacă o reparație e livrată dar neverificată, rămâne în 🔧 cu motivul la vedere.
@@ -36,6 +36,7 @@ Când verificăm împreună un rând 🙋, îl scot de aici *și* din memorie.
 | P10 | Confirmări vizuale (TERMINATOR, kill-switch, jurnal „jos", widget, Vault) | ochii tăi |
 | **D1** | **Cota Google Drive: 6 fișiere din iunie țin 10,6 GiB din 15** | vezi mai jos — decide dacă le tai |
 | **D2** | **14 G de copii vechi de DB pe discul VPS-ului** | vezi mai jos — decide dacă le tai |
+| **D3** | **Poarta SP1 nu poate trece niciodată** — creierul clientului e inert (încredere medie **5,1**) | vezi secțiunea b291 — oprim raportul zilnic, îl re-țintim, sau îl lăsăm |
 
 **D1 — Drive.** Offsite-ul merge iar (reparat în b289), dar cota e strâmtă din cauza a șase copii din
 iunie, **necomprimate**, 1,37-2,07 GB fiecare. Comprimarea a intrat abia pe 7 octombrie, deci cele noi
@@ -1902,6 +1903,9 @@ Ambele cazuri dau „teste verzi pe cod stricat", dar unul înseamnă *testul e 
 
 **R-V-9. O probă care schimbă starea nu e o probă.** *(2026-10-20: am rulat testul de acceptare al propriei mele regule R-OP-9 — „stinge-l intenționat și vezi dacă sună telefonul" — și proba a trecut, dar următoarea a tăcut când trebuia să țipe. Nu era logica nouă: `writeState` era necondiționat, deci `--dry` scria starea persistentă.)*
 Două daune, amândouă reale: proba seta fereastra de suprimare și **înăbușea o alertă adevărată 24 de ore**; iar rulată de un user care nu putea citi pm2, scria `alerting: true` în starea vie, deci rularea următoare ar fi trimis un „✅ revenit" complet fals. Regula: un flag de probă **nu scrie nimic** — nici stare, nici marcaje, nici jurnal persistent. Și corolarul care m-a prins: **când adaugi o fereastră de suprimare, orice bug preexistent de scriere a stării capătă dinți** — suprimarea transformă o scriere inofensivă într-o alertă pierdută.
+
+**R-V-10. Un rezultat GOL de la un filtru de timp e o suspiciune, nu un răspuns.** *(2026-10-20: am interogat dezacordurile de paritate cu `datetime(created_at) >= datetime('now','-3 days')`, am primit zero rânduri și aproape am raportat „nu există dezacorduri acționabile". Erau 1494 de perechi. `brain_parity_log.created_at` e **epoch în milisecunde**, nu șir datetime — filtrul nu dă eroare, dă liniște.)*
+Aceeași bază amestecă **două convenții** în coloane cu nume identice: epoch ms în `brain_parity_log.created_at` și `position_events.ts`; șir datetime în `at_closed.closed_at`, `missed_trades.created_at`, `audit_log.created_at`. *(Carte: incidentul-gemene e deja notat pe `closed_at`, unde comparația directă de șir cu `'...T...'` excludea fals rândurile zilei.)* Regula: **înainte de a filtra pe timp, citește o valoare** (`SELECT <col> ... LIMIT 1`) și abia apoi scrie predicatul. Și dacă un filtru de timp întoarce zero pe un sistem despre care știi că lucrează, prima ipoteză e că filtrul e greșit, nu că sistemul e inactiv.
 
 ### 🔵 Cod — reguli de fond
 
@@ -3866,3 +3870,62 @@ când a trimis și alarma și revenirea. Un fals alarmă pe care l-am verificat 
 
 **Fără reload:** sunt doar scripturi de cron, nu `server/`, deci n-am mai dat o a doua rafală de boot (R-OP-1).
 9 teste noi, 4 mutanți omorâți, 158 de teste de regresie verzi pe 13 suite.
+
+
+---
+
+## 🔎 Poarta SP1 măsoară o axă care nu poate trece — 2026-10-20 (b291 v1.7.265)
+
+Ți-am lăsat la finalul raportului anterior o întrebare despre `sp1-soak-check` și n-am vrut s-o las atârnată,
+așa că am săpat. **Întâi o corecție a mea:** am spus că e „un boot de node pe zi degeaba". **Greșit.**
+Rezultatul lui nu se duce în log-ul de cron (acolo ajunge doar zgomot de boot — 426 de linii de `[CONFIG]`),
+ci în `data/logs/sp1-soak.log`, unde sunt **146 de verdicte reale** și perechile cresc vizibil
+(13 → 40 → 217 → 222). Dacă mă luai pe cuvânt, ștergeam un monitor funcțional.
+
+### Ce am găsit în schimb
+
+Verdictul zilnic spune *„Real-trade agreement 0% on 2 actionable cycles"*. Am verificat cele două momente:
+
+| | client | server, în aceeași secundă |
+|---|---|---|
+| 19 oct 18:26:04 | SMALL **short**, încredere **64** | NO_TRADE, **long**, încredere **14** |
+| 19 oct 18:49:18 | SMALL **short**, încredere **67** | NO_TRADE, **neutral**, încredere **11** |
+
+Apoi am măsurat serios, pe **1494 de perechi reale** (împerechere ±15 s, cum o face chiar `queryParityReport`):
+
+- încredere medie **client 5,1** vs **server 22,4**, abatere medie **21,5 puncte**
+- direcție: 647 acord / **847 dezacord**
+
+**Cum trebuie citit, cinstit:** dezacordul de direcție **nu e alarmant în sine** — cea mai mare parte cade
+pe cicluri unde nimeni nu tradează, iar acolo „direcția" e doar o înclinare fără consecință (zgomotul
+`NtDirOnly`, deja documentat în carte). Partea care contează e alta: **creierul clientului e practic inert**,
+cu încredere medie **5,1** și **2 decizii acționabile din 2114**, în timp ce serverul are 1465.
+
+**Concluzia:** poarta cere 98% acord pe ≥50 de cicluri acționabile. Clientul produce 2. Poarta **nu poate
+trece niciodată**, deci raportul zilnic va spune „in progress" la infinit. Nu e un bug de reparat — e o
+axă de măsurare care și-a pierdut obiectul, iar decizia „client-parity = advisory" era deja luată.
+*Verificat că nu trag concluzii din date moarte: ambele surse emit azi — client 92 rânduri în 12 h, server 1673.*
+
+### O ipoteză a mea care a fost GREȘITĂ, și de ce o scriu aici
+
+Am văzut că **toate** cele 2114 rânduri de client au `cycle` **gol**, iar toate cele 47656 de server îl au
+populat, și am crezut că am găsit o împerechere ruptă. **Nu era.** `queryParityReport` nu împerechează pe
+`cycle`, ci pe `(user_id, symbol)` într-o fereastră de ±15 s, luând rândul cel mai apropiat. Cifrele porții
+sunt legitime. O scriu fiindcă e exact genul de „descoperire" care sună bine și e falsă dacă nu citești
+implementarea.
+
+**Rămâne însă o capcană pentru viitor, și asta e reală:** planul SP1.5 prevede un tabel nou
+`sizing_parity_log` cu **join pe `(user, symbol, cycle)`**. Cu `cycle` gol pe toate rândurile de client,
+join-ul ăla ar da **zero perechi, în liniște**. Cine face SP1.5 trebuie să umple `cycle` pe client întâi,
+sau să împerecheze pe timp ca raportul existent.
+
+### 📜 Regulă nouă
+
+**R-V-10 — un rezultat gol de la un filtru de timp e o suspiciune, nu un răspuns.** Am interogat
+dezacordurile cu `datetime(created_at) >= datetime('now','-3 days')`, am primit **zero** și aproape am
+raportat „nu există dezacorduri". Erau 1494 de perechi: coloana e **epoch în milisecunde**, iar filtrul
+nu dă eroare, dă liniște. Aceeași bază amestecă două convenții în coloane cu nume identice — tabelul
+complet e în regulă.
+
+**Fără reload:** runda asta n-are schimbare de cod, doar carte + versiune. Numărul nou de build intră
+la următoarea repornire naturală; nu dau o rafală de boot pentru o schimbare de documentație (R-OP-1).
