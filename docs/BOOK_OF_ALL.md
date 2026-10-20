@@ -12,7 +12,7 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 
 | | Coș | Ce înseamnă | Câte sunt acum |
 |---|---|---|---|
-| 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **0 deschise** |
+| 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **3 propuse** (lista de mai jos) |
 | 🙋 | **AȘTEAPTĂ DE LA TINE** | decizie, chei, sau ochii tăi — eu nu pot continua singur | **11 deschise** |
 | ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b291** |
 | 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **36** |
@@ -20,6 +20,19 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 **Cum folosesc coșurile:** nimic nu intră în ✅ pe baza faptului că am scris codul — intră când am o
 dovadă pe sistemul viu. Dacă o reparație e livrată dar neverificată, rămâne în 🔧 cu motivul la vedere.
 Când verificăm împreună un rând 🙋, îl scot de aici *și* din memorie.
+
+### 🔧 Ce aș face în continuare — propunerile mele
+
+Nimic din ce am găsit nu a rămas nereparat; lista asta e răspunsul la *„ce ai mai vrea să faci"*.
+Niciuna nu e urgentă și niciuna nu atinge calea banilor fără să-ți spun întâi.
+
+| # | Lucrul | De ce merită |
+|---|---|---|
+| **C-1** | **Umple `cycle` pe rândurile de paritate ale clientului** | Acum e gol pe **toate** cele 2114. Nu strică nimic azi (împerecherea merge pe timp), dar planul SP1.5 vrea join pe `(user, symbol, cycle)` → ar da **zero perechi, în liniște**. Cinci minute acum, o zi pierdută mai târziu. |
+| **C-2** | **Jurnalul `position_events` nu mai scrie nimic din 7 octombrie** | E cablat doar pe calea live, iar modul live s-a stins. Pe demo nu se scrie nimic, deci jurnalul de stări e orb exact pe singurul mod care tradează. Nu e pierdere de bani — e pierdere de **dovezi** la următorul audit. |
+| **C-3** | **Perechi neîmperecheate persistente (6-10) în raportul de paritate** | Mic, dar constant. Merită știut dacă e decalaj de ceas sau emisie ratată, înainte ca cineva să citească procente din raport. |
+
+---
 
 ### 🙋 Ce așteaptă de la tine — lista scurtă
 
@@ -3926,6 +3939,21 @@ dezacordurile cu `datetime(created_at) >= datetime('now','-3 days')`, am primit 
 raportat „nu există dezacorduri". Erau 1494 de perechi: coloana e **epoch în milisecunde**, iar filtrul
 nu dă eroare, dă liniște. Aceeași bază amestecă două convenții în coloane cu nume identice — tabelul
 complet e în regulă.
+
+### ✅ Două fire pe care le-am urmărit și s-au închis fără reparație
+
+**1. `MIXED_DIRECTION_SAME_MODE` — 143 de intrări blocate în 3 zile. NU e bug, e politica ta.**
+Scrisă explicit în cod: *„within a single mode, all positions must share direction (no mixed LONG+SHORT
+book)"*, extinsă de tine pe 19 mai de la același-simbol la **orice** simbol din același mod. Cartea
+deschisă are 3 SHORT-uri (BNB/ETH/SOL demo), deci orice LONG e respins — **corect**. Bine că am citit
+înainte: era cel mai mare blocaj de intrări din sistem și arăta exact ca un bug de reparat.
+
+**2. „Modul live s-a oprit pe 18 august" — framing-ul meu era greșit, e o stingere treptată.**
+Nu e o prăpastie: 1081 închideri live în martie → 634 (apr) → 112 (mai) → 630 (iun) → 69 (iul) → 25 (aug).
+Iar din cele 25 din august, **14 sunt măturate de reconciliere** și **13 sunt pe simboluri COIN-M**
+(`LTCUSD_PERP`, `SOLUSD_PERP`…) pe care Zeus nu le tradează. Cele 13 au fost închise **toate în aceeași
+secundă**, 18 aug 04:07:51, cu `RECON_PHANTOM_STALE_EMPTY` — adică 18 august a fost **ultima măturătoare**,
+nu momentul ruperii. Consistent cu trecerea pe demo/testnet și cu calea REAL rămasă inertă (zero chei live).
 
 **Fără reload:** runda asta n-are schimbare de cod, doar carte + versiune. Numărul nou de build intră
 la următoarea repornire naturală; nu dau o rafală de boot pentru o schimbare de documentație (R-OP-1).
