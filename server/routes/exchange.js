@@ -493,11 +493,31 @@ router.post('/switch', (req, res) => {
 // secret, and logs/audits/alerts on failure. Daily cadence; day-tracked
 // via _lastApiHealthCheckDate so multiple boots/day don't re-run the
 // probe (cheap but still respects exchange API rate limits).
-let _lastApiHealthCheckDate = '';
+// [BOOT-PROBE FIX 2026-10-20] Gardul de „o data pe zi" era o variabila de
+// modul, deci NU supravietuia unei reporniri — exact opusul a ce promite
+// comentariul de mai sus. Cu 1109 reporniri, sonda se relua la FIECARE boot:
+// un apel semnat in plus per cont de bursa (pe un sistem cu istoric de banuri)
+// si, mai rau, un avertisment pe Telegram catre operator la fiecare restart.
+// Semnatura pe viu: 14 randuri EXCHANGE_KEY_HEALTH_FAIL pe 19 octombrie, adica
+// exact numarul de reload-uri din acea zi, si 2 azi cu o singura pornire
+// (al doilea din procesul nou, care porneste cu variabila goala).
+// Ziua se tine acum in at_state, deci trece peste reporniri. Memo in proces
+// ca sa nu citim din DB la fiecare apel.
+const _API_HEALTH_KEY = 'ops:apiKeyHealthDate';
+let _lastApiHealthCheckDate = null; // null = necitit inca in acest proces
+function _loadApiHealthDate() {
+    if (_lastApiHealthCheckDate !== null) return _lastApiHealthCheckDate;
+    try {
+        const v = db.atGetState(_API_HEALTH_KEY);
+        _lastApiHealthCheckDate = typeof v === 'string' ? v : '';
+    } catch (_) { _lastApiHealthCheckDate = ''; }
+    return _lastApiHealthCheckDate;
+}
 async function _runApiKeyHealthCheck() {
     const today = new Date().toISOString().slice(0, 10);
-    if (_lastApiHealthCheckDate === today) return;
+    if (_loadApiHealthDate() === today) return;
     _lastApiHealthCheckDate = today;
+    try { db.atSetState(_API_HEALTH_KEY, today, null); } catch (_) { /* best effort */ }
     let okCount = 0, failCount = 0;
     try {
         const users = db.listUsers() || [];
@@ -538,5 +558,9 @@ async function _runApiKeyHealthCheck() {
 // hourly check after that (day-tracked so the actual probe fires once/day).
 setTimeout(() => { _runApiKeyHealthCheck().catch(() => { }); }, 5 * 60 * 1000);
 setInterval(() => { _runApiKeyHealthCheck().catch(() => { }); }, 60 * 60 * 1000);
+
+// [BOOT-PROBE FIX 2026-10-20] Expus pentru teste: gardul de zi trebuie dovedit
+// peste o REPORNIRE, iar asta cere chemarea sondei direct, nu prin cron.
+router._runApiKeyHealthCheck = _runApiKeyHealthCheck;
 
 module.exports = router;
