@@ -36,9 +36,22 @@ function fetchJournal() {
             if (!data || !data.ok) { showEmpty(); return; }
             _allTrades = data.trades || [];
             _filtered = _allTrades.slice();
+            // [2026-10-20 b292] Decorul NU are voie sa omoare datele.
+            // Inainte, `applyFilters` + `renderStats` + `renderChart` stateau
+            // toate in acest `.then`, cu un singur `.catch` la capat. Daca
+            // randarea graficului arunca (canvas indisponibil, date ciudate),
+            // `.catch` chema `showEmpty()` si STERGEA un tabel care se
+            // randase perfect — iar mesajul zicea „Fetch error", desi datele
+            // sosiseră. Oricine ar fi depanat ar fi plecat spre reţea, nu
+            // spre randare. Acum tabelul se randeaza separat, iar statisticile
+            // si graficul sunt izolate fiecare: o eroare in ele se vede in
+            // consola cu numele lui, si nu atinge rândurile.
             applyFilters();
-            renderStats(data.stats);
-            renderChart(_filtered);
+            try {
+                renderStats(data.stats);
+            } catch (e) { console.error('[Journal] renderStats failed (table kept):', e); }
+            // renderChart e deja chemat de applyFilters() mai sus; al doilea
+            // apel de aici era redundant si randa canvas-ul de doua ori.
         })
         .catch(function (err) {
             console.error('[Journal] Fetch error:', err);
@@ -81,9 +94,17 @@ function applyFilters() {
     });
 
     _page = 0;
+    // Tabelul primul si neprotejat: daca ASTA pica, chiar e o problema de
+    // date si vrem s-o vedem. Statisticile si graficul sunt decor — izolate,
+    // ca o eroare in ele sa nu urce in `.catch`-ul de la fetch si sa stearga
+    // rândurile (vezi comentariul din fetchJournal).
     renderTable(_filtered);
-    renderLocalStats(_filtered);
-    renderChart(_filtered);
+    try {
+        renderLocalStats(_filtered);
+    } catch (e) { console.error('[Journal] renderLocalStats failed (table kept):', e); }
+    try {
+        renderChart(_filtered);
+    } catch (e) { console.error('[Journal] renderChart failed (table kept):', e); }
 }
 
 function clearFilters() {
@@ -164,22 +185,27 @@ function renderTable(trades) {
         var annCell = '<span class="j-ann-stars">' + stars + '</span>' + tags +
             (notePreview ? '<span class="j-ann-note">' + notePreview + '</span>' : '') +
             '<button class="j-ann-btn" onclick="_openAnnotation(' + t.seq + ')" title="Edit notes">✎</button>';
-        return '<tr>' +
-            '<td class="dim">' + (start + i + 1) + '</td>' +
-            '<td>' + _fmtDate(t.openTs) + '</td>' +
-            '<td>' + (t.symbol || '').replace('USDT', '') + '</td>' +
-            '<td class="' + sideCls + '">' + t.side + '</td>' +
-            '<td class="' + modeCls + '">' + (_jEnv === 'testnet' ? 'TESTNET' : (t.mode || 'demo').toUpperCase()) + '</td>' +
-            '<td>$' + _fmtPrice(t.entryPrice) + '</td>' +
-            '<td>' + (t.exitPrice ? '$' + _fmtPrice(t.exitPrice) : '—') + '</td>' +
-            '<td>$' + _fmtNum(t.size) + '</td>' +
-            '<td>' + (t.leverage || '—') + 'x</td>' +
-            '<td class="' + pnlCls + '">' + _fmtPnl(t.pnl) + '</td>' +
-            '<td class="dim">' + _fmtReason(t.exitReason) + '</td>' +
-            '<td class="dim">' + _msToStr(t.holdMs) + '</td>' +
-            '<td class="dim">$' + _fmtPrice(t.sl) + '</td>' +
-            '<td class="dim">$' + _fmtPrice(t.tp) + '</td>' +
-            '<td class="j-ann-cell">' + annCell + '</td>' +
+        // [2026-10-20 b292] `data-label` pe fiecare celula: pe ecran ingust
+        // tabelul de 15 coloane se preface in casete, iar eticheta e singurul
+        // lucru care spune ce reprezinta valoarea odata ce capul de tabel
+        // dispare. Pe desktop eticheta nu se afiseaza deloc. Conţinutul si
+        // clasele rămân neatinse — e doar marcaj in plus.
+        return '<tr class="j-row">' +
+            '<td class="dim j-c-idx" data-label="#">' + (start + i + 1) + '</td>' +
+            '<td data-label="Date">' + _fmtDate(t.openTs) + '</td>' +
+            '<td class="j-c-sym" data-label="Symbol">' + (t.symbol || '').replace('USDT', '') + '</td>' +
+            '<td class="' + sideCls + '" data-label="Side">' + t.side + '</td>' +
+            '<td class="' + modeCls + '" data-label="Mode">' + (_jEnv === 'testnet' ? 'TESTNET' : (t.mode || 'demo').toUpperCase()) + '</td>' +
+            '<td data-label="Entry">$' + _fmtPrice(t.entryPrice) + '</td>' +
+            '<td data-label="Exit">' + (t.exitPrice ? '$' + _fmtPrice(t.exitPrice) : '—') + '</td>' +
+            '<td data-label="Size">$' + _fmtNum(t.size) + '</td>' +
+            '<td data-label="Lev">' + (t.leverage || '—') + 'x</td>' +
+            '<td class="' + pnlCls + ' j-c-pnl" data-label="PnL">' + _fmtPnl(t.pnl) + '</td>' +
+            '<td class="dim" data-label="Exit Reason">' + _fmtReason(t.exitReason) + '</td>' +
+            '<td class="dim" data-label="Hold Time">' + _msToStr(t.holdMs) + '</td>' +
+            '<td class="dim" data-label="SL">$' + _fmtPrice(t.sl) + '</td>' +
+            '<td class="dim" data-label="TP">$' + _fmtPrice(t.tp) + '</td>' +
+            '<td class="j-ann-cell" data-label="Notes">' + annCell + '</td>' +
             '</tr>';
     }).join('');
 

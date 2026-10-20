@@ -62,14 +62,46 @@
   overflow-x: auto; background: var(--bg2); border: 1px solid var(--brd);
   border-radius: var(--r-md);
 }
-.j-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+/* [2026-10-20 b292] Fiecare tranzactie = o CASETA, nu un rand lipit de
+   urmatorul. Inainte: 15 coloane la 12px, despartite de o linie de 1px pe
+   fundal intunecat — ochiul nu avea de ce sa se prinda si rândurile curgeau
+   unul in altul. Acum: `border-spacing` face spatiu REAL intre randuri (de-aia
+   `separate` in loc de `collapse`), fiecare rand are fundal propriu si colturi
+   rotunjite la capete, iar scrisul a crescut de la 12 la 13px. */
+.j-table {
+  width: 100%; border-collapse: separate; border-spacing: 0 6px;
+  font-size: 13px; white-space: nowrap;
+}
 .j-table th {
   background: var(--bg3); color: var(--dim); font-size: 10px; text-transform: uppercase;
-  letter-spacing: 1px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--brd);
-  position: sticky; top: 0;
+  letter-spacing: 1px; padding: 10px 12px; text-align: left;
+  border-bottom: 1px solid var(--brd);
+  position: sticky; top: 0; z-index: 2;
 }
-.j-table td { padding: 8px 12px; border-bottom: 1px solid #111820; color: var(--txt); }
-.j-table tr:hover td { background: #0f1520; }
+.j-table td {
+  padding: 11px 12px; color: var(--txt);
+  background: #0d131c;
+  border-top: 1px solid #141c28; border-bottom: 1px solid #141c28;
+}
+/* Colturile rotunjite se pun pe celulele de capat, fiindca un <tr> nu poate
+   avea el insusi colturi cand randurile sunt celule de tabel. */
+.j-table td:first-child {
+  border-left: 1px solid #141c28;
+  border-top-left-radius: 5px; border-bottom-left-radius: 5px;
+}
+.j-table td:last-child {
+  border-right: 1px solid #141c28;
+  border-top-right-radius: 5px; border-bottom-right-radius: 5px;
+}
+.j-table tbody tr:hover td {
+  background: #121a26; border-color: #1e2a3a;
+}
+/* Cele doua coloane pe care le cauti primul: simbolul si rezultatul. */
+.j-table .j-c-sym { font-weight: 700; color: var(--whi); letter-spacing: 0.5px; }
+.j-table .j-c-pnl { font-size: 14px; font-weight: 700; }
+.j-table .j-c-idx { color: #4a5568; }
+/* Eticheta per-celula exista doar pentru casetele de pe ecran ingust. */
+.j-table td::before { display: none; }
 .j-table .win { color: var(--grn); }
 .j-table .loss { color: var(--red); }
 .j-table .dim { color: var(--dim); }
@@ -103,8 +135,46 @@
 @media (max-width: 768px) {
   .j-stats { grid-template-columns: repeat(2, 1fr); }
   .j-page { padding: 10px; padding-bottom: 70px; }
-  .j-table { font-size: 11px; }
-  .j-table th, .j-table td { padding: 6px 8px; }
+
+  /* [2026-10-20 b292] Pe telefon un tabel de 15 coloane nu se poate citi
+     oricat l-ai stiliza, asa ca fiecare tranzactie devine o caseta cu
+     `eticheta ... valoare` pe cate un rand. Varianta veche mergea exact
+     invers: cobora scrisul la 11px si strangea padding-ul, adica facea
+     problema mai rea. Aici scrisul CRESTE la 13px, capul de tabel dispare
+     (etichetele il inlocuiesc, din data-label) si nu mai exista derulare pe
+     orizontala. */
+  .j-table-wrap { overflow-x: visible; background: transparent; border: 0; border-radius: 0; }
+  .j-table { border-spacing: 0; font-size: 13px; white-space: normal; display: block; }
+  .j-table thead { display: none; }
+  .j-table tbody { display: block; }
+
+  .j-table tbody tr {
+    display: block; margin-bottom: 10px; padding: 4px 0;
+    background: var(--bg2); border: 1px solid var(--brd); border-radius: 8px;
+  }
+  .j-table tbody tr:hover td { background: transparent; border-color: transparent; }
+
+  .j-table td {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 7px 12px; background: transparent;
+    border: 0; border-bottom: 1px solid #121a26;
+    border-radius: 0 !important;
+    text-align: right;
+  }
+  .j-table td:last-child { border-bottom: 0; }
+
+  /* Eticheta vine din `data-label`, pus de journal.js pe fiecare celula. */
+  .j-table td::before {
+    content: attr(data-label);
+    display: block; flex: 0 0 auto;
+    color: #7d8795; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+    text-align: left; font-weight: 400;
+  }
+
+  /* Simbolul si PnL-ul stau in capul casetei, mai mari — alea le cauti. */
+  .j-table .j-c-sym, .j-table .j-c-pnl { font-size: 16px; }
+  .j-table .j-c-idx { font-size: 11px; }
+  .j-ann-cell { max-width: none; white-space: normal; }
 }
 
 /* ═══ Trade Annotations ═══ */

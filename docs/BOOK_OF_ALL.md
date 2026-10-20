@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-20 · build b291 v1.7.265
+> **Ultima actualizare:** 2026-10-20 · build b292 v1.7.266
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -14,8 +14,8 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 |---|---|---|---|
 | 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **3 propuse** (lista de mai jos) |
 | 🙋 | **AȘTEAPTĂ DE LA TINE** | decizie, chei, sau ochii tăi — eu nu pot continua singur | **11 deschise** |
-| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b291** |
-| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **36** |
+| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b292** |
+| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **37** |
 
 **Cum folosesc coșurile:** nimic nu intră în ✅ pe baza faptului că am scris codul — intră când am o
 dovadă pe sistemul viu. Dacă o reparație e livrată dar neverificată, rămâne în 🔧 cu motivul la vedere.
@@ -1946,6 +1946,9 @@ Aceeași bază amestecă **două convenții** în coloane cu nume identice: epoc
 
 **R-C-12. Pasul care face loc trebuie să ruleze ÎNAINTE de pasul care are nevoie de loc.** *(2026-10-20: retenția offsite tăia după număr și rula după `exit 1` al urcării. Pe Drive erau exact `KEEP_N` obiecte, deci retenția n-avea ce tăia până nu reușea o urcare, iar urcarea nu reușea fiindcă nu era loc. Impas închis, 7 zile.)*
 Două corolare, amândouă plătite în aceeași zi: **(a)** o retenție care numără obiecte e oarbă la mărimea lor — când obiectele cresc (2,07 GB vs 270 MB), numărul nu mai spune nimic despre spațiu, deci judecă pe **octeți**; **(b)** o ștergere care merge în coș **nu eliberează nimic** — coșul Google Drive consumă în continuare cota, deci `--drive-use-trash=false`. Și a treia, din afara codului nostru: **cota Google e eventual-consistentă**, deci după ce faci loc trebuie să aștepți, nu doar să reîncerci.
+
+**R-C-13. Decorul nu are voie să omoare datele.** *(2026-10-20: `/journal.html` randa tabelul corect, apoi randa graficul; dacă graficul arunca, `.catch`-ul comun chema `showEmpty()` și **ștergea un tabel care se randase perfect** — iar mesajul zicea „Fetch error", deși datele sosiseră.)*
+Două daune separate, și a doua e mai perfidă: pierzi datele **și** ești trimis pe pistă greșită, fiindcă eroarea purta numele etapei nevinovate. Regula: randează **datele primul și neprotejat** — dacă acolo pică, chiar vrei să vezi — iar tot ce e decor (grafic, statistici, animații) se izolează **fiecare cu numele lui** în consolă. Și corolarul: **un `.catch` pus la capătul unui lanț de `.then` nu e un handler de rețea** — prinde tot ce s-a întâmplat după, inclusiv randarea, deci nu-i pune un mesaj care pretinde altceva.
 
 ### 🟢 Proces
 
@@ -3957,3 +3960,56 @@ nu momentul ruperii. Consistent cu trecerea pe demo/testnet și cu calea REAL r�
 
 **Fără reload:** runda asta n-are schimbare de cod, doar carte + versiune. Numărul nou de build intră
 la următoarea repornire naturală; nu dau o rafală de boot pentru o schimbare de documentație (R-OP-1).
+
+
+---
+
+## 🎨 Jurnalul full — casete în loc de rânduri lipite (b292 v1.7.266)
+
+Cererea ta: *„scrisul de la full jurnal de jos din autotrade să-l faci mai casetă, să se vadă mai bine."*
+
+Linkul **Full journal** din `AutoTradePanel.tsx:334` duce la `/journal.html`. Ce era acolo: **15 coloane la
+12 px**, cu `white-space: nowrap`, rândurile despărțite de o linie de **1 px** pe fundal întunecat — ochiul
+nu avea de ce să se prindă și rândurile curgeau unul în altul. Pe telefon era mai rău: media query-ul
+existent **cobora** scrisul la 11 px și strângea padding-ul, adică mergea exact invers.
+
+### Ce am făcut
+
+**Pe desktop** fiecare tranzacție e o casetă: `border-spacing` face spațiu **real** între rânduri (de-aia
+`separate` în loc de `collapse`), fiecare rând are fundal propriu și colțuri rotunjite la capete, scrisul a
+crescut la **13 px**, iar **simbolul și PnL-ul** sunt scoase în față — alea se caută primele.
+
+**Pe telefon** tabelul se preface în casete adevărate, cu eticheta la stânga și valoarea la dreapta, capul
+de tabel dispare, nu mai există derulare pe orizontală, și scrisul **crește** la 13 px (16 px pentru simbol
+și PnL) în loc să scadă.
+
+Etichetele vin din `data-label`, pus pe fiecare celulă în `journal.js`. **Verificat că toate 15 corespund
+capetelor de coloană 1 la 1** — altfel pe telefon ai citi valori sub etichete greșite.
+
+**Calea dublă, verificată înainte** *(lecția b286 — „fixul livrat în cod mort")*: există `public/journal.html`
+**și** `public/legacy/journal.html`. Am confirmat din `express.static` plus absența oricărei rute mai devreme
+că cel viu e `public/journal.html`; iar legacy încarcă oricum **aceleași** `/css/journal.css` și
+`/js/journal.js`, deci se îmbunătățește și el.
+
+### 🔴 Bug găsit pe drum — și merită spus cum
+
+Randând pagina în **jsdom** ca să verific casetele, **tabelul ieșea gol**. Prima reacție ar fi fost să dau
+vina pe stilul meu. Nu era el.
+
+`fetchJournal` chema `applyFilters()` (care randează tabelul **corect**), apoi `renderStats` și
+`renderChart`, toate în același `.then`, cu **un singur `.catch` la capăt**. Dacă randarea graficului arunca
+— canvas indisponibil, date ciudate — `.catch` chema `showEmpty()` și **ștergea un tabel care se randase
+perfect**. Iar mesajul din consolă zicea **„Fetch error"**, deși datele sosiseră impecabil.
+
+Două daune, și a doua e mai perfidă: pierzi datele **și** ești trimis spre rețea în loc de randare.
+
+**Reparat:** tabelul se randează **primul și neprotejat** (dacă *acela* pică, chiar e o problemă de date și
+vrem s-o vedem), iar statisticile și graficul sunt izolate **fiecare cu numele lui** în consolă. Am scos și
+al doilea apel `renderChart`, redundant, care randa canvas-ul de două ori. → **R-C-13**.
+
+**4 teste noi** (vitest, încarcă pagina reală în jsdom), **3 mutanți omorâți**, suita de client **1057 de
+teste pe 130 de fișiere** verde.
+
+**Fără reload și fără refresh forțat:** sunt fișiere statice, iar serverul le livrează cu
+`no-cache, no-store, must-revalidate`, deci o încărcare normală a paginii ia versiunea nouă.
+*(Numărul de build intră la următoarea repornire naturală — nu dau o rafală de boot pentru CSS.)*
