@@ -48,16 +48,46 @@ async function loadExchangeInfo() {
 
 // Auto-refresh every 6 hours
 let _refreshInterval = null;
+let _bootRetryTimer = null;
+
+// [2026-10-20 b289] Backoff plafonat pentru incarcarea de la boot.
+// Varianta veche facea EXACT 4 incercari (0/30s/60s/120s) si, daca toate
+// picau, renunta — urmatoarea sansa era abia refresh-ul de 6 ORE. Cache-ul
+// de filtre nu e optional: `_alignQtyToLotSize` (serverAT) respinge corect
+// orice intrare pentru un simbol fara stepSize, deci cat timp cache-ul e gol
+// serverul NU POATE intra in piata, nici autotrade nici inregistrare manuala.
+// Pe viu, 2026-10-19 12:40-12:50: 59 de intrari pierdute la uid=1 cu
+// incredere 63-71 in regim TREND, toate cu LOT_SIZE_ALIGN_REJECTED, pana
+// cand o repornire a reusit sa incarce filtrele la 12:52:29.
+// Acum reincercarea nu se opreste pana reuseste, dar e plafonata la 5 min
+// ca sa nu devina rafala spre Binance (regula: rafala -> 429 -> ban de IP).
+const BOOT_RETRY_DELAYS_MS = [30000, 60000, 120000];
+const BOOT_RETRY_MAX_MS = 300000;
+
+function _bootRetryDelay(attempt) {
+    return BOOT_RETRY_DELAYS_MS[attempt] !== undefined
+        ? BOOT_RETRY_DELAYS_MS[attempt]
+        : BOOT_RETRY_MAX_MS;
+}
+
 function startAutoRefresh() {
     if (_refreshInterval) return;
-    // Initial load with retry on failure (30s, 60s, 120s)
     (async function _initialLoad(attempt) {
+        _bootRetryTimer = null;
         await loadExchangeInfo();
-        if (!_loaded && attempt < 3) {
-            const delay = [30000, 60000, 120000][attempt];
-            console.warn(`[EXCHANGE_INFO] Retry #${attempt + 1} in ${delay / 1000}s`);
-            setTimeout(() => _initialLoad(attempt + 1), delay);
+        if (_loaded) {
+            if (attempt > 0) {
+                console.log(`[EXCHANGE_INFO] Loaded after ${attempt + 1} attempts — entries unblocked`);
+            }
+            return;
         }
+        const delay = _bootRetryDelay(attempt);
+        console.warn(
+            `[EXCHANGE_INFO] Retry #${attempt + 1} in ${delay / 1000}s — ` +
+            'cache EMPTY, every entry will be rejected (LOT_SIZE_ALIGN_REJECTED) until it loads'
+        );
+        _bootRetryTimer = setTimeout(() => _initialLoad(attempt + 1), delay);
+        if (_bootRetryTimer && typeof _bootRetryTimer.unref === 'function') _bootRetryTimer.unref();
     })(0);
     _refreshInterval = setInterval(loadExchangeInfo, 6 * 60 * 60 * 1000);
 }
