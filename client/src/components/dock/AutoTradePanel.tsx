@@ -252,6 +252,20 @@ export function AutoTradePanel() {
     color: 'var(--zi-val)', fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', fontWeight: 600, cursor: 'pointer',
   }
 
+  // [2026-10-20 b293] Intrarea in jurnal era un `zi-lbl` de 9px, subliniat,
+  // lipit in dreapta — adica o ţinta de apasat cat o scama. Operatorul a cerut
+  // explicit „gen buton apas si intru". Acum e buton pe toata latimea, din
+  // aceeasi familie cu ACTION_BTN (aceleasi culori si bordura), cu scris de
+  // 12px si inaltime 40 ca sa fie o ţinta reala la degetul mare pe telefon.
+  const JOURNAL_BTN: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    width: '100%', height: 40, background: 'var(--zi-raise)',
+    border: '1px solid var(--zi-edge)', borderRadius: 3,
+    color: 'var(--zi-val)', fontSize: 12, letterSpacing: '0.14em',
+    textTransform: 'uppercase', fontWeight: 700, cursor: 'pointer',
+    textDecoration: 'none',
+  }
+
   return (
     <>
     <div id="atPanel" style={{ height: '100%' }}>
@@ -330,8 +344,11 @@ export function AutoTradePanel() {
 
       <div style={{ flexGrow: 1 }} />
       <div className="zi-rule" />
-      <div style={{ padding: '10px 16px 0', textAlign: 'right' }}>
-        <a href="/journal.html" className="zi-lbl" style={{ textDecoration: 'underline' }}>Full journal</a>
+      <div style={{ padding: '10px 16px 0' }}>
+        <a href="/journal.html" style={JOURNAL_BTN} aria-label="Open the full trade journal">
+          Full journal
+          <span aria-hidden="true" style={{ fontSize: 14, lineHeight: 1, opacity: 0.7 }}>&rsaquo;</span>
+        </a>
       </div>
       <div style={{ padding: '10px 16px 18px', display: 'flex', gap: 8 }}>
         <button type="button" onClick={handleToggle} disabled={toggling} style={ACTION_BTN}>

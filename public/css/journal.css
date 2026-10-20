@@ -7,9 +7,12 @@
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 20px; flex-wrap: wrap; gap: 10px;
 }
+/* [2026-10-20 b293] Titlul paginii era 18px, cat un subtitlu — pe un ecran
+   lat nu se vedea ca e titlul paginii, iar pe telefon se pierdea de tot. */
 .j-header h1 {
-  font-size: 18px; color: var(--whi); margin: 0;
-  letter-spacing: 1px; text-transform: uppercase;
+  font-size: 28px; color: var(--whi); margin: 0;
+  letter-spacing: 2px; text-transform: uppercase; font-weight: 700;
+  line-height: 1.15;
 }
 .j-back {
   color: var(--dim); text-decoration: none; font-size: 13px;
@@ -135,6 +138,9 @@
 @media (max-width: 768px) {
   .j-stats { grid-template-columns: repeat(2, 1fr); }
   .j-page { padding: 10px; padding-bottom: 70px; }
+  /* Mai mare decat cele 18px de dinainte, dar nu 28 — langa butonul Export
+     ar inghesui capul paginii pe un ecran de telefon. */
+  .j-header h1 { font-size: 22px; letter-spacing: 1.5px; }
 
   /* [2026-10-20 b292] Pe telefon un tabel de 15 coloane nu se poate citi
      oricat l-ai stiliza, asa ca fiecare tranzactie devine o caseta cu

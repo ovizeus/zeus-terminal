@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-20 · build b292 v1.7.266
+> **Ultima actualizare:** 2026-10-20 · build b293 v1.7.267
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -14,8 +14,8 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 |---|---|---|---|
 | 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **3 propuse** (lista de mai jos) |
 | 🙋 | **AȘTEAPTĂ DE LA TINE** | decizie, chei, sau ochii tăi — eu nu pot continua singur | **11 deschise** |
-| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b292** |
-| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **37** |
+| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b293** |
+| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **38** |
 
 **Cum folosesc coșurile:** nimic nu intră în ✅ pe baza faptului că am scris codul — intră când am o
 dovadă pe sistemul viu. Dacă o reparație e livrată dar neverificată, rămâne în 🔧 cu motivul la vedere.
@@ -1949,6 +1949,9 @@ Două corolare, amândouă plătite în aceeași zi: **(a)** o retenție care nu
 
 **R-C-13. Decorul nu are voie să omoare datele.** *(2026-10-20: `/journal.html` randa tabelul corect, apoi randa graficul; dacă graficul arunca, `.catch`-ul comun chema `showEmpty()` și **ștergea un tabel care se randase perfect** — iar mesajul zicea „Fetch error", deși datele sosiseră.)*
 Două daune separate, și a doua e mai perfidă: pierzi datele **și** ești trimis pe pistă greșită, fiindcă eroarea purta numele etapei nevinovate. Regula: randează **datele primul și neprotejat** — dacă acolo pică, chiar vrei să vezi — iar tot ce e decor (grafic, statistici, animații) se izolează **fiecare cu numele lui** în consolă. Și corolarul: **un `.catch` pus la capătul unui lanț de `.then` nu e un handler de rețea** — prinde tot ce s-a întâmplat după, inclusiv randarea, deci nu-i pune un mesaj care pretinde altceva.
+
+**R-C-14. O clasă de etichetă nu e o clasă de buton.** *(2026-10-20: singura uşă spre toată pagina de jurnal era un `<a className="zi-lbl">` — 9 px, uppercase, subliniat, lipit în dreapta jos. Clasa nu era prost dimensionată: `zi-lbl` e folosit de 37 de ori în client și **toate** celelalte sunt titluri de secțiune pe `div`/`span`, unde 9 px e perfect corect.)*
+Greșeala e de **rol**, nu de valoare: o clasă făcută pentru a *eticheta* ceva a fost pusă pe ceva de *apăsat*. Regula: orice element pe care utilizatorul apasă — link de navigare inclusiv — primește stil de **țintă** (înălțime reală, scris de minim 12 px, bordură sau fundal care spune „sunt apăsabil"), niciodată stilul unei etichete. Când cauți altele la fel, caută după **tag** (`<a>`, `<button>`) care folosește clase de etichetă, nu după numărul de apariții al clasei.
 
 ### 🟢 Proces
 
@@ -4013,3 +4016,44 @@ teste pe 130 de fișiere** verde.
 **Fără reload și fără refresh forțat:** sunt fișiere statice, iar serverul le livrează cu
 `no-cache, no-store, must-revalidate`, deci o încărcare normală a paginii ia versiunea nouă.
 *(Numărul de build intră la următoarea repornire naturală — nu dau o rafală de boot pentru CSS.)*
+
+
+---
+
+## 🔘 Intrarea în jurnal e buton, titlul se vede — (b293 v1.7.267)
+
+Cererea ta după ce ai văzut casetele: *„să mărești și scrisul de la titlu… e mic, să fie mai mare, gen buton apăs și intru."*
+
+**Intrarea** era un `<a className="zi-lbl">` în `AutoTradePanel.tsx`: **9 px**, uppercase, subliniat, lipit
+în dreapta jos a panoului. Singura ușă spre toată pagina de jurnal, și cât o scamă de apăsat cu degetul mare.
+
+Acum e **buton pe toată lățimea**, din aceeași familie cu butonul **Arm** — aceleași `var(--zi-raise)`,
+`var(--zi-edge)`, `var(--zi-val)` și același radius, deci nu arată lipit din altă parte. Înălțime **40**,
+scris **12 px**, o săgeată discretă, și `aria-label` ca să fie clar unde duce.
+
+**Titlul paginii** de jurnal a crescut de la **18 px la 28 px** (22 px pe telefon — lângă butonul Export,
+28 ar înghesui capul paginii).
+
+### Ce am găsit verificând, și de ce a devenit regulă
+
+`zi-lbl` e folosit **de 37 de ori** în client. Primul reflex ar fi fost „deci clasa e prost dimensionată,
+o măresc". **Greșit** — toate celelalte 36 sunt titluri de secțiune pe `div`/`span`, unde 9 px e exact
+potrivit. Linkul spre jurnal era **singurul `<a>`** pe clasa aia.
+
+Deci greșeala era de **rol**, nu de valoare: o clasă de *etichetă* pusă pe ceva de *apăsat*. Dacă aș fi
+mărit clasa, aș fi stricat 36 de titluri ca să repar un buton. → **R-C-14**.
+
+### Verificat în bundle, nu în sursă *(lecția b286)*
+
+Obiectul de stil minificat din `index-DgdYmOMu.js` chiar are `width:100%, height:40, fontSize:12,
+border:1px solid var(--zi-edge), cursor:pointer`; vechiul link subliniat cu `zi-lbl` **nu mai apare deloc**;
+iar `public/app/index.html` trimite la exact bundle-ul nou. Build rulat **ca zeus**, deci zero artefacte
+root-owned în `public/app` *(regula R8 — root a mai blocat tăcut procesul zeus o dată)*.
+
+**4 teste noi** care randează chiar panoul și fixează **ținta, nu aspectul**: înălțime minim 36, scris minim
+12 px, lățime completă, cursor de apăsat. Așa pot schimba culorile oricând fără să pice nimic. **2 mutanți
+omorâți**, inclusiv punerea la loc a etichetei de 9 px. Suita de client **1061 de teste pe 131 de fișiere**
+verde, `tsc` curat.
+
+**Fără reload pm2:** schimbare doar de client — build-ul rescrie bundle-ul, serverul doar îl servește
+*(R-OP-2)*. Fișierele de jurnal sunt livrate cu `no-cache`, deci nici refresh forțat nu-ți trebuie.
