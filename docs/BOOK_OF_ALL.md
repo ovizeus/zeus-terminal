@@ -3491,12 +3491,22 @@ primit niciodată tranziția următoare. **Nu sunt o mină:** nimic nu citește 
 `at_positions` (verificat prin grep pe toate interogările — toate filtrează pe `OPEN`/`OPENING`/`CLOSING`),
 iar indexul de dedup e `WHERE status=OPEN`. Dar **nu există niciun reaper**, deci se adună la infinit.
 
-**C3 — trei rânduri de fixtură de test în baza de PRODUCȚIE.** `at_closed` seq 88888 (`closeReason:TEST`),
-99997 (`symbol:TESTGHOST`), 99998 (`symbol:TESTUSDT`), toate din martie 2026. Cel cu 99997 are
-`closed_at = "1774742870725.0"` — un **timestamp epoch brut într-o coloană de dată text**, care sortează
-greșit și scapă din orice interogare pe intervale. Nu afectează alocatorul de seq (sunt mult sub seq-urile
-reale, de ordinul 1.79e12), dar poluează jurnalul și statisticile.
-*De ce nu acum:* e o ștergere pe baza vie de producție — **decizia lui**, nu a mea.
+**C3 — trei rânduri de fixtură de test în baza de PRODUCȚIE. → REZOLVAT, operatorul a cerut ștergerea.**
+`at_closed` seq 88888 (`closeReason:TEST`), 99997 (`symbol:TESTGHOST`), 99998 (`symbol:TESTUSDT`), toate
+din martie 2026. Cel cu 99997 avea `closed_at = "1774742870725.0"` — un **timestamp epoch brut într-o
+coloană de dată text**, care sortează greșit și scapă din orice interogare pe intervale. Nu afectau
+alocatorul de seq (erau mult sub seq-urile reale, de ordinul 1.79e12), dar poluau jurnalul și statisticile.
+
+**Verificat izolate înainte de ștergere** — zero referințe în `position_events.position_seq`,
+`position_classifications.pos_seq`, `trade_annotations.seq`, `ml_position_state.pos_id`,
+`ml_position_transitions.pos_id`, `at_positions.seq`, și zero simboluri `TEST*` în tabelele conexe.
+
+**Șterse 2026-10-20**, scopat strict pe cele trei seq-uri: 3430 → 3427 rânduri. După ștergere: zero
+`closed_at` stricate, zero rânduri cu `mode` NULL, zero simboluri de test. Împărțirea pe mod se închide
+exact: 872 demo + 2551 live + 4 testnet = 3427.
+
+**Recuperabile:** `data/backups/at_closed-test-fixtures-20261020.sql` (în `data/backups/`, care e
+gitignorat, deci rămâne pe VPS fără să intre în repo). Restaurare: `sqlite3 data/zeus.db < fișierul`.
 
 **C4 — contoarele live sunt asimetrice prin construcție.** `liveStats.entries++` se aprinde **doar** pe
 calea în care Zeus plasează intrarea (`_executeLiveEntryCore`), dar `liveStats.exits++` se aprinde la
