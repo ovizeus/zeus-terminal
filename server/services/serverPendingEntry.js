@@ -256,33 +256,46 @@ function _persist(userId) {
 function _loadFromDisk() {
     try {
         const rows = db.db.prepare("SELECT key, value FROM at_state WHERE key LIKE 'pending:%'").all();
+        // Intrarile pending NU se restaureaza — sunt sensibile la timp dupa restart.
+        //
+        // [M4] Auditeaza fiecare intrare stearsa, ca userul sa vada de ce i-a
+        // dispart intrarea pre-trigger.
+        //
+        // [PENDING-AUDIT FIX 2026-10-20] Pana aici citirea nu avea aceeasi forma
+        // ca scrierea: `_persist` scrie un DICTIONAR cheiat pe simbol, iar
+        // auditul citea `data.symbol` / `data.side` / `data.triggerPrice` ca pe
+        // un obiect PLAT. Toate ieseau undefined, JSON.stringify le arunca, si
+        // `details` ajungea exact "{}" — 68 de randuri goale pe viu, cu
+        // user_id NULL, adica exact informatia pe care [M4] promitea sa o dea.
+        // Trei corecturi: (1) itereaza intrarile din dictionar, (2) userId vine
+        // din cheia `pending:<uid>` (nu e persistat in corp, dar regexul il
+        // capta deja si nu-l folosea nimeni), (3) un dictionar GOL nu mai scrie
+        // nimic — `pending:1` ramane in tabel ca `{}` dupa fiecare boot, deci
+        // se scria un rand FALS la fiecare restart.
+        let _wiped = 0;
         for (const row of rows) {
             const m = /^pending:(.+)$/.exec(row.key);
             if (!m) continue;
-            try {
-                const data = JSON.parse(row.value);
-                // Don't restore old pending entries — they're stale after restart
-                // Just clean them up
-            } catch (_) {}
-        }
-        // [M4] Audit each wiped pending so users can see why their pre-trigger entry vanished.
-        if (rows.length > 0) {
-            for (const row of rows) {
-                const m = /^pending:(.+)$/.exec(row.key);
-                if (!m) continue;
-                let data = null;
-                try { data = JSON.parse(row.value); } catch (_) {}
-                const uid = (data && data.userId) || null;
+            const uid = parseInt(m[1], 10) || null;
+            let data = null;
+            try { data = JSON.parse(row.value); } catch (_) { continue; }
+            if (!data || typeof data !== 'object') continue;
+            for (const p of Object.values(data)) {
+                if (!p || typeof p !== 'object') continue;
+                _wiped++;
                 try {
                     db.auditLog(uid, 'PENDING_WIPED_ON_RESTART', {
-                        symbol: data && data.symbol,
-                        side: data && data.side,
-                        triggerPrice: data && data.triggerPrice,
-                        createdAt: data && data.createdAt,
+                        symbol: p.symbol,
+                        dir: p.dir,
+                        entryPrice: p.entryPrice,
+                        targetPrice: p.targetPrice,
+                        createdAt: p.createdAt,
                     }, null);
                 } catch (_) {}
             }
-            logger.info('PENDING', `Wiping ${rows.length} stale pending entries on startup (audited per-user)`);
+        }
+        if (_wiped > 0) {
+            logger.info('PENDING', `Wiping ${_wiped} stale pending entries on startup (audited per-user)`);
         }
         // Clear all pending entries on startup — they're time-sensitive
         db.db.prepare("DELETE FROM at_state WHERE key LIKE 'pending:%'").run();

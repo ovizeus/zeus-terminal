@@ -47,6 +47,7 @@ const audit = require('./audit');
 // [BUG-T2a + T2b 2026-05-13] Pure-function recon helpers extracted pentru
 // testability. T2a: hedge-aware Binance held map. T2b: strict userTrades filter.
 const { buildBinanceHeldMap, findExitTrade, buildHeldMap, groupPositionsByExchange, isUntrustedEmptyHeld, hasActiveLeg, isUnmanageableSymbol: _isUnmanageableSymbol } = require('./reconHelpers');
+const { shouldReconcileExchange } = require('./reconcileFilter');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const mlDslPolicy = require('./mlDslPolicy');
@@ -5686,7 +5687,24 @@ async function _runReconciliation(isStartup) {
                     `SELECT DISTINCT user_id, exchange FROM exchange_accounts WHERE is_active = 1`
                 ).all();
                 if (!accounts || accounts.length === 0) return;
-                _idleSweepUserExchanges = accounts.map(a => ({ userId: a.user_id, exchange: a.exchange || 'binance', positions: [] }));
+                // [RECON-DRYRUN FIX 2026-10-20] `shouldReconcileExchange` a fost
+                // scris exact pentru asta: Bybit cu zavorul BYBIT_DRY_RUN_ONLY
+                // pornit nu are poziti reale si blocheaza dispatch-ul HTTP, deci
+                // orice incercare produce doar un „reconciliation failed" fals.
+                // Filtrul era insa cablat DOAR in recoveryBoot.js, iar maturatoarea
+                // de aici enumera FIECARE rand activ din exchange_accounts →
+                // bybit interogat la fiecare 120 s, la infinit (un WARN la 2
+                // minute in pm2-error.log, fara pauza).
+                //
+                // Filtrat DOAR aici, pe maturatoarea „in gol". Grupurile cu poziti
+                // chiar urmarite trec neatinse: o poziie live trebuie verificata
+                // pe bursa EI, indiferent de zavor (contractul P2c.1b, aparat de
+                // recon-cross-exchange.test.js — prima varianta a acestui fix il
+                // rupea pentru ca punea garda pe bucla comuna).
+                _idleSweepUserExchanges = accounts
+                    .filter(a => shouldReconcileExchange(a.exchange || 'binance', MF))
+                    .map(a => ({ userId: a.user_id, exchange: a.exchange || 'binance', positions: [] }));
+                if (_idleSweepUserExchanges.length === 0) return;
             } catch (e) {
                 logger.warn(label, `idle orphan sweep account query failed: ${e.message}`);
                 return;

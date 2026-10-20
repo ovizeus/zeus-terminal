@@ -3402,3 +3402,132 @@ fusese eliminată la build ca **nefolosită**.
 pe bundle: șirul apare acum în fișierul servit.
 
 Client **1053 teste / 129 fișiere**, typecheck 67 neschimbat, build curat.
+
+---
+
+## 🔎 Audit manual + autotrade — 2026-10-20 (b287 v1.7.261)
+
+Cerut de operator: *„vreau sa te uiti la manual si autotrade sa vezi ce merge ce nu ce buguri ce pozitii
+fantoma etc tot full sa fie functional"*.
+
+### Răspunsul scurt la întrebarea lui
+
+**Poziții fantomă acum: ZERO.** `at_positions` nu are niciun rând `OPEN`/`OPENING`/`CLOSING`, ultima
+poziție demo s-a închis azi la 14:20:44, iar coada de închidere de urgență are toate cele 48 de rânduri
+rezolvate (nimic nou din 18 august). Tabelul `at_positions_orphaned` e gol.
+
+**Autotrade merge** — 19 tranzacții închise azi, neîntrerupt toată săptămâna (19/4/2/4/7/10/8 pe zi).
+**Manual merge** — 543 de tranzacții istoric, ultima pe 12 octombrie; calea nu e ruptă, doar neutilizată
+de 8 zile.
+
+---
+
+### BUG 1 — auditul intrărilor pending șterse la restart nu spunea nimic (REPARAT)
+
+`serverPendingEntry._loadFromDisk` șterge intrările pending la boot (sunt sensibile la timp) și fusese
+instrumentat cu `[M4]` anume *„ca userul să vadă de ce i-a dispărut intrarea pre-trigger"*.
+
+Nu putea. **Citirea nu avea aceeași formă ca scrierea:** `_persist` scrie un **dicționar cheiat pe simbol**
+(`{ BTCUSDT: {...} }`), iar auditul citea `data.symbol` / `data.side` / `data.triggerPrice` ca pe un
+**obiect plat**. Toate ieșeau `undefined`, `JSON.stringify` le aruncă, și `details` ajungea exact `"{}"`.
+
+**Dovada vie, înainte de fix:** 68 de rânduri `PENDING_WIPED_ON_RESTART`, **toate** cu `details="{}"` și
+`user_id=NULL`. Adică exact informația pe care `[M4]` promitea să o dea.
+
+Două agravante găsite pe parcurs:
+
+- `userId` nu e persistat deloc în corp — dar e chiar în **cheia** `pending:<uid>`, pe care regexul o
+  captura deja și **nu o folosea nimeni**.
+- `pending:1` rămâne în `at_state` ca `{}` după fiecare boot, deci condiția `rows.length > 0` era mereu
+  adevărată: se scria un rând **fals** la **fiecare** restart, chiar și când nu era nimic în așteptare.
+  Astea sunt cele 68.
+
+Mai era și o buclă complet moartă deasupra, care parsa JSON-ul și arunca rezultatul într-o variabilă
+nefolosită. Ștearsă.
+
+**Reparat:** iterează intrările din dicționar (un rând de audit **per intrare**), ia `userId` din cheie, și
+un dicționar **gol nu mai scrie nimic**. 6 teste noi, 2 mutanți omorâți.
+
+---
+
+### BUG 2 — filtrul de dry-run era cablat la unul din două locuri (REPARAT)
+
+`reconcileFilter.shouldReconcileExchange` a fost scris **exact** pentru asta, și comentariul lui o spune:
+Bybit cu zăvorul `BYBIT_DRY_RUN_ONLY` pornit nu are poziții reale și blochează dispatch-ul HTTP, deci orice
+încercare produce *„un spurious reconciliation failed"*.
+
+Filtrul era aplicat **doar în `recoveryBoot.js`**. Recon-ul **periodic** din `serverAT.js` nu l-a primit
+niciodată — iar măturătoarea de orfani „în gol" enumeră **fiecare** rând activ din `exchange_accounts`,
+deci interoga bybit la fiecare 120 s, la infinit.
+
+**Dovada vie:** în `pm2-error.log`, un WARN la fiecare 2 minute, fără pauză:
+`[RECON] positionRisk query failed uid=2 exchange=bybit: BYBIT_DRY_RUN_ONLY=true — real HTTP dispatch blocked`
+
+**Aceeași clasă ca bug-ul de culoare de la b286:** fixul exista, dar trăia la una din două căi.
+
+**Prima mea variantă de fix a fost prea largă** și merită notată: pusesem garda pe bucla comună, ceea ce a
+rupt `recon-cross-exchange.test.js` — testul apără contractul P2c.1b, că o poziție live trebuie
+reconciliată pe **bursa ei**, indiferent de zăvor. Testul avea dreptate; l-am îngustat să filtreze **doar**
+măturătoarea în gol. 3 teste noi, 2 mutanți omorâți.
+
+> **Lecție:** o regresie într-un test vechi, pe un sistem cu bani, e un contract care te contrazice, nu un
+> test de actualizat.
+
+---
+
+### Rămase în carte (nereparate, cu motivul)
+
+**C1 — jurnalul mașinii de stări a pozițiilor se rupe la ~9%.** Din 438 de poziții cu evenimente, **16** au
+exact UN eveniment (`CREATED → PENDING`) și nimic după, iar **22** nu ajung niciodată la o stare terminală
+deși poziția e în `at_closed`. Verificat prin join: toate cele 18 cu ultima stare `OPEN` **sunt** în
+`at_closed`, deci s-au închis real — e o gaură în jurnal, **nu** o fantomă.
+*De ce nu acum:* mașina de stări e legată doar de calea **live** (`binanceOps`) și n-a scris nimic din
+7 octombrie, în timp ce azi s-au închis 19 tranzacții demo. E reziduu istoric dormant, iar reparatul cere
+trasată toată calea de intrare live. Orice se construiește pe `position_events` (inclusiv
+`ml_position_transitions`) stă însă pe nisip — de ținut minte înainte să fie folosit ca sursă de adevăr.
+
+**C2 — trei rânduri `PENDING` moarte în `at_positions` din 24 iunie.** Create de `binanceOps`, nu au
+primit niciodată tranziția următoare. **Nu sunt o mină:** nimic nu citește rânduri `PENDING` din
+`at_positions` (verificat prin grep pe toate interogările — toate filtrează pe `OPEN`/`OPENING`/`CLOSING`),
+iar indexul de dedup e `WHERE status=OPEN`. Dar **nu există niciun reaper**, deci se adună la infinit.
+
+**C3 — trei rânduri de fixtură de test în baza de PRODUCȚIE.** `at_closed` seq 88888 (`closeReason:TEST`),
+99997 (`symbol:TESTGHOST`), 99998 (`symbol:TESTUSDT`), toate din martie 2026. Cel cu 99997 are
+`closed_at = "1774742870725.0"` — un **timestamp epoch brut într-o coloană de dată text**, care sortează
+greșit și scapă din orice interogare pe intervale. Nu afectează alocatorul de seq (sunt mult sub seq-urile
+reale, de ordinul 1.79e12), dar poluează jurnalul și statisticile.
+*De ce nu acum:* e o ștergere pe baza vie de producție — **decizia lui**, nu a mea.
+
+**C4 — contoarele live sunt asimetrice prin construcție.** `liveStats.entries++` se aprinde **doar** pe
+calea în care Zeus plasează intrarea (`_executeLiveEntryCore`), dar `liveStats.exits++` se aprinde la
+**orice** închidere live, inclusiv pozițiile **adoptate** de pe bursă, care n-au avut niciodată o intrare.
+De aici `258 intrări vs 403 ieșiri` în starea vie — un număr imposibil de reconciliat de cine îl citește.
+Dovada: 96 de poziții închise cu `source=external`.
+În plus `winRate = wins / exits`, iar 57 de ieșiri live n-au incrementat nici win nici loss (PnL exact
+zero) — deci numitorul le numără ca nereușite, în contradicție cu intenția declarată a lui `TM-1`, care
+decide explicit că break-even **nu e nici win nici loss**.
+*De ce nu acum:* ambele variante schimbă numere pe care el le citește de luni; e alegerea lui ce înseamnă
+„intrări" și pe ce se împarte rata de câștig.
+
+---
+
+### Verificat și CURAT (ca să nu se recontroleze degeaba)
+
+| Zonă | Verdict |
+|---|---|
+| Poziții fantomă | **zero** — nicio poziție deschisă în DB, niciuna în `at_positions_orphaned` |
+| Coada de închidere de urgență | 48/48 rezolvate, nimic din 18 august |
+| Limita de pierdere zilnică | **nu blochează** — plafonul real e 5000 $ (`MAX_POSITION_USDT=100000 × 5%`), ARES e la −357,79 $ |
+| Ordine blocate | zero `ORDER_BLOCKED` recent |
+| Normalizarea pozițiilor de pe bursă | `buildHeldMap` face `parseFloat` pe tot, deci `.toFixed` din alertele de orfan e sigur |
+| Teste zona recon/orfani/fantome/risc | 235 trec pe 26 suite |
+
+**Un fals pozitiv, verificat înainte de a-l declara:** ramura demo din `/api/order/place` iese **înainte**
+de `validateOrder`, deci ocolește kill switch-ul de urgență, comutatorul general, plafonul de levier și
+limita zilnică. **Nu e bug** — e o decizie documentată în cod, la garda de GLOBAL_HALT:
+`„DEMO path intentionally unaffected (no real risk)"`.
+
+**O notă de proiectare, nu un bug:** limita de pierdere zilnică se derivă din dimensiunea maximă a
+poziției (`maxPositionUsdt × dailyLossLimitPct / 100`), deci dacă îți mărești poziția maximă îți crește
+proporțional și pierderea zilnică permisă. Cu valorile de acum: 100000 → 5000 $/zi. De știut, nu de
+reparat fără să vrea el.
