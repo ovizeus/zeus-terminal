@@ -3508,9 +3508,35 @@ invalidează înregistrarea istorică a faptului că a fost creată.
 
 **Recuperabile:** `data/backups/at_positions-dead-pending-20261020.sql`.
 
-**Rămas, NEATINS:** rândul `ORPHANED` seq 1780224661851 (ETHUSDT SHORT, 26 iunie) — operatorul a cerut doar
-cele `PENDING`. E de altă natură: are `entryOrderId`, `slOrderId` și `avgFillPrice` reale, deci e
-înregistrarea unei poziții care a existat efectiv pe bursă, nu un ciot neterminat. De decis separat.
+**Rândul `ORPHANED` seq 1780224661851 (ETHUSDT SHORT, 26 iunie) → ȘTERS, operatorul a cerut și pe el.**
+
+Pentru ăsta verificarea care conta era alta: avea `entryOrderId`, `slOrderId` și `avgFillPrice` **reale**,
+deci fusese o poziție adevărată pe bursă. Întrebarea: mai e deschisă? Dacă da, ștergerea îi face exact o
+fantomă (bursa o are, Zeus nu știe de ea).
+
+**Istoricul din `position_events` răspunde:** `CREATED→PENDING→OPENING` cu `entryOrderId` real, `SL_PLACED`
+reușit la prima încercare, iar la 12:34:58 `RECOVERY_ORPHANED_NO_EXCHANGE` —
+*„Position in DB but not on exchange (closed externally?)"*. Recuperarea la boot a verificat **pe bursă** și
+poziția nu mai era acolo. Deci ștergerea nu putea crea o fantomă.
+
+**Și mecanismul, găsit pe parcurs — merită reținut.** Rândul era **ciotul de scriere-dublă** (`binanceOps`)
+al poziției canonice seq **1780224661850**, care **E** arhivată în `at_closed` cu înregistrarea completă.
+Dovada e în datele arhivate: `at_closed(...850).data.live.opsSeq == 1780224661851`, iar
+`mainOrderId 10796918015` este exact `entryOrderId`-ul ciotului. Tranzacția nu s-a pierdut.
+
+**De ce rămăsese:** ...850 a fost arhivat la 12:05:36 cu `closeReason: null`, `closeTs: null` și
+`status: "OPEN"` — exact anomalia pe care o detectează `_isUnexpectedArchive` (arhivare tăcută). Pe calea
+aceea, curățarea ciotului legat prin `_linkedOpsSeqToCleanup` **nu rulează**, deci stub-ul a rămas orfan.
+Perechea ...850/...851 e dovada concretă că arhivarea tăcută lasă ciot de scriere-dublă în urmă.
+
+`at_positions` e acum **gol** — corect, nu există nicio poziție deschisă.
+**Recuperabil:** `data/backups/at_positions-orphaned-20261020.sql`.
+
+**Verificat că tabelul gol nu rupe pornirea** (era condiția nouă pe care o introdusesem): la repornirea de
+la 18:11 calea de boot a mers curat — `MAX(at_positions)` devine NULL, dar clamp-ul face
+`Number(null) || 0` și ia maximul cu `at_closed`, deci în log apare
+`[GLOBAL-SEQ] allocator initialized at 1791754240842`, neschimbat, fără nicio avertizare de clamp.
+`RECOVERY_BOOT_COMPLETE` cu `totalOrphaned: 0, errors: 0`.
 
 **C3 — trei rânduri de fixtură de test în baza de PRODUCȚIE. → REZOLVAT, operatorul a cerut ștergerea.**
 `at_closed` seq 88888 (`closeReason:TEST`), 99997 (`symbol:TESTGHOST`), 99998 (`symbol:TESTUSDT`), toate
