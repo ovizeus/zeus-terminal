@@ -3486,10 +3486,31 @@ deși poziția e în `at_closed`. Verificat prin join: toate cele 18 cu ultima s
 trasată toată calea de intrare live. Orice se construiește pe `position_events` (inclusiv
 `ml_position_transitions`) stă însă pe nisip — de ținut minte înainte să fie folosit ca sursă de adevăr.
 
-**C2 — trei rânduri `PENDING` moarte în `at_positions` din 24 iunie.** Create de `binanceOps`, nu au
-primit niciodată tranziția următoare. **Nu sunt o mină:** nimic nu citește rânduri `PENDING` din
-`at_positions` (verificat prin grep pe toate interogările — toate filtrează pe `OPEN`/`OPENING`/`CLOSING`),
-iar indexul de dedup e `WHERE status=OPEN`. Dar **nu există niciun reaper**, deci se adună la infinit.
+**C2 — trei rânduri `PENDING` moarte în `at_positions` din 24 iunie. → REZOLVAT, operatorul a cerut
+ștergerea.** Create de `binanceOps` (XRPUSDT, BTCUSDT, ETHUSDT, toate `SHORT`, `mode:live`), nu au primit
+niciodată tranziția următoare (`→OPENING` sau `→CANCELLED`). **Nu erau o mină:** nimic nu citește rânduri
+`PENDING` din `at_positions` (verificat prin grep pe toate interogările — toate filtrează pe
+`OPEN`/`OPENING`/`CLOSING`), `atLoadOpenPositions` le exclude deci nu ajungeau nici în memorie, iar indexul
+de dedup e `WHERE status=OPEN`. Dar nu exista niciun reaper, deci se adunau la infinit.
+
+**Verificarea care conta înainte de ștergere — alocatorul de seq.** Clamp-ul ia `Math.max` peste
+`at_closed` ȘI `at_positions`, iar reutilizarea unui seq e chiar cauza bugului recurent „Manual x1"
+(coliziune pe `at_closed.seq` UNIQUE → arhivarea eșuează → poziția dispare din `_positions` deși e vie pe
+bursă). Aici `MAX(at_closed) = 1791754240842` domină peste `MAX(at_positions) = 1780224661851`, deci
+ștergerea **nu coboară** clamp-ul. Verificat după ștergere: clamp efectiv neschimbat, egal cu seq-ul
+motorului.
+
+**Șterse 2026-10-20**, scopat pe status + cele trei seq-uri: 4 → 1 rânduri în `at_positions`.
+
+**Evenimentele `CREATED → PENDING` din `position_events` au fost PĂSTRATE intenționat** — e un jurnal
+append-only, iar cele 3 evenimente sunt chiar dovada bugului C1 de mai sus. Ștergerea poziției nu
+invalidează înregistrarea istorică a faptului că a fost creată.
+
+**Recuperabile:** `data/backups/at_positions-dead-pending-20261020.sql`.
+
+**Rămas, NEATINS:** rândul `ORPHANED` seq 1780224661851 (ETHUSDT SHORT, 26 iunie) — operatorul a cerut doar
+cele `PENDING`. E de altă natură: are `entryOrderId`, `slOrderId` și `avgFillPrice` reale, deci e
+înregistrarea unei poziții care a existat efectiv pe bursă, nu un ciot neterminat. De decis separat.
 
 **C3 — trei rânduri de fixtură de test în baza de PRODUCȚIE. → REZOLVAT, operatorul a cerut ștergerea.**
 `at_closed` seq 88888 (`closeReason:TEST`), 99997 (`symbol:TESTGHOST`), 99998 (`symbol:TESTUSDT`), toate
