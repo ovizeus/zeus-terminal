@@ -2591,6 +2591,39 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                     arm: pos.dslArm || pos.dslModeAtOpen || 'def', cohort: pos.dslCohort || 'shadow',
                     outcome: { pnlPct: _mlPnlPct }, baseline: { pnlPct: _baseSim.pnlPct }, ts: Date.now(),
                 });
+
+                // [GEOM SHADOW 2026-10-21] cohort='shadow_geom' — contrafactualul pe
+                // GEOMETRIE, care lipsea. Cohortul 'shadow' de mai sus simulează ACELAŞI
+                // preset cu care a rulat poziţia (`dslArm` nu e atribuit nicăieri, doar
+                // citit, deci `arm` cade mereu pe `dslModeAtOpen`), aşa că nu spune nimic
+                // despre ce ar fi dat o altă geometrie — măsoară doar optimismul
+                // simulatorului faţă de realitate.
+                // Aici simulăm TOATE presetele pe aceeaşi urmă, cu baza = PnL-ul REALIZAT.
+                // Optimismul (+0,0333 pp, măsurat după excluderea ieşirilor care n-au fost
+                // decizia DSL-ului) e COMUN tuturor rândurilor, deci se anulează la
+                // comparaţia arm-vs-arm: valoarea absolută a unui rând are nevoie de
+                // corecţie, DIFERENŢA dintre două geometrii nu.
+                // De ce e nevoie: auditul a arătat că DSL taie numai câştigătorii (0% activ
+                // pe cele 103 ieşiri HIT_SL, 100% pe cele 440 DSL), iar decizia pe geometrie
+                // nu se poate lua fără date — iar retroactiv nu se poate calcula, fiindcă
+                // urmele de preţ se şterg la închidere. Deci trebuie colectat de acum.
+                // Pur măsurătoare: nu atinge nicio poziţie şi nu schimbă nicio execuţie.
+                try {
+                    const _geom = require('./dslGeomShadow').buildGeomRows({
+                        presets: serverDSL.DSL_PRESETS, meta: _meta,
+                        prices: _trace.map(s => s.p), realizedPnlPct: _mlPnlPct,
+                        simulate: serverDSL.simulate,
+                    });
+                    for (const g of _geom) {
+                        mlDslLearner.learn({
+                            posId: pos.seq, userId: pos.userId, env: (pos.env || 'TESTNET'),
+                            symbol: pos.symbol, regime: pos.regime || pos.closeRegime || 'unknown',
+                            arm: g.arm, cohort: 'shadow_geom',
+                            outcome: { pnlPct: g.simPnlPct }, baseline: { pnlPct: g.baselinePnlPct },
+                            ts: Date.now(),
+                        });
+                    }
+                } catch (_) { /* măsurătoare: nu are voie să atingă calea de închidere */ }
                 // [ML-DSL REAL MEASUREMENT 2026-06-23] cohort='mlctl' — the FAITHFUL counterfactual
                 // of the ML driving the DSL in real-time. Replays serverDSL.simulateMlPath() over the
                 // ACTUAL per-tick ML proposals the policy emitted live (stamped on the trace) vs the
