@@ -51,6 +51,12 @@ const { shouldReconcileExchange } = require('./reconcileFilter');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const mlDslPolicy = require('./mlDslPolicy');
+// [SMART_CUT RESURRECTION 2026-10-21] La nivel de MODUL, nu in interiorul unei
+// functii. Pana azi `_dslRrSim` era declarat cu `const` in `_closePosition()`
+// si folosit in `onPriceUpdate()` — functii SURORI, fara nicio inchidere — deci
+// fiecare tick arunca `ReferenceError: _dslRrSim is not defined`, inghitit de un
+// `catch` gol. SMART_CUT n-a inchis niciodata nimic in 4 luni, cu zero semnal.
+const _dslRrSim = require('./dslRrSim');
 const dslSafety = require('./dslSafety');
 const mlDslShadow = require('./mlDslShadow');
 const priceTrace = require('./priceTrace');
@@ -2600,7 +2606,6 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                 // winners). Records cohort='lossside' for the DSL Drive R:R visual. Never touches
                 // the real stop/close. arm:null → does NOT update the bandit.
                 if (MF.ML_DSL_LOSSSIDE_SHADOW) {
-                    const _dslRrSim = require('./dslRrSim');
                     const _lsBaseFrac = pos.price > 0 ? (pos.side === 'LONG' ? (price - pos.price) : (pos.price - price)) / pos.price : 0;
                     const _lsSmartFrac = _dslRrSim._smartCutPnlPct(_trace.map(s => s.p), { side: pos.side, entry: pos.price, threshold: 0.0075, sustain: 2, baselinePnlPct: _lsBaseFrac });
                     mlDslLearner.learn({
@@ -3366,6 +3371,40 @@ function _priceUpdateMatchesExchange(posExchange, feedExchange) {
     return pe === fe;
 }
 
+// [SMART_CUT RESURRECTION 2026-10-21] Pasul de taiere a pierderii, extras din
+// mijlocul lui `onPriceUpdate` ca sa poata fi tinut in loc de un test. Bugul de
+// 4 luni a supravietuit exact fiindca blocul era INTESTABIL: inglobat intr-o
+// functie care cere tot mediul de rulare, cu un `catch` gol deasupra.
+// Praguri din b161, nemodificate: 0,75% advers, K=2 extreme succesive.
+// Intoarce {cut, state}; nu arunca niciodata si nu atinge nicio poziţie.
+const _LS_CUT_THRESHOLD = 0.0075;
+const _LS_CUT_SUSTAIN = 2;
+function _smartCutTick(pos, price) {
+    const _none = { cut: false, state: (pos && pos._lsCutState) || { extreme: 0, consec: 0 } };
+    if (!pos || !Number.isFinite(price)) return _none;
+    try {
+        const n = _dslRrSim._smartCutStep(price, pos.side, pos.price, _LS_CUT_THRESHOLD, _LS_CUT_SUSTAIN, pos._lsCutState || null);
+        return { cut: !!n.cut, state: { extreme: n.extreme, consec: n.consec } };
+    } catch (e) {
+        _smartCutFailure(e);
+        return _none;
+    }
+}
+
+// [R-C-14] Un `catch` gol pe calea banilor ascunde o cadere, nu o trateaza:
+// patru luni de ReferenceError pe fiecare tick, zero semnal. Logheaza prima
+// eroare si apoi cel mult una pe minut, ca sa nu inunde jurnalul la 1 tick/ms.
+let _lsCutErrCount = 0;
+let _lsCutErrLastLog = 0;
+function _smartCutFailure(e) {
+    _lsCutErrCount++;
+    const now = Date.now();
+    if (_lsCutErrCount === 1 || now - _lsCutErrLastLog > 60000) {
+        _lsCutErrLastLog = now;
+        logger.error('AT_LIVE', `[SMART_CUT] pasul a esuat (total=${_lsCutErrCount}): ${e && e.message}`);
+    }
+}
+
 function onPriceUpdate(symbol, price, exchange) {
     if (!price || price <= 0) return;
 
@@ -3616,8 +3655,8 @@ function onPriceUpdate(symbol, price, exchange) {
         // must never disturb the classic SL/TP/DSL path below.
         if (MF.ML_DSL_LOSSSIDE_ACTIVE && pos.env === 'TESTNET') {
             try {
-                const _lsNext = _dslRrSim._smartCutStep(price, pos.side, pos.price, 0.0075, 2, pos._lsCutState || null);
-                pos._lsCutState = { extreme: _lsNext.extreme, consec: _lsNext.consec };
+                const _lsNext = _smartCutTick(pos, price);
+                pos._lsCutState = _lsNext.state;
                 if (_lsNext.cut) {
                     const _scPnl = pos.side === 'LONG'
                         ? +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
@@ -3626,7 +3665,7 @@ function onPriceUpdate(symbol, price, exchange) {
                     _closePosition(i, pos, 'SMART_CUT', price, _scPnl);
                     continue;
                 }
-            } catch (e) { /* fail-closed: smart-cut must never disturb the live SL/TP/DSL path */ }
+            } catch (e) { _smartCutFailure(e); /* fail-closed, dar NU mut: R-C-14 */ }
         }
 
         // ── Classic SL/TP check ──
@@ -7094,6 +7133,7 @@ module.exports = {
     _checkDailyResetForTest: _checkDailyReset, // [T-MAXTRADES] test hook for rollover
     _shouldResyncLiveBalanceRef, // [T1-2] pure resync predicate
     _resyncLiveBalanceRef,       // [T1-2] liveBalanceRef self-heal
+    _smartCutTick,               // [SMART_CUT RESURRECTION] extras ca sa fie testabil
     _findSameModeOpposite,       // [PHANTOM-SHORT FIX] pure directional-conflict predicate (shared guard)
     _isReconcilablePosition,     // [PHANTOM-SHORT FIX b] pure recon-eligibility predicate (mode-tag robust)
     _classifyOrphanResolution,   // [ORPHAN-ADOPT FIX] pure recon orphan resolution policy (CLOSE|ADOPT)
