@@ -50,7 +50,7 @@ Niciuna nu e urgentă și niciuna nu atinge calea banilor fără să-ți spun î
 | **D1** | **Cota Google Drive: 6 fișiere din iunie țin 10,6 GiB din 15** | vezi mai jos — decide dacă le tai |
 | **D2** | **14 G de copii vechi de DB pe discul VPS-ului** | vezi mai jos — decide dacă le tai |
 | **D3** | **Poarta SP1 nu poate trece niciodată** — creierul clientului e inert (încredere medie **5,1**) | vezi secțiunea b291 — oprim raportul zilnic, îl re-țintim, sau îl lăsăm |
-| **D4** | **Quant: 2 motoare nu pot semnala niciodată** (CVD, SMF) + 41 de câmpuri fără sursă | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm. *Micșorat în b295: stiva MTF și încrederea ARIA au fost construite, nu mai sunt pe lista ta.* |
+| **D4** | **Quant: 38 de câmpuri fără sursă** | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm. *Micșorat în b295 (stiva MTF + încrederea ARIA), apoi în b301: **CVD Divergence și SMF semnalează acum**, puntea din cartea de ordine era ultima care lipsea. Măsurat după b301: din 153 de câmpuri citite de `frame.ts`, **115 au scriitor**, 38 nu.* **Restul nu mai sunt punți** — niciunul n-are o sursă disponibilă pe `S`, deci cer date noi, nu legături. Exemplu de ce nu le umplu de capul meu: `_qmCumDelta` se afișează ca **CVD**, iar CVD înseamnă delta din tranzacții executate; alimentat din adâncimea cărții ar scrie „CVD" peste un număr care nu e CVD. Iar `orderflow.ts` nu acumulează nicăieri o delta din `aggTrade`, deci sursa corectă ar trebui construită. |
 
 **D1 — Drive.** Offsite-ul merge iar (reparat în b289), dar cota e strâmtă din cauza a șase copii din
 iunie, **necomprimate**, 1,37-2,07 GB fiecare. Comprimarea a intrat abia pe 7 octombrie, deci cele noi
