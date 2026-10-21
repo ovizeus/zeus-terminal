@@ -435,6 +435,34 @@ calea brain-ului**. Ce am descoperit nepăzit e **adopţia recon** (`_registerEx
 un frate (`env`) care dezarmează tăietorul de pierderi, şi alţi doi (`decisionId`, `owner`) care
 distrug trasabilitatea. **O singură reparaţie, trei simptome.**
 
+### 15. Sincronizarea — ţeava DOVEDITĂ funcţională; lipseşte doar semaforul
+
+Am construit ţeava întreagă pe o bază de unică folosinţă (nicio atingere a bazei vii), cu toate
+piesele **copiate verbatim** din codul real: schema din migrarea `031` (`database.js:764`),
+`INSERT`-ul din `_stmtLogDslParity` (`database.js:11577`), corpul lui `logDslParityRow`
+(`database.js:11581`) şi alăturarea client↔server — exact interogarea care pe baza vie dă 0 perechi.
+
+Am scris două rânduri de server şi două de client, dintre care unul cu divergenţă injectată:
+
+```
+randuri scrise: client = 2   server = 2
+ALATURAREA client-server (aceeasi interogare ca pe baza vie):
+   perechi        : 2
+   faza identica  : 1 / 2
+   stop identic   : 1 / 2
+   divergenţe detectate: 1   (am injectat intenţionat 1)
+```
+
+**Verdict: lanţul `server → tabel → alăturare → detecţie de divergenţă` FUNCŢIONEAZĂ**, şi prinde
+divergenţa când există. Pe baza vie dă 0 perechi **dintr-un singur motiv**: nu soseşte niciun
+rând de client, fiindcă emisia e păzită de `localStorage.zeus_dsl_parity_shadow`, care are
+**un cititor (`client/src/trading/dsl.ts:786`) şi ZERO scriitori** în tot codul, fără comutator
+în interfaţă.
+
+Deci monitorul **nu e stricat şi nu e greşit construit — e doar nealimentat.** Reparaţia e să i se
+dea o cale de aprindere (comutator în UI sau pornit implicit), nu o rescriere. Rămâne decizia
+operatorului, fiind o schimbare de comportament în client.
+
 ### Ce NU e vinovat (verificat, ca să nu căutăm acolo)
 
 - **SL-ul funcționează.** Per tranzacție realizează **0,971** din stopul planificat (80 de
