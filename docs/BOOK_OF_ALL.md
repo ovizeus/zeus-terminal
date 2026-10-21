@@ -402,6 +402,39 @@ Niciuna din cele două nu e închisă. Plus cauza constituţiei în `advisory` (
 `hard`, necitite) şi ocolirea prin adopţie (8/8, ultima în august). **Patru cauze, toate vii
 în afară de cea din iunie.**
 
+### 14. ÎNCHEIERE — separarea în timp decide totul; cauza vie e UNA
+
+Am epuizat toate cele trei surse de provenienţă pentru cele 51 (obiectul stocat; `audit_log` —
+are doar 10 înregistrări de intrare, toate din august; `position_events` — `CREATED` începe
+**2 iunie 2026**, după ce ele se întâmplaseră). Calea lor exactă e **necunoscibilă din datele
+păstrate**, şi acum se vede şi de ce nu mai conteaza: **separarea în timp le rezolvă.**
+
+| cauză | n | distribuţie | ultima | stare |
+|---|---|---|---|---|
+| **A — garda OARBĂ (`userId` lipsă)** | **92** | 2026-04: 20 · **2026-10: 72** | **2026-10-20 13:03** | **VIE, DOMINANTĂ** |
+| **B — intrare brain pe cale fără gardă** | 51 | 04: 43 · 05: 7 · 06: 1 | **2026-06-07 22:17** | **ÎNCHISĂ** |
+| C — adopţie recon fără gardă | 8 | 2026-08: 8 | 2026-08-18 01:29 | **latentă, deschisă** |
+| D — constituţia în `advisory` | 31 161 | continuu | **azi 14:48** | **VIE** |
+
+**Îmi rafinez retractarea de la 13b.** Conflatasem două căi distincte. Ultimul conflict de tip B
+este **2026-06-07 22:17**, iar reparaţia e datată `[PHANTOM-SHORT FIX 2026-06-08]` — **ziua
+următoare**. Potrivire perfectă: afirmaţia mea iniţială („închisă în iunie") era **corectă pentru
+calea brain-ului**. Ce am descoperit nepăzit e **adopţia recon** (`_registerExternalPosition`,
+8/8 ar fi fost blocate, ultima în august) — latentă, nu aceeaşi cauză.
+
+**Deci răspunsul final la „de ce brain deschide long şi short în acelaşi timp":**
+
+> **O singură cauză vie o explică: `userId` lipseşte din obiectul poziţiei, aşa că garda —
+> care este corectă şi chiar trage (878 de blocaje, ultimul azi) — nu vede poziţia opusă.
+> 72 din cele 92 de apariţii sunt din luna asta, ultima ieri la 13:03.**
+> A doua cauză vie nu creează conflicte singură, dar le lasă să treacă: constituţia detectează
+> încălcarea de 31 161 de ori ca `hard` şi nu-şi citeşte niciodată propriul verdict `allowed`.
+> Restul (B închisă în iunie, C latentă prin adopţie) sunt istorie şi risc, nu explicaţia.
+
+Şi rămâne valabilă unificarea de la 13b: acelaşi câmp nescris care orbeşte garda (`userId`) are
+un frate (`env`) care dezarmează tăietorul de pierderi, şi alţi doi (`decisionId`, `owner`) care
+distrug trasabilitatea. **O singură reparaţie, trei simptome.**
+
 ### Ce NU e vinovat (verificat, ca să nu căutăm acolo)
 
 - **SL-ul funcționează.** Per tranzacție realizează **0,971** din stopul planificat (80 de
