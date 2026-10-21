@@ -664,6 +664,35 @@ piesa care lipsea pe partea de pierdere.
 
 ---
 
+## ✅ RETRAS DIN LISTĂ — constituţia pe `blocking` nu mai are ce proteja — 2026-10-21
+
+Punctul 3 din lista de reparaţii (`_r1Result.allowed` citit / `enforcementMode: 'blocking'`) era
+pe listă fiindcă **31 161 de încălcări `hard` erau detectate şi ignorate**. Măsurat acum, nu mai
+merită făcut — şi e mai bine aşa, fiindcă ar fi fost o schimbare pe calea banilor.
+
+**Din cele 7 principii, doar 2 au fost vreodată încălcate:**
+
+| principiu | n | ultima | stare |
+|---|---|---|---|
+| `NO_OPPOSITE_ENTRY_ON_OPEN` | 31 460 | **azi, 458 în 24 h** | **acoperit 100% de garda b297** |
+| `MAX_POSITION_SIZE_PCT` | 31 763 | **2026-10-07** | **s-a rezolvat singur** |
+| celelalte 5 | **0** | — | nimic de blocat |
+
+**De ce s-a rezolvat singur punctul 2:** poziţiile care încălcau erau de ~3 104 pe demo. Cu
+`demoBalance = 25 838,95`, asta e **12,0%**, nu peste 25%. Pragul se atinge doar sub un capital de
+**12 416**, iar capitalul demo l-a depăşit — de aceea încălcările se opresc pe 7 octombrie şi n-au
+mai apărut. Nu era un fals pozitiv: erau reale **la capitalul de atunci**.
+
+**De ce nu mai e nevoie de punctul 1:** garda fail-closed din b297 blochează **143 din 143** de
+conflicte direcţionale, în amonte de constituţie. Un al doilea blocaj pe acelaşi lucru n-ar opri
+nimic ce nu e deja oprit.
+
+**Concluzie:** constituţia rămâne în `advisory` **ca observator**, şi e corect aşa. Dacă apare
+vreodată o încălcare pe unul din celelalte 5 principii, atunci se redeschide discuţia — dar atunci
+numărul va fi diferit de zero, iar decizia se va lua pe el.
+
+---
+
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
 > *(**2026-10-10:** auditul de persistență la refresh → P11-P15 și constatările R1-R10. **Închise azi: P11, P12, P13, P14** și **R1, R2, R3, R4, R7, R9, R10** — b265 → b268. Rămân 10, și **niciunul nu e al meu**: toate așteaptă o decizie sau o acțiune de la tine.)*
