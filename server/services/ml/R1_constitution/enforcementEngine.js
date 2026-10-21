@@ -130,4 +130,25 @@ function logViolations({ userId, decision, violations, enforcementMode }) {
     }
 }
 
-module.exports = { evaluate, logViolations };
+// [R1 PLUMBING 2026-10-21] Verdictul constituţiei devine executabil.
+//
+// `evaluate()` calcula de la bun început `allowed: !hardViolation`, dar unicul
+// apelant (serverBrain.js) scria `enforcementMode: 'advisory'` ca ŞIR LITERAL şi
+// citea `allowed` doar ca etichetă de audit pentru charter — niciodată ca să
+// blocheze. Aşa au trecut 31 460 de încălcări `hard`, iar comentariul de la
+// apelant promitea „operator can flip to blocking later via env flag": un flag
+// care NU exista. Capcana reală nu era că nu bloca, ci că părea că ar putea —
+// cineva care ar fi căutat comutatorul n-ar fi găsit nimic de apăsat.
+//
+// Doar şirul exact 'blocking' blochează. Orice altceva — mod absent, scris
+// greşit, cu majuscule — lasă să treacă, adică exact comportamentul de azi.
+// Pragul e intenţionat strict: un mod scris greşit nu are voie să oprească
+// intrările din greşeală, iar flagul e singurul loc de unde se aprinde.
+// În schimb, când modul ESTE 'blocking', un `allowed` absent se citeşte ca
+// interdicţie: lipsa unui verdict nu e o permisiune.
+function shouldBlock(enforcementMode, allowed) {
+    if (enforcementMode !== 'blocking') return false;
+    return allowed !== true;
+}
+
+module.exports = { evaluate, logViolations, shouldBlock };

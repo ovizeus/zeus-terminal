@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-21 · build b299 v1.7.273 · garda închisă + provenienţă + paritate + SMART_CUT înviat
+> **Ultima actualizare:** 2026-10-21 · build b300 v1.7.274 · garda închisă + provenienţă + paritate + SMART_CUT + constituţia executabilă
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -664,11 +664,42 @@ piesa care lipsea pe partea de pierdere.
 
 ---
 
-## ✅ RETRAS DIN LISTĂ — constituţia pe `blocking` nu mai are ce proteja — 2026-10-21
+## 🔌 REPARAT — verdictul constituţiei devine executabil, fără să schimbe nimic azi — 2026-10-21 (b300 v1.7.274)
 
-Punctul 3 din lista de reparaţii (`_r1Result.allowed` citit / `enforcementMode: 'blocking'`) era
-pe listă fiindcă **31 161 de încălcări `hard` erau detectate şi ignorate**. Măsurat acum, nu mai
-merită făcut — şi e mai bine aşa, fiindcă ar fi fost o schimbare pe calea banilor.
+**Server-only. NU s-a făcut reload** → intră la următoarea repornire. **Comportamentul implicit e
+neschimbat**, pentru că flagul rămâne `advisory`.
+
+### Ce era stricat
+
+`evaluate()` calcula de la bun început `allowed: !hardViolation`. Dar unicul apelant scria
+`enforcementMode: 'advisory'` ca **şir literal**, iar `allowed` era citit **doar ca etichetă de
+audit** pentru charter (linia 1609) — niciodată ca să blocheze. Aşa au trecut **31 460 de încălcări
+`hard`**, iar comentariul de la apelant promitea *„operator can flip to blocking later via env
+flag"*: **un flag care nu exista.**
+
+Capcana reală nu era că nu bloca, ci că **părea că ar putea**. Cineva care ar fi căutat comutatorul
+n-ar fi găsit nimic de apăsat — şi ar fi plecat convins că a activat o protecţie inexistentă.
+
+### Reparat, în trei piese mici
+
+1. **Flag nou `R1_ENFORCEMENT_MODE`**, implicit `advisory` = exact comportamentul de azi. Doar
+   şirul exact `blocking` îl aprinde.
+2. **Predicat pur `shouldBlock(mode, allowed)`.** Doar `blocking` blochează; un mod absent, scris
+   greşit sau cu majuscule lasă să treacă — **un mod scris greşit nu are voie să oprească intrările
+   din greşeală**. În schimb, când modul *este* `blocking`, un `allowed` absent se citeşte ca
+   interdicţie: **lipsa unui verdict nu e o permisiune.**
+3. **Un singur punct de refuz**, în `processBrainDecision`, prin care trec **ambele** căi de intrare
+   — cea directă şi cea pending, care îşi reia aceeaşi decizie la execuţie. Refuzul înregistrează un
+   missed trade `R1_CONSTITUTION` şi nu deschide nicio poziţie.
+
+**13 teste noi** (8 pe predicat şi pe implicitul flagului, 5 pe punctul de refuz cu bază temporară
+prin `ZEUS_DB_PATH` — inclusiv dovada că o decizie nemarcată intră normal şi că un marcaj gol nu
+blochează). Regresie: **599 de suite, 9 608 de teste verzi**, zero eşuate.
+
+### De ce NU aprindem comutatorul
+
+Aici era iniţial pe listă o reparaţie de comportament. Măsurat, **nu merită făcută** — şi e mai bine
+aşa, fiindcă ar fi fost o schimbare pe calea banilor degeaba.
 
 **Din cele 7 principii, doar 2 au fost vreodată încălcate:**
 
@@ -687,9 +718,12 @@ mai apărut. Nu era un fals pozitiv: erau reale **la capitalul de atunci**.
 conflicte direcţionale, în amonte de constituţie. Un al doilea blocaj pe acelaşi lucru n-ar opri
 nimic ce nu e deja oprit.
 
-**Concluzie:** constituţia rămâne în `advisory` **ca observator**, şi e corect aşa. Dacă apare
-vreodată o încălcare pe unul din celelalte 5 principii, atunci se redeschide discuţia — dar atunci
-numărul va fi diferit de zero, iar decizia se va lua pe el.
+**Concluzie:** constituţia rămâne în `advisory` **ca observator**, şi e corect aşa. Diferenţa faţă
+de ieri e că acum **comutatorul există şi funcţionează**: `R1_ENFORCEMENT_MODE=blocking` plus o
+repornire, şi o încălcare `hard` opreşte intrarea. Până atunci nu se schimbă nimic.
+
+Se redeschide discuţia doar la o încălcare pe unul din celelalte 5 principii — şi atunci numărul va
+fi diferit de zero, iar decizia se va lua pe el, nu pe o presupunere.
 
 ---
 

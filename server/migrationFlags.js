@@ -233,6 +233,17 @@ try {
 // When enabled, serverDSL.tick logs source='server' rows. Default OFF = zero runtime.
 const _DSL_PARITY_SHADOW_ENABLED = (process.env.DSL_PARITY_SHADOW_ENABLED || 'false') === 'true';
 
+// [R1 PLUMBING 2026-10-21] Modul de aplicare al constituţiei R1, din env.
+// Pana azi serverBrain scria 'advisory' ca sir literal, iar comentariul promitea
+// un flag de env care nu exista — deci cele 31 460 de incalcari `hard` erau
+// detectate si lasate sa treaca, fara nicio cale de a schimba asta.
+// Implicit 'advisory' = EXACT comportamentul de azi: se logheaza, nu se
+// blocheaza. Doar sirul exact 'blocking' aprinde refuzul (vezi
+// enforcementEngine.shouldBlock), si atunci o incalcare `hard` opreşte intrarea.
+// Aprinderea e decizia operatorului: azi n-ar opri nimic in plus, fiindca garda
+// fail-closed din b297 prinde deja 143/143 conflictele directionale in amonte.
+const _R1_ENFORCEMENT_MODE = process.env.R1_ENFORCEMENT_MODE === 'blocking' ? 'blocking' : 'advisory';
+
 // ── ML-DSL Shadow — read-only from env var ──
 // [ML-DSL v1] When enabled, serverAT records shadow DSL-drive proposals (policy →
 // safety net) for the read-only DSL Drive endpoint + OMEGA box. Default OFF = zero
@@ -430,6 +441,7 @@ module.exports = {
     get ML_DSL_LOSSSIDE_SHADOW() { return _ML_DSL_LOSSSIDE_SHADOW; },
     get ML_DSL_LOSSSIDE_ACTIVE() { return _ML_DSL_LOSSSIDE_ACTIVE; },
     get ML_DSL_FULL_CONTROL() { return _ML_DSL_FULL_CONTROL; },
+    get R1_ENFORCEMENT_MODE() { return _R1_ENFORCEMENT_MODE; },   // 'advisory' | 'blocking'
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     get CHART_BACKFILL_ENABLED() { return flags.CHART_BACKFILL_ENABLED; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.

@@ -1381,6 +1381,19 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         return null;
     }
 
+    // [R1 PLUMBING 2026-10-21] Refuzul constituţiei, un singur punct prin care
+    // trec AMBELE căi de intrare (directă şi pending, care îşi reia aceeaşi
+    // decizie la execuţie). Marcajul e pus de serverBrain DOAR când
+    // R1_ENFORCEMENT_MODE === 'blocking'; implicit flagul e 'advisory', deci
+    // câmpul nu apare niciodată şi nimic nu se schimbă faţă de azi.
+    // Pană acum verdictul `allowed` al constituţiei era calculat şi folosit doar
+    // ca etichetă de audit — 31 460 de încălcări `hard` au trecut neatinse.
+    if (decision._r1Blocked) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} ${decision.symbol} ${side} — R1_CONSTITUTION (${decision._r1Blocked})`);
+        _recordMissedTrade(userId, decision, 'R1_CONSTITUTION');
+        return null;
+    }
+
     // ── Duplicate guard (per-user) ──
     const existing = _positions.find(p => p.userId === userId && p.symbol === decision.symbol && p.side === side);
     if (existing) return null;

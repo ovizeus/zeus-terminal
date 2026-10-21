@@ -1579,8 +1579,25 @@ function _runCycle() {
                                     mode: us ? us.engineMode : 'demo',
                                 },
                                 violations: _r1Filtered,
-                                enforcementMode: 'advisory',
+                                enforcementMode: MF.R1_ENFORCEMENT_MODE,
                             });
+                        }
+
+                        // [R1 PLUMBING 2026-10-21] Verdictul devine executabil.
+                        // Pana azi `_r1Result.allowed` era citit doar ca eticheta
+                        // de audit pentru charter (mai jos), niciodata ca sa
+                        // blocheze — deci 31 460 de incalcari `hard` au trecut, iar
+                        // comentariul de mai sus promitea un flag de env inexistent.
+                        // Implicit NIMIC NU SE SCHIMBA: flagul e 'advisory', deci
+                        // `shouldBlock` intoarce false si intrarea merge mai departe
+                        // exact ca inainte. Cu R1_ENFORCEMENT_MODE=blocking, o
+                        // incalcare `hard` marcheaza decizia si `processBrainDecision`
+                        // o refuza — un singur punct de refuz, prin care trec AMBELE
+                        // cai de intrare (directa si pending, care isi reia aceeasi
+                        // decizie la executie).
+                        if (r1.shouldBlock(MF.R1_ENFORCEMENT_MODE, _r1Result.allowed)) {
+                            decision._r1Blocked = _r1Filtered.map(v => v.id).join(',') || 'HARD';
+                            logger.warn('BRAIN', `[R1] Entry blocked uid=${userId} ${snap.symbol} — constitutie in mod blocking: ${decision._r1Blocked}`);
                         }
 
                         // [Wave 2] R1 charter layer — record constitutional classification.
