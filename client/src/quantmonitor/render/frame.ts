@@ -695,9 +695,9 @@ export function renderFrame(): string {
   L(`  <span class="rb">REAL LIQUIDATIONS THIS SESSION</span>`)
   L(`  <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>`)
   L(`  <span class="dg">EXCHANGE       BTC COUNT    BTC TOTAL</span>`)
-  L(`  <span class="c">BINANCE</span>     <span class="w">${String(LIQS.binance.btc.length).padStart(6)}</span>     <span class="y">$${fmtUSD(LIQS.binance.totalBtc).padStart(9)}</span>`)
-  L(`  <span class="p">BYBIT  </span>     <span class="w">${String(LIQS.bybit.btc.length).padStart(6)}</span>     <span class="y">$${fmtUSD(LIQS.bybit.totalBtc).padStart(9)}</span>`)
-  L(`  <span class="y">OKX    </span>     <span class="w">${String(LIQS.okx.btc.length).padStart(6)}</span>     <span class="y">$${fmtUSD(LIQS.okx.totalBtc).padStart(9)}</span>`)
+  L(`  <span class="c">BINANCE</span>     <span class="w">${String(LIQS.binance.countBtc || 0).padStart(6)}</span>     <span class="y">$${fmtUSD(LIQS.binance.totalBtc).padStart(9)}</span>`)
+  L(`  <span class="p">BYBIT  </span>     <span class="w">${String(LIQS.bybit.countBtc || 0).padStart(6)}</span>     <span class="y">$${fmtUSD(LIQS.bybit.totalBtc).padStart(9)}</span>`)
+  L(`  <span class="y">OKX    </span>     <span class="w">${String(LIQS.okx.countBtc || 0).padStart(6)}</span>     <span class="y">$${fmtUSD(LIQS.okx.totalBtc).padStart(9)}</span>`)
   L(`  <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>     <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500</span>     <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>`)
   L(`  <span class="w">TOTAL  </span>     <span class="gb">${String(btcTot.count).padStart(6)}</span>     <span class="yb">$${fmtUSD(btcTot.total).padStart(9)}</span>`)
   L(``)
@@ -1183,7 +1183,16 @@ export function renderFrame(): string {
       L(`  <span class="${evtClr}">${e.name.padEnd(5)}</span> <span class="dg">${e.date.toISOString().slice(0, 10)}</span>  <span class="${urgency}">T-${timeStr}</span>`)
     })
   } else {
-    L(`  <span class="dg">No upcoming events in calendar</span>`)
+    // [2026-10-21 b294] Calendarul e hardcodat in state.ts si TOATE intrarile
+    // sunt din mai-iulie 2025, deci filtrul de mai sus nu lasa niciodata nimic
+    // si secţiunea afisa „No upcoming events" NEINTRERUPT din august 2025 —
+    // un panou mort care arata ca o perioada liniştita. Acum spune de ce tace:
+    // tacerea care se explica poate fi reparata, tacerea anonima nu.
+    const newest = MACRO_EVENTS.reduce((a, b2) => (b2.date > a.date ? b2 : a), MACRO_EVENTS[0])
+    const stale = newest && newest.date.getTime() < nowMs
+    L(stale
+      ? `  <span class="y">Calendar expirat</span> <span class="dg">— ultima intrare ${newest.date.toISOString().slice(0, 10)}, de actualizat</span>`
+      : `  <span class="dg">No upcoming events in calendar</span>`)
     L(`  <span class="d">\u00B7</span>`)
     L(`  <span class="d">\u00B7</span>`)
     L(`  <span class="d">\u00B7</span>`)

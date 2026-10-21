@@ -18,10 +18,15 @@ export const QM = {
     { name: 'NFP', date: new Date('2025-06-06T12:30:00Z') },
     { name: 'NFP', date: new Date('2025-07-03T12:30:00Z') },
   ],
+  // [2026-10-21 b294] `countBtc` = cate evenimente am vazut in sesiune.
+  // `btc` e un inel de 300 pentru fluxul AFISAT, deci `btc.length` ingheta pe
+  // 300 in timp ce `totalBtc` urca — doua numere alaturate in tabelul
+  // „THIS SESSION" care descriau seturi diferite. Eticheta spune sesiune,
+  // deci totalul era cel corect; acum si numaratoarea e pe sesiune.
   liqAgg: {
-    binance: { btc: [] as any[], totalBtc: 0 },
-    bybit: { btc: [] as any[], totalBtc: 0 },
-    okx: { btc: [] as any[], totalBtc: 0 },
+    binance: { btc: [] as any[], totalBtc: 0, countBtc: 0 },
+    bybit: { btc: [] as any[], totalBtc: 0, countBtc: 0 },
+    okx: { btc: [] as any[], totalBtc: 0, countBtc: 0 },
   },
   // QM extended state on w.S (populated by engines)
   // fearGreed, cascadeRisk, cascadeZone, orderFlowDelta, ofdHist,
@@ -49,6 +54,7 @@ export function addLiq(exchange: string, liq: any): void {
   if (!ex) return
   ex.btc.push(liq)
   if (ex.btc.length > 300) ex.btc.shift()
+  ex.countBtc = (ex.countBtc || 0) + 1
   // [AUDIT-20260619 P2] guard NaN: a vol-less event would make totalBtc NaN
   // permanently (NaN+x=NaN) → "$NaN" for the whole session. Siblings (liqPersist,
   // liqMap) already guard this; addLiq was the only unguarded accumulator.
@@ -58,8 +64,10 @@ export function addLiq(exchange: string, liq: any): void {
 export function getLiqTotals(): { total: number; count: number } {
   let total = 0, count = 0
   ;(['binance', 'bybit', 'okx'] as const).forEach(ex => {
-    total += (QM.liqAgg as any)[ex].totalBtc
-    count += (QM.liqAgg as any)[ex].btc.length
+    const a = (QM.liqAgg as any)[ex]
+    total += a.totalBtc
+    // countBtc, nu btc.length: inelul de 300 e doar pentru fluxul afisat.
+    count += a.countBtc || 0
   })
   return { total, count }
 }

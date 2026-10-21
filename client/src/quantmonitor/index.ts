@@ -19,6 +19,22 @@ const intervals: ReturnType<typeof setInterval>[] = []
 let renderRaf = 0
 let renderIv: ReturnType<typeof setInterval> | null = null
 let _destroyed = false
+// [2026-10-21 b294] Jeton de rulare pentru cursa init/destroy.
+// init() e async si asteapta 8 fetch-uri INAINTE de a instala temporizatoarele
+// periodice. Panoul il cheama fire-and-forget, iar cleanup-ul React cheama
+// destroy(). Daca panoul se inchide inainte ca init sa termine, destroy()
+// rula primul (golea `intervals`), apoi init isi relua cursul si instala 8
+// setInterval-uri NOI pe care nu le mai curata nimeni: /api/market/* la 5s si
+// 10s, pe termen nelimitat, pe un sistem cu istoric de banuri de IP Binance.
+// Masurat in test: 12 apeluri pe minut per deschidere scursa, cumulative.
+// Un simplu flag `_destroyed` n-ar fi destul: o a doua deschidere il pune pe
+// false, iar prima rulare, inca in await, s-ar crede vie. Jetonul face
+// fiecare rulare sa-si recunoasca propria generatie.
+// Se incrementeaza DOAR in init(): o inchidere simpla e prinsa de `_destroyed`,
+// iar o redeschidere bumpeaza generatia oricum. Am avut si un `_runId++` in
+// destroy() si l-am scos — testul de mutatie a aratat ca nu schimba nimic,
+// deci era cod care parea sa apere ceva.
+let _runId = 0
 // [PERF-2] Module-level refs to liquidation handlers so destroy() can
 // removeEventListener. Without these, every init() call (each panel toggle)
 // leaks one zeus:liq + one zeus:okxLiq listener — after ~5 toggles, addLiq
@@ -92,6 +108,51 @@ export function _syncQmVars(): void {
   S._qmSpread = S._qmAsk > 0 && S._qmBid > 0 ? S._qmAsk - S._qmBid : 0
   // FR from server funding cache (basisRate.ts populates S.fr)
   if (S.fr && S.fr !== 0) S._qmFr = S.fr
+
+  // [2026-10-21 b294] PUNTEA NETERMINATA.
+  // Portarea din HTML a aliasat CITIRILE randarii la `S._qmFoo`, dar puntea a
+  // rămas la ~20 de campuri din 157. Masurat pe tot repo-ul (1014 fisiere):
+  // 71 de campuri citite de frame.ts n-aveau niciun scriitor. Cele 28 de mai
+  // jos erau cazul supărător — valoarea EXISTA deja pe S, calculata la fiecare
+  // 60s de calcS2F/calcLogRegression/calcMarketCycle si de basisRate, si era
+  // aruncata. Exemplu masurat pe date vii: Mayer Multiple real 1,137
+  // (BTC $82.743 / media 200 zile $72.767) in timp ce panoul afisa 0.
+  // Celelalte 43 n-au nicio sursa in cod — alea sunt functii neterminate, nu
+  // punte lipsa, si rămân in Book ca atare.
+  S._qmAtr = S.atr || 0
+  S._qmMarkPrice = S.markPrice || 0
+  S._qmIndexPrice = S.indexPrice || 0
+  S._qmFundingRate = S.fr || 0
+  S._qmOiValue = S.oi || 0
+  // Stock-to-Flow
+  S._qmS2fValue = S.s2fValue || 0
+  S._qmS2fModelPrice = S.s2fModelPrice || 0
+  S._qmS2fDeviation = S.s2fDeviation || 0
+  // Mayer Multiple + medii lungi
+  S._qmMayer200dma = S.mayer200dma || 0
+  S._qmMayerMultiple = S.mayerMultiple || 0
+  S._qmWma200 = S.wma200 || 0
+  S._qmWmaRatio = S.wmaRatio || 0
+  // Regresie logaritmica
+  S._qmLogRegMid = S.logRegMid || 0
+  S._qmLogRegHigh = S.logRegHigh || 0
+  S._qmLogRegLow = S.logRegLow || 0
+  S._qmLogRegPos = S.logRegPos || 0
+  // Metrici on-chain derivate
+  S._qmNupl = S.nupl || 0
+  S._qmRealizedProxy = S.realizedProxy || 0
+  S._qmRhodlScore = S.rhodlScore || 0
+  S._qmPuell = S.puell || 0
+  // Pi Cycle Top
+  S._qmPi111 = S.pi111 || 0
+  S._qmPi350x2 = S.pi350x2 || 0
+  S._qmPiSignal = S.piSignal || ''
+  // Ciclul de piata
+  S._qmCyclePct = S.cyclePct || 0
+  S._qmCyclePhase = S.cyclePhase || ''
+  S._qmCyclePhaseClr = S.cyclePhaseClr || ''
+  S._qmCycleDaysElapsed = S.cycleDaysElapsed || 0
+  S._qmCycleDaysRemain = S.cycleDaysRemain || 0
 }
 
 function startRenderLoop(screenId: string): void {
@@ -107,6 +168,9 @@ function startRenderLoop(screenId: string): void {
 }
 
 export async function init(screenId: string, _canvasId?: string): Promise<void> {
+  const myRun = ++_runId
+  // Rularea asta e inca cea curenta? (vezi comentariul de la _runId)
+  const aborted = () => _destroyed || myRun !== _runId
   _destroyed = false
   qmLog('SYS', 'ZeuS Quantitative Monitor V2.0.0')
   qmLog('SYS', 'Initializing engines...')
@@ -149,6 +213,10 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
     }
   } catch (_) {}
 
+  // Panoul s-a inchis in timpul fetch-ului de mai sus? Ieșim inainte sa mai
+  // cerem 7 lucruri de care nimeni nu are nevoie.
+  if (aborted()) return
+
   // Fetch new data sources
   await Promise.all([
     fetchBasisRate(),
@@ -163,6 +231,12 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
   calcS2F()
   calcLogRegression()
   calcMarketCycle()
+
+  // GARDA CARE CONTEAZA: tot ce urmeaza instaleaza temporizatoare si
+  // ascultatori. Daca panoul s-a inchis in timpul await-urilor de mai sus,
+  // destroy() a rulat deja si a golit `intervals`, deci orice am porni acum
+  // ar rula pentru totdeauna, nevazut si necuratat.
+  if (aborted()) return
 
   qmLog('SYS', 'All engines ready — rendering')
 

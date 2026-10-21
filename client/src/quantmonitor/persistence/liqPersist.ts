@@ -71,10 +71,13 @@ export function loadLiqSnapshot(): { restored: number } {
     // Hydrate QM.liqAgg buffers + recompute totalBtc so the counter stays honest
     QM.liqAgg.binance.btc = bnb
     QM.liqAgg.binance.totalBtc = bnb.reduce((s: number, e: any) => s + (+e.vol || 0), 0)
+    QM.liqAgg.binance.countBtc = bnb.length
     QM.liqAgg.bybit.btc = byb
     QM.liqAgg.bybit.totalBtc = byb.reduce((s: number, e: any) => s + (+e.vol || 0), 0)
+    QM.liqAgg.bybit.countBtc = byb.length
     QM.liqAgg.okx.btc = okx
     QM.liqAgg.okx.totalBtc = okx.reduce((s: number, e: any) => s + (+e.vol || 0), 0)
+    QM.liqAgg.okx.countBtc = okx.length
 
     // Hydrate w.S.llvBuckets — merge with whatever already exists (live WS may
     // have pushed a few events before init completes)

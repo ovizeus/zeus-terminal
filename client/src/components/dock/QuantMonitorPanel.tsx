@@ -15,15 +15,19 @@ export function QuantMonitorPanel() {
     // previous builds split this into quantmonitor-*.js and a stale SW or
     // CDN edge could return 404 for the chunk even when it existed on the
     // origin. Added bundle cost: ~25 KB gzipped, acceptable for reliability.
-    let destroyed = false
+    // [2026-10-21 b294] Aici era `let destroyed = false` + `void destroyed`
+    // DUPA `return` — cod inaccesibil, variabila necitita de nimic. Cineva a
+    // vrut o garda pentru init-ul async si n-a ajuns niciodata cablata, iar
+    // scurgerea a rămas: panoul inchis inainte ca init sa termine lasa 8
+    // temporizatoare care lovesc /api/market/* la 5s si 10s, pe termen
+    // nelimitat. Garda e acum in quantmonitor/index.ts, pe jeton de rulare,
+    // acolo unde sunt si temporizatoarele — nu aici, unde n-avea ce apara.
     qmInit('qm-screen').catch((e: any) => console.warn('[QM] init error:', e))
 
     return () => {
-      destroyed = true
       try { qmDestroy() } catch (_) { }
       initRef.current = false
     }
-    void destroyed
   }, [])
 
   return (
