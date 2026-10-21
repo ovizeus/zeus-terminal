@@ -1150,9 +1150,26 @@ function _findSameModeOpposite(positions, { userId, side, mode } = {}) {
     if (!Array.isArray(positions)) return null;
     const oppositeSide = side === 'LONG' ? 'SHORT' : 'LONG';
     const m = mode || 'demo';
-    return positions.find(p =>
-        p && p.userId === userId && p.side === oppositeSide && (p.mode || 'demo') === m
-    ) || null;
+    // [GUARD FAIL-CLOSED 2026-10-21] Pre-fix, filtrul era doar
+    // `p.userId === userId`, deci o poziţie cu `userId` lipsă din obiect era
+    // SĂRITĂ în linişte şi garda raporta „nicio poziţie opusă". Aşa a deschis
+    // brain-ul LONG+SHORT în acelaşi mod: 92 de conflicte măsurate, 72 doar în
+    // octombrie, iar rejucate prin garda reală TOATE au avut la bază exclusiv
+    // poziţii opuse fără `userId`. Scriitorul acelor obiecte nu a putut fi găsit
+    // în codul de azi, deci garda nu are voie sa depinda de repararea lui.
+    // Un proprietar NECUNOSCUT în acelaşi mod blochează acum: costul e o intrare
+    // ratată (înregistrată ca missed trade), alternativa e o carte mixtă pe bani,
+    // interzisă explicit de politica operatorului din 2026-05-19.
+    // Un ALT utilizator cunoscut nu blochează — fail-closed doar pe necunoscut,
+    // nu pe altcineva (aceeaşi logică ca garda [C5] de la încărcare, care refuză
+    // să presupună un utilizator în loc să ghicească).
+    const _opposite = (p, ownerMatches) =>
+        !!p && ownerMatches(p) && p.side === oppositeSide && (p.mode || 'demo') === m;
+    // Potrivirea CUNOSCUTĂ are prioritate, ca mesajul de blocaj să numească o
+    // poziţie reală a utilizatorului, nu una orfană.
+    return positions.find(p => _opposite(p, x => x.userId === userId))
+        || positions.find(p => _opposite(p, x => x.userId == null))
+        || null;
 }
 
 // [DUAL-WRITE DUP FIX 2026-06-15] Pure same-side open-duplicate predicate. On a

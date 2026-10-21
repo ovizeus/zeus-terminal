@@ -18,6 +18,7 @@ const orderLock = require('./orderLock');
 const positionStateMachine = require('./positionStateMachine');
 const positionEvents = require('./positionEvents');
 const canonicalErrors = require('./canonicalErrors');
+const { resolveProvenance } = require('./positionProvenance');
 
 const LOCK_TIMEOUT_MS = 10_000;
 const SL_RETRIES = 3;
@@ -97,6 +98,27 @@ async function _emergencyClose(uid, params, creds, seq) {
     return { ok: false, attempts: EMERGENCY_RETRIES };
 }
 
+// [PROVENANCE FIX 2026-10-21] Constructor pur pentru rândul PENDING, oglinda
+// celui din binanceOps. Extras din corpul lui `placeEntry` ca să fie testabil:
+// contractul se verifică acum simetric pe ambele burse, altfel una o ia iar
+// înainte — exact ce s-a întâmplat cu tag-ul de `mode`, reparat în iunie doar
+// pe binance. Două corecturi aici:
+//   1. `userId` + `env` în obiect (vezi positionProvenance.js pentru cele două
+//      mecanisme care cădeau fără ele: garda direcţională şi SMART_CUT).
+//   2. `mode` ia ENGINE mode din `params` şi abia apoi `creds.mode` — pe bybit
+//      rămăsese vechiul `mode: creds.mode`, care ştampilează o poziţie a
+//      motorului LIVE drept 'testnet'. Acelaşi mistag reparat pe binance în
+//      [PHANTOM-SHORT FIX 2026-06-08 — part a], rămas aici până azi.
+function _buildPendingPositionDataBybit(params, creds, uid) {
+    return {
+        symbol: params.symbol, side: params.side, qty: params.qty,
+        entryType: params.entryType, sl: params.sl && params.sl.price, tp: params.tp && params.tp.price,
+        leverage: params.leverage, decisionKey: params.decisionKey, source: params.source,
+        mode: params.mode || (creds && creds.mode),
+        ...resolveProvenance(uid, params, creds),
+    };
+}
+
 async function placeEntry(uid, params, creds) {
     const lockKey = `${uid}|${params.symbol}`;
     const lockAcquired = await orderLock.acquire(lockKey, LOCK_TIMEOUT_MS);
@@ -104,11 +126,7 @@ async function placeEntry(uid, params, creds) {
         return { ok: false, error: canonicalErrors.create('ErrLockTimeout', `lock held >${LOCK_TIMEOUT_MS}ms for ${lockKey}`) };
     }
 
-    const positionData = {
-        symbol: params.symbol, side: params.side, qty: params.qty,
-        entryType: params.entryType, sl: params.sl && params.sl.price, tp: params.tp && params.tp.price,
-        leverage: params.leverage, decisionKey: params.decisionKey, source: params.source, mode: creds.mode,
-    };
+    const positionData = _buildPendingPositionDataBybit(params, creds, uid);
     const insertResult = db.prepare(
         `INSERT INTO at_positions (data, status, user_id, exchange) VALUES (?, 'PENDING', ?, 'bybit')`
     ).run(JSON.stringify(positionData), uid);
@@ -671,6 +689,7 @@ async function getOrder(uid, params, creds) {
 }
 
 module.exports = {
+    _buildPendingPositionDataBybit,  // [PROVENANCE FIX] pur, testat simetric cu binanceOps
     placeEntry, closePosition,
     ensureSymbolReady, getPositions, getBalance, getUserTrades,
     ping, cancelOrder, placeStopLoss,

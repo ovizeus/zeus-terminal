@@ -22,6 +22,7 @@ const orderLock = require('./orderLock');
 const positionStateMachine = require('./positionStateMachine');
 const positionEvents = require('./positionEvents');
 const canonicalErrors = require('./canonicalErrors');
+const { resolveProvenance } = require('./positionProvenance');
 
 const LOCK_TIMEOUT_MS = 10_000;
 const SL_RETRIES = 3;
@@ -157,13 +158,20 @@ function _isUniqueConstraintError(err) {
 // (params.mode, e.g. 'live') — NOT creds.mode ('testnet'/'real'), which would
 // mistag a live-engine position and exclude it from recon / confuse the
 // directional guard. creds.mode remains a backward-compat fallback.
-function _buildPendingPositionData(params, creds) {
+function _buildPendingPositionData(params, creds, uid) {
     return {
         symbol: params.symbol, side: params.side, qty: params.qty,
         entryType: params.entryType, sl: params.sl && params.sl.price,
         tp: params.tp && params.tp.price, leverage: params.leverage,
         decisionKey: params.decisionKey, source: params.source,
         mode: params.mode || (creds && creds.mode),
+        // [PROVENANCE FIX 2026-10-21] userId + env ÎN OBIECT, nu doar în coloana
+        // `user_id`. Fără ele, garda direcţională nu vedea poziţia opusă
+        // (`p.userId === userId`) şi poarta SMART_CUT (`pos.env === 'TESTNET'`)
+        // sărea tăietorul de pierderi. Comentariul de mai sus avertiza chiar
+        // despre „confuzia gărzii direcţionale" — s-a reparat `mode` şi s-a
+        // ratat câmpul pe care garda îl testează PRIMUL.
+        ...resolveProvenance(uid, params, creds),
     };
 }
 
@@ -178,7 +186,7 @@ async function placeEntry(uid, params, creds) {
     }
 
     // Create PENDING row
-    const positionData = _buildPendingPositionData(params, creds);
+    const positionData = _buildPendingPositionData(params, creds, uid);
     const insertResult = db.prepare(
         `INSERT INTO at_positions (data, status, user_id, exchange, created_at, updated_at) VALUES (?, 'PENDING', ?, 'binance', datetime('now'), datetime('now'))`
     ).run(JSON.stringify(positionData), uid);
