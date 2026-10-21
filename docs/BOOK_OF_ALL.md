@@ -356,16 +356,47 @@ apeluri `_findSameModeOpposite` în corpul funcţiei; verifică doar `_findSameS
 | `_registerManualPositionLegacy` (4782) | **NU** | **client, `POST /api/trading/…` → `trading.js:241`** |
 | `_registerExternalPosition` (5032) | **NU** | adopţie recon |
 
-**Şi aici se unesc două dintre întrebările operatorului.** Clientul are propriul autotrade care
-ştampilează `sourceMode: 'auto'` — exact amprenta celor 51 (`src=auto`, **fără `decisionId`**,
-**fără `owner`**). Deci:
+### 13b. RETRACTARE — cele 51 NU sunt de origine client
 
-> **„de ce deschide long+short" şi „de ce nu e sincronizat" sunt ACEEAŞI cauză:**
-> clientul lucrează pe cartea de poziţii printr-o rută HTTP care nu împarte garda serverului.
+La punctul 13 am scris că cele 51 vin de la autotrade-ul clientului şi că „long+short" şi
+„nesincronizat" sunt aceeaşi cauză. **Am verificat prin amprentă pozitivă şi e GREŞIT. Retrag.**
+
+`brainModeAtOpen` şi `label` sunt scrise **exclusiv de client** (`grep` pe serverAT.js +
+serverBrain.js = **0 apariţii**). În cele 51:
+
+| amprentă | prezenţă |
+|---|---|
+| `brainModeAtOpen` (doar clientul) | **0 / 51** |
+| `label` (doar clientul) | **0 / 51** |
+| `cycle` (doar brain-ul serverului) | 17 / 51 (33%) |
+| `fusionMult` (doar brain-ul serverului) | 17 / 51 (33%) |
+| `decisionId` (doar `processBrainDecision`) | 2 / 51 |
+| `owner` | 1 / 51 |
+
+Control: 579 de poziţii sigur de la brain-ul serverului (`decisionId`+`cycle`) au
+`brainModeAtOpen` în **0** cazuri — amprenta e curată, deci absenţa ei în cele 51 e concluzivă.
+
+*(Prima rulare a dat 0/0: uitasem să încarc câmpul `userId` în obiectele sondei, deci garda
+compara cu `undefined` la toate. Am adăugat o **auto-verificare a instrumentului** înainte de
+orice raportare — R-V-11 aplicat pe mine.)*
+
+**Deci calea celor 51 NU se poate determina din obiectul stocat**: o treime poartă câmpuri de
+decizie ale serverului **fără `decisionId`**, iar restul n-au niciun marcaj de provenienţă.
+
+**Unificarea CORECTĂ** — şi e mai simplă decât cea pe care am retras-o:
+
+> Boala e una singură: **obiectul poziţiei e persistat incomplet pe mai multe căi.** Acelaşi
+> defect, în trei câmpuri diferite, produce trei simptome fără legătură aparentă:
+> `userId` lipsă → **orbeşte garda direcţională** (92 de conflicte);
+> `env` lipsă → **dezarmează tăietorul de pierderi** (−10 057 în 16 tranzacţii);
+> `decisionId`/`owner` lipsă → **distruge trasabilitatea**, aşa că nici post-mortem nu se poate
+> numi calea (cele 51).
 
 **Atribuirea celor 143 de conflicte ale brain-ului, 100% explicată:**
 - **92 (64,3%)** — brain-ul serverului; garda a rulat dar a fost **oarbă** (`userId` lipsă) → **VIE**
-- **51 (35,7%)** — intrări de origine client, pe o rută **fără gardă** → **VIE**
+- **51 (35,7%)** — garda **nu a rulat**: intrate pe una din cele două căi fără gardă
+  (`_registerManualPositionLegacy` 4782 / `_registerExternalPosition` 5032). Calea exactă **nu
+  se poate stabili** — vezi 13b: le lipseşte provenienţa. → **VIE**
 
 Niciuna din cele două nu e închisă. Plus cauza constituţiei în `advisory` (31 161 de încălcări
 `hard`, necitite) şi ocolirea prin adopţie (8/8, ultima în august). **Patru cauze, toate vii
