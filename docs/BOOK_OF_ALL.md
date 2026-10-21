@@ -277,8 +277,9 @@ blocat: **49 din 51 n-au `decisionId`** şi **50 din 51 n-au `owner`** → n-au 
 **43 în aprilie, 7 în mai, 1 în iunie, ZERO după.** Se potriveşte exact cu
 `[PHANTOM-SHORT FIX 2026-06-08]`, care a cablat aceeaşi gardă pe calea de adopţie
 (`serverAT.js:6565` şi `6576`, cu log-ul „DEFERRED (would create same-mode opposite book…)").
-**Cauza B e închisă din iunie; cauza A (userId) e încă vie; cauza C (constituţia în advisory)
-e vie.**
+**ATENŢIE — afirmaţia asta e CORECTATĂ la punctul 13: cauza B NU e închisă.** Reparaţia din
+iunie a acoperit doar calea `userDataStream`; adopţia recon şi ruta de înregistrare a clientului
+sunt tot fără gardă, iar ocolirea a tras ultima dată în august 2026.
 
 ### 11. DSL Drive pe o poziţie în pierdere — lanţul închis în cod
 
@@ -318,6 +319,57 @@ să scrie semaforul de mână în consola browserului.
 Acelaşi tipar ca la auditul Quant (71 din 157 de câmpuri citite fără scriitor): **monitorul nu
 e stricat, e nealimentat.** De aceea cele 649 833 de rânduri sunt toate `source='server'` şi
 alăturarea client↔server are exact 0 perechi — determinat, nu estimat.
+
+### 13. CORECŢIE + atribuire COMPLETĂ: patru căi în carte, doar două consultă garda
+
+**Corectez ce am scris la punctul 10:** „cauza B e închisă din iunie" este **GREŞIT**. Reparaţia
+din iunie a cablat garda pe calea `userDataStream`, **nu** pe celelalte două. Greşeala mea a venit
+dintr-un filtru propriu: rejucasem doar intrările cu `src === 'auto'`, ceea ce a ascuns adopţiile.
+
+`SAT_RECON_ORPHAN_ADOPTED` a tras **14 ori, ultima 2026-08-18 01:29**, cu 96 de poziţii
+`source='external'` — iar pe 2026-08-18 01:29 au apărut două conflicte direcţionale reale
+(SHORT NEARUSD_PERP şi SHORT ETCUSD_PERP peste un registru LONG).
+
+**Atribuirea completă — toate 460 de conflicte, pe calea de intrare:**
+
+| cale | total | garda ar fi blocat | garda oarbă | ultima |
+|---|---|---|---|---|
+| MANUAL | 278 | 55 | 223 | 2026-10-11 |
+| **BRAIN (`src=auto`)** | **143** | **51** | **92** | **2026-10-20** |
+| altă/necunoscută | 31 | 7 | 24 | 2026-04-26 |
+| **ADOPŢIE (`source=external`)** | **8** | **8 = 100%** | 0 | **2026-08-18** |
+
+Cele **278 manuale sunt prin politica operatorului** ([[no-mixed-bias-per-mode]]: intrările
+manuale NU îi sunt supuse, cartea mixtă pentru hedge e decizia lui) — **nu sunt bug**.
+
+**Dovada curată de ocolire: adopţia, 8 din 8.** Garda le-ar fi blocat pe toate, iar
+`_registerExternalPosition` (`serverAT.js:5032`) **nu o cheamă niciodată** — verificat: zero
+apeluri `_findSameModeOpposite` în corpul funcţiei; verifică doar `_findSameSideOpenDup`
+(aceeaşi parte).
+
+**Garda există în DOAR două locuri vii** (`grep` pe tot fişierul dă 1373, 6565, 6576 + definiţia):
+
+| cale în carte | consultă garda? | accesibilă din |
+|---|---|---|
+| `processBrainDecision` (1373) | **DA** | brain-ul serverului |
+| `userDataStream` fast-path (6565/6576) | **DA** (adăugat 2026-06-08) | evenimente bursă |
+| `_registerManualPositionLegacy` (4782) | **NU** | **client, `POST /api/trading/…` → `trading.js:241`** |
+| `_registerExternalPosition` (5032) | **NU** | adopţie recon |
+
+**Şi aici se unesc două dintre întrebările operatorului.** Clientul are propriul autotrade care
+ştampilează `sourceMode: 'auto'` — exact amprenta celor 51 (`src=auto`, **fără `decisionId`**,
+**fără `owner`**). Deci:
+
+> **„de ce deschide long+short" şi „de ce nu e sincronizat" sunt ACEEAŞI cauză:**
+> clientul lucrează pe cartea de poziţii printr-o rută HTTP care nu împarte garda serverului.
+
+**Atribuirea celor 143 de conflicte ale brain-ului, 100% explicată:**
+- **92 (64,3%)** — brain-ul serverului; garda a rulat dar a fost **oarbă** (`userId` lipsă) → **VIE**
+- **51 (35,7%)** — intrări de origine client, pe o rută **fără gardă** → **VIE**
+
+Niciuna din cele două nu e închisă. Plus cauza constituţiei în `advisory` (31 161 de încălcări
+`hard`, necitite) şi ocolirea prin adopţie (8/8, ultima în august). **Patru cauze, toate vii
+în afară de cea din iunie.**
 
 ### Ce NU e vinovat (verificat, ca să nu căutăm acolo)
 
