@@ -117,6 +117,17 @@ export function _syncQmVars(): void {
   const _cvd = w.RAW_FLOW?.cumDelta || 0
   S._qmCumDelta = _cvd; S.cumDelta = _cvd
 
+  // [RSI REAL 2026-10-21] `_qmRsi` n-avea scriitor, iar randarea face
+  // `S._qmRsi || 50`, deci panoul afişa CONSTANT `RSI:50.0`, cu culoarea de
+  // neutru — un „neutru" care arată ca o citire reală. Mai înşelător decât un
+  // zero: zeroul se vede ca lipsă, 50 se vede ca informaţie.
+  // Sursa exista şi e populată: `S.rsi[tf]` (marketDataFeeds.ts:239). Intervalul
+  // canonic pentru o citire VIE e '5m' — exact ce foloseşte panoul existent
+  // pentru RSI-ul live (`dtrsic`). Nu scriem nimic când lipseşte, ca să nu
+  // inventăm o valoare; atunci randarea rămâne pe propriul ei fallback.
+  const _rsi5 = S.rsi?.['5m']
+  if (Number.isFinite(_rsi5)) S._qmRsi = _rsi5
+
   S._qmBasisRate = S.basisRate || 0
   S._qmFrBybit = S.frBybit || 0
   S._qmFrOkx = S.frOkx || 0

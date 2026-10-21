@@ -50,7 +50,7 @@ Niciuna nu e urgentă și niciuna nu atinge calea banilor fără să-ți spun î
 | **D1** | **Cota Google Drive: 6 fișiere din iunie țin 10,6 GiB din 15** | vezi mai jos — decide dacă le tai |
 | **D2** | **14 G de copii vechi de DB pe discul VPS-ului** | vezi mai jos — decide dacă le tai |
 | **D3** | **Poarta SP1 nu poate trece niciodată** — creierul clientului e inert (încredere medie **5,1**) | vezi secțiunea b291 — oprim raportul zilnic, îl re-țintim, sau îl lăsăm |
-| **D4** | **Quant: 37 de câmpuri fără sursă** | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm. *Micșorat în b295 (stiva MTF + încrederea ARIA), apoi în b301: **CVD Divergence și SMF semnalează acum**, puntea din cartea de ordine era ultima care lipsea. Măsurat după b301: din 153 de câmpuri citite de `frame.ts`, **115 au scriitor**, 38 nu.* **Restul nu mai sunt punți** — niciunul n-are o sursă disponibilă pe `S`, deci cer date noi, nu legături. Exemplu de ce nu le umplu de capul meu: `_qmCumDelta` se afișează ca **CVD**, iar CVD înseamnă delta din tranzacții executate; alimentat din adâncimea cărții ar scrie „CVD" peste un număr care nu e CVD. Iar `orderflow.ts` nu acumulează nicăieri o delta din `aggTrade`, deci sursa corectă ar trebui construită. |
+| **D4** | **Quant: 36 de câmpuri fără sursă** | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm. *Micșorat în b295 (stiva MTF + încrederea ARIA), apoi în b301: **CVD Divergence și SMF semnalează acum**, puntea din cartea de ordine era ultima care lipsea. Măsurat după b301: din 153 de câmpuri citite de `frame.ts`, **115 au scriitor**, 38 nu.* **Restul nu mai sunt punți** — niciunul n-are o sursă disponibilă pe `S`, deci cer date noi, nu legături. Exemplu de ce nu le umplu de capul meu: `_qmCumDelta` se afișează ca **CVD**, iar CVD înseamnă delta din tranzacții executate; alimentat din adâncimea cărții ar scrie „CVD" peste un număr care nu e CVD. Iar `orderflow.ts` nu acumulează nicăieri o delta din `aggTrade`, deci sursa corectă ar trebui construită. |
 
 **D1 — Drive.** Offsite-ul merge iar (reparat în b289), dar cota e strâmtă din cauza a șase copii din
 iunie, **necomprimate**, 1,37-2,07 GB fiecare. Comprimarea a intrat abia pe 7 octombrie, deci cele noi
@@ -699,7 +699,17 @@ exact pe dos în fiecare trend, aşa că e fixat în test, nu lăsat la memorie.
 **Deci SMF avea DOUĂ intrări moarte, nu una:** `obBV`/`obAV` (reparate în b301) şi asta. Acum se
 scrie pe ambele nume, deci şi afişajul şi scorul primesc valoarea.
 
-**11 teste noi.** Client: **143 de fişiere, 1 178 de teste verzi**, `tsc` curat, asset **HTTP 200**.
+### Şi RSI — cel mai înşelător câmp fără scriitor
+
+`_qmRsi` n-avea scriitor, iar randarea face `S._qmRsi || 50` — deci panoul afişa **constant
+`RSI:50.0`**, cu culoarea de neutru. **Mai înşelător decât un zero:** un zero se vede ca lipsă, un
+50 se vede ca informaţie.
+
+Sursa exista şi e populată (`S.rsi[tf]`, `marketDataFeeds.ts:239`), iar intervalul canonic pentru o
+citire **vie** e `5m` — exact ce foloseşte panoul existent pentru RSI-ul live. Nu scriem nimic când
+lipseşte, ca să nu inventăm o valoare.
+
+**15 teste noi.** Client: **143 de fişiere, 1 182 de teste verzi**, `tsc` curat, asset **HTTP 200**.
 
 ---
 

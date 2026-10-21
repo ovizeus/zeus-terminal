@@ -221,3 +221,43 @@ describe('_syncQmVars — CVD alimenteaza si scorul SMF, nu doar afisajul', () =
     expect(w.S.cumDelta).toBeLessThan(0)
   })
 })
+
+/**
+ * [2026-10-21 b303] RSI — cel mai inselator dintre campurile fara scriitor.
+ *
+ * `_qmRsi` n-avea scriitor, iar randarea face `S._qmRsi || 50`, deci panoul
+ * afisa CONSTANT `RSI:50.0` — cu culoarea de neutru, adica un „neutru" care
+ * arata ca o citire reala. Mai rau decat un zero evident: un zero se vede ca
+ * lipsa, un 50 se vede ca informatie.
+ *
+ * Sursa exista si e populata: `w.S.rsi[tf]` (marketDataFeeds.ts:239).
+ * Intervalul canonic pentru o citire VIE e '5m' — exact ce foloseste panoul
+ * existent pentru `dtrsic` (RSI live), si ce spune comentariul din aub.ts:267.
+ */
+describe('_syncQmVars — RSI real, nu 50 constant', () => {
+  beforeEach(() => { w.S = { price: 100, klines: [], _qmBuf: [], _qmDeltaHist: [] } })
+
+  test('preia RSI pe 5m, intervalul folosit pentru citirea vie', () => {
+    w.S.rsi = { '5m': 73.2, '1h': 41 }
+    _syncQmVars()
+    expect(w.S._qmRsi).toBeCloseTo(73.2)
+  })
+
+  test('REGRESIE: nu mai e 50 cand exista o valoare reala de 50-ceva', () => {
+    w.S.rsi = { '5m': 28.7 }
+    _syncQmVars()
+    expect(w.S._qmRsi).toBeCloseTo(28.7)
+    expect(w.S._qmRsi).not.toBe(50)
+  })
+
+  test('fara harta de RSI → nu inventeaza (rămane nescris, randarea decide)', () => {
+    _syncQmVars()
+    expect(w.S._qmRsi == null || w.S._qmRsi === 50).toBe(true)
+  })
+
+  test('o valoare nefinita nu e propagata ca RSI', () => {
+    w.S.rsi = { '5m': NaN }
+    _syncQmVars()
+    expect(Number.isNaN(w.S._qmRsi)).toBe(false)
+  })
+})
