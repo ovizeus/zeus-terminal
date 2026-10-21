@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-21 · build b296 v1.7.270
+> **Ultima actualizare:** 2026-10-21 · build b296 v1.7.270 · audit brain/ML/DSL (fără schimbări de cod)
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -66,6 +66,109 @@ Toate sunt snapshot-uri pre-operație de acum 10-120 de zile; DB-ul viu e sănă
 rulat azi pe copia de 20 oct). `data/db_backups` are 4 dailies × 2,8 G = 11 G, iar acelea **le-aș ține**.
 
 ---
+
+---
+
+## 🩸 DE CE NU IESE PE CÂȘTIG — auditul cerut de operator (2026-10-21, fără schimbări de cod)
+
+Audit pe date vii, 3 441 de tranzacții închise. **Net istoric: −8 459,4.** Nimic nu a fost
+modificat; mai jos e doar ce am dovedit, cu cifra lângă fiecare afirmație.
+
+### 1. Geometria ieșirii — cauza principală a pierderii
+
+DSL se activează abia după ce prețul merge în favoarea ta cu `openDslPct` (0,35% pe presetul
+`fast`, cel folosit). Consecința, măsurată pe `dslProgress` al fiecărei poziții închise:
+
+| ieșire | n | DSL era activ | PnL mediu | total |
+|---|---|---|---|---|
+| **HIT_SL** | 103 | **0 %** (`active:false`, `phaseChanges:0`) | −104,07 | **−10 718,9** |
+| **DSL** | 440 | **100 %** | +16,29 | +7 169,4 |
+
+Împărțirea e perfectă, 0% / 100%. **DSL taie numai câștigătorii.** Dacă tranzacția merge
+împotrivă din prima secundă, DSL nu pornește niciodată, iar pierderea curge până la stopul
+întreg. Dacă merge în favoare, urmărirea de 0,5% o închide la **3,4% din ținta TP**
+(+16 din ~220 medie).
+
+Rata de reușită e **bună: 81%**. Dar raportul câștig/pierdere e **1:6,4**, iar pragul de
+rentabilitate la 1:6,4 cere **86%**. Pierde din geometrie, nu din direcție.
+
+Pe presetul `fast`, prețul trebuie să parcurgă **8,2 lățimi de urmărire** fără o singură
+retragere de 0,5% ca să atingă ținta.
+
+### 2. LONG + SHORT în același timp — DOUĂ cauze independente, ambele dovedite
+
+**739 de conflicte direcționale** în istoric, **352 provocate de brain**, ultimul
+**2026-10-20 13:03**. Inclusiv 2026-10-20 05:27: brain a intrat SHORT SOLUSDT având
+**LONG SOLUSDT deschis** — același simbol.
+
+**(a) Garda e oarbă la poziții-fantomă.** `_findSameModeOpposite` (serverAT.js:1150) compară
+`p.userId === userId`. Există **466 de poziții la care `userId` lipsește din obiect**, deși
+coloana `user_id` îl are. Garda nu le vede → brain deschide opusul. **~93% din conflicte
+implică o astfel de fantomă.** Fantomele au și `sl:0, tp:0` și **zero `dslParams`** (100% din
+466), deci nimic nu le poate închide:
+
+| | n | durată medie | închise cu mâna |
+|---|---|---|---|
+| fără `userId` în obiect | 466 | **18,2 h** | 69% |
+| cu `userId` | 2 951 | **1,0 h** | 6% |
+
+Una a stat deschisă **9,96 zile** (XRPUSDT, −384,88). Un scriitor identificat:
+`_buildPendingPositionData` (binanceOps.js:160) omite `userId` — comentariul lui chiar spune
+„ar confuza garda direcțională", au reparat `mode` și au ratat exact câmpul testat primul.
+27 din fantome sunt din octombrie și **nu** sunt din backfill, deci mecanismul e viu.
+
+**(b) Constituția știe și tace.** Principiul `NO_OPPOSITE_ENTRY_ON_OPEN` a fost încălcat
+**31 161 de ori**, severitate **`hard`**, ultima **azi 14:48**. `enforcementEngine.evaluate()`
+întoarce `allowed:false`, dar singurul apelant (serverBrain.js:1582) scrie
+`enforcementMode: 'advisory'` **ca șir literal** și **nu citește niciodată `_r1Result.allowed`**.
+Comentariul promite „un flag de env" care nu există.
+
+Garda de la (a) **funcționează** când vede poziția: 878 de blocaje `mixed_bias_skip`, ultimul azi.
+
+### 3. ML — învață, nu atinge nimic
+
+- **`ml_influence_audit`: `gate_status='skipped'` la 100% din 413 845 de rânduri.** Nicio
+  influență ML nu a fost aplicată niciodată. În plus `proposed_dir <> phase2_dir` de **0 ori** —
+  propunerea nici n-a diferit vreodată.
+- **198 din 367 de tabele ML (54%) sunt complet goale** — construite, niciodată conectate.
+- **`ml_dsl_optin` e gol.** DSL Drive învață (1 129 rezultate, 276 posteriori) cu **zero autoritate**.
+
+### 4. R7 („N7") — gândește, dar 99,7% e umplutură
+
+`ml_voice_log`: **951 144** rostiri. Doar **2 814 (0,3%)** sunt substanțiale (decizie, blocaj,
+acțiune). Restul: `neutral_watch` 317k, `conf_mid` 180k, `conf_low` 155k, `reflection_block` 130k.
+Nu e un creier care raționează; e un debit de stare.
+
+### 5. Sincronizarea — monitoarele compară cu nimic
+
+- **`dsl_parity_log`: 649 833 de rânduri, TOATE `source='server'`.** Zero de la client. Un
+  jurnal de paritate cu o singură parte nu poate detecta nicio nepotrivire, oricât crește.
+- **`brain_parity_log`**: server 319 795 de decizii la încredere medie **26,4**; client
+  2 292 la **3,8**. Pe ultimele 24 h: server 4 914 @ 28,3 · client 264 @ 3,9. Cel care
+  tranzacționează și cel pe care îl vezi tu **nu sunt același creier**.
+- Coloana `dir` din `brain_parity_log` e **NULL la toate** — paritatea nu poate compara nici
+  direcția, fiindcă nimeni nu scrie câmpul.
+
+### Ce NU e vinovat (verificat, ca să nu căutăm acolo)
+
+- **SL-ul funcționează.** Per tranzacție realizează **0,971** din stopul planificat (80 de
+  cazuri); doar 13 îl depășesc, cu alunecare normală. *Prima mea citire pe medii sugerase o
+  depășire de 56% — era o comparație între rânduri diferite, nu per tranzacție.*
+- **`ENTRY_FAILED_INSUFFICIENT_MARGIN` (1 199)** e istoric: ultima în iunie 2026.
+- **Cartea de poziții e coerentă ACUM**: 3× LONG demo, zero mixt.
+
+### Ordinea reparațiilor, dacă vrei să le facem
+
+1. **Geometria DSL** — e singura care schimbă semnul rezultatului. Fie DSL se activează și pe
+   pierdere, fie urmărirea se lărgește spre țintă. Atinge bani; o fac separat, cu teste, nu
+   înlănțuită.
+2. **`userId` în obiectul poziției** — reparație mică, deblochează garda *și* DSL-ul pe fantome.
+3. **`allowed` citit, sau `blocking` pe `NO_OPPOSITE_ENTRY_ON_OPEN`** — o linie, dar schimbă
+   ce intră; separat de 1 și 2.
+4. **`dir` scris în paritate + clientul să raporteze** — altfel nu putem măsura 1-3.
+
+**Nu am atins nimic.** Procesul e online, 19 h, fără reload; arborele git e curat.
+
 
 ## 🔧 DE FĂCUT — în ordinea priorităţii
 
