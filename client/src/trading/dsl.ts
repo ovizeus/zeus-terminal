@@ -477,6 +477,37 @@ export function runDSLBrain(): void {
 }
 
 // ── Client-side DSL engine — runs activation + phases on given positions ──
+// [SYNC FIX 2026-10-21] Poarta emisiei de paritate DSL — opt-OUT, nu opt-in.
+//
+// Inainte: `localStorage.getItem('zeus_dsl_parity_shadow') === 'true'`. Acel
+// semafor avea UN cititor (aici) si ZERO scriitori in tot codul, fara comutator
+// in interfaţa — deci `dsl_parity_log` a adunat 649 833 de randuri si TOATE
+// `source='server'`. Alaturarea client-server dadea exact 0 perechi, iar un
+// jurnal de paritate alimentat de o singura parte nu poate raporta nicio
+// nepotrivire, oricat creşte. Ţeava nu era stricata (reconstruita verbatim,
+// prinde o divergenţa injectata) — era NEALIMENTATA.
+//
+// Alinierea e la sora care MERGE, nu la o politica noua: emisia de paritate a
+// brain-ului (2 316 randuri reale) nu are niciun semafor, emite direct si
+// best-effort, iar SERVERUL decide daca scrie — `MF.PARITY_SHADOW_ENABLED`,
+// altfel intoarce `{ok:true, logged:false}` fara eroare. Acelasi contract e
+// deja implementat pe ruta DSL, deci pornirea implicita nu poate scrie nimic
+// pe un server care are shadow-ul stins.
+//
+// Cost: un POST per poziţie deschisa la 5 s (throttle existent, mai jos).
+// Taiere: `localStorage.setItem('zeus_dsl_parity_shadow', 'false')`.
+// Doar sirul „false" opreste; orice altceva, inclusiv o cheie absenta sau un
+// localStorage care arunca (fereastra privata, date blocate), lasa emisia
+// pornita — altfel diagnosticul ar muri exact pe dispozitivele unde nu-l vedem.
+export function _dslParityEmitEnabled(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return true
+    return localStorage.getItem('zeus_dsl_parity_shadow') !== 'false'
+  } catch (_) {
+    return true
+  }
+}
+
 export function _runClientDSLOnPositions(positions: any[]): void {
   const _globalDslPct = getTCDslActivatePct()
   const _globalPivotL = getTCDslTrailPct()
@@ -780,10 +811,10 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       }
     }
 
-    // [BUG-S7] Shadow parity emit — gated by localStorage flag.
-    // Fire-and-forget; never blocks render or DSL math. Throttled per pos.
+    // [BUG-S7] Shadow parity emit — fire-and-forget; never blocks render sau
+    // matematica DSL. Throttled per pos. Poarta: vezi _dslParityEmitEnabled.
     try {
-      const _shadowOn = (typeof localStorage !== 'undefined' && localStorage.getItem('zeus_dsl_parity_shadow') === 'true')
+      const _shadowOn = _dslParityEmitEnabled()
       if (_shadowOn) {
         const _now = Date.now()
         const _lastEmit = pos._dslParityLastEmit || 0
