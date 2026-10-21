@@ -92,3 +92,71 @@ describe('_syncQmVars — puntea S.foo -> S._qmFoo', () => {
     expect(() => _syncQmVars()).not.toThrow()
   })
 })
+
+/**
+ * [2026-10-21 b301] Puntea CALCULATA — volumul din cartea de ordine.
+ *
+ * `obBV`/`obAV` (volum total pe bid / pe ask) erau citite in 11 locuri
+ * (index.ts, intel.ts de 6 ori, flow.ts:88, frame.ts prin `_qmObBV`/`_qmObAV`)
+ * si scrise in ZERO. Nu era un alias lipsa ca celelalte 28, ci o INSUMARE
+ * lipsa: datele soseau tot timpul in `S.bids`/`S.asks` din fluxul depth20.
+ *
+ * Doua motoare mureau din asta, ambele dovedite in b294:
+ *   - CVD Divergence nu putea semnala NICIODATA — `_qmDeltaHist` primea
+ *     `0 - 0` la fiecare tick, iar pe o serie constanta de zerouri nici `dUp`
+ *     nici `dDn` nu pot deveni true.
+ *   - scorul SMF rămanea blocat pe NEUT — `flow.ts:88` compara obBV cu obAV,
+ *     si `0 > 0` e fals in ambele sensuri.
+ */
+describe('_syncQmVars — puntea calculata din cartea de ordine', () => {
+  beforeEach(() => {
+    w.S = { price: 100, klines: [], _qmBuf: [], _qmDeltaHist: [] }
+  })
+
+  test('insumeaza bids/asks pe S, nu doar local', () => {
+    w.S.bids = [{ p: 99, q: 2 }, { p: 98, q: 3 }]
+    w.S.asks = [{ p: 101, q: 1 }]
+    _syncQmVars()
+    expect(w.S.obBV).toBe(5)
+    expect(w.S.obAV).toBe(1)
+  })
+
+  test('scrie si aliasurile pe care le citeste randarea', () => {
+    w.S.bids = [{ p: 99, q: 4 }]
+    w.S.asks = [{ p: 101, q: 6 }]
+    _syncQmVars()
+    expect(w.S._qmObBV).toBe(4)
+    expect(w.S._qmObAV).toBe(6)
+  })
+
+  test('REGRESIE: istoricul de delta nu mai e numai zerouri (CVD poate semnala)', () => {
+    w.S.bids = [{ p: 99, q: 10 }]
+    w.S.asks = [{ p: 101, q: 3 }]
+    _syncQmVars()
+    expect(w.S._qmDeltaHist[w.S._qmDeltaHist.length - 1]).toBe(7)
+  })
+
+  test('REGRESIE: delta isi schimba SEMNUL cand cartea se intoarce', () => {
+    w.S.bids = [{ p: 99, q: 10 }]; w.S.asks = [{ p: 101, q: 3 }]
+    _syncQmVars()
+    w.S.bids = [{ p: 99, q: 2 }]; w.S.asks = [{ p: 101, q: 9 }]
+    _syncQmVars()
+    const h = w.S._qmDeltaHist
+    expect(h[h.length - 2]).toBeGreaterThan(0)
+    expect(h[h.length - 1]).toBeLessThan(0)
+  })
+
+  test('REGRESIE: SMF are acum o parte dominanta de comparat (nu mai e 0 vs 0)', () => {
+    w.S.bids = [{ p: 99, q: 10 }]
+    w.S.asks = [{ p: 101, q: 1 }]
+    _syncQmVars()
+    expect(w.S.obBV > w.S.obAV * 1.1).toBe(true)
+  })
+
+  test('carte lipsa → 0, nu NaN (toti cei 11 cititori ar cadea pe NaN)', () => {
+    _syncQmVars()
+    expect(w.S.obBV).toBe(0)
+    expect(w.S.obAV).toBe(0)
+    expect(Number.isNaN(w.S.obBV)).toBe(false)
+  })
+})

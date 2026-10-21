@@ -5,6 +5,7 @@ import { runIntel } from './engines/intel'
 import { calcFLOW } from './engines/flow'
 import { calcARIA } from './engines/aria'
 import { fetchMtfKlines } from './engines/mtf'
+import { sumDepthVolume } from './engines/depth'
 import { calcWyckoff, calcCVDDivergence, calcVolumeProfile } from './engines/wyckoff'
 import { buildLiqEstimate, fetchTopTraderPositionRatio } from './engines/liqMap'
 import { fetchBasisRate } from '../data/basisRate'
@@ -62,11 +63,10 @@ function runAllEngines(): void {
   w.S._qmBuf.push(w.S.price)
   if (w.S._qmBuf.length > 200) w.S._qmBuf.shift()
 
-  // Maintain delta history
-  const obBV = w.S.obBV || 0, obAV = w.S.obAV || 0
-  w.S._qmDeltaHist = w.S._qmDeltaHist || []
-  w.S._qmDeltaHist.push(obBV - obAV)
-  if (w.S._qmDeltaHist.length > 40) w.S._qmDeltaHist.shift()
+  // [DEPTH BRIDGE 2026-10-21] Volumul din carte şi istoricul de delta s-au mutat
+  // în `_syncQmVars`, unde stau toate punţile — rulează imediat înainte de aici
+  // (bucla: _syncQmVars() apoi runAllEngines()), deci motoarele de mai jos
+  // citesc exact aceleaşi valori ca înainte, doar că nu mai sunt zero.
 
   // Run engines
   runIntel()
@@ -86,6 +86,25 @@ export function _syncQmVars(): void {
     if (S.markPrice && S.markPrice > 0) S.price = S.markPrice
     else if (S.klines?.length) S.price = S.klines[S.klines.length - 1].close || 0
   }
+  // [DEPTH BRIDGE 2026-10-21] Puntea lipsă, singura CALCULATĂ dintre toate.
+  // `obBV`/`obAV` (volum total pe bid / pe ask) erau citite în 11 locuri
+  // (runAllEngines, intel.ts de 6 ori, flow.ts:88, frame.ts prin aliasuri) şi
+  // scrise în ZERO. Nu lipsea un alias ca la celelalte 28 din b294, lipsea
+  // ÎNSUMAREA: datele soseau tot timpul în `S.bids`/`S.asks` din fluxul depth20.
+  // Două motoare mureau din asta: CVD Divergence nu putea semnala niciodată
+  // (istoricul de delta era `0 - 0` la fiecare tick) şi scorul SMF rămânea
+  // blocat pe NEUT (`0 > 0` e fals în ambele sensuri).
+  // Scriem pe `S`, nu local, ca să ajungă la toţi cei 11 cititori.
+  const _obBV = sumDepthVolume(S.bids), _obAV = sumDepthVolume(S.asks)
+  S.obBV = _obBV; S.obAV = _obAV
+  S._qmObBV = _obBV; S._qmObAV = _obAV
+  // Istoricul de delta e stare derivată din puntea de deasupra, deci stă lângă
+  // ea. Rulează înaintea motoarelor (bucla: _syncQmVars apoi runAllEngines),
+  // exact ca înainte de mutare.
+  S._qmDeltaHist = S._qmDeltaHist || []
+  S._qmDeltaHist.push(_obBV - _obAV)
+  if (S._qmDeltaHist.length > 40) S._qmDeltaHist.shift()
+
   S._qmBasisRate = S.basisRate || 0
   S._qmFrBybit = S.frBybit || 0
   S._qmFrOkx = S.frOkx || 0
