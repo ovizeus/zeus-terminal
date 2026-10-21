@@ -1,9 +1,27 @@
 // QM ARIA Engine — Pattern Recognition + MTF Stack — 1:1 from HTML
 const w = window as any
 import { qmLog } from '../state'
+import { computeMtfStack, computeAlignScore, mtfWatch } from './mtf'
 
 export function calcARIA(): void {
   const c = w.S; if (!c) return
+
+  // MTF Stack — din klines ADEVARATE (vezi engines/mtf.ts).
+  // [2026-10-21 b295] Inainte se calcula din `c._qmBuf`, un tampon care
+  // primeste un pret la fiecare 500 ms: randurile etichetate 5m/15m/30m/1h/4h
+  // acopereau in realitate 4/10/20/30/60 de SECUNDE, iar '1D' era hardcodat 0.
+  // Se calculeaza INAINTE de ieşirea devreme de mai jos (nu depinde nici de
+  // klines, nici de tampon, deci panoul arata orizonturi reale si la pornire)
+  // si inainte de detectia de pattern, ca increderea sa foloseasca scorul din
+  // ACEST tick. La comutarea de simbol datele vechi sunt ignorate, nu citite
+  // ca trend al noului simbol.
+  const _mk = c._qmMtfKlines
+  const _mtfSrc = _mk && _mk.symbol === (c.symbol || 'BTCUSDT') ? _mk : {}
+  c._qmAriaMTF = computeMtfStack(_mtfSrc)
+  c._qmMtfAlignScore = computeAlignScore(c._qmAriaMTF)
+  c._qmMtfAlignDetailed = { '15m': c._qmAriaMTF['15m'], '1h': c._qmAriaMTF['1h'], '4h': c._qmAriaMTF['4h'] }
+  c._qmAriaWatch = mtfWatch(c._qmAriaMTF)
+
   const kl = c.klines; const buf = c._qmBuf || []
   if (!kl || kl.length < 15 || buf.length < 20) return
   const now = Date.now()
@@ -24,7 +42,13 @@ export function calcARIA(): void {
   else if (c._qmBbSqueeze && c._qmRegime === 'RANGING') pat = { name: 'Inside Squeeze', side: 'NEUT', shape: 'squeeze' }
 
   if (pat) {
-    pat.conf = Math.min(95, Math.round(35 + (c._qmMtfAlignScore || 50) / 4))
+    // `_qmMtfAlignScore` n-avea NICIUN scriitor (3 cititori in frame.ts, zero
+    // scrieri), deci cadea mereu pe `|| 50` si increderea ieşea constant 48%.
+    // Acum scorul e real, pe scala 0..100 pe care o randeaza panoul
+    // ("ALIGN SCORE x / 100"). Factorul /4 presupunea o scala 0..240 ca sa
+    // atinga plafonul de 95 al autorului; cu 0..100, *0,6 da exact acelasi
+    // interval intenţionat, 35..95.
+    pat.conf = Math.min(95, Math.round(35 + (c._qmMtfAlignScore || 0) * 0.6))
     pat.tf = '15m'; pat.time = now
     const last = c._qmAriaPatterns[c._qmAriaPatterns.length - 1]
     if (!last || last.name !== pat.name || now - last.time > 90000) {
@@ -42,18 +66,4 @@ export function calcARIA(): void {
   c._qmAriaCandleType = br > 0.6 ? (lk.c > lk.o ? 'bullish' : 'bearish') : (br > 0.3 ? 'indecision' : 'doji')
   c._qmAriaCandleVol = lk.v > avgVol * 1.5 ? 'high' : lk.v < avgVol * 0.5 ? 'low' : 'flat'
 
-  // MTF Stack
-  const ema = (d: number[], p: number) => { if (d.length < p) return d[d.length - 1]; const k = 2 / (p + 1); let v = d[0]; for (let i = 1; i < d.length; i++) v = d[i] * k + v * (1 - k); return v }
-  const sl = (n: number) => buf.slice(-Math.min(n, buf.length))
-  c._qmAriaMTF = {
-    '5m': buf.length >= 8 ? (ema(sl(8), 3) > ema(sl(8), 6) ? 1 : -1) : 0,
-    '15m': buf.length >= 20 ? (ema(sl(20), 5) > ema(sl(20), 12) ? 1 : -1) : 0,
-    '30m': buf.length >= 40 ? (ema(sl(40), 8) > ema(sl(40), 20) ? 1 : -1) : 0,
-    '1h': buf.length >= 60 ? (ema(sl(60), 10) > ema(sl(60), 30) ? 1 : -1) : 0,
-    '4h': buf.length >= 120 ? (ema(sl(120), 15) > ema(sl(120), 40) ? 1 : -1) : 0,
-    '1D': 0
-  }
-  const bullTFs = Object.values(c._qmAriaMTF).filter((v: any) => v === 1).length
-  const bearTFs = Object.values(c._qmAriaMTF).filter((v: any) => v === -1).length
-  c._qmAriaWatch = bullTFs >= 4 ? 'BULL' : bearTFs >= 4 ? 'BEAR' : 'WATCH'
 }

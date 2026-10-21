@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-21 · build b294 v1.7.268
+> **Ultima actualizare:** 2026-10-21 · build b295 v1.7.269
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -14,8 +14,8 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 |---|---|---|---|
 | 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **3 propuse** (lista de mai jos) |
 | 🙋 | **AȘTEAPTĂ DE LA TINE** | decizie, chei, sau ochii tăi — eu nu pot continua singur | **11 deschise** |
-| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b294** |
-| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **40** |
+| ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b295** |
+| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **41** |
 
 **Cum folosesc coșurile:** nimic nu intră în ✅ pe baza faptului că am scris codul — intră când am o
 dovadă pe sistemul viu. Dacă o reparație e livrată dar neverificată, rămâne în 🔧 cu motivul la vedere.
@@ -50,7 +50,7 @@ Niciuna nu e urgentă și niciuna nu atinge calea banilor fără să-ți spun î
 | **D1** | **Cota Google Drive: 6 fișiere din iunie țin 10,6 GiB din 15** | vezi mai jos — decide dacă le tai |
 | **D2** | **14 G de copii vechi de DB pe discul VPS-ului** | vezi mai jos — decide dacă le tai |
 | **D3** | **Poarta SP1 nu poate trece niciodată** — creierul clientului e inert (încredere medie **5,1**) | vezi secțiunea b291 — oprim raportul zilnic, îl re-țintim, sau îl lăsăm |
-| **D4** | **Quant: 4 motoare nu pot semnala niciodată** + 43 de câmpuri fără sursă | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm |
+| **D4** | **Quant: 2 motoare nu pot semnala niciodată** (CVD, SMF) + 41 de câmpuri fără sursă | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm. *Micșorat în b295: stiva MTF și încrederea ARIA au fost construite, nu mai sunt pe lista ta.* |
 
 **D1 — Drive.** Offsite-ul merge iar (reparat în b289), dar cota e strâmtă din cauza a șase copii din
 iunie, **necomprimate**, 1,37-2,07 GB fiecare. Comprimarea a intrat abia pe 7 octombrie, deci cele noi
@@ -1959,6 +1959,8 @@ Greșeala e de **rol**, nu de valoare: o clasă făcută pentru a *eticheta* cev
 
 **R-V-11. Când un mutant supraviețuiește, bănuiește întâi testul, nu codul.** *(2026-10-21: trei mutanți au supraviețuit fixului meu de ciclu de viață. Nu codul era slab — pusesem **două** gărzi, iar testele mele atingeau doar prima, deci nu discriminau. Refăcute ca să țintească exact, mutația a arătat apoi că o **a treia** bucată a propriului meu fix era redundantă, și am scos-o.)*
 Un mutant viu are trei explicații, în ordinea probabilității: **testul nu ajunge acolo**, **codul mutat e redundant**, sau **mutantul nu s-a aplicat** (vezi [[R-V-8]]). Niciuna nu înseamnă „e în regulă". Regula: fiecare bucată a unui fix își câștigă locul cu un test care o omoară la mutație — altfel o scoți. Și corolarul pentru verificarea în bundle: caută **forma de după minificare**, nu forma din sursă — `if (x) return` devine `x||(...)` și grep-ul naiv raportează fals că garda lipsește.
+
+**R-V-12. O comparație de două medii nu dă `0` pe o piață plată — virgula mobilă îi dă o direcție.** *(2026-10-21: `emaTrend` pe o serie perfect constantă răspundea `-1`. Cele două EMA *ar trebui* să iasă identice, dar acumulează altfel pentru `k` diferiți și rămâne o diferență de ordinul `1e-14`, din care `f > s` producea un trend **încrezător** pe o piață care nu se mișcă. Regula: orice verdict obținut din compararea a două valori calculate are nevoie de **epsilon relativ**, nu de `===`; altfel zgomotul de rotunjire devine semnal. Prins de test, nu de ochi.)*
 
 ### 🟢 Proces
 
@@ -4065,6 +4067,89 @@ verde, `tsc` curat.
 **Fără reload pm2:** schimbare doar de client — build-ul rescrie bundle-ul, serverul doar îl servește
 *(R-OP-2)*. Fișierele de jurnal sunt livrate cu `no-cache`, deci nici refresh forțat nu-ți trebuie.
 
+
+---
+
+## 📐 MTF REAL — stiva multi-timeframe nu mai minte — 2026-10-21 (b295 v1.7.269)
+
+**Cererea lui:** *„aria e fs?"* — e ARIA fals? Apoi, după răspuns: *„da fa mtf real"*.
+
+**Răspunsul onest a fost: nu, dar două lucruri din el minteau.** Detecția de pattern era și este reală
+(Liquidity Sweep, Upthrust, Spring, Absorption, Inside Squeeze — toate din klines adevărate). Citirea
+lumânării la fel. Minteau încrederea și orizonturile.
+
+### 🔴 Bug 1 — rândurile scriau ore și măsurau secunde
+
+`_qmAriaMTF` se calcula din `S._qmBuf`, un tampon care primește un preț **la fiecare 500 ms**
+(`index.ts`, `startRenderLoop`). Deci:
+
+| scria | măsura de fapt | măsoară acum |
+|---|---|---|
+| 5m | 4 secunde | **0,5 h** |
+| 15m | 10 secunde | **3 h** |
+| 30m | 20 secunde | **10 h** |
+| 1h | 30 secunde | **30 h** |
+| 4h | 60 secunde | **160 h** |
+| 1D | hardcodat 0 | **720 h (30 zile)** |
+
+Un operator care citea *„4 din 6 timeframe-uri sunt bull"* vedea în realitate **un singur trend de un
+minut, numărat de cinci ori**.
+
+**Reparat** cu un modul nou, `client/src/quantmonitor/engines/mtf.ts`: trei fetch-uri pe simbolul
+**curent**, prin proxy-ul cu cache de pe server (5m ×1000, 1h ×1000, 1d ×400), din care derivăm cele
+șase rânduri prin agregare pe **găleți aliniate la ceas** — `floor(t/span)`, ca o bară de 15m să înceapă
+la :00/:15/:30 ca la bursă, nu la prima bară primită. 15m și 30m din 5m, 4h din 1h.
+
+**Costul:** 3 cereri la 3 minute = **1 pe minut**. Pentru comparație, `basisRate` face deja 12 pe minut,
+iar cache-ul serverului ține klines 60 s — o cadență mai rapidă n-ar aduce date mai proaspete, doar
+trafic spre Binance pe un sistem cu istoric de banuri de IP.
+
+**Dovada pe date vii (BTCUSDT, 21 oct):** stiva a ieșit `5m: bear, 15m/30m/1h/4h/1D: bull` → scor
+**67/100**, verdict `BULL`, încredere **75%**. Un **dezacord între orizonturi** este exact lucrul pe care
+varianta din tampon nu-l putea produce niciodată, fiindcă toate rândurile citeau același minut.
+
+### 🔴 Bug 2 — două câmpuri fără scriitor, din care ieșeau două semnale false
+
+`_qmMtfAlignScore` și `_qmMtfAlignDetailed` aveau **trei cititori în `frame.ts` și zero scrieri**. De aici:
+
+- **încrederea ARIA ieșea constant 48%** la orice pattern (`35 + 50/4`, cu `|| 50` din lipsa scriitorului);
+- **eticheta STRUCTURE raporta permanent `ALIGNED BEAR`** — `frame.ts:747` numără câte rânduri sunt `1`,
+  iar un obiect gol dă `u === 0`, care cădea exact pe ramura bearish. **Un semnal fals, nu un gol.**
+
+Acum scorul e real pe scala 0..100 pe care panoul o randa deja (`ALIGN SCORE x / 100`, bară, praguri
+70/40), încrederea acoperă **35..95**, iar STRUCTURE spune **`NO DATA`** când nu are date.
+
+> **Despre formula de încredere:** factorul `/4` al autorului presupunea o scală 0..240 ca să atingă
+> plafonul lui de 95. Cu scala 0..100 pe care o cere randarea, `*0,6` dă **exact același interval
+> intenționat**, 35..95. Am schimbat factorul, nu intenția — și o spun aici fiindcă schimbă un număr
+> pe care îl citești.
+
+### 🔴 Bug 3 — găsit de propriul meu test: o piață plată dădea un trend încrezător
+
+`emaTrend` pe o serie perfect constantă răspundea **`-1`**, nu `0`. Pe o serie de 100-uri cele două medii
+*ar trebui* să iasă identice, dar `_ema` acumulează altfel pentru `k` diferiți și virgula mobilă lasă o
+diferență de ordinul `1e-14` — din care compararea producea o **direcție încrezătoare pe o piață care nu
+se mișcă deloc**. Reparat cu epsilon relativ. → **R-V-12**.
+
+### Onestitate prin construcție
+
+- un rând fără destule bare dă `0` = **necunoscut**, pe care panoul randează `─ ─`; **nu** cade niciodată
+  înapoi pe tamponul de secunde;
+- **zero surse dă scor 0, nu 100** — lipsa datelor nu e aliniere perfectă;
+- verdictul e fail-closed: fără 4 rânduri de acord rămâne `WATCH`;
+- la comutarea de simbol, klines-urile vechi sunt **ignorate**, nu citite ca trend al noului simbol
+  (aceeași capcană pentru care `marketDataChart` filtrează răspunsurile învechite).
+
+### Verificare
+
+- **37 de teste noi** (25 pure + 12 de cablaj), inclusiv o regresie care cere ca `5m` și `30m` să dea
+  semne **diferite** pe aceeași serie — cu valorile verificate numeric *înainte* de a fi scrise în test,
+  nu presupuse.
+- **Mutație: 13 din 14 omorâți.** Cel supraviețuitor a arătat că propria mea gardă `|| !bars.length` era
+  **redundantă** (`aggregateBars` pe gol dă gol, `emaTrend` pe gol dă 0) — scoasă, ca `_runId++` în b294.
+- Suita client **1116/136 verde**, `tsc` curat, fixurile confirmate **structural** în bundle
+  (`index-Bblm00y_.js`).
+- Doar client → **fără reload pm2** (R-OP-2).
 
 ---
 

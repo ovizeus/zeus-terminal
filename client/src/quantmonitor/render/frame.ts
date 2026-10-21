@@ -744,7 +744,20 @@ export function renderFrame(): string {
 
   const sqzStr = bbSqueeze ? `<span class="yb">\u26A1 ACTIV</span> <span class="dg">str:${bbSqueezeStr.toFixed(0)}%</span>` : `<span class="dg">\u2500</span>`
   const regCls2: Record<string, string> = { TRENDING: 'gb', VOLATILE: 'rb', RANGING: 'y', TRANSITION: 'dg', SQUEEZE: 'yb' }
-  const strucLabel = (() => { const al = mtfAlignDetailed; const v = Object.values(al) as number[]; const u = v.filter((x: number) => x === 1).length; return u === 3 ? 'ALIGNED BULL' : u === 0 ? 'ALIGNED BEAR' : u === 2 ? 'MOSTLY BULL' : u === 1 ? 'MOSTLY BEAR' : 'MIXED' })()
+  // [2026-10-21 b295] `_qmMtfAlignDetailed` n-avea scriitor, deci `al` era `{}`,
+  // `v` era gol, `u` ieşea 0 si eticheta raporta permanent 'ALIGNED BEAR' — un
+  // semnal FALS, nu un gol. Acum are scriitor (aria.ts), dar randurile pot fi
+  // legitim necunoscute pana sosesc klines-urile, asa ca numaram doar ce are
+  // date si spunem 'NO DATA' cand nu avem nimic.
+  const strucLabel = (() => {
+    const v = Object.values(mtfAlignDetailed) as number[]
+    const known = v.filter((x: number) => x === 1 || x === -1)
+    if (!known.length) return 'NO DATA'
+    const u = known.filter((x: number) => x === 1).length
+    if (u === known.length) return 'ALIGNED BULL'
+    if (u === 0) return 'ALIGNED BEAR'
+    return u * 2 > known.length ? 'MOSTLY BULL' : 'MOSTLY BEAR'
+  })()
 
   L(`  <span class="dg">REGIME     </span>  <span class="${regCls2[reRegime] || 'dg'}">${reRegime}</span>`)
   L(`  <span class="dg">STRUCTURE  </span>  <span class="w">${strucLabel}</span>`)

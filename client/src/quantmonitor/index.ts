@@ -4,6 +4,7 @@ import { QM, qmLog, addLiq } from './state'
 import { runIntel } from './engines/intel'
 import { calcFLOW } from './engines/flow'
 import { calcARIA } from './engines/aria'
+import { fetchMtfKlines } from './engines/mtf'
 import { calcWyckoff, calcCVDDivergence, calcVolumeProfile } from './engines/wyckoff'
 import { buildLiqEstimate, fetchTopTraderPositionRatio } from './engines/liqMap'
 import { fetchBasisRate } from '../data/basisRate'
@@ -226,6 +227,7 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
     fetchTopTraderPositionRatio(),
     fetchWeeklyKlines(),
     fetchDailyKlines(),
+    fetchMtfKlines(),
   ]).catch(() => { /* silent */ })
 
   calcS2F()
@@ -246,6 +248,10 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
   intervals.push(setInterval(fetchBTCDominance, 300000))
   intervals.push(setInterval(fetchStablecoins, 600000))
   intervals.push(setInterval(fetchTopTraderPositionRatio, 10000))
+  // Stiva MTF: 3 cereri (5m/1h/1d) la 3 minute = 1 cerere/minut. Cache-ul
+  // serverului ţine klines 60 s, deci o cadenta mai rapida n-ar aduce date mai
+  // proaspete, doar trafic spre Binance pe un sistem cu istoric de banuri.
+  intervals.push(setInterval(() => { fetchMtfKlines() }, 180000))
   intervals.push(setInterval(() => { fetchWeeklyKlines() }, 3600000))
   intervals.push(setInterval(() => { fetchDailyKlines() }, 900000))
   intervals.push(setInterval(() => { calcS2F(); calcLogRegression(); calcMarketCycle() }, 60000))
