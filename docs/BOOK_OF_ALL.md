@@ -191,11 +191,42 @@ Doar **24%** din hemoragie e în mediul permis. Cea mai mare gaură din tot sist
 aceeaşi clasă de bug ca `userId`-ul lipsă de la punctul 2.** Un câmp nescris dezarmează
 simultan garda direcţională ŞI tăietorul de pierderi.
 
-Şi: după livrare (22 iunie) au fost **14 ocazii pe TESTNET, unde avea drept să taie, şi
-`SMART_CUT` n-a închis NICIODATĂ nimic** (0 rânduri în istoric; doar `DSL_ML_CUT` de 2 ori).
-Codul e accesibil, în `onPriceUpdate` înaintea verificării clasice SL/TP, fără al doilea
-blocaj — deci **de ce n-a tras niciodată rămâne nelămurit** şi e primul lucru de instrumentat
-dacă atacăm punctul 1.
+### 7b. REZOLVAT — `SMART_CUT` este COD MORT de la livrare
+
+`SMART_CUT` n-a închis **niciodată** nimic: 0 rânduri în istoric, 0 apariţii în jurnale,
+deşi a avut 14 ocazii permise pe TESTNET după 22 iunie. Cauza e o greşeală de domeniu,
+ascunsă de un `catch` gol:
+
+- `const _dslRrSim = require('./dslRrSim')` e declarat la **linia 2586, în `_closePosition()`**
+  (care începe la 2537).
+- E folosit la **linia 3602, în `onPriceUpdate()`** (care începe la 3352).
+- Ambele încep în **coloana 1** → funcţii surori, **nicio închidere** între ele. Nu există
+  nicio declaraţie la nivel de modul (doar 3 apariţii în tot fişierul: 1 declaraţie + 2 folosiri).
+
+Deci linia 3602 aruncă `ReferenceError: _dslRrSim is not defined` la **fiecare tick**, iar
+`catch (e) { /* fail-closed */ }` de la 3612 o înghite în linişte.
+
+**Dovadă empirică** (reproducere cu structura exactă, 200 de tickuri advers-susţinute):
+
+```
+modulul se incarca si functia EXISTA : true
+tickuri rulate                      : 200
+tăieri SMART_CUT                    : 0
+excepţii inghitite de catch-ul gol  : 200
+eroarea reala, invizibila in prod   : ReferenceError: _dslRrSim is not defined
+CONTROL, import in domeniul corect  : a tăiat = true
+```
+
+Cu importul în domeniul corect, **acelaşi cod taie**. Reparaţia e o linie (mută `require`
+la nivel de modul sau în `onPriceUpdate`) — dar aprinderea ei schimbă ieşirile pe bani, iar
+b161 a pus intenţionat un gard de probe (`n>=30-50`). **Decizia e a operatorului**, nu o fac
+singur. Notat şi că fixul nu e suficient: poarta `pos.env === 'TESTNET'` lasă tot 76% din
+hemoragie afară (punctul 7).
+
+**Regulă nouă — R-C-14. Un `catch` gol pe o cale de bani ascunde o cădere, nu o tratează.**
+Patru luni de `ReferenceError` pe fiecare tick, zero semnal. Orice `catch` pe calea banilor
+înregistrează măcar o dată eroarea (contor sau log cu limitare), altfel „fail-closed" nu e
+siguranţă, e orbire.
 
 ### 8. „N7" — lămurit
 
@@ -227,7 +258,7 @@ rânduri, deci nici direcţia nu se compară.
 ### Ordinea reparațiilor, dacă vrei să le facem
 
 1. **Geometria DSL** — singura care schimbă semnul. Două sub-puncte, acum că leacul e trasat:
-   (a) de ce `SMART_CUT` n-a tras in 14 ocazii permise; (b) poarta `pos.env === 'TESTNET'`
+   (a) `SMART_CUT` e COD MORT — `_dslRrSim` nedefinit in `onPriceUpdate`, dovedit (7b); (b) poarta `pos.env === 'TESTNET'`
    lasă 76% din hemoragie afară. Atinge bani; separat, cu teste, nu înlănțuită.
 2. **`userId` în obiectul poziției** — reparație mică, deblochează garda *și* DSL-ul pe fantome.
 3. **`allowed` citit, sau `blocking` pe `NO_OPPOSITE_ENTRY_ON_OPEN`** — o linie, dar schimbă
