@@ -105,6 +105,18 @@ export function _syncQmVars(): void {
   S._qmDeltaHist.push(_obBV - _obAV)
   if (S._qmDeltaHist.length > 40) S._qmDeltaHist.shift()
 
+  // [CVD REAL 2026-10-21] Afişajul CVD avea zero scriitori, deci arăta mereu
+  // +0.000. Sursa NU e puntea de deasupra: CVD înseamnă delta din tranzacţii
+  // EXECUTATE, nu dezechilibrul cărţii de ordine — alimentat din adâncime ar
+  // scrie „CVD" peste un număr care nu e CVD. Vine din acumulatorul de pe calea
+  // de aggTrade (orderflow.ts `_onMsg`), singurul loc care vede tranzacţii reale.
+  // Scriem pe AMBELE nume: `_qmCumDelta` e citit de randare, iar `cumDelta`
+  // (fără prefix) e citit de scorul SMF în flow.ts:105, cu ±15 puncte. Al doilea
+  // n-avea nici el scriitor, deci SMF avea DOUĂ intrări moarte, nu una — prima
+  // (obBV/obAV) a fost reparată în b301, asta e a doua.
+  const _cvd = w.RAW_FLOW?.cumDelta || 0
+  S._qmCumDelta = _cvd; S.cumDelta = _cvd
+
   S._qmBasisRate = S.basisRate || 0
   S._qmFrBybit = S.frBybit || 0
   S._qmFrOkx = S.frOkx || 0

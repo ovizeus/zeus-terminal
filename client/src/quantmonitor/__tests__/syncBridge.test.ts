@@ -160,3 +160,64 @@ describe('_syncQmVars — puntea calculata din cartea de ordine', () => {
     expect(Number.isNaN(w.S.obBV)).toBe(false)
   })
 })
+
+/**
+ * [2026-10-21 b303] CVD — puntea care trebuia sa vina din ALTA parte.
+ *
+ * `_qmCumDelta` se afiseaza ca **CVD** si avea zero scriitori, deci randarea
+ * arata mereu `+0.000`. Tentatia era sa-l alimentez din puntea de carte adaugata
+ * in b301 (`obBV - obAV`), fiindca devenise disponibila — dar CVD inseamna delta
+ * din tranzactii EXECUTATE, nu dezechilibrul cartii. Ar fi scris „CVD" peste un
+ * numar care nu e CVD.
+ * Sursa corecta e acumulatorul de pe calea de aggTrade (`RAW_FLOW.cumDelta`),
+ * singurul loc care vede tranzactii reale.
+ */
+describe('_syncQmVars — CVD vine din tranzactii, nu din carte', () => {
+  beforeEach(() => {
+    w.S = { price: 100, klines: [], _qmBuf: [], _qmDeltaHist: [] }
+    delete w.RAW_FLOW
+  })
+
+  test('preia delta cumulata din RAW_FLOW', () => {
+    w.RAW_FLOW = { cumDelta: -12.345 }
+    _syncQmVars()
+    expect(w.S._qmCumDelta).toBeCloseTo(-12.345)
+  })
+
+  test('REGRESIE: NU se alimenteaza din cartea de ordine', () => {
+    w.S.bids = [{ p: 99, q: 100 }]    // carte puternic bid
+    w.S.asks = [{ p: 101, q: 1 }]
+    w.RAW_FLOW = { cumDelta: -5 }      // dar tranzactiile spun invers
+    _syncQmVars()
+    expect(w.S._qmCumDelta).toBe(-5)   // tranzactiile CASTIGA, nu cartea
+  })
+
+  test('fara flux de tranzactii → 0, nu NaN si nu valoarea cartii', () => {
+    w.S.bids = [{ p: 99, q: 7 }]
+    _syncQmVars()
+    expect(w.S._qmCumDelta).toBe(0)
+  })
+})
+
+describe('_syncQmVars — CVD alimenteaza si scorul SMF, nu doar afisajul', () => {
+  beforeEach(() => {
+    w.S = { price: 100, klines: [], _qmBuf: [], _qmDeltaHist: [] }
+    delete w.RAW_FLOW
+  })
+
+  // flow.ts:105 citeste `c.cumDelta` (FARA prefix) pentru scorul SMF, cu +/-15
+  // puncte. N-avea nici el scriitor, deci SMF avea DOUA intrari moarte: obBV/obAV
+  // (reparata in b301) si asta.
+  test('REGRESIE: scrie si `cumDelta` fara prefix, pentru SMF', () => {
+    w.RAW_FLOW = { cumDelta: 8.5 }
+    _syncQmVars()
+    expect(w.S.cumDelta).toBe(8.5)
+    expect(w.S._qmCumDelta).toBe(8.5)
+  })
+
+  test('semnul ajunge intact la scor (SMF da +15 sau -15 pe el)', () => {
+    w.RAW_FLOW = { cumDelta: -3 }
+    _syncQmVars()
+    expect(w.S.cumDelta).toBeLessThan(0)
+  })
+})

@@ -1,4 +1,5 @@
 import { toast } from './marketDataHelpers'
+import { signedQty } from './tradeDelta'
 import { computeFusionDecision , atLog } from '../trading/autotrade'
 // setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
 import { _ucMarkDirty, ZT_safeInterval } from '../core/config'
@@ -399,7 +400,13 @@ export function _initOrderflowP1() {
     buf: [] as any[],
     windowMs: 10000,
     maxTrades: 2500,
-    dropped: 0
+    dropped: 0,
+    // [CVD REAL 2026-10-21] Delta cumulată din tranzacţii executate, pentru
+    // afişajul CVD din Quant (`_qmCumDelta` avea zero scriitori, deci arăta
+    // mereu +0.000). Trebuie ACUMULATOR, nu suma lui `buf`: `_prune` taie
+    // buffer-ul la 10 secunde, deci suma lui ar fi o deltă pe fereastră, nu
+    // cumulată — iar eticheta spune cumulată.
+    cumDelta: 0
   }
 
   let _ofWS: any = null
@@ -419,12 +426,13 @@ export function _initOrderflowP1() {
   function _onMsg(e: any) {
     try {
       const d = JSON.parse(e.data)
-      w.RAW_FLOW.buf.push({
-        ts: d.T,
-        p: +d.p,
-        q: +d.q,
-        isBuyerMaker: !!d.m
-      })
+      const _t = { ts: d.T, p: +d.p, q: +d.q, isBuyerMaker: !!d.m }
+      w.RAW_FLOW.buf.push(_t)
+      // [CVD REAL 2026-10-21] Punctul unic prin care trec ambele căi directe
+      // (onmessage de la 474 şi apelul de la 487), deci o singură linie acoperă
+      // tot ce e viu. Acumulăm aici, nu la randare: `_prune` taie buffer-ul la
+      // 10 secunde, deci o sumă calculată mai târziu ar pierde istoricul.
+      w.RAW_FLOW.cumDelta = (w.RAW_FLOW.cumDelta || 0) + signedQty(_t)
       _prune()
     } catch (_) { }
   }
@@ -454,7 +462,11 @@ export function _initOrderflowP1() {
       const { on } = require('../services/wsMarketBridge')
       w._wsProxyOfUnsub = on('market.aggTrade', function (msg: any) {
         if (msg.symbol !== sym.toUpperCase()) return
-        RF.buf.push({ ts: msg.T, p: msg.p, q: msg.q, isBuyerMaker: msg.m })
+        const _pt = { ts: msg.T, p: msg.p, q: msg.q, isBuyerMaker: msg.m }
+        RF.buf.push(_pt)
+        // [CVD REAL 2026-10-21] Şi pe calea prin proxy, ca să nu moară una din
+        // cele două dacă WS_PROXY_ENABLED se aprinde (azi e false).
+        RF.cumDelta = (RF.cumDelta || 0) + signedQty(_pt)
         _prune()
       })
       try { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[OF v121] WS_PROXY aggTrade: ' + sym) } catch (_) { }

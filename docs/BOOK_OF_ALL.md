@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-21 · build b302 v1.7.276 · garda + provenienţă + paritate + SMART_CUT + constituţie + CVD/SMF + risipa tăiată
+> **Ultima actualizare:** 2026-10-21 · build b303 v1.7.277 · garda + provenienţă + paritate + SMART_CUT + constituţie + CVD real + risipa tăiată
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -50,7 +50,7 @@ Niciuna nu e urgentă și niciuna nu atinge calea banilor fără să-ți spun î
 | **D1** | **Cota Google Drive: 6 fișiere din iunie țin 10,6 GiB din 15** | vezi mai jos — decide dacă le tai |
 | **D2** | **14 G de copii vechi de DB pe discul VPS-ului** | vezi mai jos — decide dacă le tai |
 | **D3** | **Poarta SP1 nu poate trece niciodată** — creierul clientului e inert (încredere medie **5,1**) | vezi secțiunea b291 — oprim raportul zilnic, îl re-țintim, sau îl lăsăm |
-| **D4** | **Quant: 38 de câmpuri fără sursă** | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm. *Micșorat în b295 (stiva MTF + încrederea ARIA), apoi în b301: **CVD Divergence și SMF semnalează acum**, puntea din cartea de ordine era ultima care lipsea. Măsurat după b301: din 153 de câmpuri citite de `frame.ts`, **115 au scriitor**, 38 nu.* **Restul nu mai sunt punți** — niciunul n-are o sursă disponibilă pe `S`, deci cer date noi, nu legături. Exemplu de ce nu le umplu de capul meu: `_qmCumDelta` se afișează ca **CVD**, iar CVD înseamnă delta din tranzacții executate; alimentat din adâncimea cărții ar scrie „CVD" peste un număr care nu e CVD. Iar `orderflow.ts` nu acumulează nicăieri o delta din `aggTrade`, deci sursa corectă ar trebui construită. |
+| **D4** | **Quant: 37 de câmpuri fără sursă** | vezi secțiunea b294 — le construim, le scoatem din afișaj, sau le lăsăm. *Micșorat în b295 (stiva MTF + încrederea ARIA), apoi în b301: **CVD Divergence și SMF semnalează acum**, puntea din cartea de ordine era ultima care lipsea. Măsurat după b301: din 153 de câmpuri citite de `frame.ts`, **115 au scriitor**, 38 nu.* **Restul nu mai sunt punți** — niciunul n-are o sursă disponibilă pe `S`, deci cer date noi, nu legături. Exemplu de ce nu le umplu de capul meu: `_qmCumDelta` se afișează ca **CVD**, iar CVD înseamnă delta din tranzacții executate; alimentat din adâncimea cărții ar scrie „CVD" peste un număr care nu e CVD. Iar `orderflow.ts` nu acumulează nicăieri o delta din `aggTrade`, deci sursa corectă ar trebui construită. |
 
 **D1 — Drive.** Offsite-ul merge iar (reparat în b289), dar cota e strâmtă din cauza a șase copii din
 iunie, **necomprimate**, 1,37-2,07 GB fiecare. Comprimarea a intrat abia pe 7 octombrie, deci cele noi
@@ -661,6 +661,45 @@ piesa care lipsea pe partea de pierdere.
 ### Regresie
 
 **599 de suite, 9 595 de teste verzi pe 4 sharduri, zero eşuate.**
+
+---
+
+## 📉 REPARAT — CVD devine real, şi a scos la lumină a doua intrare moartă a lui SMF — 2026-10-21 (b303 v1.7.277)
+
+**Client-only → build, fără reload.**
+
+`_qmCumDelta` se afişează ca **CVD** şi avea zero scriitori — randarea arăta mereu `+0.000`.
+
+### Capcana de care m-am ferit
+
+Tentaţia era să-l alimentez din puntea de carte adăugată în b301 (`obBV − obAV`), fiindcă devenise
+disponibilă. **Ar fi fost greşit:** CVD înseamnă delta din tranzacţii **executate**, nu
+dezechilibrul cărţii de ordine. Ar fi scris „CVD" peste un număr care nu e CVD — exact falsa
+onestitate pe care auditul o vâna.
+
+Testul fixează regula explicit: cu o carte puternic pe bid şi tranzacţii care spun invers, **CVD
+urmează tranzacţiile.**
+
+### Sursa corectă exista, doar nu era legată
+
+`_onMsg` (orderflow.ts) primeşte fiecare `aggTrade`, îl pune în `RAW_FLOW.buf` cu `isBuyerMaker`, şi
+e **punctul unic** prin care trec ambele căi directe. Lipsea acumulatorul — iar suma buffer-ului
+**nu** era o alternativă: `_prune` îl taie la 10 secunde, deci ar fi dat o deltă pe fereastră, nu
+cumulată.
+
+Semnul vine din **rolul agresorului**, nu din cantitate: `isBuyerMaker = true` înseamnă că
+cumpărătorul e maker, deci agresorul e **vânzătorul** → deltă negativă. Inversat, CVD-ul ar arăta
+exact pe dos în fiecare trend, aşa că e fixat în test, nu lăsat la memorie.
+
+### Descoperire pe drum, din verificarea în bundle
+
+`cumDelta` apărea de 8 ori, şi una era un **cititor într-un motor de scor**: `flow.ts:105` citeşte
+`c.cumDelta` — **fără prefix** — şi îi dă **±15 puncte** scorului SMF. N-avea nici el scriitor.
+
+**Deci SMF avea DOUĂ intrări moarte, nu una:** `obBV`/`obAV` (reparate în b301) şi asta. Acum se
+scrie pe ambele nume, deci şi afişajul şi scorul primesc valoarea.
+
+**11 teste noi.** Client: **143 de fişiere, 1 178 de teste verzi**, `tsc` curat, asset **HTTP 200**.
 
 ---
 
