@@ -103,8 +103,8 @@ retragere de 0,5% ca să atingă ținta.
 
 **(a) Garda e oarbă la poziții-fantomă.** `_findSameModeOpposite` (serverAT.js:1150) compară
 `p.userId === userId`. Există **466 de poziții la care `userId` lipsește din obiect**, deși
-coloana `user_id` îl are. Garda nu le vede → brain deschide opusul. **~93% din conflicte
-implică o astfel de fantomă.** Fantomele au și `sl:0, tp:0` și **zero `dslParams`** (100% din
+coloana `user_id` îl are. Garda nu le vede → brain deschide opusul. **64,3% din conflicte sunt CAUZATE de aceasta** (rejucat prin garda reală — vezi 10;
+cifra de ~93% din prima citire era o corelaţie, nu o cauză). Fantomele au și `sl:0, tp:0` și **zero `dslParams`** (100% din
 466), deci nimic nu le poate închide:
 
 | | n | durată medie | închise cu mâna |
@@ -246,6 +246,78 @@ client↔server are **exact 0 perechi** şi „faza identică" / „stop identic
 mici. Un jurnal de paritate alimentat de o singură parte nu poate raporta niciodată o
 nepotrivire, oricât creşte. La fel, `brain_parity_log.dir` e NULL pe toate cele 322 087 de
 rânduri, deci nici direcţia nu se compară.
+
+### 10. De la CORELAŢIE la CAUZALITATE — conflictele rejucate prin garda reală
+
+Afirmaţia „~93% din conflicte implică o fantomă" era o **corelaţie**. Am rejucat fiecare
+conflict prin garda **extrasă verbatim** din `serverAT.js:1149` (funcţie pură, rulată izolat,
+fără să atingem baza vie ca scriitor). Cifra corectă e **mai mică şi dovedită**:
+
+**Dovadă unitară, deterministă** — aceeaşi carte, aceeaşi gardă, un singur câmp schimbat:
+
+| carte de poziţii | verdictul gărzii reale |
+|---|---|
+| opus LONG cu `userId=1` | **BLOCHEAZĂ** |
+| opus LONG cu `userId=null` | **LASĂ SĂ TREACĂ** |
+| ambele în carte | BLOCHEAZĂ |
+
+**Rejucarea istoricului** (143 de conflicte reale provocate de brain, grupate pe coloana
+`user_id` care e sursa de adevăr):
+
+| | n | |
+|---|---|---|
+| garda reală **ar fi blocat** | **51** | → au intrat pe **ALTĂ cale** |
+| garda reală **a fost oarbă** | **92** | → **100% pentru că toate poziţiile opuse aveau `userId` lipsă** |
+
+**Deci 64,3% din conflicte sunt CAUZATE de `userId` lipsă** — nu 93%. Corecţie asumată.
+
+**Şi o cauză a treia, pe care nu o aveam — deja reparată.** Cele 51 pe care garda le-ar fi
+blocat: **49 din 51 n-au `decisionId`** şi **50 din 51 n-au `owner`** → n-au trecut prin
+`processBrainDecision` deloc, au intrat pe calea de adopţie/recon/stream. Distribuţia în timp:
+**43 în aprilie, 7 în mai, 1 în iunie, ZERO după.** Se potriveşte exact cu
+`[PHANTOM-SHORT FIX 2026-06-08]`, care a cablat aceeaşi gardă pe calea de adopţie
+(`serverAT.js:6565` şi `6576`, cu log-ul „DEFERRED (would create same-mode opposite book…)").
+**Cauza B e închisă din iunie; cauza A (userId) e încă vie; cauza C (constituţia în advisory)
+e vie.**
+
+### 11. DSL Drive pe o poziţie în pierdere — lanţul închis în cod
+
+Nu există nicio comandă DSL Drive pe o poziţie în pierdere, şi se poate arăta de ce fără
+niciun test sintetic. `serverDSL.js:236`:
+
+```js
+const activationHit = isLong ? (price >= s.activationPrice) : (price <= s.activationPrice);
+if (!s.active && activationHit) { s.active = true; ... }
+```
+
+`activationPrice` e intrarea deplasată cu `openDslPct` în direcţia **favorabilă**. Pe un LONG
+care pierde, preţul nu urcă niciodată până acolo → `s.active` rămâne `false` şi `progress`
+rămâne 0. Iar `if (s.active)` (linia 285) păzeşte TOT mecanismul de ieşire DSL, exact ca poarta
+`_ds.active && _ds.mlActiveFromEntry` a lui DSL Drive (`serverAT.js:3414`).
+
+**Confirmat în producţie pe 103 din 103**: fiecare poziţie ieşită pe HIT_SL are
+`{"active": false, "progress": 0, "phaseChanges": 0}`. Lanţul cauzal e complet:
+*poziţie în pierdere → `activationHit` fals → `active` fals → se sare ŞI blocul de ieşire DSL
+ŞI blocul DSL Drive → poziţia curge până la stopul hard original.*
+
+### 12. De ce clientul nu raportează paritate — câmp cu cititor şi zero scriitori
+
+Serverul e gata: `POST /api/brain/parity/dsl/client` → `db.logDslParityRow(..., 'client', ...)`
+(`routes/brainParity.js:107`). Clientul chiar îl cheamă (`client/src/trading/dsl.ts:796`).
+Dar emisia e păzită de:
+
+```js
+localStorage.getItem('zeus_dsl_parity_shadow') === 'true'
+```
+
+**Căutat în tot codul: un cititor (`dsl.ts:786`), ZERO scriitori** — nici client, nici server,
+nici legacy — şi **niciun comutator în interfaţă**. Apare doar în `DEVICE_WIDE` al unui test şi
+la **R6** din această carte. Ca să existe jumătatea de client a parităţii, operatorul ar trebui
+să scrie semaforul de mână în consola browserului.
+
+Acelaşi tipar ca la auditul Quant (71 din 157 de câmpuri citite fără scriitor): **monitorul nu
+e stricat, e nealimentat.** De aceea cele 649 833 de rânduri sunt toate `source='server'` şi
+alăturarea client↔server are exact 0 perechi — determinat, nu estimat.
 
 ### Ce NU e vinovat (verificat, ca să nu căutăm acolo)
 
