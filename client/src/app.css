@@ -6005,14 +6005,17 @@ body .zpv ~ #ptr-indicator { top: calc(48px + env(safe-area-inset-top, 0px)); }
    QUANTITATIVE MONITOR — color span classes used by renderFrame()
    These map to the original HTML QM color palette.
    ═══════════════════════════════════════════════════════════════ */
-#qm-screen .dg  { color: #444 }
+/* [b296] Panoul e o regiune derulabila cu tabIndex=0, ca sa fie accesibila de
+   la tastatura (WCAG 2.1.1). Fara contur, focusul ar fi invizibil. */
+#qm-screen:focus-visible { outline: 1px solid #00aaff; outline-offset: -1px }
+#qm-screen .dg  { color: #7b8794 }  /* [b296] era #444 = 2,16:1 pe negru. `.dg` nu e doar etichete, poarta DATE (ASK/BID, volume, spread, mesaje de stare) in 407 locuri si nu se putea citi la 11,5px. 5,74:1, si tot ~3x mai stins decat .w, deci ierarhia ramane. */
 #qm-screen .g   { color: #00d97a }
 #qm-screen .r   { color: #ff3355 }
 #qm-screen .w   { color: #e8e8e8 }
 #qm-screen .c   { color: #00aaff }
 #qm-screen .y   { color: #f0c040 }
-#qm-screen .p   { color: #aa44ff }
-#qm-screen .d   { color: #1a1a1a }
+#qm-screen .p   { color: #bb66ff }  /* [b296] titluri de secţiune, 4,98:1 -> 6,46:1 */
+#qm-screen .d   { color: #2a2e33 }  /* [b296] umplutura (· si ─ pe sloturi goale): era 1,21:1, adica absenta. Acum se vede ca e GOL. */
 #qm-screen .gb  { color: #00ff99; font-weight: 700 }
 #qm-screen .rb  { color: #ff2244; font-weight: 700 }
 #qm-screen .yb  { color: #ffe066; font-weight: 700 }
