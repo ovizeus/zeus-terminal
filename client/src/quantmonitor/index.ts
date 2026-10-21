@@ -6,6 +6,7 @@ import { calcFLOW } from './engines/flow'
 import { calcARIA } from './engines/aria'
 import { fetchMtfKlines } from './engines/mtf'
 import { sumDepthVolume } from './engines/depth'
+import { normalizeKlines } from './engines/klinesNorm'
 import { calcWyckoff, calcCVDDivergence, calcVolumeProfile } from './engines/wyckoff'
 import { buildLiqEstimate, fetchTopTraderPositionRatio } from './engines/liqMap'
 import { fetchBasisRate } from '../data/basisRate'
@@ -47,16 +48,15 @@ let _okxLiqHandler: ((e: CustomEvent) => void) | null = null
 
 function runAllEngines(): void {
   if (!w.S || !w.S.price) return
-  // Map Zeus kline format {open,high,low,close,volume,time} → QM format {o,h,l,c,v,t}
-  // Engines expect HTML-style klines (.h, .l, .c, .o, .v, .t)
-  if (w.S.klines && w.S.klines.length > 0 && w.S.klines[0].open !== undefined) {
-    w.S.klines = w.S.klines.map((k: any) => ({
-      o: k.open ?? k.o, h: k.high ?? k.h, l: k.low ?? k.l,
-      c: k.close ?? k.c, v: k.volume ?? k.v, t: k.time ?? k.t,
-      // Keep originals for Zeus chart
-      open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume, time: k.time
-    }))
-  }
+  // Map Zeus kline format {open,high,low,close,volume,time} → QM format {o,h,l,c,v,t}.
+  // [KLINES REMAP 2026-10-21] Înainte, asta remapa TOT vectorul la fiecare tick:
+  // garda testa `klines[0].open !== undefined`, iar remap-ul păstra `open` pentru
+  // graficul Zeus, deci condiţia nu se putea stinge niciodată — ~1 000 de obiecte
+  // pe secundă, 3,6 milioane pe oră, pe aceleaşi date. Acum convertim doar barele
+  // care n-au încă formatul QM: tot vectorul la o aducere proaspătă, şi numai
+  // coada când lumânarea vie e înlocuită (marketDataChart.ts:142/162/193 o pune
+  // la loc în format Zeus, deci ea TREBUIE prinsă — vezi engines/klinesNorm.ts).
+  normalizeKlines(w.S.klines)
 
   // Maintain price buffer (for engines that need history)
   w.S._qmBuf = w.S._qmBuf || []

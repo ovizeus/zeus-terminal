@@ -1,6 +1,21 @@
 // QM Flow Engine — 1:1 from HTML: VAC, ICE, FLIP, MMTRAP, EXHAUST, VOID, STOP, SMF
 const w = window as any
 
+// [MMTRAP MINE 2026-10-21] Fereastra MMTRAP, scoasă din corpul lui `calcFLOW` ca
+// să fie verificabilă la limită. Înainte, limita era un `return` care ieşea din
+// TOATĂ funcţia şi stingea în linişte EXHAUST, VOID, STOP şi SMF; nu se putea
+// testa, fiindcă pragul e o constantă în cod şi din afară nu ajungeai la ea.
+// Acum REFUZĂ (null) în loc să oprească, iar apelantul sare doar blocul MMTRAP.
+// Valorile nefinite sunt filtrate: `Math.max` cu un NaN întoarce NaN, iar un
+// `hi` NaN ar face toate comparaţiile de mai jos false pe tăcute — adică acelaşi
+// fel de tăcere, mutată cu un pas mai departe.
+export function mmtrapWindow(buf: number[], lookback = 30, tailDrop = 3): { hi: number; lo: number } | null {
+  if (!Array.isArray(buf) || buf.length < lookback) return null
+  const slice = buf.slice(-lookback).slice(0, -tailDrop).filter((n) => Number.isFinite(n))
+  if (slice.length < 1) return null
+  return { hi: Math.max(...slice), lo: Math.min(...slice) }
+}
+
 export function calcFLOW(): void {
   const c = w.S; if (!c || !c.price) return
   const buf = c._qmBuf || []; if (buf.length < 20) return
@@ -37,10 +52,15 @@ export function calcFLOW(): void {
 
   // MMTRAP
   c._qmMmtrapHist = c._qmMmtrapHist || []
-  if (buf.length >= 30) {
-    const win = buf.slice(-30)
-    const winSlice = win.slice(0, -3); if (winSlice.length < 1) return
-    const hi = Math.max(...winSlice), lo = Math.min(...winSlice)
+  // [MMTRAP MINE 2026-10-21] Aici era un `return` care ieşea din TOATĂ funcţia,
+  // nu din bloc: `win.slice(0,-3)` gol abandona calcFLOW şi stingea în linişte
+  // EXHAUST, VOID, STOP şi SMF. Azi nu se declanşa, fiindcă `buf.length >= 30`
+  // garanta 27 de elemente — dar o coborâre a pragului ar fi tăiat patru motoare
+  // fără nicio eroare. Fereastra e acum o funcţie pură care REFUZĂ (întoarce
+  // null) în loc să oprească, deci limita e verificabilă din test.
+  const _mw = mmtrapWindow(buf)
+  if (_mw) {
+    const hi = _mw.hi, lo = _mw.lo
     const lp = buf[buf.length - 1], pp = buf[buf.length - 4]
     if (pp && pp > hi * (1 + 0.0002) && lp < hi) c._qmMmtrapHist.push({ type: 'SHORT', pct: ((lp - pp) / pp * 100), time: now })
     if (pp && pp < lo * (1 - 0.0002) && lp > lo) c._qmMmtrapHist.push({ type: 'LONG', pct: ((lp - pp) / pp * 100), time: now })
