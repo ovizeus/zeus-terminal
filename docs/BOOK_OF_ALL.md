@@ -149,6 +149,73 @@ Nu e un creier care raționează; e un debit de stare.
 - Coloana `dir` din `brain_parity_log` e **NULL la toate** — paritatea nu poate compara nici
   direcția, fiindcă nimeni nu scrie câmpul.
 
+### 6. CORECŢIE IMPORTANTĂ — ce e istoric şi ce e viu (adăugat după trasarea completă)
+
+Prima citire a acestui audit a pus hemoragia de **−20 548 pe HIT_SL** ca problemă vie. Nu este.
+**Ultima atingere de stop hard a fost 2026-07-06.** Iar **octombrie e NET POZITIV: +2 730.**
+
+Dar adevărata dovadă e asta — aceleaşi intrări, două mâini diferite pe ieşire, luna curentă:
+
+| cine închide | n | câştiguri | total | mediu | mediana |
+|---|---|---|---|---|---|
+| **operatorul, cu mâna** | 21 | **21 / 21 = 100%** | **+2 963,3** | **+141,11** | +80,4 |
+| **automatul (DSL)** | 86 | 32 / 86 = 37% | +382,5 | **+4,45** | — |
+
+Zero pierderi la mână; cea mai slabă ieşire manuală: **+12,6**. Distribuţia e densă
+(12,6 · 19,7 · 20,6 … 388,7 · 534,6), deci **nu sunt doi outlieri care trag media**.
+
+**Concluzia corectată:** sistemul nu mai explodează, dar nici nu mai poate câştiga. Automatul
+scoate **+4,45** din exact aceleaşi poziţii din care mâna operatorului scoate **+141,11** —
+de **32 de ori** mai puţin. Intrările brain-ului sunt bune; el o dovedeşte luând aceleaşi
+poziţii. **Ieşirea e singura diferenţă.** Asta e „de ce nu iese pe câştig", în cifre.
+
+### 7. Leacul EXISTĂ deja, construit în iunie, şi e îngrădit greşit
+
+Changelog-ul **b161 (2026-06-22)** descrie exact ce am redescoperit independent azi:
+*„when DSL manages the exit the system wins (+2765, R:R 2.1), but trades that escape DSL and
+die at the wide hard SL bleed (HIT_SL −6024 avgLoss −134)"*. S-a construit **`SMART_CUT`** —
+taie pierzătorul la 0,75% advers susţinut (K=2), înaintea stopului larg. Flagul
+`ML_DSL_LOSSSIDE_ACTIVE=true` **e aprins în `.env`**.
+
+Dar poarta e `MF.ML_DSL_LOSSSIDE_ACTIVE && pos.env === 'TESTNET'` (serverAT.js:3600), iar
+pierderea pe stop stă aproape toată în afara ei:
+
+| mediu | n | total | leacul are drept? |
+|---|---|---|---|
+| `TESTNET` | 65 | −4 857 | **da** |
+| `DEMO` | 32 | −5 218 | nu |
+| **`env` LIPSEŞTE din obiect** | **16** | **−10 057** | **nu — câmpul nu există** |
+
+Doar **24%** din hemoragie e în mediul permis. Cea mai mare gaură din tot sistemul —
+**−10 057 în 16 tranzacţii** — e invizibilă leacului fiindcă `pos.env` lipseşte: **exact
+aceeaşi clasă de bug ca `userId`-ul lipsă de la punctul 2.** Un câmp nescris dezarmează
+simultan garda direcţională ŞI tăietorul de pierderi.
+
+Şi: după livrare (22 iunie) au fost **14 ocazii pe TESTNET, unde avea drept să taie, şi
+`SMART_CUT` n-a închis NICIODATĂ nimic** (0 rânduri în istoric; doar `DSL_ML_CUT` de 2 ori).
+Codul e accesibil, în `onPriceUpdate` înaintea verificării clasice SL/TP, fără al doilea
+blocaj — deci **de ce n-a tras niciodată rămâne nelămurit** şi e primul lucru de instrumentat
+dacă atacăm punctul 1.
+
+### 8. „N7" — lămurit
+
+Nu există ca identificator nicăieri (cele 5 potriviri din `grep` sunt coincidenţe în blocuri
+base64 din `pwa.js`/`index.html`). Arhitectura ML are inelele **R0–R7**, iar R7 e
+`communication`/`meta`. Citirea corectă a mesajului operatorului este însă **„n7" = „nu"**
+(pe tastatură `7` e deasupra lui `u`; în acelaşi mesaj a scris „trwbuie" cu `w` lângă `e`).
+Propoziţia devine: *„ce face ML în asta, de ce **nu** gândeşte cum trebuie să gândească"* —
+răspuns la punctele 3 şi 4. Nu era un modul.
+
+### 9. Paritatea DSL — analiza dusă până la capăt
+
+Interogarea de alăturare pe 649 833 de rânduri a fost oprită de mine (încărca baza vie), dar
+răspunsul e determinat fără ea: **`SELECT source, COUNT(*) ... GROUP BY source` întoarce un
+singur rând, `server` = 649 833.** Nu există nicio linie cu `source` de client, deci alăturarea
+client↔server are **exact 0 perechi** şi „faza identică" / „stop identic" sunt nedefinite, nu
+mici. Un jurnal de paritate alimentat de o singură parte nu poate raporta niciodată o
+nepotrivire, oricât creşte. La fel, `brain_parity_log.dir` e NULL pe toate cele 322 087 de
+rânduri, deci nici direcţia nu se compară.
+
 ### Ce NU e vinovat (verificat, ca să nu căutăm acolo)
 
 - **SL-ul funcționează.** Per tranzacție realizează **0,971** din stopul planificat (80 de
@@ -159,9 +226,9 @@ Nu e un creier care raționează; e un debit de stare.
 
 ### Ordinea reparațiilor, dacă vrei să le facem
 
-1. **Geometria DSL** — e singura care schimbă semnul rezultatului. Fie DSL se activează și pe
-   pierdere, fie urmărirea se lărgește spre țintă. Atinge bani; o fac separat, cu teste, nu
-   înlănțuită.
+1. **Geometria DSL** — singura care schimbă semnul. Două sub-puncte, acum că leacul e trasat:
+   (a) de ce `SMART_CUT` n-a tras in 14 ocazii permise; (b) poarta `pos.env === 'TESTNET'`
+   lasă 76% din hemoragie afară. Atinge bani; separat, cu teste, nu înlănțuită.
 2. **`userId` în obiectul poziției** — reparație mică, deblochează garda *și* DSL-ul pe fantome.
 3. **`allowed` citit, sau `blocking` pe `NO_OPPOSITE_ENTRY_ON_OPEN`** — o linie, dar schimbă
    ce intră; separat de 1 și 2.
