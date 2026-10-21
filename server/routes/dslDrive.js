@@ -56,7 +56,7 @@ router.get('/scoreboard', (req, res) => {
     const row = uid ? db.prepare(
       `SELECT COUNT(*) n, AVG(advantage) avgAdv, SUM(CASE WHEN win=1 THEN 1 ELSE 0 END) wins,
               AVG(ml_pnl_pct) avgMl, AVG(baseline_pnl_pct) avgBase
-       FROM ml_dsl_outcome WHERE user_id=? AND ts > ? AND (cohort IS NULL OR cohort NOT IN ('lossside','mlctl'))`).get(uid, Date.now() - 21 * 86400000) : null;
+       FROM ml_dsl_outcome WHERE user_id=? AND ts > ? AND (cohort IS NULL OR cohort NOT IN ('lossside','mlctl','shadow_geom'))`).get(uid, Date.now() - 21 * 86400000) : null;
 
     // [2026-06-19] Smart loss-side cut (SHADOW) R:R block + cumulative-advantage sparkline.
     let lossSide = { n: 0 };
@@ -122,6 +122,32 @@ router.get('/scoreboard', (req, res) => {
       }
     }
 
+    // [GEOM SHADOW 2026-10-21] cohort='shadow_geom' — contrafactualul pe GEOMETRIE,
+    // adică ce ar fi dat fiecare preset DSL pe aceeaşi urmă de preţ, cu baza = PnL-ul
+    // realizat. Citirea se livrează ODATĂ cu colectarea: cohortul 'shadow' a stat
+    // patru luni cu semantică greşită (simula acelaşi preset, fiindcă `dslArm` nu e
+    // atribuit nicăieri) exact pentru că nimeni nu se uita la el.
+    // Optimismul simulatorului (+0,0333 pp curat) e comun tuturor rândurilor, deci
+    // DIFERENŢA dintre două geometrii e curată chiar dacă valoarea absolută nu e.
+    // `medianAdvantage` stă lângă medie intenţionat: la SMART_CUT media era +0,052
+    // dar mediana 0, adică nicio diferenţă în tranzacţia tipică.
+    let geometry = { n: 0, arms: [] };
+    if (uid) {
+      try {
+        const { summarizeGeomRows } = require('../services/dslGeomShadow');
+        const gr = db.prepare(
+          `SELECT arm, advantage FROM ml_dsl_outcome
+           WHERE user_id=? AND cohort='shadow_geom' ORDER BY ts ASC`).all(uid);
+        const arms = summarizeGeomRows(gr).map(a => ({
+          arm: a.arm, n: a.n,
+          avgAdvantage: +a.avgAdvantage.toFixed(4),
+          medianAdvantage: +a.medianAdvantage.toFixed(4),
+          better: a.better, worse: a.worse, neutral: a.neutral,
+        }));
+        geometry = { n: gr.length, arms };
+      } catch (_) { /* citire best-effort: nu are voie sa doboare scoreboardul */ }
+    }
+
     res.json({
       ok: true,
       trades: row ? row.n : 0,
@@ -131,6 +157,7 @@ router.get('/scoreboard', (req, res) => {
       avgBaselinePnlPct: row && row.avgBase != null ? +row.avgBase.toFixed(3) : 0,
       lossSide,
       mlControl,
+      geometry,
       ts: Date.now(),
     });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

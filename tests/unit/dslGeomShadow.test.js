@@ -76,3 +76,57 @@ describe('buildGeomRows — colecteaza contrafactualul pe geometrie', () => {
     expect(buildGeomRows({ presets: null, meta: META, prices: PRICES, realizedPnlPct: 0, simulate: fakeSim })).toEqual([]);
   });
 });
+
+// ── Citirea ─────────────────────────────────────────────────────────────────
+// Colectarea fara citire e cum a stat cohortul `shadow` patru luni: date pe care
+// nimeni nu se uita, cu semantica greşita, si nimeni n-a observat. Deci agregarea
+// pe geometrie se verifica aici, nu se lasa pe mai tarziu.
+const { summarizeGeomRows } = require('../../server/services/dslGeomShadow');
+
+describe('summarizeGeomRows — face datele colectate citibile', () => {
+  const R = (arm, adv) => ({ arm, advantage: adv });
+
+  test('e o functie exportata', () => {
+    expect(typeof summarizeGeomRows).toBe('function');
+  });
+
+  test('grupeaza pe geometrie si numara', () => {
+    const s = summarizeGeomRows([R('fast', 1), R('fast', 3), R('swing', 2)]);
+    expect(s.find(x => x.arm === 'fast').n).toBe(2);
+    expect(s.find(x => x.arm === 'swing').n).toBe(1);
+  });
+
+  test('da media SI mediana — media singura minte cand avantajul e pe coada', () => {
+    const s = summarizeGeomRows([R('fast', 0), R('fast', 0), R('fast', 30)]);
+    const f = s.find(x => x.arm === 'fast');
+    expect(f.avgAdvantage).toBeCloseTo(10);
+    expect(f.medianAdvantage).toBe(0);
+  });
+
+  test('numara cazurile mai bune si mai rele, nu doar media', () => {
+    const s = summarizeGeomRows([R('fast', 2), R('fast', -1), R('fast', 0)]);
+    const f = s.find(x => x.arm === 'fast');
+    expect(f.better).toBe(1);
+    expect(f.worse).toBe(1);
+    expect(f.neutral).toBe(1);
+  });
+
+  test('ordoneaza descrescator pe avantaj, ca prima linie sa fie geometria cea mai buna', () => {
+    const s = summarizeGeomRows([R('a', 1), R('b', 5), R('c', 3)]);
+    expect(s.map(x => x.arm)).toEqual(['b', 'c', 'a']);
+  });
+
+  test('randuri fara arm sau cu avantaj nefinit sunt ignorate, nu propagate ca NaN', () => {
+    const s = summarizeGeomRows([R('fast', 2), R(null, 5), R('fast', NaN), { advantage: 1 }]);
+    const f = s.find(x => x.arm === 'fast');
+    expect(f.n).toBe(1);
+    expect(f.avgAdvantage).toBe(2);
+    expect(s.length).toBe(1);
+  });
+
+  test('intrare goala sau invalida → lista goala, fara excepţie', () => {
+    expect(summarizeGeomRows([])).toEqual([]);
+    expect(summarizeGeomRows(null)).toEqual([]);
+    expect(() => summarizeGeomRows('aiurea')).not.toThrow();
+  });
+});

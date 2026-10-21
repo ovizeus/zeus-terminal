@@ -51,4 +51,48 @@ function buildGeomRows({ presets, meta, prices, realizedPnlPct, simulate } = {})
     return rows;
 }
 
-module.exports = { buildGeomRows };
+/**
+ * Agregă rândurile colectate, pe geometrie, pentru citire.
+ *
+ * Colectarea fără citire e exact cum a stat cohortul `shadow` patru luni: date
+ * pe care nimeni nu se uită, cu semantică greşită, şi nimeni n-a observat. Deci
+ * citirea se livrează odată cu colectarea, nu „mai târziu".
+ *
+ * Dă şi mediană, nu doar medie, pentru că la `SMART_CUT` media a fost înşelătoare
+ * exact aşa: +0,052 pe medie, dar mediană 0 — adică nicio diferenţă în tranzacţia
+ * tipică, totul venit dintr-o minoritate de cazuri. Aceeaşi capcană se aplică
+ * geometriei, deci cifra care o arată stă lângă cea care o ascunde.
+ */
+function summarizeGeomRows(rows) {
+    if (!Array.isArray(rows)) return [];
+    const by = new Map();
+    for (const r of rows) {
+        if (!r || typeof r !== 'object') continue;
+        const arm = r.arm;
+        if (typeof arm !== 'string' || !arm) continue;
+        const adv = Number(r.advantage);
+        if (!Number.isFinite(adv)) continue;
+        if (!by.has(arm)) by.set(arm, []);
+        by.get(arm).push(adv);
+    }
+    const out = [];
+    for (const [arm, vals] of by) {
+        const n = vals.length;
+        const sorted = vals.slice().sort((a, b) => a - b);
+        const mid = Math.floor(n / 2);
+        const median = n % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        out.push({
+            arm, n,
+            avgAdvantage: vals.reduce((a, b) => a + b, 0) / n,
+            medianAdvantage: median,
+            better: vals.filter(v => v > 0).length,
+            worse: vals.filter(v => v < 0).length,
+            neutral: vals.filter(v => v === 0).length,
+        });
+    }
+    // Descrescător: prima linie e geometria cu cel mai mare avantaj mediu.
+    out.sort((a, b) => b.avgAdvantage - a.avgAdvantage);
+    return out;
+}
+
+module.exports = { buildGeomRows, summarizeGeomRows };

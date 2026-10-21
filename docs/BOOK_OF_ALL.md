@@ -1,7 +1,7 @@
 # Book of All
 
 > Monitorul tău personal. Aici trec EU tot ce facem: ce-i de făcut, ce-i de verificat, ce-i bug, ce-i plan. Când verificăm ceva împreună, îl scot de aici (și din memorie). Așa nu se pierde nimic.
-> **Ultima actualizare:** 2026-10-21 · build b304 v1.7.278 · garda + provenienţă + paritate + SMART_CUT + constituţie + CVD + risipa + geometria se măsoară
+> **Ultima actualizare:** 2026-10-21 · build b305 v1.7.279 · garda + provenienţă + paritate + SMART_CUT + constituţie + CVD + risipa + geometria se măsoară şi se citeşte
 > **Ordinea de mai jos e ordinea în care le facem.**
 
 ---
@@ -661,6 +661,36 @@ piesa care lipsea pe partea de pierdere.
 ### Regresie
 
 **599 de suite, 9 595 de teste verzi pe 4 sharduri, zero eşuate.**
+
+---
+
+## 👁️ CITIREA pentru geometrie — plus un bug pe care l-am introdus eu la b304 — 2026-10-21 (b305 v1.7.279)
+
+**Server-only, fără reload.**
+
+### Bugul meu, găsit imediat după
+
+Interogarea principală a scoreboardului exclude cohorturile cu `NOT IN ('lossside','mlctl')` — deci
+rândurile noi `shadow_geom` **treceau filtrul şi se amestecau în media generală**, poluând exact
+cifra pe care o citeşti.
+
+L-am găsit citind **consumatorul** după ce adăugasem producătorul — adică fix pasul pe care îl
+sărisem când am livrat b304. Reparat.
+
+### Citirea
+
+**Colectarea fără citire e exact cum a stat cohortul `shadow` patru luni** cu semantică greşită:
+nimeni nu se uita la el. Deci citirea se livrează **odată** cu colectarea, nu „mai târziu".
+
+Scoreboardul are acum un bloc `geometry` cu un rând per preset: `n`, avantaj mediu, avantaj
+**median**, şi câte cazuri au fost mai bune / mai rele / neutre. Ordonat descrescător, deci prima
+linie e geometria cea mai bună.
+
+**De ce şi mediana, nu doar media:** la `SMART_CUT` media era +0,052 dar **mediana zero** — nicio
+diferenţă în tranzacţia tipică, totul dintr-o minoritate de cazuri. Aceeaşi capcană se aplică
+geometriei, deci cifra care o arată stă lângă cea care o ascunde.
+
+**7 teste noi** (16 pe modul). Regresie: **9 624 de teste verzi**, zero eşuate.
 
 ---
 
