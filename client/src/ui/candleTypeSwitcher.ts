@@ -3,6 +3,7 @@
 // Supported types: candles, hollow, heikin, bars, line, line-markers, step, area, volume-candles.
 
 import { USER_SETTINGS, _usScheduleSave } from '../core/config'
+import { setCandleSeries } from '../bridge/chartBridge'
 import { terminatorTintBars, heikinAshiBars } from '../engine/indicatorCalc'
 
 const w = window as any
@@ -51,7 +52,9 @@ function _removeOldSeries() {
       w.mainChart.removeSeries(w.cSeries)
     }
   } catch (_) { }
-  w.cSeries = null
+  // [2026-10-24] Prin punte, nu direct: `w.cSeries = null` lasa aliasul `_zCSeries`
+  // sa arate in continuare spre seria tocmai STEARSA, iar desenul il citeste pe el.
+  setCandleSeries(null)
 }
 
 function _buildSeries(type: CandleType): any {
@@ -176,7 +179,7 @@ export function applyCandleType(type: CandleType, opts?: { persist?: boolean }):
   _removeOldSeries()
   const series = _buildSeries(type)
   if (!series) return
-  w.cSeries = series
+  setCandleSeries(series)
   _currentType = type
   _applyData(series, type, klines)
   if (opts?.persist !== false) {

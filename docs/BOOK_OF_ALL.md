@@ -3764,6 +3764,8 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 
 **R-V-14. Un obiect-ciot pus ca sa previna crash-uri face orice verificare de tip „e truthy?" sa minta.** *(2026-10-24: `unregisterChart()` pune pe globalele chartului un `_noopStub` — un `Proxy` peste o **functie**, deci truthy. `_activate` verifica `if (!_series())`, deci trecea; `createPriceLine` intorcea `undefined`; linia se adauga in lista fara nimic desenat si fara nicio eroare. Operatorul: „apas si nu face nimic". Trei runde de reparaturi pe gesturi nu puteau gasi asta, fiindca nu era un bug de gest. Regula: daca un modul inlocuieste o dependenta cu un `noop` in loc de `null`, intrebarea valida nu e „exista?" ci „e FUNCTIONALA?", si raspunsul se cere de la cel care stie — aici `isChartReady()` al punţii — nu se deduce din prezenta. Corolar, platit cu trei runde: **o cale de eşec muta costa mai mult decat bugul.** Orice acţiune a utilizatorului care se poate opri trebuie sa spuna de ce, acolo unde se vede: pe telefon, nu in un toast de 12px in colţ care dispare in 1,2 s. Vezi si [[R-V-11]] — un test al meu de la aceeasi runda a fost decor, prins fiindca mutantul a supravieţuit.)*
 
+**R-V-15. Un alias catre un obiect viu trebuie sa aiba UN SINGUR proprietar, iar cine inlocuieste obiectul trece pe la el.** *(2026-10-24: `w.cSeries` si `w._zCSeries` aratau spre aceeasi serie de lumânari si erau scrise de module diferite. `applyCandleType` a inlocuit seria — `removeSeries` + `w.cSeries = series` — si a actualizat doar unul. Nimic n-a crapat: aliasul rămas arata spre un obiect valid sintactic dar MORT semantic, care raspundea `null` la orice intrebare, deci `coordinateToPrice` dadea null si desenul nu putea pune niciun punct. Si fiindca tipul de lumânare se re-aplica LA BOOT, desenul era rupt din secunda in care pornea aplicatia. Cinci runde de citit codul DESENULUI nu aveau cum sa o gaseasca, fiindca **cauza nu era in codul care esua** — simptomul („nu pot desena") si cauza („s-a schimbat tipul de lumânare") sunt despartite de un boot si n-au nicio legatura vizibila. Fixul corect e pe clasa: un singur `setCandleSeries` in punte care schimba TOATE aliasurile deodata, si toti cei care inlocuiesc seria trec pe acolo. Vezi si [[R-V-14]] — tot despre obiecte care par vii.)*
+
 ### 🟢 Proces
 
 **R-P-1. Tot în Book of All.** Orice găsim, reparăm, amânăm sau decidem.
@@ -6721,3 +6723,81 @@ niciodată **împreună**.
 
 Lecţia practică, pentru următoarea dată: la un simptom de UI, întreabă din prima **ce se
 vede**, nu doar **ce nu merge** — ce se schimbă pe ecran, ce scrie, în ce ordine.
+
+## 🏁 2026-10-24 — GĂSIT: desenul întreba seria de lumânări ŞTEARSĂ (b311 v1.7.285)
+
+Operatorul a trimis o **captură**. În două secunde a dat ce cinci runde de citit cod nu
+au dat:
+
+- butonul de trendline **galben** → armarea merge;
+- mesajul centrat, cel introdus la b310: **„Could not read the price there — tap on the
+  candles"**.
+
+`coordinateToPrice` întoarce `null` într-un **singur** caz: seria întrebată **nu are
+date** (`firstValue()` e null). Dar lumânările se vedeau pe ecran. Deci aliasul folosit
+de desen arăta spre **altă serie decât cea care desenează**.
+
+### Cauza
+
+`_zCSeries` — aliasul citit de `drawingTools` — e scris în **exact două locuri**,
+amândouă în `chartBridge` (`registerChart` şi `unregisterChart`).
+
+Iar `applyCandleType` **schimbă seria de lumânări**:
+
+```js
+_removeOldSeries()        // w.mainChart.removeSeries(w.cSeries); w.cSeries = null
+const series = _buildSeries(type)
+w.cSeries = series        // ← şi atât. `_zCSeries` rămâne pe seria ŞTEARSĂ.
+```
+
+Şi partea care face totul să se lege: tipul salvat se **re-aplică la BOOT**
+(`stores/settingsStore.ts:184` şi `core/config.ts:2206` cheamă `applyCandleType(ct,
+{persist:false})`). Deci pentru cine şi-a ales alt tip de lumânare decât cel implicit,
+**desenul era rupt din secunda în care pornea aplicaţia, de fiecare dată**. În captură
+se vede că avea un tip selectat.
+
+**Asta explică de ce niciuna dintre cele cinci runde anterioare nu a ajutat.** Toate
+reparau lucruri reale — armarea, panoramarea, tragerea, filtrul de tap, ciotul de chart,
+prinderea la capete — dar pe un drum care oricum se termina într-o serie moartă.
+
+### Fixul e pe clasă, nu pe instanţă
+
+Puntea devine **singurul proprietar** al aliasurilor, prin `setCandleSeries(series)`,
+care schimbă deodată `w.cSeries`, `w._zCSeries` şi `_refs.candle`. Toate cele trei
+locuri care schimbau seria trec acum pe acolo: `candleTypeSwitcher` la ştergere şi la
+reconstrucţie, şi calea de rezervă din `marketDataChart`.
+
+`null` e acceptat în timpul schimbului: între ştergere şi reconstrucţie chiar nu există
+serie, şi e mai cinstit decât un alias care arată spre un obiect mort.
+
+### Verificare
+
+4 teste noi, scrise înainte; **al treilea a reprodus bugul direct** — după
+`applyCandleType`, `_zCSeries` rămânea seria veche în timp ce `cSeries` era cea nouă.
+Mutaţie: 3 mutanţi ţintiţi — puntea uită iar aliasul; schimbătorul scrie iar direct pe
+`cSeries`; `refs.candle` nu mai e actualizat — **toţi morţi**. 147 de fişiere,
+**1240 teste** verzi, `tsc` curat. În bundle-ul servit:
+`function af(e){let t=window;t.cSeries=e,t._zCSeries=e,ef&&(ef.candle=e)}`.
+
+### R-V-15 (regulă nouă)
+
+**Un alias către un obiect viu trebuie să aibă un singur proprietar, iar cine
+înlocuieşte obiectul trece pe la el.** `w.cSeries` şi `w._zCSeries` arătau spre acelaşi
+obiect şi erau scrise de module diferite; al treilea modul l-a înlocuit şi a actualizat
+doar unul. Nimic nu a crăpat — aliasul rămas arăta spre un obiect valid sintactic, doar
+mort semantic, şi a răspuns `null` la orice întrebare.
+
+Simptomul la suprafaţă („nu pot desena") nu avea nicio legătură vizibilă cu cauza
+(„s-a schimbat tipul de lumânare"), iar cele două sunt despărţite de un boot. De-aia
+cinci runde de citit codul desenului n-aveau cum să o găsească: **cauza nu era în codul
+care eşua.**
+
+### Şi lecţia de proces, a doua oară în aceeaşi zi
+
+La b310 am scris: *la un simptom de UI, întreabă din prima ce se VEDE*. Aici a mers mai
+departe: **o captură a bătut cinci runde de analiză.** Iar ce a făcut captura utilă a
+fost mesajul pe care îl adăugasem la b309/b310 — adică investiţia în „fiecare cale de
+eşec spune de ce" s-a plătit la prima folosire.
+
+Ordinea corectă, pentru data viitoare: **fă întâi eşecurile să vorbească, apoi cere o
+captură.** Nu invers, şi în niciun caz cinci runde de dedus.

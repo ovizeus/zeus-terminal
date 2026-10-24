@@ -3,6 +3,7 @@
 // Chart init, fetchKlines, renderChart
 
 import { fmtTime, fmtDate, toast } from './marketDataHelpers'
+import { setCandleSeries } from '../bridge/chartBridge'
 import { el } from '../utils/dom'
 import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/indicators'
 import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
@@ -52,7 +53,8 @@ export function initCharts(): void {
   const _reactChartReady = w.mainChart && typeof w.mainChart.addLineSeries === 'function'
   if (!_reactChartReady) {
     w.mainChart = w.LightweightCharts.createChart(el('mc'), base(getChartH()))
-    w.cSeries = w.mainChart.addCandlestickSeries({ upColor: '#00d97a', downColor: '#ff3355', borderUpColor: '#00d97a', borderDownColor: '#ff3355', wickUpColor: '#00d97a77', wickDownColor: '#ff335577' })
+    // [2026-10-24] Prin punte, ca aliasul de desen `_zCSeries` sa urmeze seria.
+    setCandleSeries(w.mainChart.addCandlestickSeries({ upColor: '#00d97a', downColor: '#ff3355', borderUpColor: '#00d97a', borderDownColor: '#ff3355', wickUpColor: '#00d97a77', wickDownColor: '#ff335577' }))
   }
   // LLV: load persisted settings and ensure canvas is ready
   if (typeof llvLoadSettings === 'function') llvLoadSettings()

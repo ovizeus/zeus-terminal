@@ -156,6 +156,32 @@ export function unregisterChart(): void {
   console.log('[CHART-BRIDGE] Chart unregistered — window refs replaced with no-op stubs')
 }
 
+/**
+ * Înlocuieşte seria de lumânări, în TOATE locurile deodată.
+ *
+ * [2026-10-24] De ce există: `_zCSeries` — aliasul pe care îl citeşte
+ * `drawingTools` — era scris în exact două locuri, amândouă aici. Iar
+ * `applyCandleType` SCHIMBĂ seria de lumânări (`removeSeries` + `w.cSeries =
+ * series`) şi nu atingea niciodată aliasul. Deci după orice schimbare de tip,
+ * desenul întreba seria **ştearsă**: `coordinateToPrice` întorcea `null` (o serie
+ * fără date nu are `firstValue`), punctul nu se putea pune, şi mesajul era
+ * „Could not read the price there" — exact ce s-a văzut în captura operatorului.
+ *
+ * Şi fiindcă tipul salvat se re-aplică la BOOT (settingsStore, config), pentru
+ * cine şi-a ales alt tip de lumânare desenul era rupt din secunda în care pornea
+ * aplicaţia, de fiecare dată.
+ *
+ * Deci puntea rămâne singurul proprietar al aliasurilor, iar cine schimbă seria
+ * trece pe aici. `null` e acceptat: între ştergere şi reconstrucţie nu există
+ * serie, şi e mai cinstit decât un alias care arată spre un obiect mort.
+ */
+export function setCandleSeries(series: ISeriesApi<'Candlestick'> | any | null): void {
+  const w = window as any
+  w.cSeries = series
+  w._zCSeries = series
+  if (_refs) _refs.candle = series
+}
+
 /** Check if chart bridge has registered refs */
 export function isChartReady(): boolean {
   return _registered && _refs !== null
