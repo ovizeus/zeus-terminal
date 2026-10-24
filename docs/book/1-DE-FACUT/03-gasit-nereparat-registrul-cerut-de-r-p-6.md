@@ -34,11 +34,28 @@ că nu pleacă nicăieri, dar nu e o dovadă — n-am căutat în servicii şi n
 aproape un sfert de megabyte pe fiecare încărcare a aplicaţiei, pe telefonul tău. **De verificat înainte
 de a propune ceva**, nu de reparat acum.
 
-**G-4. `atPruneClosed` e cod mort, şi e o mină.** Ar păstra doar ultimele 500 de poziţii închise pe
-utilizator. Exportată, necheamată de nimeni — verificat azi. Dacă o cablează cineva „ca să nu crească
-tabela", taie tăcut istoricul de tranzacţionare, clasa declarată intangibilă de [[R-C-21]].
-*Nereparat: n-o şterg şi n-o cablez fără cuvântul tău. Opţiunile sunt trei — o ştergem, o lăsăm cu un
-comentariu care spune de ce nu se cheamă, sau îi punem un test care îi interzice să aibă apelant.*
+**G-4. ✅ ÎNCHIS pe 2026-10-24 — `atPruneClosed` rămâne cod mort, acum păzit de un test.**
+Ar păstra doar ultimele 500 de poziţii închise pe utilizator. Exportată, necheamată de nimeni.
+
+**Decizia operatorului:** testul, nu ştergerea. *(„fa g4 daca zici ca e ok")*
+
+Ce s-a făcut, şi nimic altceva: un comentariu deasupra funcţiei care spune că e moartă deliberat şi de
+ce, plus `tests/unit/at-prune-closed-has-no-caller.test.js` — **3 teste** care pică în clipa în care
+funcţia capătă un apelant. Zero schimbare de comportament: funcţia e exact cum era, n-am şters-o şi
+n-am cablat-o.
+
+**De ce test şi nu doar comentariu:** un comentariu convinge pe cine îl citeşte; testul opreşte pe cine
+nu-l citeşte. Iar aici greşeala e tăcută şi definitivă — cineva care o cablează „ca să nu crească
+tabela" nu primeşte nicio eroare, doar pierde istoricul.
+
+**Dovedit că apără, nu doar că trece** ([[R-V-3]], [[R-V-8]]): trei mutaţii, toate omorâte —
+un apelant într-un alt fişier de server (pică testul 1), un apelant chiar în `database.js` (pică
+testul 2), şi funcţia redenumită (pică testul 3, garda care verifică să nu treacă pe nimic). După
+fiecare, fişierul restaurat cu `git checkout` şi arborele verificat curat.
+
+**Şi lucrul care merită reţinut din tot G-4:** operatorul mai are cele 3 480 de poziţii închise
+**din accident** — cineva a scris funcţia de curăţenie şi a uitat s-o cheme. Toate măsurătorile din
+octombrie s-au făcut pe exact istoricul ăla. Nu era o protecţie, era noroc. Acum e politică.
 
 **G-5. 205 989 de rânduri din `brain_decisions` fără nicio regulă de retenţie — desfăcute acum.**
 Scrisesem mai devreme că nu ştiu ce sunt. Le-am desfăcut, e o simplă citire, şi suma dă exact:

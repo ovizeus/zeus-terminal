@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7354 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7371 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🏁 2026-10-24, ÎNCHIDEREA SESIUNII — ritualul cerut de R-OP-11
 

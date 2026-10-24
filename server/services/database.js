@@ -11033,6 +11033,22 @@ function atGetStateByUser(userId) {
     });
 }
 
+// ─── [G-4 2026-10-24] DELIBERATELY DEAD. Do not wire this up. ───
+// Keeps only the newest 500 closed positions per user and deletes the rest.
+// That is TRADE HISTORY, which R-C-21 (operator decision, 2026-10-24) declares
+// untouchable: decision and trade data are never deleted, only telemetry is
+// pruned.
+//
+// Found on 2026-10-24 to have no caller anywhere in server/. The operator still
+// has all 3 480 closed positions BY ACCIDENT rather than by design — and every
+// measurement made in October (the counterfactuals, the funnel, the per-trade
+// figure) was computed on exactly that history. Wiring this in would lose it
+// silently and permanently.
+//
+// Kept rather than removed so the intent stays recorded. Enforced by
+// `tests/unit/at-prune-closed-has-no-caller.test.js`, which fails the moment
+// this function acquires a caller. If you need a cap on at_closed, that is a
+// conversation with the operator first (Book: G-4), not a wire-up.
 function atPruneClosed(userId) {
     if (!userId) return; // safety: no global prune without userId
     _stmts.atPruneClosed.run(userId, userId);
