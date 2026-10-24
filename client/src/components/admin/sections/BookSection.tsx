@@ -15,6 +15,18 @@ type Item = { file: string; title: string; date: string | null }
 type Cat = { id: string; title: string; desc: string | null; count: number; items: Item[] }
 type Tree = { start: string | null; cats: Cat[]; updatedAt: string | null }
 
+const CAT_TINTS: Record<string, string> = {
+  '1-DE-FACUT': '#4fd1ff',
+  '2-DECIZII-ALE-TALE': '#ffb454',
+  '3-IN-COLECTARE': '#9fe6c4',
+  '4-LIVRATE': '#5fd38d',
+  '5-MASURATORI': '#b794ff',
+  '6-RETRACTARI': '#ff5c7a',
+  '7-INCIDENTE': '#ff5c7a',
+  '8-REGULI': '#cdd3e0',
+  '9-ARHIVA': '#8a93a8',
+}
+
 const CAT_ICONS: Record<string, string> = {
   '1-DE-FACUT': '🔧',
   '2-DECIZII-ALE-TALE': '🙋',
@@ -31,6 +43,33 @@ const CARD: React.CSSProperties = {
   display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
   padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.03)',
   border: '1px solid rgba(255,255,255,0.07)', color: 'inherit', font: 'inherit',
+}
+
+// Placuta de folder: pictograma mare + titlu + numarul de secţiuni.
+// Intrarea in carte e DOAR grila asta — se reperează din ochi, nu se citeşte.
+const TILE: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+  gap: 6, cursor: 'pointer', textAlign: 'center', padding: '16px 8px 14px',
+  borderRadius: 14, background: 'rgba(255,255,255,0.035)',
+  border: '1px solid rgba(255,255,255,0.08)', color: 'inherit', font: 'inherit',
+  minHeight: 104, position: 'relative',
+}
+
+function Tile({ icon, title, count, tint, onClick }: {
+  icon: string; title: string; count?: number; tint?: string; onClick: () => void
+}) {
+  const c = tint || '#b794ff'
+  return (
+    <button style={TILE} onClick={onClick}>
+      <span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span>
+      <span style={{ color: '#cdd3e0', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.02em', lineHeight: 1.25 }}>{title}</span>
+      {typeof count === 'number' && (
+        <span style={{ position: 'absolute', top: 8, right: 8, minWidth: 20, height: 18, padding: '0 5px',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7,
+          background: `${c}22`, color: c, fontWeight: 700, fontSize: 11 }}>{count}</span>
+      )}
+    </button>
+  )
 }
 
 function Bar({ children }: { children: React.ReactNode }) {
@@ -59,7 +98,7 @@ export function BookSection() {
   const [tree, setTree] = useState<Tree | null>(null)
   const [full, setFull] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [view, setView] = useState<{ cat?: Cat; item?: Item; all?: boolean }>({})
+  const [view, setView] = useState<{ cat?: Cat; item?: Item; all?: boolean; start?: boolean }>({})
   const [section, setSection] = useState<string | null>(null)
 
   useEffect(() => {
@@ -104,13 +143,23 @@ export function BookSection() {
     return <div style={wrap}><div style={{ padding: 30, textAlign: 'center', color: '#8a93a8', fontSize: 13 }}>Se încarcă cartea…</div></div>
   }
 
+  // ── START: starea de acum ──
+  if (view.start) {
+    return (
+      <div style={wrap}>
+        <Bar><Btn onClick={() => setView({})}>← 🗂️ Foldere</Btn></Bar>
+        {tree && tree.start ? renderMarkdown(tree.start) : <div style={{ color: '#8a93a8', fontSize: 13 }}>Fără START.md pe disc.</div>}
+      </div>
+    )
+  }
+
   // ── o secţiune ──
   if (view.item && view.cat) {
     return (
       <div style={wrap}>
         <Bar>
           <Btn onClick={() => { setView({ cat: view.cat }); setSection(null) }}>← {view.cat.id}</Btn>
-          <Btn onClick={() => { setView({}); setSection(null) }}>🧭 START</Btn>
+          <Btn onClick={() => { setView({}); setSection(null) }}>🗂️ Foldere</Btn>
         </Bar>
         {section === null
           ? <div style={{ padding: 24, textAlign: 'center', color: '#8a93a8', fontSize: 13 }}>Se încarcă…</div>
@@ -123,7 +172,7 @@ export function BookSection() {
   if (view.cat) {
     return (
       <div style={wrap}>
-        <Bar><Btn onClick={() => setView({})}>← 🧭 START</Btn></Bar>
+        <Bar><Btn onClick={() => setView({})}>← 🗂️ Foldere</Btn></Bar>
         <h1 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 4px' }}>
           {CAT_ICONS[view.cat.id] || '•'} {view.cat.title}
         </h1>
@@ -145,39 +194,35 @@ export function BookSection() {
   if (view.all || !tree) {
     return (
       <div style={wrap}>
-        {tree && <Bar><Btn onClick={() => setView({})}>← 🧭 START</Btn></Bar>}
+        {tree && <Bar><Btn onClick={() => setView({})}>← 🗂️ Foldere</Btn></Bar>}
         {full !== null ? renderMarkdown(full) : <div style={{ color: '#8a93a8', fontSize: 13 }}>Se încarcă…</div>}
       </div>
     )
   }
 
-  // ── intrarea: START.md + coşurile ──
+  // ── intrarea: DOAR folderele ──
+  // El a cerut-o explicit: „cand intru sa vad doar folderele si cand intru in
+  // folder sa vad continutul, asa le reperez mai repede". Deci nimic de citit
+  // aici: pictograma, titlu, cat e inauntru.
   return (
     <div style={wrap}>
-      {tree.start ? renderMarkdown(tree.start) : null}
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#b794ff', margin: '22px 0 12px', padding: '8px 14px', borderRadius: 10, background: 'rgba(183,148,255,0.14)', borderLeft: '3px solid #b794ff' }}>
-        🗂️ Coşurile
-      </h2>
-      <div style={{ display: 'grid', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 10 }}>
+        <Tile icon="🧭" title="START" tint="#4fd1ff" onClick={() => setView({ start: true })} />
         {tree.cats.map((c) => (
-          <button key={c.id} style={CARD} onClick={() => setView({ cat: c })}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 17 }}>{CAT_ICONS[c.id] || '•'}</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ color: '#fff', fontSize: 13.5, fontWeight: 700, display: 'block' }}>{c.title}</span>
-                {c.desc && <span style={{ color: '#8a93a8', fontSize: 11.5, lineHeight: 1.4, display: 'block', marginTop: 2 }}>{c.desc}</span>}
-              </span>
-              <span style={{ flex: '0 0 auto', minWidth: 26, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'rgba(183,148,255,0.14)', color: '#b794ff', fontWeight: 700, fontSize: 12 }}>{c.count}</span>
-            </div>
-          </button>
+          <Tile
+            key={c.id}
+            icon={CAT_ICONS[c.id] || '📁'}
+            title={c.title}
+            count={c.count}
+            tint={CAT_TINTS[c.id]}
+            onClick={() => setView({ cat: c })}
+          />
         ))}
-      </div>
-      <div style={{ marginTop: 16 }}>
-        <Btn onClick={() => setView({ all: true })} accent>📖 Cartea întreagă, în ordine cronologică</Btn>
+        <Tile icon="📖" title="CARTEA ÎNTREAGĂ" tint="#8a93a8" onClick={() => setView({ all: true })} />
       </div>
       {tree.updatedAt && (
-        <div style={{ marginTop: 24, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', color: '#5f6678', fontSize: 11.5, textAlign: 'right' }}>
-          fişier actualizat: {new Date(tree.updatedAt).toLocaleString('ro-RO')}
+        <div style={{ marginTop: 20, color: '#5f6678', fontSize: 11.5, textAlign: 'right' }}>
+          actualizat: {new Date(tree.updatedAt).toLocaleString('ro-RO')}
         </div>
       )}
     </div>

@@ -80,3 +80,5 @@ capturi", prima mişcare e `ls data/book_uploads/`.
 **Verificat:** client **1268/1268**, server admin+book **67/67**, șirurile găsite în **bundle**, zero
 artefacte root în `public/app`. `tsc` are 68 de erori preexistente în alte fişiere, **zero** în ale mele —
 nu pretind că e curat, fiindcă nu e.
+
+---

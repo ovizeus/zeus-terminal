@@ -1,7 +1,7 @@
-# 🧭 START — citeşte doar pagina asta
+# 🧭 START — starea de acum
 
 > **Ultima actualizare:** 2026-10-24 · **b313 v1.7.287**, servit și în aplicație
-> Citești pagina asta **în Zeus**, din Admin Control Center → Book of All. Coșurile de mai jos sunt butoane.
+> Ești în Zeus → Admin Control Center → Book of All. Intrarea e **grila de foldere**; asta e folderul 🧭 START.
 
 Cartea întreagă rămâne în `docs/BOOK_OF_ALL.md` — 109 secţiuni, în ordinea în care s-au întâmplat.
 Folderele de aici sunt **navigaţia**: fiecare secţiune stă în coşul ei. Nimic nu s-a şters.
