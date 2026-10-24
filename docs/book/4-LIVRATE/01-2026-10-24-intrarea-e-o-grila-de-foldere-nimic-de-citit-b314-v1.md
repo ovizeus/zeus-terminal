@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7153 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7157 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗂️ 2026-10-24 — INTRAREA E O GRILĂ DE FOLDERE, nimic de citit (b314 v1.7.288)
 

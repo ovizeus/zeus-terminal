@@ -9,7 +9,7 @@ Patru coșuri. Orice rând din carte intră în exact unul.
 | 🔧 | **ALE MELE** | le fac eu, fără să te întreb | **3 propuse** (lista de mai jos) |
 | 🙋 | **AȘTEAPTĂ DE LA TINE** | decizie, chei, sau ochii tăi — eu nu pot continua singur | **11 deschise** |
 | ✅ | **FĂCUTE** | livrat *și* dovedit pe viu, cu numărul de build | 2026-10: b264 → **b296** |
-| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **41** |
+| 📜 | **REGULI** | lecții plătite cu un incident; se citesc la început de sesiune | **66** |
 
 **Cum folosesc coșurile:** nimic nu intră în ✅ pe baza faptului că am scris codul — intră când am o
 dovadă pe sistemul viu. Dacă o reparație e livrată dar neverificată, rămâne în 🔧 cu motivul la vedere.

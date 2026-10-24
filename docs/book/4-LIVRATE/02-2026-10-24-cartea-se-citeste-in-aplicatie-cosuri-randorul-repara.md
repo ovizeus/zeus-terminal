@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7070 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7074 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 📖 2026-10-24 — CARTEA SE CITEŞTE ÎN APLICAŢIE: coşuri + randorul reparat (b313 v1.7.287)
 

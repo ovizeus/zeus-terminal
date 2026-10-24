@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5135 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5139 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 💥 2026-10-19 — PULSAR: compresie, mișcare măsurată și lumânări recolorate pe chartul mare (b283 v1.7.257)
 

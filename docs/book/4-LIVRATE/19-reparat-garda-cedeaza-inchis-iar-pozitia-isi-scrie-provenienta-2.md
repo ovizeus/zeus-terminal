@@ -61,7 +61,7 @@ Regresie: **599 de suite, 9 587 de teste verzi pe 4 sharduri, zero eşuate.**
 
 ### Regula care iese
 
-**R-C-15. O gardă care filtrează pe identitate trebuie să cedeze ÎNCHIS pe identitate lipsă.**
+**R-C-15 → renumerotată [[R-C-24]] pe 2026-10-24, era coliziune de numere. O gardă care filtrează pe identitate trebuie să cedeze ÎNCHIS pe identitate lipsă.**
 `p.userId === userId` pare un filtru de siguranţă, dar pe un rând incomplet devine o **permisiune**:
 necunoscutul trece. Fail-closed înseamnă că absenţa unei informaţii blochează, nu eliberează.
 

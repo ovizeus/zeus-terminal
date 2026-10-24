@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6329 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6333 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ✏️ 2026-10-24 — „dungile nu se pun": desenul se dezarma în secret (b306 v1.7.280)
 

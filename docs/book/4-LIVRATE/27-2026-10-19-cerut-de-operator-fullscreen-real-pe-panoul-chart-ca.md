@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4825 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4829 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🖥️ 2026-10-19 — CERUT DE OPERATOR: fullscreen real pe panoul chart, „ca TradingView" (b278 v1.7.252)
 

@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5904 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5908 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔘 Intrarea în jurnal e buton, titlul se vede — (b293 v1.7.267)
 

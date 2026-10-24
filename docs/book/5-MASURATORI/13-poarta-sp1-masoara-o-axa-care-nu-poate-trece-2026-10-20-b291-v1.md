@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5777 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5781 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔎 Poarta SP1 măsoară o axă care nu poate trece — 2026-10-20 (b291 v1.7.265)
 

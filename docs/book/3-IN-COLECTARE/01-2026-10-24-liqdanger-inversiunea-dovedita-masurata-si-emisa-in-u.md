@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6887 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6891 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🧲 2026-10-24 — LiqDanger: inversiunea dovedită, măsurată, şi emisă în UMBRĂ (b312 v1.7.286)
 

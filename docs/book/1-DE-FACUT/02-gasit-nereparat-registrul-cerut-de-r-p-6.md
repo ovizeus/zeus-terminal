@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7186 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7190 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔭 GĂSIT, NEREPARAT — registrul cerut de R-P-6
 
@@ -33,3 +33,18 @@ client. `grep` pe rutele de server nu l-a găsit nicăieri în afară de propriu
 că nu pleacă nicăieri, dar nu e o dovadă — n-am căutat în servicii şi nici în client. Dacă pleacă, e
 aproape un sfert de megabyte pe fiecare încărcare a aplicaţiei, pe telefonul tău. **De verificat înainte
 de a propune ceva**, nu de reparat acum.
+
+**G-4. `atPruneClosed` e cod mort, şi e o mină.** Ar păstra doar ultimele 500 de poziţii închise pe
+utilizator. Exportată, necheamată de nimeni — verificat azi. Dacă o cablează cineva „ca să nu crească
+tabela", taie tăcut istoricul de tranzacţionare, clasa declarată intangibilă de [[R-C-21]].
+*Nereparat: n-o şterg şi n-o cablez fără cuvântul tău. Opţiunile sunt trei — o ştergem, o lăsăm cu un
+comentariu care spune de ce nu se cheamă, sau îi punem un test care îi interzice să aibă apelant.*
+
+**G-5. 205 989 de rânduri din `brain_decisions` fără nicio regulă de retenţie.** Cele trei reguli acoperă
+`NO_TRADE`, `blocked_*` şi `entry`; restul creşte nelimitat. Nu e urgent — discul e la 47% — dar e
+singura clasă fără plafon dintr-o tabelă care ia 17 000 de rânduri pe zi. *Nereparat: înainte de orice
+retenţie nouă trebuie stabilit în ce clasă din [[R-C-21]] intră rândurile alea, şi eu nu ştiu încă ce
+sunt — n-am desfăcut `final_tier`-urile.*
+
+
+---

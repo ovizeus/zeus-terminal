@@ -3790,11 +3790,12 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 
 > ### 📥 LOT NOU DE REGULI — primit de la operator pe 2026-10-24
 >
-> El le-a scris, eu le-am citit pe toate şi le-am verificat împotriva celor 45 existente şi împotriva
-> stării reale a sistemului. **Sunt 15, şi 13 intră aşa cum sunt.** Două se bat cap în cap cu ceva ce avem
-> deja în producţie, şi le-am scris cu obiecţia la vedere, nu le-am tocit în linişte ca să pară că sunt
-> de acord. Unde o regulă era corectă dar nemăsurabilă („minim N tranzacţii"), am propus cifra —
-> o regulă fără prag nu se poate încălca, deci nu apără nimic.
+> El le-a scris, eu le-am citit pe toate si le-am verificat impotriva celor 45 existente si impotriva
+> starii reale a sistemului. **Sunt 15 si intra toate.** Treisprezece asa cum le-a scris; doua — R-C-17
+> si R-C-21 — se bateau cap in cap cu ceva aflat deja in productie, le-am scris cu obiectia la vedere
+> in loc sa le tocesc in liniste, iar **pe 2026-10-24 a decis pe forma amendata**: flag-uri doar pe
+> calea banilor, retentia despartita pe doua clase de date. Unde o regula era corecta dar nemasurabila
+> („minim N tranzactii”), am propus cifra — o regula fara prag nu se poate incalca, deci nu apara nimic.
 
 **R-OP-10. Ritual de început de sesiune.** Înainte de orice modificare: citeşti rubrica; `SELECT banned_until FROM binance_rate_state`; `git status` (pe ce branch şi worktree eşti); `pm2 list`. Patru comenzi, două minute. Fără ele lucrezi pe ghicite. *(Adăugarea mea, plătită azi: **`ls data/book_uploads/`** — a cincea comandă. El urcă capturile din aplicaţie, nu în chat. Azi mi-a spus „uită-te la capturi" şi i-am răspuns că n-au ajuns; erau pe disc de douăzeci de minute. Vezi [[R-V-16]].)*
 
@@ -3812,7 +3813,7 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 
 **R-C-16. Orice schimbare pe calea banilor trece întâi prin demo.** Comutarea DEMO→LIVE o face **doar operatorul**, niciodată agentul. *(Asta e deja arhitectura: `SERVER_BRAIN`/`SERVER_AT` sunt `false` pe live, iar `S10` din plan e explicit „decizia şi cheile TALE". Regula scrie ce era convenţie. **Pragul lipsea şi îl propun:** minimum **30 de tranzacţii demo închise curat** şi **14 zile** fără incident — aceleaşi cifre ca soak-ul din S10, ca să nu avem două standarde. Dacă vrei alt număr, spune-l şi îl schimb; dar fără cifră regula nu se poate încălca, deci nu apără nimic.)*
 
-**R-C-17. Feature nou = flag, implicit OFF.** 🙋 **Aici nu sunt de acord pe toată suprafaţa, şi îţi spun de ce.** Principiul e corect pe calea banilor: porneşti funcţia de pe flag, nu de pe deploy, şi o opreşti fără reload. **Dar Zeus are deja 34 de flag-uri, toate ON**, iar auditul din 14 octombrie a găsit **două flag-uri aprinse care nu fac nimic** — şi `SMART_CUT` a stat **cod mort de la livrare**, în spatele unui flag care părea pornit. Un flag în plus nu e gratis: e un comutator care poate minţi, şi avem deja clasa asta de bug de trei ori. **Ce propun:** flag obligatoriu pentru orice atinge decizia de tranzacţionare, execuţia, sau ce nu se poate opri printr-un rebuild. Pentru o schimbare doar de client — cum a fost cartea azi — rollback-ul e rebuild-ul, iar un flag ar adăuga doar încă un comutator de urmărit. **Decizia e a ta**; dacă spui „pe tot", o aplic pe tot.
+**R-C-17. Feature nou pe CALEA BANILOR = flag, implicit OFF.** Orice atinge decizia de tranzacționare, execuția, sizing-ul sau ce nu se poate opri printr-un rebuild pornește de pe flag, nu de pe deploy — ca să poată fi stins **fără reload**. Restul nu primește flag. *(**Decis de operator, 2026-10-24: „flagurile doar pe calea banilor”.** Varianta „pe tot” a fost respinsă deliberat, și motivul se scrie ca să nu se redeschidă din reflex: Zeus are deja **34 de flag-uri, toate ON**, auditul din 14 octombrie a găsit **două aprinse care nu fac nimic**, iar `SMART_CUT` a stat **cod mort de la livrare** în spatele unui comutator care părea pornit. Un flag nu e gratis — e un comutator care poate minți, și avem clasa asta de bug de trei ori. Pentru o schimbare doar de client, rollback-ul **e** rebuild-ul ([[R-OP-2]]); un flag acolo ar adăuga doar un comutator de urmărit. **Corolar obligatoriu:** un flag nou se naște cu testul care dovedește că **stins înseamnă chiar stins** — altfel repetăm `SMART_CUT`.)*
 
 **R-C-18. Orice apel nou spre bursă îşi declară greutatea.** Cât adaugă la bugetul de ~345/min şi cât de des rulează. Fără cifra asta nu intră în cod. *(Foarte bună, şi direct plătită: banul de IP din 10 octombrie şi rafala de `positionRisk` din P1. [[R-OP-1]] păzeşte reload-urile, asta păzeşte codul care rulează între ele — cealaltă jumătate a aceleiaşi probleme.)*
 
@@ -3820,7 +3821,7 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 
 **R-C-20. Fişierele generate nu se editează.** Dacă antetul zice „generat din…", se editează sursa şi se rulează scriptul. *(Nimerită la fix: fişierele din `docs/book/` poartă exact antetul ăla, iar `scripts/book-split.py` **şterge tot ce generează** înainte să scrie — o editare acolo n-ar supravieţui nici până la următoarea rulare. Singura excepţie, scrisă pe faţă în script: `START.md`.)*
 
-**R-C-21. Datele nu se şterg, se arhivează.** 🙋 **Şi aici am o obiecţie, iar asta e cea importantă din lot.** Pentru **istoricul de tranzacţii, decizii şi jurnal** regula e corectă fără rezerve — pierderea lor omoară orice analiză viitoare, şi jumătate din ce ţi-am dovedit luna asta a ieşit din `brain_decisions` şi `at_closed`. **Dar aşa cum e scrisă intră în conflict direct cu ceva ce am reparat deliberat în b289:** retenţia care taie cea mai mare tabelă. Baza e la **2,8 GB** şi creşte cu ~17 000 de decizii pe zi. Dacă nimic nu se mai şterge niciodată, discul devine o problemă, iar bugul pe care l-am reparat — retenţia care nu rula — devine „funcţionalitate". **Ce propun:** regula se aplică la **datele de decizie şi tranzacţionare** (nu se şterg niciodată, se arhivează), iar **telemetria şi logurile de depanare** rămân pe retenţie, fiindcă asta e treaba lor. Dacă vrei regula pe tot, se poate — dar atunci trebuie să ne uităm la disc împreună, şi îţi spun dinainte că e o discuţie despre spaţiu, nu despre principiu.
+**R-C-21. Datele de DECIZIE și TRANZACŢIONARE nu se șterg niciodată; telemetria rămâne pe retenție.** Tranzacții, poziții închise, decizii ale creierului și jurnal: nu se dă `DELETE`, se arhivează. Logurile de depanare, telemetria și tabelele de diagnostic: rămân pe retenție, fiindcă asta e treaba lor. *(**Decis de operator, 2026-10-24: „retentia cum ai zis tu”.** Despărțirea nu e comoditate, e necesitate măsurată: baza e la **2,8 GB** și crește cu **~17 000 de decizii pe zi**. Dacă nimic nu s-ar mai șterge vreodată, bugul reparat deliberat în **b289** — retenția care nu rula niciodată, fiindcă `setInterval` de 24h n-avea rulare la pornire — ar deveni „funcționalitate”. Pe partea cealaltă, jumătate din ce i-am dovedit în octombrie a ieșit din `brain_decisions` și `at_closed`: **pierderea istoricului de decizie omoară orice analiză viitoare**, inclusiv retractările, care se fac tot pe datele vechi. **Corolar:** înainte ca o retenție nouă să atingă o tabelă, se scrie în carte în ce clasă din cele două intră tabela. Dacă nu e clar, e istoric — se păstrează.)*
 
 **R-P-6. Ce găseşti în afara sarcinii se notează, nu se repară.** Se trece în carte la „găsit, nereparat" şi se repară doar cu acordul tău. *(Bună, şi întăreşte [[R-C-3]]. **I-am făcut loc să existe:** vezi secţiunea „🔭 GĂSIT, NEREPARAT" din carte — altfel regula cere să scriu undeva unde nu există nimic, şi devine o intenţie, nu o practică.)*
 
@@ -3831,10 +3832,11 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 > ### 🧱 CINCI REGULI DE LA MINE — 2026-10-24, cerute de el
 >
 > Am ales **cinci**, nu cincisprezece, şi asta e prima mea părere despre rubrica asta: **o carte de
-> reguli pe care n-o mai citeşte nimeni e mai rea decât una mai scurtă pe care o respecţi.** Suntem la
-> 60. Fiecare dintre cele cinci de mai jos e plătită cu un incident **din cartea asta**, nu e sfat
-> general de pe internet. Dacă vreuna ţi se pare că nu şi-a câştigat locul, scoate-o — prefer 55 vii
-> decât 60 decorative.
+> reguli pe care n-o mai citeşte nimeni e mai rea decât una mai scurtă pe care o respecţi.** Fiecare
+> dintre cele cinci de mai jos e plătită cu un incident **din cartea asta**, nu e sfat general de pe
+> internet.
+>
+> ✅ **Adoptate de operator pe 2026-10-24: „adauga si regulile tale”.** Sunt reguli, nu propuneri.
 
 **R-C-22. Reparaţia se face pe CLASĂ, nu pe instanţă.** Când ai găsit cauza, înainte să spui „gata" cauţi **toate** locurile cu aceeaşi formă şi le numeri în carte. *(**Cea mai scumpă lecţie din toată cartea, plătită de cel puţin cinci ori.** Escaparea pentru Telegram a fost reparată pe 7 octombrie **la un singur loc de apel** — comentariul de acolo notează 149 de eşecuri într-o zi — şi s-a întors imediat, fiindcă alte 25 de şabloane interpolau la fel; la b273 s-a reparat la graniţă, o dată, pentru toate. Cele opt chei care suprascriau setările: fiecare „reparată" separat ar fi fost opt runde. Aliasul seriei de lumânări: fixul corect n-a fost să actualizez `_zCSeries` în `applyCandleType`, ci un singur `setCandleSeries` prin care trec toţi. Azi, la ora asta: clasificatorul cărţii punea „NEREPARAT" în coşul LIVRAT fiindcă potrivirea era pe subşir; reparaţia pe instanţă ar fi fost o excepţie pentru titlul meu, reparaţia pe clasă a fost o listă de negaţii care prinde şi „NELIVRAT" şi „NEVERIFICAT". **Corolar:** o potrivire pe subşir nu e o potrivire pe înţeles.)*
 
@@ -7218,3 +7220,67 @@ client. `grep` pe rutele de server nu l-a găsit nicăieri în afară de propriu
 că nu pleacă nicăieri, dar nu e o dovadă — n-am căutat în servicii şi nici în client. Dacă pleacă, e
 aproape un sfert de megabyte pe fiecare încărcare a aplicaţiei, pe telefonul tău. **De verificat înainte
 de a propune ceva**, nu de reparat acum.
+
+**G-4. `atPruneClosed` e cod mort, şi e o mină.** Ar păstra doar ultimele 500 de poziţii închise pe
+utilizator. Exportată, necheamată de nimeni — verificat azi. Dacă o cablează cineva „ca să nu crească
+tabela", taie tăcut istoricul de tranzacţionare, clasa declarată intangibilă de [[R-C-21]].
+*Nereparat: n-o şterg şi n-o cablez fără cuvântul tău. Opţiunile sunt trei — o ştergem, o lăsăm cu un
+comentariu care spune de ce nu se cheamă, sau îi punem un test care îi interzice să aibă apelant.*
+
+**G-5. 205 989 de rânduri din `brain_decisions` fără nicio regulă de retenţie.** Cele trei reguli acoperă
+`NO_TRADE`, `blocked_*` şi `entry`; restul creşte nelimitat. Nu e urgent — discul e la 47% — dar e
+singura clasă fără plafon dintr-o tabelă care ia 17 000 de rânduri pe zi. *Nereparat: înainte de orice
+retenţie nouă trebuie stabilit în ce clasă din [[R-C-21]] intră rândurile alea, şi eu nu ştiu încă ce
+sunt — n-am desfăcut `final_tier`-urile.*
+
+
+---
+
+## 🗃️ 2026-10-24 — CLASIFICAREA CERUTĂ DE R-C-21, făcută pe retenţia care rulează ACUM
+
+Regula adoptată azi cere ca orice retenţie să-şi declare clasa tabelei. Am aplicat-o retroactiv pe ce
+rulează deja, fiindcă altfel regula ar fi început să conteze abia de la următoarea tabelă — iar
+problema, dacă există, e în cea de acum.
+
+### Ce taie, cât păstrează, şi dovada din date
+
+| Ce | Fereastra în cod | Cea mai veche linie, măsurată | Clasa |
+|---|---|---|---|
+| `brain_decisions`, `NO_TRADE` nelegate | 30 zile | **2026-09-24** (= fix 30 zile) | telemetrie |
+| `brain_decisions`, `blocked_*` | 90 zile | **2026-07-26** (= fix 90 zile) | telemetrie |
+| `brain_decisions`, `entry` nelegate | 365 zile | 2026-05-13, **1 317 rânduri** | **istoric** |
+| `ml_influence_audit` | 30 zile | — | telemetrie |
+| `brain_parity_log` | 60 zile | — | telemetrie |
+
+Ferestrele nu sunt luate din comentarii: **se văd în date**. `NO_TRADE` începe exact acum 30 de zile,
+`blocked_*` exact acum 90. Retenţia rulează şi face ce zice ([[R-V-1]]).
+
+Încadrarea pe clasele din [[R-C-21]]: **nimic din ce taie azi nu e istoric de tranzacţionare.** Intrările
+legate de o poziţie nu se şterg niciodată, iar cele nelegate sunt intenţii care n-au devenit tranzacţii.
+
+### 🔴 Dar au ieşit două lucruri pe care nu le căutam
+
+**`atPruneClosed` e cod mort — şi e bine că e.** `DELETE FROM at_closed WHERE user_id = ? AND seq NOT IN
+(… ORDER BY closed_at DESC LIMIT 500)`: ar păstra **doar ultimele 500 de poziţii închise pe utilizator**.
+Funcţia există, e exportată, şi **nimic n-o cheamă** — singura apariţie în afara definiţiei şi a
+exportului e propria ei instrucţiune pregătită. De-asta avem încă toate cele **3 480** de poziţii închise,
+şi de-asta au fost posibile măsurătorile din octombrie.
+
+E a doua oară când găsesc exact forma asta: `SMART_CUT` era tot cod mort, tot exportat, tot necheamat —
+numai că acolo lipsa lui costa bani, iar aici lipsa lui **salvează istoricul**. Dar rămâne o mină: cineva
+care o vede exportată şi o cablează „ca să nu crească tabela" ar tăia tăcut istoricul de tranzacţionare,
+adică fix clasa pe care tocmai ai declarat-o intangibilă. *Nereparat — [[R-P-6]]. Vezi G-4.*
+
+**205 989 de rânduri din `brain_decisions` nu intră sub nicio regulă de retenţie.** Cele trei reguli
+acoperă `NO_TRADE`, `blocked_*` şi `entry`. Tot ce nu e niciuna dintre ele — 205 989 de rânduri, cea mai
+veche din 13 mai — **creşte nelimitat**. Nu e urgent (tabela are 744 822 de rânduri în total şi discul e
+la 47%), dar e singura clasă fără plafon dintr-o tabelă care primeşte 17 000 de rânduri pe zi.
+*Nereparat. Vezi G-5.*
+
+### Ce înseamnă pentru măsurătorile mele, şi e o constrângere reală
+
+**Pâlnia are orizont de 30 de zile.** Analizele pe blocaje de reflecţie şi pe `NO_TRADE` — cele din care
+ţi-am dat cifrele pe 23 octombrie — nu pot privi mai în urmă de o lună, fiindcă datele de dinainte sunt
+şterse legitim. Orice afirmaţie de forma „istoric, pâlnia arată…" e falsă dincolo de fereastra aia.
+Se leagă direct de [[R-V-20]]: cifra poartă fereastra ei, iar aici fereastra nu e aleasă de mine, e impusă
+de retenţie.
