@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4859 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4919 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🌊 2026-10-19 — CINCI INDICATORI NOI, pe date pe care nimeni nu le citea (b279 v1.7.253)
 

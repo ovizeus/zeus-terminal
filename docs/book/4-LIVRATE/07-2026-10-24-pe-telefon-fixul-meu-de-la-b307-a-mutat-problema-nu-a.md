@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6465 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6525 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 📱 2026-10-24 — pe TELEFON: fixul meu de la b307 a mutat problema, nu a rezolvat-o (b308 v1.7.282)
 

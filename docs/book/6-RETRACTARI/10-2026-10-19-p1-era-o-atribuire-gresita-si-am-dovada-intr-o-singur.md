@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4506 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4566 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🧾 2026-10-19 — P1 era o atribuire greșită, și am dovada într-o singură linie de log
 

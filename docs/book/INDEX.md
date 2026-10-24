@@ -1,6 +1,6 @@
 # Index complet — toate secţiunile cartii
 
-Toate cele 110 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde sta.
+Toate cele 111 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde sta.
 
 | Data | Coş | Secţiunea |
 |---|---|---|
@@ -106,13 +106,14 @@ Toate cele 110 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-09 | `1-DE-FACUT` | [🔌 PLAN: conectarea ML-ului neconectat *(cerut 2026-10-09, de făcut mai târziu)*](1-DE-FACUT/01-plan-conectarea-ml-ului-neconectat-cerut-2026-10-09-de-facut-mai.md) |
 | 2026-10-09 | `5-MASURATORI` | [🧠 ML — unde suntem (verificat azi, 2026-10-09)](5-MASURATORI/35-ml-unde-suntem-verificat-azi-2026-10-09.md) |
 | 2026-10-09 | `5-MASURATORI` | [🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici](5-MASURATORI/36-audit-de-buguri-2026-10-09-grave-medii-mici.md) |
+| — | `1-DE-FACUT` | [🔭 GĂSIT, NEREPARAT — registrul cerut de R-P-6](1-DE-FACUT/02-gasit-nereparat-registrul-cerut-de-r-p-6.md) |
 | — | `4-LIVRATE` | [🔘 Intrarea în jurnal e buton, titlul se vede — (b293 v1.7.267)](4-LIVRATE/43-intrarea-in-jurnal-e-buton-titlul-se-vede-b293-v1-7-267.md) |
 | — | `4-LIVRATE` | [🎨 Jurnalul full — casete în loc de rânduri lipite (b292 v1.7.266)](4-LIVRATE/44-jurnalul-full-casete-in-loc-de-randuri-lipite-b292-v1-7-266.md) |
 | — | `9-ARHIVA` | [✅ REZOLVATE — arhivă](9-ARHIVA/01-rezolvate-arhiva.md) |
-| — | `1-DE-FACUT` | [PLANS — pe viitor](1-DE-FACUT/02-plans-pe-viitor.md) |
+| — | `1-DE-FACUT` | [PLANS — pe viitor](1-DE-FACUT/03-plans-pe-viitor.md) |
 | — | `3-IN-COLECTARE` | [👀 DE URMĂRIT — monitorizare](3-IN-COLECTARE/03-de-urmarit-monitorizare.md) |
 | — | `8-REGULI` | [📜 REGULILE DUPĂ CARE LUCRĂM — rubrică permanentă](8-REGULI/01-regulile-dupa-care-lucram-rubrica-permanenta.md) |
-| — | `1-DE-FACUT` | [🔧 DE FĂCUT — în ordinea priorităţii](1-DE-FACUT/03-de-facut-in-ordinea-prioritatii.md) |
+| — | `1-DE-FACUT` | [🔧 DE FĂCUT — în ordinea priorităţii](1-DE-FACUT/04-de-facut-in-ordinea-prioritatii.md) |
 | — | `2-DECIZII-ALE-TALE` | [🧭 INTRAREA ÎN CARTE — unde stă fiecare lucru](2-DECIZII-ALE-TALE/05-intrarea-in-carte-unde-sta-fiecare-lucru.md) |
 
 ---

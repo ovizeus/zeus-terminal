@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5549 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5609 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔧 Întreținere + audit server-side — 2026-10-20 (b289 v1.7.263)
 

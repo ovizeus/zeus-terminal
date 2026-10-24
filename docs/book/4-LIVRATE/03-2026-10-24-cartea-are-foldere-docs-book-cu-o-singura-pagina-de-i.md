@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6931 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6991 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗂️ 2026-10-24 — CARTEA ARE FOLDERE: `docs/book/`, cu o singură pagină de intrare
 

@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6377 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6437 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🖐️ 2026-10-24 — „nu merge să trag dungi": chartul se muta sub tine (b307 v1.7.281)
 

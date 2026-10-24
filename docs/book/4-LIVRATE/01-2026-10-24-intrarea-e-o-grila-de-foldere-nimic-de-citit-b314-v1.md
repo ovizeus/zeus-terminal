@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7093 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7153 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗂️ 2026-10-24 — INTRAREA E O GRILĂ DE FOLDERE, nimic de citit (b314 v1.7.288)
 
@@ -30,3 +30,5 @@ dacă folderele lipsesc de pe disc se vede tot cartea întreagă.
 
 **Verificat:** client **1276/1276** (150 de fişiere), şirurile noi găsite în **bundle**, zero artefacte
 root. Client-only, deci **fără reload** — [[R-OP-2]].
+
+---

@@ -83,8 +83,20 @@ OVERRIDES = [
 # un titlu care poarta numar de build e, prin definiţie, ceva livrat
 BUILD_TAG = re.compile(r'\(B\d+ V1\.7\.\d+\)')
 
+# Negaţii: cuvinte care CONŢIN o regula pozitiva dar inseamna fix pe dos.
+# „NEREPARAT" conţine „REPARAT", deci ar fi aterizat in 4-LIVRATE — adica exact
+# in coşul contrar. Se verifica INAINTEA oricarei reguli pozitive.
+NEGATIONS = [
+    ('NEREPARAT', '1-DE-FACUT'),
+    ('NELIVRAT', '1-DE-FACUT'),
+    ('NEVERIFICAT', '1-DE-FACUT'),
+]
+
 def classify(title):
     t = fold(title)
+    for key, cat in NEGATIONS:
+        if key in t:
+            return cat, 'negaţie:' + key
     for key, cat in OVERRIDES:
         if key in t:
             return cat, 'override:' + key

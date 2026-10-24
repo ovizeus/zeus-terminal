@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4590 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4650 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔎 2026-10-19 — REPARAT: 20 265 de eșecuri care spuneau „HTTP 503" și nimic altceva (b275 v1.7.249)
 

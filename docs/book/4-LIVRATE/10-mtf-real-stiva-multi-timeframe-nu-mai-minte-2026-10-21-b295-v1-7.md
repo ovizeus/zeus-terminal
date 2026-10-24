@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5950 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6010 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 📐 MTF REAL — stiva multi-timeframe nu mai minte — 2026-10-21 (b295 v1.7.269)
 

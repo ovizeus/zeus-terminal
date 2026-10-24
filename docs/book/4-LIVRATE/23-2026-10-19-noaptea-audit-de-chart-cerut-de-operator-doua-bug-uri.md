@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5216 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5276 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔍 2026-10-19 noaptea — AUDIT DE CHART cerut de operator: două bug-uri reale, reparate (b285 v1.7.259)
 

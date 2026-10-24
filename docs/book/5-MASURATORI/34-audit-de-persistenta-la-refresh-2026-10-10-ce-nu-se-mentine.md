@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 3946 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4006 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔁 AUDIT DE PERSISTENŢĂ LA REFRESH 2026-10-10 — „ce nu se menţine"
 
