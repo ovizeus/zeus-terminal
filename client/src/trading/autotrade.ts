@@ -64,6 +64,7 @@ export function _computeFillQtyFallback(
 }
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATPnlAtReset, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
+import { liquidityDanger } from './liqDanger'
 import { AT } from '../engine/events'
 import { serverOwnsAT } from '../engine/lockoutGate'
 import { confNDirectional, classifyEntryTier } from '../engine/fusionMath'
@@ -589,10 +590,27 @@ export function computeFusionDecision(): any {
   if ((buy + sell) > 0) reasons.push('OFI:' + (ofi * 100).toFixed(0) + '%')
 
   // 5) Liquidity danger
+  //
+  // [2026-10-24] Valoarea folosita in decizie e NESCHIMBATA aici, dinadins. Formula
+  // `nearPct / 100` e INTOARSA (nearPct e DISTANTA pana la magnet, deci mic = aproape
+  // = periculos) si, fiindca nearPct e deja procent, mai e si impartita o data in plus
+  // — masurat pe randurile de paritate, mediana iese 0,00, deci penalizarea
+  // `confF *= (1 - liqDangerN * 0.55)` nu se aplica practic niciodata.
+  //
+  // Valoarea CORECTA se emite alaturi, in UMBRA, ca sa i se poata vedea distributia pe
+  // date vii inainte sa atinga vreo decizie. Nu se copiaza pur si simplu serverul:
+  // serverul calculeaza corect apropierea, dar are mediana 100%, adica ar taia ~45% din
+  // incredere la FIECARE decizie — o taxa constanta, nu un semnal care discrimineaza.
   let liqDangerN = 0.2
   try {
     const nearPct = Number.isFinite(+w.MAGNETS?.nearPct) ? +w.MAGNETS.nearPct : null
-    if (nearPct != null) { liqDangerN = _clampFB01(nearPct / 100); reasons.push('LiqDanger:' + nearPct.toFixed(0) + '%') }
+    if (nearPct != null) {
+      liqDangerN = _clampFB01(nearPct / 100)
+      // Doua zecimale: cu `toFixed(0)` tot ce e sub 0,5% se rotunjea la „0", adica exact
+      // zona care conteaza devenea invizibila in masuratoare.
+      reasons.push('LiqDanger:' + nearPct.toFixed(2) + '%')
+      reasons.push('LiqDangerFix:' + Math.round(liquidityDanger(nearPct) * 100) + '%')
+    }
   } catch (_) { }
 
   // 6) Hard veto: KillSwitch / Session
