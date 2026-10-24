@@ -7330,7 +7330,7 @@ Opt commit-uri, de la `41974f2e` la `fd42ae34`, toate pushuite. Starea servită:
 build afişat în aplicaţie va arăta **b313** până la următoarea repornire naturală, fiindcă versiunea vine
 de la server. Nu e o eroare, e o consecinţă.
 
-Şi, în afara codului: **cartea are 112 secţiuni pe nouă coşuri**, `scripts/book-split.py` le regenerează,
+Şi, în afara codului: **cartea are 113 secţiuni pe nouă coşuri**, `scripts/book-split.py` le regenerează,
 iar rubrica a crescut de la 45 la **66 de reguli**.
 
 ### Ce a rămas deschis — aşteaptă un cuvânt de la tine
