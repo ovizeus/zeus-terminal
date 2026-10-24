@@ -137,3 +137,8 @@ export function parseInlineTokens(text: string): Inline[] {
   if (last < src.length) out.push({ kind: 'text', text: src.slice(last) })
   return out
 }
+
+/** Titlul unei secţiuni, fără marcaje — pentru liste, unde `**` s-ar vedea ca atare. */
+export function plainText(text: string): string {
+  return parseInlineTokens(text).map((t) => t.text).join('')
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { renderMarkdown } from '../bookRender'
+import { plainText } from '../bookParse'
 
 // ─── "Book of All" — monitorul personal al operatorului ───
 // [2026-10-24] Cartea are coşuri pe disc (`docs/book/`, generate de
@@ -131,7 +132,7 @@ export function BookSection() {
           {view.cat.items.map((it) => (
             <button key={it.file} style={CARD} onClick={() => openItem(view.cat as Cat, it)}>
               {it.date && <span style={{ color: '#5f6678', fontSize: 11, display: 'block', marginBottom: 3 }}>{it.date}</span>}
-              <span style={{ color: '#c4cad8', fontSize: 13.5, lineHeight: 1.45 }}>{it.title}</span>
+              <span style={{ color: '#c4cad8', fontSize: 13.5, lineHeight: 1.45 }}>{plainText(it.title)}</span>
             </button>
           ))}
           {!view.cat.items.length && <div style={{ color: '#5f6678', fontSize: 13 }}>Gol.</div>}

@@ -144,3 +144,16 @@ describe('parseInlineTokens', () => {
     expect(parseInlineTokens('text simplu')).toEqual([{ kind: 'text', text: 'text simplu' }])
   })
 })
+
+describe('plainText', () => {
+  it('scoate marcajele din titlu — in lista de sectiuni nu se arata `**`', async () => {
+    const { plainText } = await import('../bookParse')
+    expect(plainText('⏸️ R16 — **DECIZIA OPERATORULUI: A, nu facem nimic**'))
+      .toBe('⏸️ R16 — DECIZIA OPERATORULUI: A, nu facem nimic')
+  })
+
+  it('pastreaza eticheta legaturii, nu tinta', async () => {
+    const { plainText } = await import('../bookParse')
+    expect(plainText('vezi [START](book/START.md) acum')).toBe('vezi START acum')
+  })
+})
