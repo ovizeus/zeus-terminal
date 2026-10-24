@@ -59,6 +59,7 @@ RULES = [
                            'NU MAI MINTE', 'SE DEZARMA', 'SE MUTA SUB TINE',
                            'FIXUL MEU', 'PUNCTUL 1 CADEA', 'SERIA DE LUMANARI']),
     ('5-MASURATORI',      ['AUDIT', 'MASURAT', 'MASURATOARE', 'VERIFICAT', 'GASIT',
+                           'CLASIFICARE', 'CLASIFICAREA', 'RETENTIA',
                            'CONTRAFACTUAL', 'PALNIA', 'DOVEDIT', 'INSTANTANEU',
                            'INCHIS', 'NUMIT', 'SINCRONIZAREA', 'CIFRA CORECTA',
                            'DE CE NU IESE PE CASTIG', 'CAT DIN ML', 'ML -', 'ML —',
