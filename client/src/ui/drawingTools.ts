@@ -4,7 +4,7 @@
    ─────────────────────────────────────────────────────────────── */
 import { getKlines } from '../services/stateAccessors'
 import { forSymbol, mergeForSave } from './drawingScope'
-import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool, suspendedChartOptions, dragGesture, tapAccepted, drawBlockReason, DRAW_BLOCK_MESSAGE } from './drawToolArming'
+import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool, suspendedChartOptions, dragGesture, tapAccepted, drawBlockReason, DRAW_BLOCK_MESSAGE, klineIndexAt } from './drawToolArming'
 import { showDrawNotice } from './drawNotice'
 import { isChartReady } from '../bridge/chartBridge'
 const w = window as any; // kept for w._zMainChart, w._zCSeries, w._dtToastTimer, w.__ZEUS_DRAW__, fn calls
@@ -104,16 +104,19 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var y = clientY - mc.getBoundingClientRect().top;
     try { var p = _series().coordinateToPrice(y); return (p && Number.isFinite(p) && p > 0) ? p : null; } catch(_) { return null; }
   }
+  // [2026-10-24 b310] Se PRINDE la capete in loc sa refuze. Inainte, un index in
+  // afara intervalului intorcea `null`, iar pe trendline punctul 1 se pune doar daca
+  // ies si pretul si timpul — deci o atingere in spatiul GOL de langa ultima lumânare
+  // nu punea nimic, fara niciun mesaj: butonul rămânea galben si scria in continuare
+  // „Click first point". Pe telefon spatiul ala e exact locul unde vrei sa ancorezi o
+  // linie de trend, deci refuzul era pe cel mai firesc gest.
   function _timeAtX(clientX: any) {
     var mc = _mc(); if (!mc) return null;
     var x = clientX - mc.getBoundingClientRect().left;
     try {
-      var log = _chart().timeScale().coordinateToLogical(x);
       var klines = getKlines();
-      if (log != null && klines.length) {
-        var idx = Math.round(log);
-        if (idx >= 0 && idx < klines.length) return klines[idx].time;
-      }
+      var idx = klineIndexAt(_chart().timeScale().coordinateToLogical(x), klines.length);
+      if (idx !== null && klines[idx]) return klines[idx].time;
     } catch(_) {}
     return null;
   }
@@ -685,7 +688,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       return;
     }
 
-    if (!price) { _toast('Move over chart'); return; }
+    if (!price) { showDrawNotice('Could not read the price there — tap on the candles'); return; }
 
     if (_activeTool === 'hline') {
       _addHLine(price); _deactivate(); _toast('H-Line @ ' + price.toFixed(2)); return;
@@ -836,6 +839,12 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
           _tlineTouchActive = true;
           _tlineJustInitedP1 = true;
           _startPreview(_tlinePendingP1);
+        } else {
+          // [2026-10-24 b310] Ramura asta era MUTA, si e exact cea pe care a lovit-o
+          // operatorul: butonul galben, scrie „Click first point", si punctul nu se
+          // pune. Daca nu se poate, se SPUNE, vizibil.
+          showDrawNotice(!price ? 'Could not read the price there — tap on the candles'
+                                : 'Could not read the time there — tap on the candles');
         }
       } else if (_tlineStep === 1) {
         // Second touch — could be a tap (place p2) or drag (place p2

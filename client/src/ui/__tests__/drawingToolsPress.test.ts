@@ -124,6 +124,53 @@ describe('APAS pe butonul de linie, exact ca operatorul', () => {
   })
 })
 
+// RUNDA 5 — fluxul pe care NU l-am testat niciodata, si care e exact ce face el:
+// trendline prin DOUA ATINGERI, pe telefon.
+describe('TRENDLINE prin doua atingeri, cum face el pe telefon', () => {
+  it('prima atingere pune punctul 1, a doua inchide linia', () => {
+    press('tline')
+    const before = calls.lineSeries
+    touch(mc, 'touchstart', 80, 90)     // punctul 1
+    touch(mc, 'touchend', 80, 90)
+    touch(mc, 'touchstart', 240, 170)   // punctul 2
+    touch(mc, 'touchend', 240, 170)
+    expect(calls.lineSeries).toBe(before + 1)
+  })
+
+  // Cazul pe care l-a lovit: atingere in spatiul GOL din dreapta ultimei lumânari.
+  // `coordinateToLogical` da un index peste numarul de bare, `_timeAtX` intorcea
+  // `null`, iar punctul 1 nu se punea — fara niciun mesaj, butonul galben, scria in
+  // continuare „Click first point".
+  it('atingerea dincolo de ultima lumânare se prinde la ea, nu se pierde', () => {
+    // Scala raspunde cu un logic MULT peste numarul de bare doar in dreapta — adica
+    // spatiul gol de dupa ultima lumânare. In stanga rămâne normala, altfel ambele
+    // puncte ar cadea pe aceeasi bara si refuzul ar fi corect, dar din alt motiv.
+    refs.chart.timeScale = () => ({
+      coordinateToLogical: (x: number) => (x > 300 ? 9999 : Math.round(x / 2)),
+      timeToCoordinate: () => 100,
+    })
+    press('tline')
+    const before = calls.lineSeries
+    touch(mc, 'touchstart', 380, 90)
+    touch(mc, 'touchend', 380, 90)
+    touch(mc, 'touchstart', 200, 170)
+    touch(mc, 'touchend', 200, 170)
+    // Punctul 1 S-A pus (prins la ultima bara), deci a doua atingere inchide linia.
+    // Inainte, amandoua atingerile cadeau in gol si nu se intampla NIMIC.
+    expect(calls.lineSeries).toBe(before + 1)
+  })
+
+  it('cand nici pretul nu se poate citi, se SPUNE, nu se tace', () => {
+    const saved = refs.candle.coordinateToPrice
+    refs.candle.coordinateToPrice = () => null       // chartul nu da pret
+    press('tline')
+    touch(mc, 'touchstart', 100, 100)
+    touch(mc, 'touchend', 100, 100)
+    expect(notice()).toContain('Could not read the price')
+    refs.candle.coordinateToPrice = saved
+  })
+})
+
 // MIEZUL rundei a patra: cauza care a supravieţuit trei runde fiindca era MUTA.
 describe('chartul ca CIOT — cazul care tacea', () => {
   it('nu desenează pe un chart dezinregistrat, si SPUNE de ce', () => {

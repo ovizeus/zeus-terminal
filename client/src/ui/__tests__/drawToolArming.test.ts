@@ -13,6 +13,7 @@
 // chart viu, deci altfel nu s-ar putea testa (acelaşi motiv ca la drawingScope.ts).
 import { describe, it, expect, vi } from 'vitest'
 import {
+  klineIndexAt,
   tapAccepted,
   suspendedChartOptions,
   dragGesture,
@@ -237,5 +238,41 @@ describe('tapAccepted — filtrul de atingere rapida arunca atingerile ATENTE', 
   it('nu cade pe valori lipsa sau nefinite', () => {
     expect(tapAccepted(null, NaN, 0)).toBe(false)
     expect(tapAccepted('hline', NaN, NaN)).toBe(true)
+  })
+})
+
+describe('klineIndexAt — atingerea in spatiul GOL din dreapta nu mai refuza in liniste', () => {
+  // `_timeAtX` facea `coordinateToLogical(x)`, rotunjea, si daca indexul ieşea din
+  // interval intorcea `null`. Iar pe trendline punctul 1 se pune DOAR daca ies si
+  // preţul si timpul — deci o atingere in spatiul gol de langa ultima lumânare nu
+  // punea nimic, fara niciun mesaj: butonul rămânea galben si scria in continuare
+  // „Click first point". Exact ce a descris operatorul.
+  //
+  // Pe telefon asta e usor de nimerit: chartul are spatiu la dreapta, iar acolo vrei
+  // sa ancorezi o linie de trend. Deci se prinde la capete, nu se refuza.
+  it('un index din interval rămâne neschimbat', () => {
+    expect(klineIndexAt(42, 100)).toBe(42)
+    expect(klineIndexAt(0, 100)).toBe(0)
+    expect(klineIndexAt(99, 100)).toBe(99)
+  })
+
+  it('rotunjeste logicul fracţionar, ca inainte', () => {
+    expect(klineIndexAt(42.4, 100)).toBe(42)
+    expect(klineIndexAt(42.6, 100)).toBe(43)
+  })
+
+  it('dincolo de ultima lumânare se prinde la ULTIMA, nu refuza', () => {
+    expect(klineIndexAt(140, 100)).toBe(99)
+    expect(klineIndexAt(100, 100)).toBe(99)
+  })
+
+  it('inaintea primei lumânari se prinde la PRIMA', () => {
+    expect(klineIndexAt(-7, 100)).toBe(0)
+  })
+
+  it('fara bare nu exista raspuns', () => {
+    expect(klineIndexAt(10, 0)).toBe(null)
+    expect(klineIndexAt(null as any, 100)).toBe(null)
+    expect(klineIndexAt(NaN, 100)).toBe(null)
   })
 })

@@ -207,3 +207,28 @@ export const DRAW_BLOCK_MESSAGE: Record<string, string> = {
   'module-not-loaded': 'Drawing tools did not load — reload the page (pull down to refresh)',
   'chart-not-ready': 'Chart is not ready yet — wait for the candles, then try again',
 }
+
+/**
+ * Indexul de lumânare pentru un „logical" dat de `timeScale().coordinateToLogical`.
+ *
+ * `_timeAtX` rotunjea şi, dacă indexul ieşea din interval, întorcea `null`. Iar pe
+ * trendline punctul 1 se pune DOAR dacă ies şi preţul şi timpul — deci o atingere în
+ * spaţiul gol de lângă ultima lumânare nu punea nimic, **fără niciun mesaj**: butonul
+ * rămânea galben şi scria în continuare „Click first point".
+ *
+ * Pe telefon asta e uşor de nimerit: chartul are spaţiu la dreapta, şi exact acolo
+ * vrei să ancorezi o linie de trend. Deci se prinde la capete în loc să refuze —
+ * intenţia e limpede, iar ancora corectă e ultima bară.
+ */
+export function klineIndexAt(logical: number | null | undefined, len: number): number | null {
+  if (!Number.isFinite(len as any) || len <= 0) return null
+  // `coordinateToLogical` poate intoarce `null`. NU trece prin `Number()`:
+  // `Number(null)` e 0, finit, deci un „fara raspuns" ar fi devenit „prima lumânare".
+  if (logical === null || logical === undefined) return null
+  const l = Number(logical)
+  if (!Number.isFinite(l)) return null
+  const idx = Math.round(l)
+  if (idx < 0) return 0
+  if (idx > len - 1) return len - 1
+  return idx
+}
