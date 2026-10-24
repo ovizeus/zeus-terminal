@@ -99,3 +99,65 @@ export function subscribeDrawTool(cb: (tool: DrawTool) => void): () => void {
   window.addEventListener(DRAW_TOOL_EVENT, handler)
   return () => window.removeEventListener(DRAW_TOOL_EVENT, handler)
 }
+
+/**
+ * Opţiunile cu care chartul NU se mai mută cât timp desenezi pe el.
+ *
+ * De ce era nevoie: `marketDataChart.ts` ţine `pressedMouseMove`, `horzTouchDrag`
+ * şi `vertTouchDrag` pe `true`, iar drawingTools nu suspenda nimic. Deci când tragi
+ * cu o unealtă armată, lightweight-charts panoramează chartul sub tine — pe mouse
+ * nu se desenează nimic, iar pe atingere punctul 2 se calculează pe scala DEJA
+ * mutată, deci linia aterizează altundeva decât ai tras. Asta e exact ce suspendă
+ * TradingView cât timp o unealtă de desen e activă.
+ *
+ * Zoom-ul rămâne aprins: numai panoramarea prin tragere se bate cu desenul.
+ *
+ * Calculat din opţiunile CURENTE, nu hardcodat, ca restaurarea să nu reaprindă
+ * ceva ce operatorul avea stins şi să nu dubleze valorile din marketDataChart.ts.
+ */
+export function suspendedChartOptions(cur: any): {
+  handleScroll: { mouseWheel: boolean; pressedMouseMove: boolean; horzTouchDrag: boolean; vertTouchDrag: boolean };
+  handleScale: { mouseWheel: boolean; pinch: boolean; axisPressedMouseMove: boolean };
+} {
+  // Implicitele bibliotecii sunt „totul aprins", deci lipsa înseamnă aprins.
+  var flag = function (group: any, key: string): boolean {
+    if (group === false) return false
+    if (group === true || group == null) return true
+    return group[key] !== false
+  }
+  var scroll = cur ? cur.handleScroll : undefined
+  var scale = cur ? cur.handleScale : undefined
+  return {
+    handleScroll: {
+      mouseWheel: flag(scroll, 'mouseWheel'),
+      pressedMouseMove: false,
+      horzTouchDrag: false,
+      vertTouchDrag: false,
+    },
+    handleScale: {
+      mouseWheel: flag(scale, 'mouseWheel'),
+      pinch: flag(scale, 'pinch'),
+      axisPressedMouseMove: false,
+    },
+  }
+}
+
+export interface Pt { x: number; y: number }
+
+/**
+ * Tragere sau atingere, cu acelaşi prag ca pe calea de atingere (8px pe suma
+ * deplasărilor), ca gestul să se simtă identic pe mouse şi pe ecran.
+ *
+ * Sub prag TREBUIE să rămână atingere: altfel un simplu clic ar porni fluxul de
+ * tragere şi ar pune punctul 2 peste punctul 1, adică exact linia de lungime zero
+ * pe care am interzis-o. Fluxul clic-clic nu are voie să fie rupt de desenul prin
+ * tragere.
+ */
+export function dragGesture(from: Pt | null | undefined, to: Pt | null | undefined, minPx = 8):
+  'drag' | 'tap' | null {
+  if (!from || !to) return null
+  var dx = Number(to.x) - Number(from.x)
+  var dy = Number(to.y) - Number(from.y)
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null
+  return (Math.abs(dx) + Math.abs(dy)) > minPx ? 'drag' : 'tap'
+}

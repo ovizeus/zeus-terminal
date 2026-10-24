@@ -13,6 +13,8 @@
 // chart viu, deci altfel nu s-ar putea testa (acelaşi motiv ca la drawingScope.ts).
 import { describe, it, expect, vi } from 'vitest'
 import {
+  suspendedChartOptions,
+  dragGesture,
   resolveToolToggle,
   tlineSeriesData,
   needsHandleContainer,
@@ -122,5 +124,86 @@ describe('magistrala de armare — cum află React că modulul s-a dezarmat sing
     window.removeEventListener(DRAW_TOOL_EVENT, cb)
     expect(cb).toHaveBeenCalledTimes(1)
     expect(DRAW_TOOL_EVENT).toBe('zeus:drawToolChanged')
+  })
+})
+
+describe('suspendedChartOptions — chartul nu are voie sa se mute cand desenezi pe el', () => {
+  // De ce: `marketDataChart.ts` tine `pressedMouseMove`, `horzTouchDrag` si
+  // `vertTouchDrag` pe true, iar drawingTools NU suspenda nimic. Deci cand tragi cu
+  // unealta armata, lightweight-charts panorameaza chartul sub tine: pe mouse nu se
+  // deseneaza nimic, iar pe atingere punctul 2 se calculeaza pe scala DEJA mutata.
+  // Asta e ce suspenda TradingView cat timp o unealta de desen e activa.
+  const live = {
+    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+    handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+  }
+
+  it('taie toate gesturile de TRAGERE care mutau chartul', () => {
+    const o = suspendedChartOptions(live)
+    expect(o.handleScroll.pressedMouseMove).toBe(false)
+    expect(o.handleScroll.horzTouchDrag).toBe(false)
+    expect(o.handleScroll.vertTouchDrag).toBe(false)
+    expect(o.handleScale.axisPressedMouseMove).toBe(false)
+  })
+
+  // Zoom-ul rămâne: in TradingView poti da zoom cat timp desenezi, doar panoramarea
+  // prin tragere e cea care se bate cu desenul.
+  it('pastreaza zoom-ul pe rotita si pe pinch', () => {
+    const o = suspendedChartOptions(live)
+    expect(o.handleScroll.mouseWheel).toBe(true)
+    expect(o.handleScale.mouseWheel).toBe(true)
+    expect(o.handleScale.pinch).toBe(true)
+  })
+
+  it('accepta forma booleana a opţiunilor', () => {
+    const o = suspendedChartOptions({ handleScroll: true, handleScale: true })
+    expect(o.handleScroll.mouseWheel).toBe(true)
+    expect(o.handleScroll.pressedMouseMove).toBe(false)
+    expect(o.handleScale.pinch).toBe(true)
+    expect(o.handleScale.axisPressedMouseMove).toBe(false)
+  })
+
+  it('nu reaprinde ce era deja stins', () => {
+    const o = suspendedChartOptions({ handleScroll: false, handleScale: false })
+    expect(o.handleScroll.mouseWheel).toBe(false)
+    expect(o.handleScale.pinch).toBe(false)
+  })
+
+  it('pe optiuni lipsa cade pe implicitele bibliotecii, dar tot cu tragerea stinsa', () => {
+    const o = suspendedChartOptions(undefined)
+    expect(o.handleScroll.mouseWheel).toBe(true)
+    expect(o.handleScroll.pressedMouseMove).toBe(false)
+    expect(o.handleScale.axisPressedMouseMove).toBe(false)
+  })
+
+  // `axisPressedMouseMove` poate fi si obiect {time, price} — tot trebuie stins.
+  it('stinge si forma-obiect a tragerii pe axa', () => {
+    const o = suspendedChartOptions({ handleScale: { axisPressedMouseMove: { time: true, price: true } } })
+    expect(o.handleScale.axisPressedMouseMove).toBe(false)
+  })
+})
+
+describe('dragGesture — tragere sau atingere, acelasi prag ca pe mobil', () => {
+  it('peste prag e tragere', () => {
+    expect(dragGesture({ x: 10, y: 10 }, { x: 40, y: 12 })).toBe('drag')
+  })
+
+  // Sub prag TREBUIE sa rămână atingere, altfel un simplu clic ar porni fluxul de
+  // tragere si ar pune punctul 2 peste punctul 1 — adica exact linia de lungime zero
+  // pe care tocmai am interzis-o. Fluxul clic-clic nu are voie sa fie rupt de fixul asta.
+  it('sub prag e atingere, deci fluxul clic-clic rămâne neatins', () => {
+    expect(dragGesture({ x: 10, y: 10 }, { x: 13, y: 11 })).toBe('tap')
+    expect(dragGesture({ x: 10, y: 10 }, { x: 10, y: 10 })).toBe('tap')
+  })
+
+  it('pragul e acelasi cu cel din calea de atingere: 8px pe suma deplasarilor', () => {
+    expect(dragGesture({ x: 0, y: 0 }, { x: 8, y: 0 })).toBe('tap')
+    expect(dragGesture({ x: 0, y: 0 }, { x: 9, y: 0 })).toBe('drag')
+    expect(dragGesture({ x: 0, y: 0 }, { x: 5, y: 4 })).toBe('drag')
+  })
+
+  it('fara puncte valide nu decide nimic', () => {
+    expect(dragGesture(null as any, { x: 1, y: 1 })).toBe(null)
+    expect(dragGesture({ x: NaN, y: 0 }, { x: 50, y: 0 })).toBe(null)
   })
 })

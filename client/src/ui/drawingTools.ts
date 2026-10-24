@@ -4,7 +4,7 @@
    ─────────────────────────────────────────────────────────────── */
 import { getKlines } from '../services/stateAccessors'
 import { forSymbol, mergeForSave } from './drawingScope'
-import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool } from './drawToolArming'
+import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool, suspendedChartOptions, dragGesture } from './drawToolArming'
 const w = window as any; // kept for w._zMainChart, w._zCSeries, w._dtToastTimer, w.__ZEUS_DRAW__, fn calls
 
 export function drawToolActivate(tool: any): void { w.drawToolActivate(tool); }
@@ -45,6 +45,14 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   // through pan / zoom too.
   var _previewMarker: any = null;
   var _handleContainer: any = null;
+  // [2026-10-24] Panoramarea chartului se bate cu desenul: `pressedMouseMove` si
+  // `horzTouchDrag/vertTouchDrag` sunt aprinse in marketDataChart.ts, deci o tragere
+  // cu unealta armata MUTA chartul in loc sa deseneze. Salvam optiunile vii cat timp
+  // o unealta e activa si le punem la loc dupa, ca sa nu reaprindem ce era stins.
+  var _panSaved: any = null;
+  // Desen prin TRAGERE cu mouse-ul. Pe atingere exista de la Pack G.3; pe mouse NU
+  // exista deloc, se putea doar clic-clic — de aici „nu merge sa trag dungi".
+  var _mouseDown: any = null;
 
   var COLORS = ['#f0c040','#00d97a','#ff3355','#00b8d4','#aa44ff','#ff8822','#ffffff'];
   var _colorIdx = 0;
@@ -431,7 +439,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
 
   // ── Add Trendline (native LWC LineSeries — follows chart automatically) ──
   function _addTLine(p1: any, p2: any, color?: any, existingId?: any, width?: any, style?: any, storedSym?: any) {
-    var c = _chart(); if (!c) return;
+    var c = _chart(); if (!c) return false;
     // [Pack G] Use operator's saved defaults when caller omits.
     color = color || _defaultColor || _nextColor();
     var w0 = Number.isFinite(width) ? width : _defaultWidth;
@@ -446,7 +454,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     // linia ieşea de lungime zero, adica invizibila. Garda exista deja in
     // `_updateTLineSeries`, pe calea de drag, si lipsea de pe cea de creare.
     var data = tlineSeriesData(p1, p2);
-    if (!data) { if (!existingId) _toast('Pick two different candles'); return; }
+    if (!data) { if (!existingId) _toast('Pick two different candles'); return false; }
     // Create a LineSeries on the chart for this trendline
     var lineSeries = c.addLineSeries({
       color: color,
@@ -468,6 +476,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     _lines.push({ id:id, type:'tline', sym:_symFor(existingId, storedSym), p1:{time:p1.time, price:p1.price}, p2:{time:p2.time, price:p2.price}, color:color, width:w0, style:st0, lwcSeries:lineSeries, handles:[h1,h2], delBtn:del, cfgBtn:cfg, selected:false });
     _selectLine(id);
     if (!existingId) _save();
+    return true;
   }
 
   // ── Update trendline series data after drag ──
@@ -692,8 +701,10 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       }
       if (_tlineStep === 1 && _tlinePendingP1) {
         _clearPreview();
-        _addTLine(_tlinePendingP1, { time:time, price:price });
-        _tlinePendingP1 = null; _tlineStep = 0; _deactivate(); _toast('Trendline placed'); return;
+        var okClick = _addTLine(_tlinePendingP1, { time:time, price:price });
+        _tlinePendingP1 = null; _tlineStep = 0; _deactivate();
+        if (okClick) _toast('Trendline placed');
+        return;
       }
     }
     if (_activeTool === 'eraser') {
@@ -728,6 +739,48 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       _deactivate();
     }
   }
+
+  // [2026-10-24] Desen prin TRAGERE cu mouse-ul. Pe atingere fluxul asta exista de la
+  // Pack G.3 (apasa-trage-ridica), pe mouse NU exista deloc: se putea doar clic-clic.
+  // Deci o tragere punea cel mult punctul 1 si lasa o previzualizare care urma
+  // cursorul la nesfarsit — „nu merge sa trag dungi".
+  //
+  // Pragul e acelasi ca pe atingere, ca gestul sa se simta identic; SUB prag nu se
+  // intampla nimic aici, deci fluxul clic-clic rămâne exact cum era.
+  document.addEventListener('mousedown', function (e: any) {
+    if (_activeTool !== 'tline' || _dragging || e.button !== 0) return;
+    if (e.target && e.target.closest && e.target.closest('.dt-btn,.dt-del,.dt-handle,.dt-cfg,.dt-cfg-panel')) return;
+    if (!_isOnChart(e)) return;
+    _mouseDown = { x: e.clientX, y: e.clientY, armed: false };
+  }, true);
+
+  document.addEventListener('mousemove', function (e: any) {
+    if (!_mouseDown || _mouseDown.armed || _activeTool !== 'tline') return;
+    if (dragGesture(_mouseDown, { x: e.clientX, y: e.clientY }) !== 'drag') return;
+    // Punctul 1 e de unde s-a APASAT, nu de unde a ajuns cursorul.
+    var p1price = _priceAtY(_mouseDown.y), p1time = _timeAtX(_mouseDown.x);
+    if (!p1price || !p1time) { _mouseDown = null; return; }
+    _mouseDown.armed = true;
+    _tlinePendingP1 = { time: p1time, price: p1price };
+    _tlineStep = 1;
+    _startPreview(_tlinePendingP1);
+  }, true);
+
+  document.addEventListener('mouseup', function (e: any) {
+    var md = _mouseDown; _mouseDown = null;
+    if (!md || !md.armed || _activeTool !== 'tline' || !_tlinePendingP1) return;
+    var p2price = _priceAtY(e.clientY), p2time = _timeAtX(e.clientX);
+    if (!p2price || !p2time) { _toast('Release over the chart area'); return; }
+    _clearPreview();
+    var okDrag = _addTLine(_tlinePendingP1, { time: p2time, price: p2price });
+    _tlinePendingP1 = null; _tlineStep = 0;
+    // Un mousedown+mouseup produce SI un `click`: fara suprimare ar cadea pe ramura
+    // de selectare imediat dupa ce tocmai am desenat.
+    _suppressNextChartAction = true;
+    setTimeout(function () { _suppressNextChartAction = false; }, 250);
+    _deactivate();
+    if (okDrag) _toast('Trendline placed');
+  }, true);
 
   // Desktop click
   document.addEventListener('click', function(e: any) {
@@ -855,13 +908,30 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   // React o oglindeste prin `zeus:drawToolChanged`. Inainte, React isi calcula
   // singur toggle-ul din starea LUI, care ramanea aprinsa dupa ce `_deactivate()`
   // dezarma modulul la fiecare plasare — de unde „dungile nu se pun".
+  function _suspendPan() {
+    var c = _chart(); if (!c || _panSaved) return;
+    try {
+      var cur = (typeof c.options === 'function') ? c.options() : null;
+      _panSaved = {
+        handleScroll: cur ? cur.handleScroll : true,
+        handleScale: cur ? cur.handleScale : true,
+      };
+      c.applyOptions(suspendedChartOptions(cur));
+    } catch (_) { _panSaved = null; }
+  }
+  function _restorePan() {
+    var c = _chart(); if (!c || !_panSaved) { _panSaved = null; return; }
+    try { c.applyOptions(_panSaved); } catch (_) { /* */ }
+    _panSaved = null;
+  }
+
   function _activate(tool: any) {
     var next = resolveToolToggle(_activeTool, tool);
     if (next === null) { _deactivate(); return; }
     if (!_series()) { _toast('Chart not ready'); return; }
     _activeTool = next; _tlineStep = 0; _tlinePendingP1 = null;
     _clearPreview();
-    _deselectAll(); _updateBtnStates(); emitDrawTool(_activeTool);
+    _deselectAll(); _updateBtnStates(); emitDrawTool(_activeTool); _suspendPan();
     var mc = _mc(); if (mc) mc.style.cursor = 'crosshair';
     if (next === 'hline') _toast('Click to place line');
     else if (next === 'tline') _toast('Click first point');
@@ -869,6 +939,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   }
   function _deactivate() {
     _activeTool = null; _tlineStep = 0; _tlinePendingP1 = null;
+    _mouseDown = null; _restorePan();
     // [Pack G.3] Reset mobile flow flags so a future activation starts clean.
     _tlineTouchActive = false; _tlineJustInitedP1 = false;
     _clearPreview();
