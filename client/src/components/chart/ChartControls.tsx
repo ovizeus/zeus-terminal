@@ -13,7 +13,9 @@ import { useScrollLock } from '../../core/scrollLock'
 import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
 import { USER_SETTINGS } from '../../core/config'
 import { IND_ICONS } from '../../constants/indicatorIcons'
-import { subscribeDrawTool, type DrawTool } from '../../ui/drawToolArming'
+import { subscribeDrawTool, drawBlockReason, DRAW_BLOCK_MESSAGE, type DrawTool } from '../../ui/drawToolArming'
+import { showDrawNotice } from '../../ui/drawNotice'
+import { isChartReady } from '../../bridge/chartBridge'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -1102,7 +1104,13 @@ export function ChartControls() {
   // Acum modulul decide, si noi doar oglindim ce ne anunta.
   function handleDrawTool(tool: string) {
     const w = window as any
-    if (typeof w.drawToolActivate === 'function') w.drawToolActivate(tool)
+    // [2026-10-24 b309] Daca nu se poate desena, SPUNE de ce. Pana acum, o apasare pe
+    // butonul de linie cu modulul nelegat nu facea absolut nimic — nici un mesaj, nici
+    // macar butonul aprins (de la b306, fiindca starea e oglinda modulului). Trei runde
+    // de reparaturi s-au dus pe tacerea asta.
+    const blocked = drawBlockReason(typeof w.drawToolActivate === 'function', isChartReady())
+    if (blocked) { showDrawNotice(DRAW_BLOCK_MESSAGE[blocked]); return }
+    w.drawToolActivate(tool)
   }
   // Oglinda armarii: modulul anunta, noi randam. Acopera si tasta H, care armeaza
   // direct modulul fara sa treaca prin butoane.

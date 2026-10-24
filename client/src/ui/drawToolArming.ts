@@ -183,3 +183,27 @@ export function tapAccepted(armed: DrawTool, elapsedMs: number, movedPx: number,
   if (!Number.isFinite(ms) || !Number.isFinite(px)) return false
   return ms <= maxMs && px <= maxPx
 }
+
+/**
+ * De ce nu se poate desena ACUM, spus pe nume.
+ *
+ * `bridgeReady` vine din `isChartReady()` al punţii, nu din „obiectul e truthy".
+ * Diferenţa e cauza care a supravieţuit trei runde: `unregisterChart()` pune pe
+ * globale un `_noopStub`, care e un `Proxy` peste o funcţie, deci **truthy**.
+ * Verificarea `if (!_series())` din `_activate` trecea, `createPriceLine` întorcea
+ * `undefined`, linia se adăuga în listă fără nimic desenat, şi nu apărea nicio
+ * eroare. Exact „apăs şi nu face nimic".
+ */
+export type DrawBlock = 'module-not-loaded' | 'chart-not-ready' | null
+
+export function drawBlockReason(hasActivate: boolean, bridgeReady: boolean): DrawBlock {
+  if (!hasActivate) return 'module-not-loaded'
+  if (!bridgeReady) return 'chart-not-ready'
+  return null
+}
+
+/** Mesaje pentru om, nu coduri. Cine le vede trebuie sa stie ce sa FACA. */
+export const DRAW_BLOCK_MESSAGE: Record<string, string> = {
+  'module-not-loaded': 'Drawing tools did not load — reload the page (pull down to refresh)',
+  'chart-not-ready': 'Chart is not ready yet — wait for the candles, then try again',
+}

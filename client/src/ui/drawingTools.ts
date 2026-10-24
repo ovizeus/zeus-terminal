@@ -4,7 +4,9 @@
    ─────────────────────────────────────────────────────────────── */
 import { getKlines } from '../services/stateAccessors'
 import { forSymbol, mergeForSave } from './drawingScope'
-import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool, suspendedChartOptions, dragGesture, tapAccepted } from './drawToolArming'
+import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool, suspendedChartOptions, dragGesture, tapAccepted, drawBlockReason, DRAW_BLOCK_MESSAGE } from './drawToolArming'
+import { showDrawNotice } from './drawNotice'
+import { isChartReady } from '../bridge/chartBridge'
 const w = window as any; // kept for w._zMainChart, w._zCSeries, w._dtToastTimer, w.__ZEUS_DRAW__, fn calls
 
 export function drawToolActivate(tool: any): void { w.drawToolActivate(tool); }
@@ -956,7 +958,13 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   function _activate(tool: any) {
     var next = resolveToolToggle(_activeTool, tool);
     if (next === null) { _deactivate(); return; }
-    if (!_series()) { _toast('Chart not ready'); return; }
+    // [2026-10-24 b309] NU „obiectul e truthy", ci puntea. `unregisterChart()` pune pe
+    // globale un `_noopStub`, care e un Proxy peste o functie, deci TRUTHY: vechea
+    // verificare `if (!_series())` trecea, `createPriceLine` intorcea `undefined`,
+    // linia se adauga in lista fara nimic desenat, si nu aparea nicio eroare. Exact
+    // „apas si nu face nimic". Si de acum motivul se SPUNE, vizibil.
+    var _blk = drawBlockReason(true, isChartReady() && !!_series());
+    if (_blk) { showDrawNotice(DRAW_BLOCK_MESSAGE[_blk]); return; }
     _activeTool = next; _tlineStep = 0; _tlinePendingP1 = null;
     _clearPreview();
     _deselectAll(); _updateBtnStates(); emitDrawTool(_activeTool); _suspendPan();
