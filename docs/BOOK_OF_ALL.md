@@ -6902,3 +6902,18 @@ verzi, `tsc` curat.
 După câteva zile de colectare se citeşte distribuţia lui `LiqDangerFix` pe date vii, se
 alege pragul, **apoi** se mută pe decizie. Acelaşi tipar ca `shadow_geom`: colectezi,
 citeşti, abia apoi atingi ce tranzacţionează.
+
+### Decizia operatorului (2026-10-24): *„lasa sa colecteze cateva zile"*
+
+Deci nu se atinge decizia. `LiqDangerFix` se adună în `brain_parity_log`, iar citirea e
+livrată **odată cu** colectarea, nu „mai târziu": `scripts/liqdanger-shadow.py` arată
+distribuţia distanţei, pericolul de acum vs cel corect, penalizarea în puncte
+procentuale pe fiecare, şi cât de des ar discrimina valoarea corectă.
+
+Ce trebuie citit acolo: dacă valoarea corectă stă **mereu sus**, nu e un semnal care
+alege, e o taxă constantă — şi atunci se strâmtează pragul `LIQ_PROXIMITY_PCT`, nu se
+mută decizia pe ea. Exact capcana în care stă partea de server (mediana 100%).
+
+Motivul pentru care cititorul vine acum, nu peste câteva zile: cohortul `shadow` a stat
+patru luni cu semantică greşită fiindcă nimeni nu se uita la el. **Colectarea fără
+citire nu e măsurătoare, e speranţă.**
