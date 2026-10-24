@@ -7254,12 +7254,37 @@ E exact clasa numită de [[R-C-22]] şi de corolarul ei: **o potrivire pe prefix
 înţeles.** Acelaşi tipar ca „NEREPARAT" care ateriza în coşul LIVRAT, doar că aici costă 128 187 de
 rânduri care cresc la nesfârşit.
 
-*Nereparat, şi nu din lene: reparaţia curată nu e să adaug un `OR final_action = 'entry_blocked'` — asta
-e tot reparaţie pe instanţă. Întrebarea corectă e dacă numele trebuie uniformizat la sursă
-(`blocked_at_rejected`), ceea ce atinge ce se scrie în `brain_decisions` pe calea vie, sau dacă retenţia
-trebuie să se uite la `blockedReason` în loc de la forma numelui. **Prima e mai curată şi mai riscantă;
-a doua e mai sigură şi lasă numele inconsecvent.** Decizia ta. Cele două clase ISTORIC — `pending_fill`
-şi `pending_momentum`, 510 rânduri, toate legate de poziţii reale — nu se ating în niciun scenariu.*
+*Nereparat, şi nu din lene.* **Dar corectez ce scrisesem acum o oră: pusesem două opţiuni, şi pe cea
+greşită o numisem „mai sigură".**
+
+Scrisesem că retenţia s-ar putea uita la `blockedReason` în loc de forma numelui, şi că asta ar fi
+varianta sigură. **Am verificat, şi e pe dos:** `blockedReason` **nu e coloană** — stă în blob-ul JSON din
+`data`. Măsurat pe baza vie, doar cu `SELECT`:
+
+| Filtru | Timp |
+|---|---|
+| `json_extract(data,'$.blockedReason')='at_rejected'` | **2,254 s** |
+| `final_action='entry_blocked'` | **0,030 s** |
+
+**De 75 de ori mai lent**, şi `better-sqlite3` e **sincron**: un `DELETE` cu filtrul pe JSON ar îngheţa
+bucla de evenimente ~2 secunde la fiecare rulare de retenţie. Aia e exact clasa incidentului din
+**7 octombrie**, când un `PRAGMA integrity_check` pus inline în tick-ul doctorului a oprit Zeus. Iar
+comentariul din `database.js` avertizează deja, cu propriile lui cuvinte, că un `DELETE … WHERE` peste
+milioane de rânduri e sincron.
+
+**Deci cele două opţiuni pe care ţi le dădusem erau o falsă alegere**, şi cea pe care o recomandam era
+periculoasă. A treia, pe care n-o scrisesem, e şi curată şi ieftină:
+
+> **Retenţia şi scriitorul citesc aceeaşi listă de acţiuni „blocate".** Un singur loc care spune ce
+> înseamnă blocat, folosit şi de cine scrie, şi de cine şterge. Filtrul rămâne pe coloana `final_action`
+> — deci viteză de coloană — iar `entry_blocked` intră în listă, nu într-un `OR` lipit la coadă.
+
+Asta e [[R-C-22]] aplicată corect (reparaţie pe clasă, nu pe instanţă) **şi** [[R-C-23]] (o singură sursă
+de adevăr pentru „ce e blocat"), fără să atingă ce se scrie pe calea vie. **Rămâne decizia ta**, dar
+recomandarea mea nu mai e cea de acum o oră.
+
+*Cele două clase ISTORIC — `pending_fill` şi `pending_momentum`, 510 rânduri, toate legate de poziţii
+reale — nu se ating în niciun scenariu.*
 
 
 ---
