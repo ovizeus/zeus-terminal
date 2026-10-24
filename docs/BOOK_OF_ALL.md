@@ -7227,11 +7227,39 @@ tabela", taie tăcut istoricul de tranzacţionare, clasa declarată intangibilă
 *Nereparat: n-o şterg şi n-o cablez fără cuvântul tău. Opţiunile sunt trei — o ştergem, o lăsăm cu un
 comentariu care spune de ce nu se cheamă, sau îi punem un test care îi interzice să aibă apelant.*
 
-**G-5. 205 989 de rânduri din `brain_decisions` fără nicio regulă de retenţie.** Cele trei reguli acoperă
-`NO_TRADE`, `blocked_*` şi `entry`; restul creşte nelimitat. Nu e urgent — discul e la 47% — dar e
-singura clasă fără plafon dintr-o tabelă care ia 17 000 de rânduri pe zi. *Nereparat: înainte de orice
-retenţie nouă trebuie stabilit în ce clasă din [[R-C-21]] intră rândurile alea, şi eu nu ştiu încă ce
-sunt — n-am desfăcut `final_tier`-urile.*
+**G-5. 205 989 de rânduri din `brain_decisions` fără nicio regulă de retenţie — desfăcute acum.**
+Scrisesem mai devreme că nu ştiu ce sunt. Le-am desfăcut, e o simplă citire, şi suma dă exact:
+
+| Ce | Rânduri | Legate de o poziţie | Cea mai veche | Clasa după [[R-C-21]] |
+|---|---|---|---|---|
+| `entry_blocked` (SMALL/MEDIUM/LARGE) | **128 187** | 0 | 2026-05-26 | telemetrie |
+| `pending_expire` | 43 743 | 0 | 2026-05-13 | telemetrie |
+| `pending_created` | 33 549 | 0 | 2026-05-13 | telemetrie |
+| `pending_fill` | 448 | **toate 448** | 2026-05-13 | **ISTORIC** |
+| `pending_momentum` | 62 | **toate 62** | 2026-05-18 | **ISTORIC** |
+
+128 187 + 43 743 + 33 549 + 448 + 62 = **205 989**, fără rest.
+
+**Şi aici e lucrul care merită spus:** `entry_blocked` **este** un blocaj. Se scrie la
+`serverBrain.js:1655`, când `serverAT.processBrainDecision` refuză intrarea, cu `blockedReason:
+'at_rejected'`. E acelaşi lucru ca `blocked_reflection` sau `blocked_gates` — o intenţie care n-a devenit
+tranzacţie — doar că blocajul vine de la stratul AT, nu de la porţile creierului.
+
+Regula de retenţie de 90 de zile prinde `final_action LIKE 'blocked_%'`. **`entry_blocked` nu începe cu
+`blocked_`, deci scapă.** Rezultatul măsurat: două clase identice ca înţeles au retenţii complet
+diferite — una tăiată la 90 de zile, cealaltă neatinsă de cinci luni. **62% din rândurile fără plafon
+sunt o nepotrivire de nume, nu o lipsă de politică.**
+
+E exact clasa numită de [[R-C-22]] şi de corolarul ei: **o potrivire pe prefix nu e o potrivire pe
+înţeles.** Acelaşi tipar ca „NEREPARAT" care ateriza în coşul LIVRAT, doar că aici costă 128 187 de
+rânduri care cresc la nesfârşit.
+
+*Nereparat, şi nu din lene: reparaţia curată nu e să adaug un `OR final_action = 'entry_blocked'` — asta
+e tot reparaţie pe instanţă. Întrebarea corectă e dacă numele trebuie uniformizat la sursă
+(`blocked_at_rejected`), ceea ce atinge ce se scrie în `brain_decisions` pe calea vie, sau dacă retenţia
+trebuie să se uite la `blockedReason` în loc de la forma numelui. **Prima e mai curată şi mai riscantă;
+a doua e mai sigură şi lasă numele inconsecvent.** Decizia ta. Cele două clase ISTORIC — `pending_fill`
+şi `pending_momentum`, 510 rânduri, toate legate de poziţii reale — nu se ating în niciun scenariu.*
 
 
 ---
@@ -7284,3 +7312,58 @@ la 47%), dar e singura clasă fără plafon dintr-o tabelă care primeşte 17 00
 şterse legitim. Orice afirmaţie de forma „istoric, pâlnia arată…" e falsă dincolo de fereastra aia.
 Se leagă direct de [[R-V-20]]: cifra poartă fereastra ei, iar aici fereastra nu e aleasă de mine, e impusă
 de retenţie.
+
+---
+
+## 🏁 2026-10-24, ÎNCHIDEREA SESIUNII — ritualul cerut de R-OP-11
+
+Prima aplicare a regulii adoptate chiar azi. Scris ca să pornească următoarea sesiune de aici, nu de la zero.
+
+### Ce s-a schimbat
+
+| Build | Ce | Reload |
+|---|---|---|
+| **b313** v1.7.287 | Cartea se citeşte **în aplicaţie**: coşuri + randorul reparat (tabele, cod, legături) | da, făcut |
+| **b314** v1.7.288 | Intrarea e o **grilă de foldere**, nimic de citit | nu ([[R-OP-2]]) |
+
+Opt commit-uri, de la `41974f2e` la `fd42ae34`, toate pushuite. Starea servită: **b314**, iar numărul de
+build afişat în aplicaţie va arăta **b313** până la următoarea repornire naturală, fiindcă versiunea vine
+de la server. Nu e o eroare, e o consecinţă.
+
+Şi, în afara codului: **cartea are 112 secţiuni pe nouă coşuri**, `scripts/book-split.py` le regenerează,
+iar rubrica a crescut de la 45 la **66 de reguli**.
+
+### Ce a rămas deschis — aşteaptă un cuvânt de la tine
+
+| # | Ce | De ce n-am făcut-o |
+|---|---|---|
+| **G-4** | `atPruneClosed` e cod mort care ar tăia istoricul de tranzacţionare | trei opţiuni scrise, niciuna nu e a mea de ales |
+| **G-5** | `entry_blocked`, 128 187 de rânduri care scapă retenţiei pe o nepotrivire de nume | reparaţia curată atinge ce se scrie pe calea vie; cea sigură lasă numele inconsecvent |
+| **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
+| **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |
+| **G-3** | `changelog` = 297 KB — **neverificat** dacă ajunge la client | de verificat înainte de a propune ceva ([[R-V-18]]) |
+
+Plus cele 15 de dinainte, neatinse azi: D1-D4, P2-P10, R12, R16.
+
+### Ce s-a amânat deliberat, şi de ce
+
+**LiqDanger rămâne în umbră.** Decizia ta de ieri — „lasă să colecteze câteva zile" — e în picioare.
+Cititorul e scris (`scripts/liqdanger-shadow.py`), criteriul e scris dinainte, nu l-am atins.
+
+**Geometria DSL** colectează din 21 octombrie, 165 de rânduri. Mai are nevoie de ~20 de zile.
+
+**N-am atins calea banilor deloc azi.** Nicio linie din `serverBrain`, `serverAT` sau `autotrade`.
+Singura schimbare de server a fost o rută read-only de admin.
+
+### Ce am stricat şi am reparat în aceeaşi sesiune
+
+Două, amândouă ale mele, amândouă scrise la locul lor: generatorul cărţii care nu ştergea şi lăsa fişiere
+orfane (200 în loc de 120), şi lista de secţiuni care afişa titlurile cu `**` — exact greşeala pe care
+tocmai o reparasem în randor.
+
+### 🔶 Ce NU am verificat ([[R-V-18]])
+
+- dacă `changelog`-ul de 297 KB pleacă spre client — am căutat doar în rutele de server;
+- cum arată grila de foldere **pe telefonul tău** — testele dovedesc structura, nu cum se vede;
+- `tsc` nu e o poartă: pot spune doar „n-am adăugat erori", nu „e curat";
+- n-am rulat suita completă de server, doar shard-urile atinse (admin + book), conform [[R-OP-8]].

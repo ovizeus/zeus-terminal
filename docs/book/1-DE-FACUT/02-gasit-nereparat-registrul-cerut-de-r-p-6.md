@@ -40,11 +40,39 @@ tabela", taie tăcut istoricul de tranzacţionare, clasa declarată intangibilă
 *Nereparat: n-o şterg şi n-o cablez fără cuvântul tău. Opţiunile sunt trei — o ştergem, o lăsăm cu un
 comentariu care spune de ce nu se cheamă, sau îi punem un test care îi interzice să aibă apelant.*
 
-**G-5. 205 989 de rânduri din `brain_decisions` fără nicio regulă de retenţie.** Cele trei reguli acoperă
-`NO_TRADE`, `blocked_*` şi `entry`; restul creşte nelimitat. Nu e urgent — discul e la 47% — dar e
-singura clasă fără plafon dintr-o tabelă care ia 17 000 de rânduri pe zi. *Nereparat: înainte de orice
-retenţie nouă trebuie stabilit în ce clasă din [[R-C-21]] intră rândurile alea, şi eu nu ştiu încă ce
-sunt — n-am desfăcut `final_tier`-urile.*
+**G-5. 205 989 de rânduri din `brain_decisions` fără nicio regulă de retenţie — desfăcute acum.**
+Scrisesem mai devreme că nu ştiu ce sunt. Le-am desfăcut, e o simplă citire, şi suma dă exact:
+
+| Ce | Rânduri | Legate de o poziţie | Cea mai veche | Clasa după [[R-C-21]] |
+|---|---|---|---|---|
+| `entry_blocked` (SMALL/MEDIUM/LARGE) | **128 187** | 0 | 2026-05-26 | telemetrie |
+| `pending_expire` | 43 743 | 0 | 2026-05-13 | telemetrie |
+| `pending_created` | 33 549 | 0 | 2026-05-13 | telemetrie |
+| `pending_fill` | 448 | **toate 448** | 2026-05-13 | **ISTORIC** |
+| `pending_momentum` | 62 | **toate 62** | 2026-05-18 | **ISTORIC** |
+
+128 187 + 43 743 + 33 549 + 448 + 62 = **205 989**, fără rest.
+
+**Şi aici e lucrul care merită spus:** `entry_blocked` **este** un blocaj. Se scrie la
+`serverBrain.js:1655`, când `serverAT.processBrainDecision` refuză intrarea, cu `blockedReason:
+'at_rejected'`. E acelaşi lucru ca `blocked_reflection` sau `blocked_gates` — o intenţie care n-a devenit
+tranzacţie — doar că blocajul vine de la stratul AT, nu de la porţile creierului.
+
+Regula de retenţie de 90 de zile prinde `final_action LIKE 'blocked_%'`. **`entry_blocked` nu începe cu
+`blocked_`, deci scapă.** Rezultatul măsurat: două clase identice ca înţeles au retenţii complet
+diferite — una tăiată la 90 de zile, cealaltă neatinsă de cinci luni. **62% din rândurile fără plafon
+sunt o nepotrivire de nume, nu o lipsă de politică.**
+
+E exact clasa numită de [[R-C-22]] şi de corolarul ei: **o potrivire pe prefix nu e o potrivire pe
+înţeles.** Acelaşi tipar ca „NEREPARAT" care ateriza în coşul LIVRAT, doar că aici costă 128 187 de
+rânduri care cresc la nesfârşit.
+
+*Nereparat, şi nu din lene: reparaţia curată nu e să adaug un `OR final_action = 'entry_blocked'` — asta
+e tot reparaţie pe instanţă. Întrebarea corectă e dacă numele trebuie uniformizat la sursă
+(`blocked_at_rejected`), ceea ce atinge ce se scrie în `brain_decisions` pe calea vie, sau dacă retenţia
+trebuie să se uite la `blockedReason` în loc de la forma numelui. **Prima e mai curată şi mai riscantă;
+a doua e mai sigură şi lasă numele inconsecvent.** Decizia ta. Cele două clase ISTORIC — `pending_fill`
+şi `pending_momentum`, 510 rânduri, toate legate de poziţii reale — nu se ating în niciun scenariu.*
 
 
 ---

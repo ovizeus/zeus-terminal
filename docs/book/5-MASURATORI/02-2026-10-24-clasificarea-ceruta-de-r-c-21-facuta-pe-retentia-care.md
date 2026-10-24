@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7239 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7267 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗃️ 2026-10-24 — CLASIFICAREA CERUTĂ DE R-C-21, făcută pe retenţia care rulează ACUM
 
@@ -48,3 +48,5 @@ la 47%), dar e singura clasă fără plafon dintr-o tabelă care primeşte 17 00
 şterse legitim. Orice afirmaţie de forma „istoric, pâlnia arată…" e falsă dincolo de fereastra aia.
 Se leagă direct de [[R-V-20]]: cifra poartă fereastra ei, iar aici fereastra nu e aleasă de mine, e impusă
 de retenţie.
+
+---
