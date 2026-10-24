@@ -13,6 +13,7 @@
 // chart viu, deci altfel nu s-ar putea testa (acelaşi motiv ca la drawingScope.ts).
 import { describe, it, expect, vi } from 'vitest'
 import {
+  tapAccepted,
   suspendedChartOptions,
   dragGesture,
   resolveToolToggle,
@@ -205,5 +206,36 @@ describe('dragGesture — tragere sau atingere, acelasi prag ca pe mobil', () =>
   it('fara puncte valide nu decide nimic', () => {
     expect(dragGesture(null as any, { x: 1, y: 1 })).toBe(null)
     expect(dragGesture({ x: NaN, y: 0 }, { x: 50, y: 0 })).toBe(null)
+  })
+})
+
+describe('tapAccepted — filtrul de atingere rapida arunca atingerile ATENTE', () => {
+  // `drawingTools.ts` avea, pe calea de atingere, un filtru de „tap rapid": peste
+  // 300 ms sau peste 10 px, gestul era aruncat COMPLET si fara nicio reacţie. Filtrul
+  // avea sens cat timp chartul se panorama la tragere — trebuia sa deosebeasca o
+  // atingere de o panoramare. Dar pe telefon o atingere ATENTA pe un nivel de preţ
+  // trece des de 300 ms, deci operatorul apasa si nu se intampla nimic, fara nici
+  // macar un mesaj. Iar de la b307 panoramarea e suspendata cat timp o unealta e
+  // armata, deci distincţia nu mai e necesara: pe un chart care nu se mai mişca, o
+  // apasare lunga nu poate fi altceva decat intenţia de a desena.
+  it('cand o unealta e armata, o atingere LENTA e acceptata', () => {
+    expect(tapAccepted('hline', 850, 0)).toBe(true)
+  })
+
+  it('cand o unealta e armata, degetul care aluneca puţin nu mai strica nimic', () => {
+    expect(tapAccepted('tline', 120, 26)).toBe(true)
+  })
+
+  // Fara unealta armata filtrul rămâne EXACT cum era: acolo chartul chiar se
+  // panoramează, deci atingerea trebuie deosebita de tragere.
+  it('fara unealta armata pastreaza pragurile vechi: 300 ms si 10 px', () => {
+    expect(tapAccepted(null, 300, 10)).toBe(true)
+    expect(tapAccepted(null, 301, 0)).toBe(false)
+    expect(tapAccepted(null, 100, 11)).toBe(false)
+  })
+
+  it('nu cade pe valori lipsa sau nefinite', () => {
+    expect(tapAccepted(null, NaN, 0)).toBe(false)
+    expect(tapAccepted('hline', NaN, NaN)).toBe(true)
   })
 })

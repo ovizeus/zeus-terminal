@@ -4,7 +4,7 @@
    ─────────────────────────────────────────────────────────────── */
 import { getKlines } from '../services/stateAccessors'
 import { forSymbol, mergeForSave } from './drawingScope'
-import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool, suspendedChartOptions, dragGesture } from './drawToolArming'
+import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool, suspendedChartOptions, dragGesture, tapAccepted } from './drawToolArming'
 const w = window as any; // kept for w._zMainChart, w._zCSeries, w._dtToastTimer, w.__ZEUS_DRAW__, fn calls
 
 export function drawToolActivate(tool: any): void { w.drawToolActivate(tool); }
@@ -883,9 +883,15 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     }
 
     if (!_tapStart) return;
-    if (Date.now() - _tapStart.t > 300) { _tapStart = null; return; }
     var touch = (e.changedTouches && e.changedTouches[0]) || _tapStart;
-    if (Math.abs(touch.clientX - _tapStart.x) > 10 || Math.abs(touch.clientY - _tapStart.y) > 10) { _tapStart = null; return; }
+    // [2026-10-24 b308] Filtrul de „tap rapid" (300 ms / 10 px) arunca atingerile
+    // ATENTE, fara nicio reacţie: pe telefon o apasare precisa pe un nivel de preţ
+    // trece des de 300 ms, deci apasai si nu se intampla NIMIC, nici macar un mesaj.
+    // Filtrul avea sens cat timp chartul se panorama; de la b307 panoramarea e
+    // suspendata cat timp o unealta e armata, deci pe un chart care nu se mai mişca
+    // o apasare lunga nu poate fi altceva decat intenţia de a desena.
+    var _tapMoved = Math.max(Math.abs(touch.clientX - _tapStart.x), Math.abs(touch.clientY - _tapStart.y));
+    if (!tapAccepted(_activeTool, Date.now() - _tapStart.t, _tapMoved)) { _tapStart = null; return; }
     if (touch.target && touch.target.closest && touch.target.closest('.dt-handle,.dt-del,.dt-cfg,.dt-cfg-panel')) { _tapStart = null; return; }
     if (!_isOnChart({ clientX:touch.clientX, clientY:touch.clientY })) { _tapStart = null; return; }
     _handleChartAction(touch.clientX, touch.clientY);
@@ -908,21 +914,43 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   // React o oglindeste prin `zeus:drawToolChanged`. Inainte, React isi calcula
   // singur toggle-ul din starea LUI, care ramanea aprinsa dupa ce `_deactivate()`
   // dezarma modulul la fiecare plasare — de unde „dungile nu se pun".
+  // [2026-10-24 b308] `touch-action: none` pe gazda chartului, cat timp o unealta e
+  // armata. E PARTEA CARE LIPSEA din b307 pe telefon: cand i-am stins
+  // `horzTouchDrag/vertTouchDrag`, lightweight-charts nu mai cheama `preventDefault`
+  // pe `touchmove` — in codul lui, `preventDefault` sta sub `if
+  // (!_preventTouchDragProcess)`, iar acel flag devine true exact cand tragerea e
+  // tratata ca derulare de pagina. Iar handlerele noastre sunt `passive`, deci nici
+  // ele nu pot opri derularea. Rezultat: pe telefon b307 a inlocuit „chartul se muta"
+  // cu „pagina se deruleaza". `touch-action` rezolva declarativ si merge cu handlere
+  // pasive. Se pune doar cat timp desenezi, deci pinch-ul revine la dezarmare.
+  // UN SINGUR indicator de stare pentru amandoua, ca suspendarea sa fie idempotenta.
+  // Prima scriere a asta folosea `dataset`, si era gresita: `style.touchAction` e de
+  // obicei sir GOL, deci verificarea „am salvat deja?" raspundea nu, a doua intrare
+  // salva `none` ca valoare originala si `touch-action: none` ramanea lipit pe chart
+  // pentru totdeauna. Prins citindu-mi codul, nu de un test.
   function _suspendPan() {
-    var c = _chart(); if (!c || _panSaved) return;
+    if (_panSaved) return;
+    var mc0 = _mc();
+    var saved: any = { touchAction: mc0 ? (mc0.style.touchAction || '') : '' };
+    if (mc0) mc0.style.touchAction = 'none';
+    var c = _chart();
     try {
-      var cur = (typeof c.options === 'function') ? c.options() : null;
-      _panSaved = {
-        handleScroll: cur ? cur.handleScroll : true,
-        handleScale: cur ? cur.handleScale : true,
-      };
-      c.applyOptions(suspendedChartOptions(cur));
-    } catch (_) { _panSaved = null; }
+      var cur = (c && typeof c.options === 'function') ? c.options() : null;
+      saved.handleScroll = cur ? cur.handleScroll : true;
+      saved.handleScale = cur ? cur.handleScale : true;
+      if (c) c.applyOptions(suspendedChartOptions(cur));
+    } catch (_) { /* optiunile ramân nesalvate; touch-action se pune oricum la loc */ }
+    _panSaved = saved;
   }
   function _restorePan() {
-    var c = _chart(); if (!c || !_panSaved) { _panSaved = null; return; }
-    try { c.applyOptions(_panSaved); } catch (_) { /* */ }
-    _panSaved = null;
+    var saved = _panSaved; _panSaved = null;
+    if (!saved) return;
+    var mc0 = _mc();
+    if (mc0) mc0.style.touchAction = saved.touchAction;
+    var c = _chart();
+    if (c && saved.handleScroll !== undefined) {
+      try { c.applyOptions({ handleScroll: saved.handleScroll, handleScale: saved.handleScale }); } catch (_) { /* */ }
+    }
   }
 
   function _activate(tool: any) {

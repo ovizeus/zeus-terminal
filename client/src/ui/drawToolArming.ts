@@ -161,3 +161,25 @@ export function dragGesture(from: Pt | null | undefined, to: Pt | null | undefin
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null
   return (Math.abs(dx) + Math.abs(dy)) > minPx ? 'drag' : 'tap'
 }
+
+/**
+ * Dacă o atingere trebuie tratată ca intenţie de desen.
+ *
+ * Calea de atingere avea un filtru de „tap rapid": peste 300 ms sau peste 10 px,
+ * gestul era aruncat COMPLET şi fără nicio reacţie. Filtrul avea sens cât timp
+ * chartul se panorama la tragere — trebuia să deosebească o atingere de o
+ * panoramare. Dar pe telefon o atingere ATENTĂ pe un nivel de preţ trece des de
+ * 300 ms, deci operatorul apăsa şi nu se întâmpla nimic, fără nici măcar un mesaj.
+ *
+ * De la b307 panoramarea e suspendată cât timp o unealtă e armată, deci distincţia
+ * nu mai e necesară: pe un chart care nu se mai mişcă, o apăsare lungă nu poate fi
+ * altceva decât intenţia de a desena. Fără unealtă armată, pragurile rămân exact
+ * cum erau, fiindcă acolo chartul chiar se panoramează.
+ */
+export function tapAccepted(armed: DrawTool, elapsedMs: number, movedPx: number,
+                            maxMs = 300, maxPx = 10): boolean {
+  if (armed) return true
+  var ms = Number(elapsedMs), px = Number(movedPx)
+  if (!Number.isFinite(ms) || !Number.isFinite(px)) return false
+  return ms <= maxMs && px <= maxPx
+}
