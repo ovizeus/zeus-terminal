@@ -4,6 +4,7 @@
    ─────────────────────────────────────────────────────────────── */
 import { getKlines } from '../services/stateAccessors'
 import { forSymbol, mergeForSave } from './drawingScope'
+import { resolveToolToggle, tlineSeriesData, needsHandleContainer, emitDrawTool } from './drawToolArming'
 const w = window as any; // kept for w._zMainChart, w._zCSeries, w._dtToastTimer, w.__ZEUS_DRAW__, fn calls
 
 export function drawToolActivate(tool: any): void { w.drawToolActivate(tool); }
@@ -141,15 +142,26 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   }
 
   // ── Handle container ──
+  // [2026-10-24] Nodul memorat poate fi DETASAT: panoul de chart se re-monteaza si
+  // `#dt-handles` iese din document, dar ramane in variabila. De atunci mânerele,
+  // butonul de stergere si cel de setari se adaugau in afara paginii — linia se
+  // vedea, dar nu puteai nici sa o muti, nici sa o stergi. Verificam, si mutam ce
+  // exista deja, altfel liniile vechi ar rămâne fara mânere in containerul nou.
   function _ensureHandleContainer() {
-    if (_handleContainer) return;
+    if (!needsHandleContainer(_handleContainer)) return;
     var mc = _mc(); if (!mc) return;
     var p = mc.parentElement; if (!p) return;
     if (getComputedStyle(p).position === 'static') p.style.position = 'relative';
+    var stale = _handleContainer;
     _handleContainer = document.createElement('div');
     _handleContainer.id = 'dt-handles';
     _handleContainer.style.cssText = 'position:absolute;inset:0;z-index:25;pointer-events:none;overflow:hidden;';
     p.appendChild(_handleContainer);
+    if (stale) _lines.forEach(function (l: any) {
+      (l.handles || []).forEach(function (h: any) { if (h) _handleContainer.appendChild(h); });
+      if (l.delBtn) _handleContainer.appendChild(l.delBtn);
+      if (l.cfgBtn) _handleContainer.appendChild(l.cfgBtn);
+    });
   }
 
   function _createHandle(lineId: any, idx: any, color: any) {
@@ -426,6 +438,15 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var st0 = Number.isFinite(style) ? style : _defaultStyle;
     var id = existingId || _nextId++;
 
+    // [2026-10-24] Datele se pregatesc INAINTE de a crea seria, ca un refuz sa nu
+    // lase o serie orfana pe chart. `tlineSeriesData` intoarce null cand ambele
+    // clicuri cad pe aceeasi lumanare: `_timeAtX` rotunjeste la index, deci pe un
+    // chart departat doua clicuri la câţiva pixeli dau acelasi timp, iar in
+    // producţie `setData` nu valideaza ordinea — punctele se colapsau intr-unul si
+    // linia ieşea de lungime zero, adica invizibila. Garda exista deja in
+    // `_updateTLineSeries`, pe calea de drag, si lipsea de pe cea de creare.
+    var data = tlineSeriesData(p1, p2);
+    if (!data) { if (!existingId) _toast('Pick two different candles'); return; }
     // Create a LineSeries on the chart for this trendline
     var lineSeries = c.addLineSeries({
       color: color,
@@ -435,11 +456,6 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       lastValueVisible: false,
       crosshairMarkerVisible: false
     });
-    // Set the 2 data points
-    var data = [
-      { time: Math.min(p1.time, p2.time), value: (p1.time <= p2.time) ? p1.price : p2.price },
-      { time: Math.max(p1.time, p2.time), value: (p1.time <= p2.time) ? p2.price : p1.price }
-    ];
     lineSeries.setData(data);
 
     _ensureHandleContainer();
@@ -835,23 +851,28 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   }, true);
 
   // ── Activate / Deactivate ──
+  // [2026-10-24] Modulul e SINGURA sursa de adevar pentru ce unealta e armata, iar
+  // React o oglindeste prin `zeus:drawToolChanged`. Inainte, React isi calcula
+  // singur toggle-ul din starea LUI, care ramanea aprinsa dupa ce `_deactivate()`
+  // dezarma modulul la fiecare plasare — de unde „dungile nu se pun".
   function _activate(tool: any) {
-    if (_activeTool === tool) { _deactivate(); return; }
+    var next = resolveToolToggle(_activeTool, tool);
+    if (next === null) { _deactivate(); return; }
     if (!_series()) { _toast('Chart not ready'); return; }
-    _activeTool = tool; _tlineStep = 0; _tlinePendingP1 = null;
+    _activeTool = next; _tlineStep = 0; _tlinePendingP1 = null;
     _clearPreview();
-    _deselectAll(); _updateBtnStates();
+    _deselectAll(); _updateBtnStates(); emitDrawTool(_activeTool);
     var mc = _mc(); if (mc) mc.style.cursor = 'crosshair';
-    if (tool === 'hline') _toast('Click to place line');
-    else if (tool === 'tline') _toast('Click first point');
-    else if (tool === 'eraser') _toast('Click near a line');
+    if (next === 'hline') _toast('Click to place line');
+    else if (next === 'tline') _toast('Click first point');
+    else if (next === 'eraser') _toast('Click near a line');
   }
   function _deactivate() {
     _activeTool = null; _tlineStep = 0; _tlinePendingP1 = null;
     // [Pack G.3] Reset mobile flow flags so a future activation starts clean.
     _tlineTouchActive = false; _tlineJustInitedP1 = false;
     _clearPreview();
-    _updateBtnStates();
+    _updateBtnStates(); emitDrawTool(null);
     var mc = _mc(); if (mc) mc.style.cursor = '';
   }
 

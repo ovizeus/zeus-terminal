@@ -13,6 +13,7 @@ import { useScrollLock } from '../../core/scrollLock'
 import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
 import { USER_SETTINGS } from '../../core/config'
 import { IND_ICONS } from '../../constants/indicatorIcons'
+import { subscribeDrawTool, type DrawTool } from '../../ui/drawToolArming'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -828,7 +829,7 @@ export function ChartControls() {
     try { return localStorage.getItem('zeus_drawings_vis') !== '0' } catch (_) { return true }
   })()
   const [tsOn, setTsOn] = useState(_initTsOn)
-  const [drawTool, setDrawTool] = useState<string | null>(null)
+  const [drawTool, setDrawTool] = useState<DrawTool>(null)
   const [drawingsVisible, setDrawingsVisible] = useState(_initDrawingsVisible)
   const [activeInds, setActiveInds] = useState<Record<string, boolean>>({})
   // [2026-06-16] Favorites: starred indicators pin to the top of the panel, in the
@@ -1092,13 +1093,20 @@ export function ChartControls() {
   }
 
   // Drawing tools — delegate to old JS drawingTools.js
+  //
+  // [2026-10-24] Trimitem unealta APASATA si nimic altceva. Inainte calculam aici
+  // toggle-ul din `drawTool`, starea noastra — dar modulul se dezarmeaza singur la
+  // fiecare linie plasata (`_deactivate()`), fara sa ne spuna. Deci dupa o linie
+  // butonul arata aprins, clicul pe chart nu mai desena, iar re-armarea cerea doua
+  // apasari: prima trimitea `null`, fiindca noi credeam ca stingem ce era aprins.
+  // Acum modulul decide, si noi doar oglindim ce ne anunta.
   function handleDrawTool(tool: string) {
     const w = window as any
-    if (typeof w.drawToolActivate === 'function') {
-      w.drawToolActivate(drawTool === tool ? null : tool)
-    }
-    setDrawTool(drawTool === tool ? null : tool)
+    if (typeof w.drawToolActivate === 'function') w.drawToolActivate(tool)
   }
+  // Oglinda armarii: modulul anunta, noi randam. Acopera si tasta H, care armeaza
+  // direct modulul fara sa treaca prin butoane.
+  useEffect(() => subscribeDrawTool(setDrawTool), [])
   function handleDrawToggleVis() {
     const w = window as any
     if (typeof w.drawToolToggleVis === 'function') w.drawToolToggleVis()
@@ -1110,8 +1118,8 @@ export function ChartControls() {
   }
   function handleDrawClearAll() {
     const w = window as any
+    // `_clearAll` sterge liniile, NU dezarmeaza unealta — deci nu atingem oglinda.
     if (typeof w.drawToolClearAll === 'function') w.drawToolClearAll()
-    setDrawTool(null)
   }
 
   return (
@@ -1252,10 +1260,10 @@ export function ChartControls() {
           <button className={`ovrb${tsOn ? ' act' : ''}`} id="ts-toggle-btn" title="Time &amp; Sales tape (T)" onClick={toggleTimeSales}>&#128200; T&amp;S</button>
           <span style={{ width: '8px' }}></span>
           <span className="dt-sep">|</span>
-          <button className={`dt-btn${drawTool === 'hline' ? ' act' : ''}`} id="dt-hline" title="Horizontal Line (H)" onClick={() => handleDrawTool('hline')}>&#9473;</button>
-          <button className={`dt-btn${drawTool === 'tline' ? ' act' : ''}`} id="dt-tline" title="Trendline (click 2 points)" onClick={() => handleDrawTool('tline')}>&#9585;</button>
-          <button className={`dt-btn${drawTool === 'eraser' ? ' act' : ''}`} id="dt-eraser" title="Eraser (click near line)" onClick={() => handleDrawTool('eraser')}>&#9003;</button>
-          <button className={`dt-btn${!drawingsVisible ? ' act' : ''}`} id="dt-eye" title="Toggle drawings visibility" onClick={handleDrawToggleVis}>&#128065;</button>
+          <button className={`dt-btn${drawTool === 'hline' ? ' on' : ''}`} id="dt-hline" title="Horizontal Line (H)" onClick={() => handleDrawTool('hline')}>&#9473;</button>
+          <button className={`dt-btn${drawTool === 'tline' ? ' on' : ''}`} id="dt-tline" title="Trendline (click 2 points)" onClick={() => handleDrawTool('tline')}>&#9585;</button>
+          <button className={`dt-btn${drawTool === 'eraser' ? ' on' : ''}`} id="dt-eraser" title="Eraser (click near line)" onClick={() => handleDrawTool('eraser')}>&#9003;</button>
+          <button className={`dt-btn${!drawingsVisible ? ' on' : ''}`} id="dt-eye" title="Toggle drawings visibility" onClick={handleDrawToggleVis}>&#128065;</button>
           <button className="dt-btn" title="Clear all drawings" style={{ color: 'var(--red, #ff3355)' }} onClick={handleDrawClearAll}>&#128465;</button>
         </div>
       </div>
