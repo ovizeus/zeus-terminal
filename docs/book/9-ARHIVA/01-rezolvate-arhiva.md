@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4273 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4275 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ✅ REZOLVATE — arhivă
 

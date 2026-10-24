@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4631 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4633 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🧹 2026-10-19 — Proprietatea fișierelor: 21 813 → 0
 

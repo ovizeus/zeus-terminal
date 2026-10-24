@@ -3772,6 +3772,8 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 
 **R-V-15. Un alias catre un obiect viu trebuie sa aiba UN SINGUR proprietar, iar cine inlocuieste obiectul trece pe la el.** *(2026-10-24: `w.cSeries` si `w._zCSeries` aratau spre aceeasi serie de lumânari si erau scrise de module diferite. `applyCandleType` a inlocuit seria — `removeSeries` + `w.cSeries = series` — si a actualizat doar unul. Nimic n-a crapat: aliasul rămas arata spre un obiect valid sintactic dar MORT semantic, care raspundea `null` la orice intrebare, deci `coordinateToPrice` dadea null si desenul nu putea pune niciun punct. Si fiindca tipul de lumânare se re-aplica LA BOOT, desenul era rupt din secunda in care pornea aplicatia. Cinci runde de citit codul DESENULUI nu aveau cum sa o gaseasca, fiindca **cauza nu era in codul care esua** — simptomul („nu pot desena") si cauza („s-a schimbat tipul de lumânare") sunt despartite de un boot si n-au nicio legatura vizibila. Fixul corect e pe clasa: un singur `setCandleSeries` in punte care schimba TOATE aliasurile deodata, si toti cei care inlocuiesc seria trec pe acolo. Vezi si [[R-V-14]] — tot despre obiecte care par vii.)*
 
+**R-V-16. „Livrat" inseamna livrat ACOLO UNDE SE UITA EL.** *(2026-10-24: am reorganizat cartea in `docs/book/`, pe disc, si i-am spus ca are foldere. El citeste cartea de pe TELEFON, din aplicatie, unde sectiunea servea `BOOK_OF_ALL.md` intreg: pentru el nu se schimbase nimic. „Cand intru" insemna in aplicatie. A doua oara in aceeasi zi cand repar ceva unde nu se uita el — vezi [[R-V-15]], cinci runde pe codul desenului cand cauza era in alta parte. Intrebarea inainte de a spune „gata" nu e „e fisierul pe disc?", ci **pe ce ecran ajunge?**. Corolar, platit in aceeasi runda: cand spune „uita-te la capturi", prima miscare e `ls data/book_uploads/` — mecanismul de urcat capturi exista de luni de zile, construit exact pentru asta, iar eu i-am raspuns ca n-au ajuns capturile. Al doilea corolar, din ce aratau ele: **un randor scris pentru „un subset controlat" imbatraneste odata cu continutul.** Randorul cartii nu stia tabele; cartea a devenit intre timp aproape numai tabele, deci partea cea mai citita era partea cea mai rupta, in liniste, de luni de zile.)*
+
 ### 🟢 Proces
 
 **R-P-1. Tot în Book of All.** Orice găsim, reparăm, amânăm sau decidem.
@@ -7002,3 +7004,86 @@ generează înainte de a scrie, cu o singură excepţie scrisă pe faţă (`STAR
 Cifrele din START vin din sistemul viu, nu din carte: 17 218 decizii în ultimele 24h, 750 811 în total,
 4 poziţii deschise, 165 de rânduri adunate pe geometrie, HEAD b312 dar **servit b310** — scris la vedere,
 fiindcă e genul de nepotrivire care produce o oră de vânătoare la următoarea sesiune.
+
+---
+
+## 📖 2026-10-24 — CARTEA SE CITEŞTE ÎN APLICAŢIE: coşuri + randorul reparat (b313 v1.7.287)
+
+> *„pai intru in book si e la fel uitate la capturi ceva nu e in regula acolo am zis eu"*
+> *„dar eu acolo vreau sa fie bookul sal vad si eu stii"*
+
+A avut dreptate **de două ori**, iar a doua oară era mai rău decât prima.
+
+### 1. Ordinea o făcusem unde nu se uită el
+
+Commit-ul precedent a pus cartea pe coşuri în `docs/book/` — **pe disc**. El citeşte cartea de pe
+**telefon**, din Admin Control Center, iar secţiunea aia servea `docs/BOOK_OF_ALL.md` întreg, neschimbat.
+Deci pentru el nu se schimbase absolut nimic. „Când intru" însemna *în aplicaţie*, şi eu am livrat
+navigaţie într-un loc în care el nu intră niciodată.
+
+### 2. Capturile arătau altceva, mai rău
+
+Le-a urcat din aplicaţie, în `data/book_uploads/` — unde eu am uitat să mă uit, deşi mecanismul există
+exact pentru asta. Trei capturi. Ce se vede în ele: **randorul de markdown al cărţii nu cunoştea tabele,
+nu cunoştea blocuri de cod şi nu cunoştea legături.**
+
+```
+| | Coş | Ce înseamnă | Câte sunt acum |
+|---|---|---|---|
+```
+
+Asta e ce vedea el pe telefon, literal, ca text. Cartea e făcută aproape numai din tabele — lista lui de
+decizii, pâlnia, cifrele pe cohorte, fiecare comparaţie pe care i-am dat-o vreodată. Plus
+`[docs/book/START.md](book/START.md)` afişat cu paranteze cu tot, şi un `>` rătăcit pe pagină.
+
+**Partea cea mai citită a cărţii era exact partea cea mai ruptă**, şi asta de luni de zile. Eu scriam
+tabele frumoase şi le citeam în terminal, unde arată bine. El le primea ca gard de bare verticale.
+
+### 3. Ce am reparat
+
+**Parserul s-a scos într-un modul pur**, `client/src/components/admin/bookParse.ts`, **18 teste**, separat
+de randare ca să poată fi verificat pe blocuri şi nu pe pixeli. Ştie acum:
+
+- **tabele**, inclusiv celule goale în cap (cartea are tabele cu prima coloană fără titlu) şi rânduri mai
+  scurte decât capul, care altfel ar fi strâmtat tabelul; separator cu aliniere (`:---`, `---:`)
+- **blocuri de cod** ```` ``` ````, cu limbajul, şi **fără** să interpreteze markdown-ul dinăuntru
+- **citate** care se re-parsează înăuntru, deci un `###` sau un tabel într-un citat rămân ce sunt
+- un **`>` singur** e rând gol, nu un caracter pe ecran
+- **legături**: o ţintă relativă (`book/START.md`) nu duce nicăieri din aplicaţie, deci se arată eticheta
+  şi **nu** se preface că e de apăsat; doar `http(s)` devine legătură adevărată
+
+Pe telefon, tabelele şi blocurile de cod primesc derulare proprie pe orizontală, ca să nu împingă pagina.
+
+**Trei mutaţii încercate, toate omorâte** (tabel fără separator cerut, legături relative raportate ca
+externe, `>` redevenit text). A doua a „trecut" prima oară — şi am verificat de ce înainte să mă bucur:
+`sed`-ul nu se aplicase. Aplicată cu adevărat, moare şi ea. *Un mutant care supravieţuieşte se verifică
+întâi dacă există.*
+
+### 4. Navigarea
+
+Rute noi, read-only: `GET /api/admin/book/tree` şi `/book/section`. Servesc **folderele deja generate** de
+`scripts/book-split.py` — **nu** o a doua clasificare scrisă în TypeScript, care ar pleca în altă direcţie
+decât cea în Python la prima secţiune ambiguă. O singură sursă de adevăr, cum am stabilit.
+
+Intrarea e `START.md`, apoi coş, apoi secţiune, cu cartea întreagă la un buton distanţă. **Dacă folderele
+lipsesc de pe disc, se arată cartea întreagă, ca până acum** — navigaţia nouă nu poate lăsa pe nimeni fără
+carte.
+
+Numele venite din cerere sunt validate **pe tipar şi apoi verificate pe calea rezolvată** — tiparul singur
+e o promisiune, `path.dirname` e o dovadă. **17 teste de server, 8 dintre ele încercări de ieşire din
+folder** (`..`, cale absolută, procentaj codat, coş care există pe disc dar nu respectă tiparul).
+
+### 5. Lecţia, şi e una pe care o plătesc a doua oară azi
+
+**R-V-16 — „livrat" înseamnă livrat ACOLO UNDE SE UITĂ EL.** Am mai făcut greşeala asta exact azi, la
+desen: cinci cauze reale reparate, niciuna a lui, fiindcă nu mă uitam unde trebuie. Aici am reorganizat
+7 000 de linii şi i-am dat o cale de fişier pe care un telefon n-o poate deschide. Înainte de a spune
+„gata", întrebarea e **pe ce ecran ajunge**, nu dacă fişierul e pe disc.
+
+Şi corolarul: **capturile lui au venit prin mecanismul pe care l-am construit pentru capturi**
+(`data/book_uploads/`), iar eu am răspuns „capturile nu au ajuns în mesaj". Când spune „uită-te la
+capturi", prima mişcare e `ls data/book_uploads/`.
+
+**Verificat:** client **1268/1268**, server admin+book **67/67**, șirurile găsite în **bundle**, zero
+artefacte root în `public/app`. `tsc` are 68 de erori preexistente în alte fişiere, **zero** în ale mele —
+nu pretind că e curat, fiindcă nu e.

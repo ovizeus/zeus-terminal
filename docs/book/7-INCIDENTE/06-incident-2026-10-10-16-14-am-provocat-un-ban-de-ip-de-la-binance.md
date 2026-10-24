@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 3908 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 3910 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🚨 INCIDENT 2026-10-10 16:14 — am provocat un ban de IP de la Binance cu reload-uri prea dese
 

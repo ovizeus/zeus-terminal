@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4137 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4139 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🧠 ML — unde suntem (verificat azi, 2026-10-09)
 

@@ -1,137 +1,183 @@
 import { useEffect, useState } from 'react'
+import { renderMarkdown } from '../bookRender'
 
-// ─── "Book of All" — operator's personal monitor ───
-// Read-only render of docs/BOOK_OF_ALL.md (maintained by the assistant).
-// A tiny line-based markdown renderer for a CONTROLLED input subset (headings,
-// blockquote, numbered/bullet lists, **bold**/*italic*/`code`, hr). No external
-// markdown dependency — the input format is ours, so a small renderer is safe.
+// ─── "Book of All" — monitorul personal al operatorului ───
+// [2026-10-24] Cartea are coşuri pe disc (`docs/book/`, generate de
+// `scripts/book-split.py`). El o citeşte de pe telefon, DIN APLICAŢIE, deci
+// coşurile trebuie să ajungă aici, altfel pentru el nu există: „pai intru in
+// book si e la fel".
+//
+// Intrarea e START.md. De acolo: un coş → o secţiune. Cartea întreagă rămâne
+// la un buton distanţă, şi e tot ce se arată dacă folderele lipsesc de pe disc.
 
-type Accent = { color: string; glow: string }
-const ACCENTS: Record<string, Accent> = {
-  bug: { color: '#ff5c7a', glow: 'rgba(255,92,122,0.16)' },
-  monitor: { color: '#ffb454', glow: 'rgba(255,180,84,0.14)' },
-  plan: { color: '#4fd1ff', glow: 'rgba(79,209,255,0.14)' },
-  default: { color: '#b794ff', glow: 'rgba(183,148,255,0.14)' },
+type Item = { file: string; title: string; date: string | null }
+type Cat = { id: string; title: string; desc: string | null; count: number; items: Item[] }
+type Tree = { start: string | null; cats: Cat[]; updatedAt: string | null }
+
+const CAT_ICONS: Record<string, string> = {
+  '1-DE-FACUT': '🔧',
+  '2-DECIZII-ALE-TALE': '🙋',
+  '3-IN-COLECTARE': '🔭',
+  '4-LIVRATE': '✅',
+  '5-MASURATORI': '📏',
+  '6-RETRACTARI': '⛔',
+  '7-INCIDENTE': '🚨',
+  '8-REGULI': '📜',
+  '9-ARHIVA': '🗄️',
 }
 
-function accentFor(heading: string): Accent {
-  const h = heading.toUpperCase()
-  if (h.includes('BUG')) return ACCENTS.bug
-  if (h.includes('MONITORING') || h.includes('MAKE') || h.includes('TO MAKE')) return ACCENTS.monitor
-  if (h.includes('PLAN')) return ACCENTS.plan
-  return ACCENTS.default
+const CARD: React.CSSProperties = {
+  display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+  padding: '12px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(255,255,255,0.07)', color: 'inherit', font: 'inherit',
 }
 
-function parseInline(text: string, keyPrefix: string): React.ReactNode[] {
-  const nodes: React.ReactNode[] = []
-  const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g
-  let last = 0
-  let m: RegExpExecArray | null
-  let i = 0
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) nodes.push(text.slice(last, m.index))
-    const tok = m[0]
-    if (tok.startsWith('**')) {
-      nodes.push(<strong key={`${keyPrefix}-${i}`} style={{ color: '#fff', fontWeight: 700 }}>{tok.slice(2, -2)}</strong>)
-    } else if (tok.startsWith('`')) {
-      nodes.push(<code key={`${keyPrefix}-${i}`} style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: '0.88em', color: '#9fe6c4' }}>{tok.slice(1, -1)}</code>)
-    } else {
-      nodes.push(<em key={`${keyPrefix}-${i}`} style={{ color: '#8a93a8' }}>{tok.slice(1, -1)}</em>)
-    }
-    last = m.index + tok.length
-    i++
-  }
-  if (last < text.length) nodes.push(text.slice(last))
-  return nodes
+function Bar({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 14px' }}>{children}</div>
+  )
 }
 
-function renderMarkdown(md: string): React.ReactNode[] {
-  const lines = md.split('\n')
-  const out: React.ReactNode[] = []
-  let accent = ACCENTS.default
-  lines.forEach((raw, idx) => {
-    const line = raw.replace(/\s+$/, '')
-    const key = `l${idx}`
-    if (!line.trim()) { out.push(<div key={key} style={{ height: 8 }} />); return }
-    if (line === '---') { out.push(<hr key={key} style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)', margin: '18px 0' }} />); return }
-    if (line.startsWith('# ')) {
-      out.push(<h1 key={key} style={{ fontSize: 26, fontWeight: 800, color: '#fff', margin: '0 0 4px', letterSpacing: '-0.02em' }}>{parseInline(line.slice(2), key)}</h1>)
-      return
-    }
-    if (line.startsWith('## ')) {
-      accent = accentFor(line)
-      out.push(
-        <h2 key={key} style={{ fontSize: 17, fontWeight: 700, color: accent.color, margin: '22px 0 12px', padding: '8px 14px', borderRadius: 10, background: accent.glow, borderLeft: `3px solid ${accent.color}` }}>
-          {parseInline(line.slice(3), key)}
-        </h2>
-      )
-      return
-    }
-    if (line.startsWith('### ')) {
-      out.push(<h3 key={key} style={{ fontSize: 14, fontWeight: 700, color: '#cdd3e0', margin: '14px 0 6px' }}>{parseInline(line.slice(4), key)}</h3>)
-      return
-    }
-    if (line.startsWith('> ')) {
-      out.push(<div key={key} style={{ color: '#8a93a8', fontSize: 13, lineHeight: 1.5, padding: '4px 0 4px 12px', borderLeft: '2px solid rgba(255,255,255,0.1)', margin: '2px 0' }}>{parseInline(line.slice(2), key)}</div>)
-      return
-    }
-    const numbered = line.match(/^(\d+)\.\s+(.*)/)
-    if (numbered) {
-      out.push(
-        <div key={key} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '9px 12px', margin: '6px 0', borderRadius: 10, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <span style={{ flex: '0 0 auto', minWidth: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: accent.glow, color: accent.color, fontWeight: 700, fontSize: 12.5 }}>{numbered[1]}</span>
-          <span style={{ color: '#c4cad8', fontSize: 13.5, lineHeight: 1.55, paddingTop: 1 }}>{parseInline(numbered[2], key)}</span>
-        </div>
-      )
-      return
-    }
-    if (line.startsWith('- ')) {
-      out.push(
-        <div key={key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '3px 0 3px 16px' }}>
-          <span style={{ flex: '0 0 auto', marginTop: 7, width: 5, height: 5, borderRadius: '50%', background: accent.color }} />
-          <span style={{ color: '#aeb4c2', fontSize: 13, lineHeight: 1.55 }}>{parseInline(line.slice(2), key)}</span>
-        </div>
-      )
-      return
-    }
-    out.push(<p key={key} style={{ color: '#aeb4c2', fontSize: 13.5, lineHeight: 1.6, margin: '6px 0' }}>{parseInline(line, key)}</p>)
-  })
-  return out
+function Btn({ onClick, children, accent }: { onClick: () => void; children: React.ReactNode; accent?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '7px 13px', borderRadius: 9, cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+        background: accent ? 'rgba(183,148,255,0.14)' : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${accent ? 'rgba(183,148,255,0.4)' : 'rgba(255,255,255,0.1)'}`,
+        color: accent ? '#b794ff' : '#aeb4c2',
+      }}
+    >
+      {children}
+    </button>
+  )
 }
 
 export function BookSection() {
-  const [markdown, setMarkdown] = useState<string | null>(null)
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+  const [tree, setTree] = useState<Tree | null>(null)
+  const [full, setFull] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState<{ cat?: Cat; item?: Item; all?: boolean }>({})
+  const [section, setSection] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
-    fetch('/api/admin/book', { credentials: 'same-origin' })
-      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then((d) => { if (!alive) return; setMarkdown(d.markdown || ''); setUpdatedAt(d.updatedAt || null) })
-      .catch((e) => { if (alive) setError(String(e.message || e)) })
+    fetch('/api/admin/book/tree', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => { if (alive && d && Array.isArray(d.cats) && d.cats.length) setTree(d) })
+      .catch(() => { /* fără coşuri pe disc — rămâne cartea întreagă, de mai jos */ })
+      .finally(() => {
+        if (!alive) return
+        fetch('/api/admin/book', { credentials: 'same-origin' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+          .then((d) => { if (alive) setFull(d.markdown || '') })
+          .catch((e) => { if (alive) setError(String(e.message || e)) })
+      })
     return () => { alive = false }
   }, [])
 
-  return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '8px 4px 60px' }}>
-      {error && (
+  function openItem(cat: Cat, item: Item) {
+    setSection(null)
+    setView({ cat, item })
+    const q = `cat=${encodeURIComponent(cat.id)}&file=${encodeURIComponent(item.file)}`
+    fetch(`/api/admin/book/section?${q}`, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => setSection(d.markdown || ''))
+      .catch((e) => setSection(`## Nu s-a putut citi secţiunea\n\n${String(e.message || e)}`))
+  }
+
+  const wrap: React.CSSProperties = { maxWidth: 860, margin: '0 auto', padding: '8px 4px 60px' }
+
+  if (error && !tree && full === null) {
+    return (
+      <div style={wrap}>
         <div style={{ padding: 16, borderRadius: 10, background: 'rgba(255,92,122,0.1)', color: '#ff5c7a', fontSize: 13 }}>
           Nu s-a putut încărca cartea: {error}
         </div>
-      )}
-      {!error && markdown === null && (
-        <div style={{ padding: 30, textAlign: 'center', color: '#8a93a8', fontSize: 13 }}>Se încarcă cartea…</div>
-      )}
-      {!error && markdown !== null && (
-        <>
-          {renderMarkdown(markdown)}
-          {updatedAt && (
-            <div style={{ marginTop: 24, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', color: '#5f6678', fontSize: 11.5, textAlign: 'right' }}>
-              fișier actualizat: {new Date(updatedAt).toLocaleString('ro-RO')}
+      </div>
+    )
+  }
+
+  if (!tree && full === null) {
+    return <div style={wrap}><div style={{ padding: 30, textAlign: 'center', color: '#8a93a8', fontSize: 13 }}>Se încarcă cartea…</div></div>
+  }
+
+  // ── o secţiune ──
+  if (view.item && view.cat) {
+    return (
+      <div style={wrap}>
+        <Bar>
+          <Btn onClick={() => { setView({ cat: view.cat }); setSection(null) }}>← {view.cat.id}</Btn>
+          <Btn onClick={() => { setView({}); setSection(null) }}>🧭 START</Btn>
+        </Bar>
+        {section === null
+          ? <div style={{ padding: 24, textAlign: 'center', color: '#8a93a8', fontSize: 13 }}>Se încarcă…</div>
+          : renderMarkdown(section)}
+      </div>
+    )
+  }
+
+  // ── un coş ──
+  if (view.cat) {
+    return (
+      <div style={wrap}>
+        <Bar><Btn onClick={() => setView({})}>← 🧭 START</Btn></Bar>
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: '0 0 4px' }}>
+          {CAT_ICONS[view.cat.id] || '•'} {view.cat.title}
+        </h1>
+        {view.cat.desc && <p style={{ color: '#8a93a8', fontSize: 13, margin: '0 0 14px' }}>{view.cat.desc}</p>}
+        <div style={{ display: 'grid', gap: 8 }}>
+          {view.cat.items.map((it) => (
+            <button key={it.file} style={CARD} onClick={() => openItem(view.cat as Cat, it)}>
+              {it.date && <span style={{ color: '#5f6678', fontSize: 11, display: 'block', marginBottom: 3 }}>{it.date}</span>}
+              <span style={{ color: '#c4cad8', fontSize: 13.5, lineHeight: 1.45 }}>{it.title}</span>
+            </button>
+          ))}
+          {!view.cat.items.length && <div style={{ color: '#5f6678', fontSize: 13 }}>Gol.</div>}
+        </div>
+      </div>
+    )
+  }
+
+  // ── cartea întreagă ──
+  if (view.all || !tree) {
+    return (
+      <div style={wrap}>
+        {tree && <Bar><Btn onClick={() => setView({})}>← 🧭 START</Btn></Bar>}
+        {full !== null ? renderMarkdown(full) : <div style={{ color: '#8a93a8', fontSize: 13 }}>Se încarcă…</div>}
+      </div>
+    )
+  }
+
+  // ── intrarea: START.md + coşurile ──
+  return (
+    <div style={wrap}>
+      {tree.start ? renderMarkdown(tree.start) : null}
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#b794ff', margin: '22px 0 12px', padding: '8px 14px', borderRadius: 10, background: 'rgba(183,148,255,0.14)', borderLeft: '3px solid #b794ff' }}>
+        🗂️ Coşurile
+      </h2>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {tree.cats.map((c) => (
+          <button key={c.id} style={CARD} onClick={() => setView({ cat: c })}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 17 }}>{CAT_ICONS[c.id] || '•'}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ color: '#fff', fontSize: 13.5, fontWeight: 700, display: 'block' }}>{c.title}</span>
+                {c.desc && <span style={{ color: '#8a93a8', fontSize: 11.5, lineHeight: 1.4, display: 'block', marginTop: 2 }}>{c.desc}</span>}
+              </span>
+              <span style={{ flex: '0 0 auto', minWidth: 26, height: 22, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'rgba(183,148,255,0.14)', color: '#b794ff', fontWeight: 700, fontSize: 12 }}>{c.count}</span>
             </div>
-          )}
-        </>
+          </button>
+        ))}
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <Btn onClick={() => setView({ all: true })} accent>📖 Cartea întreagă, în ordine cronologică</Btn>
+      </div>
+      {tree.updatedAt && (
+        <div style={{ marginTop: 24, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', color: '#5f6678', fontSize: 11.5, textAlign: 'right' }}>
+          fişier actualizat: {new Date(tree.updatedAt).toLocaleString('ro-RO')}
+        </div>
       )}
     </div>
   )

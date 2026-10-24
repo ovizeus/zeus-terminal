@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6929 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6931 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗂️ 2026-10-24 — CARTEA ARE FOLDERE: `docs/book/`, cu o singură pagină de intrare
 
@@ -76,3 +76,5 @@ generează înainte de a scrie, cu o singură excepţie scrisă pe faţă (`STAR
 Cifrele din START vin din sistemul viu, nu din carte: 17 218 decizii în ultimele 24h, 750 811 în total,
 4 poziţii deschise, 165 de rânduri adunate pe geometrie, HEAD b312 dar **servit b310** — scris la vedere,
 fiindcă e genul de nepotrivire care produce o oră de vânătoare la următoarea sesiune.
+
+---

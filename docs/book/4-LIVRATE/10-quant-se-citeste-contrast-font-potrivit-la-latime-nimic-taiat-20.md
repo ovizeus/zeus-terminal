@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5883 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5885 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🖥️ Quant se citește — contrast, font potrivit la lățime, nimic tăiat — 2026-10-21 (b296 v1.7.270)
 

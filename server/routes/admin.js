@@ -155,6 +155,30 @@ router.get('/book', _requireAuth, _requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/admin/book/tree — the book split into baskets (docs/book/, generated
+// by scripts/book-split.py). The operator reads the book from the APP, on his
+// phone, so the folders have to reach him there or they do not exist for him.
+const _BOOK_DIR = require('path').join(__dirname, '..', '..', 'docs', 'book');
+
+router.get('/book/tree', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        return res.json(Object.assign({ ok: true }, require('../services/bookTree').listTree(_BOOK_DIR)));
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: 'Could not read book tree' });
+    }
+});
+
+// GET /api/admin/book/section?cat=4-LIVRATE&file=01-....md — one section.
+router.get('/book/section', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        const md = require('../services/bookTree').resolveSection(_BOOK_DIR, req.query.cat, req.query.file);
+        if (md === null) return res.status(404).json({ ok: false, error: 'No such section' });
+        return res.json({ ok: true, markdown: md });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: 'Could not read section' });
+    }
+});
+
 // ─── Uploads ("Book" attachments) — operator uploads screenshots + docs, the
 // assistant reads them off disk to fix things, the operator deletes them after.
 // Admin-only, under /api/admin (NOT /auth, which is rate-limited). Stored on disk

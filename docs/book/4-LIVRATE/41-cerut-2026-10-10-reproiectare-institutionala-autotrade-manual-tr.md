@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 3788 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 3790 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🎨 CERUT 2026-10-10 — reproiectare „instituțională" AutoTrade + Manual Trade, diagnosticul în THEIA
 

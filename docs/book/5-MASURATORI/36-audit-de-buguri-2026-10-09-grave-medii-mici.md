@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4009 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4011 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici
 

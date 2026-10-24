@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4357 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4359 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 2026-10-18 — TERMINATOR confirmat de operator + ETA real pentru poarta de paritate
 

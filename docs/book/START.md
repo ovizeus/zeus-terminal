@@ -1,9 +1,9 @@
 # 🧭 START — citeşte doar pagina asta
 
-> **Ultima actualizare:** 2026-10-24 · HEAD **b312 v1.7.286** · servit în browser: **b310**
-> (se aliniază la următoarea repornire; nu e o eroare, am folosit deja două reload-uri azi)
+> **Ultima actualizare:** 2026-10-24 · **b313 v1.7.287**, servit și în aplicație
+> Citești pagina asta **în Zeus**, din Admin Control Center → Book of All. Coșurile de mai jos sunt butoane.
 
-Cartea întreagă rămâne în `docs/BOOK_OF_ALL.md` — 108 secţiuni, în ordinea în care s-au întâmplat.
+Cartea întreagă rămâne în `docs/BOOK_OF_ALL.md` — 109 secţiuni, în ordinea în care s-au întâmplat.
 Folderele de aici sunt **navigaţia**: fiecare secţiune stă în coşul ei. Nimic nu s-a şters.
 
 ---
@@ -82,8 +82,9 @@ Ultimele şapte build-uri, toate din 24 octombrie, toate pe aceeaşi problemă p
 | b310 | punctul 1 cădea în spaţiul gol din dreapta ultimei lumânări |
 | **b311** | **cauza reală** — desenul întreba seria de lumânări **ştearsă**, iar tipul de lumânare se re-aplică la fiecare pornire, deci era mort din boot |
 | b312 | LiqDanger: inversiunea dovedită, măsurată, emisă în umbră |
+| **b313** | **cartea se citește aici** — coșuri în aplicație, iar randorul știe în sfârșit tabele, cod și legături |
 
-Istoricul complet: `4-LIVRATE/` (42 de secţiuni).
+Istoricul complet: `4-LIVRATE/` (43 de secţiuni).
 
 ---
 
@@ -94,13 +95,13 @@ Istoricul complet: `4-LIVRATE/` (42 de secţiuni).
 | [`1-DE-FACUT/`](1-DE-FACUT/) | munca deschisă, în ordinea priorităţii, plus planurile pe viitor | 3 |
 | [`2-DECIZII-ALE-TALE/`](2-DECIZII-ALE-TALE/) | ce nu pot continua singur | 5 |
 | [`3-IN-COLECTARE/`](3-IN-COLECTARE/) | măsurători care adună date acum + lista de urmărit | 3 |
-| [`4-LIVRATE/`](4-LIVRATE/) | ce s-a făcut, livrat **şi** dovedit pe sistemul viu | 42 |
+| [`4-LIVRATE/`](4-LIVRATE/) | ce s-a făcut, livrat **şi** dovedit pe sistemul viu | 43 |
 | [`5-MASURATORI/`](5-MASURATORI/) | audituri şi constatări, fără schimbări de cod | 36 |
 | [`6-RETRACTARI/`](6-RETRACTARI/) | **unde am greşit şi m-am corectat** — citeşte înainte să reiei o cifră de-a mea | 11 |
 | [`7-INCIDENTE/`](7-INCIDENTE/) | ce s-a stricat, cine l-a stricat, ce regulă a ieşit | 6 |
 | [`8-REGULI/`](8-REGULI/) | regulile după care lucrăm, fiecare cu incidentul care a produs-o | 1 |
 | [`9-ARHIVA/`](9-ARHIVA/) | închise, păstrate pentru istoric | 1 |
-| [`INDEX.md`](INDEX.md) | toate cele 108 secţiuni într-un singur tabel, cele mai noi primele | 108 |
+| [`INDEX.md`](INDEX.md) | toate cele 109 secţiuni într-un singur tabel, cele mai noi primele | 109 |
 
 **Coşul 6 nu e cochetărie.** Am retras, documentat, cifre pe care ţi le dădusem ca sigure — ultima
 chiar ieri, un contrafactual întreg măsurat cu semnul întors. Dacă vreodată citeşti o cifră de-a mea

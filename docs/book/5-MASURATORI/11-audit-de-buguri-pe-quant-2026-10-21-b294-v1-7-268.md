@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6031 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6033 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔬 Audit de buguri pe Quant — 2026-10-21 (b294 v1.7.268)
 

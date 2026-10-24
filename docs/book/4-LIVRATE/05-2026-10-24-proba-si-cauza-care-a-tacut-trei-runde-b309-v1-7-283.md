@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6550 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6552 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔬 2026-10-24 — PROBA, şi cauza care a tăcut trei runde (b309 v1.7.283)
 
