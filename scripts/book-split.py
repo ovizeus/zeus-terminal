@@ -49,7 +49,11 @@ RULES = [
     ('3-IN-COLECTARE',    ['COLECTAM', 'IN UMBRA', 'UMBRA', 'DE URMARIT']),
     ('2-DECIZII-ALE-TALE',['DECIZIA OPERATORULUI', 'RAMANE DE DECIS', 'INTRAREA IN CARTE',
                            'ASTEAPTA DECIZIA', 'ALEGEREA LUI', 'PAUZA']),
-    ('1-DE-FACUT',        ['DE FACUT', 'PLAN:', 'PLANS', 'ORDINEA REPARATIILOR']),
+    ('1-DE-FACUT',        ['DE FACUT', 'PLAN:', 'PLANS', 'ORDINEA REPARATIILOR',
+                           # inchiderea de sesiune (R-OP-11) sta aici fiindca asta e incarcatura
+                           # ei: ce a rămas deschis. Scriptul sorteaza nou->vechi, deci ultima
+                           # inchidere e prima din coş — exact ce ii trebuie cand intra.
+                           'INCHIDEREA SESIUNII', 'GASIT, NEREPARAT']),
     ('4-LIVRATE',         ['REPARAT', 'LIVRAT', 'IMPLEMENTAT', 'INVIAT', 'ELIMINAT',
                            'FIXAT', 'REPROIECTARE', 'INGUSTAT', 'CERUT DE OPERATOR',
                            'CERUT 2026', 'INDICATORI NOI', 'BACKUP ZEUS',

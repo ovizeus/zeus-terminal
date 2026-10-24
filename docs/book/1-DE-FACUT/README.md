@@ -2,14 +2,15 @@
 
 > Ce e de facut — munca deschisa, in ordinea prioritatii
 
-4 secţiuni.
+5 secţiuni.
 
 | Data | Secţiunea |
 |---|---|
-| 2026-10-09 | [🔌 PLAN: conectarea ML-ului neconectat *(cerut 2026-10-09, de făcut mai târziu)*](01-plan-conectarea-ml-ului-neconectat-cerut-2026-10-09-de-facut-mai.md) |
-| — | [🔭 GĂSIT, NEREPARAT — registrul cerut de R-P-6](02-gasit-nereparat-registrul-cerut-de-r-p-6.md) |
-| — | [PLANS — pe viitor](03-plans-pe-viitor.md) |
-| — | [🔧 DE FĂCUT — în ordinea priorităţii](04-de-facut-in-ordinea-prioritatii.md) |
+| 2026-10-24 | [🏁 2026-10-24, ÎNCHIDEREA SESIUNII — ritualul cerut de R-OP-11](01-2026-10-24-inchiderea-sesiunii-ritualul-cerut-de-r-op-11.md) |
+| 2026-10-09 | [🔌 PLAN: conectarea ML-ului neconectat *(cerut 2026-10-09, de făcut mai târziu)*](02-plan-conectarea-ml-ului-neconectat-cerut-2026-10-09-de-facut-mai.md) |
+| — | [🔭 GĂSIT, NEREPARAT — registrul cerut de R-P-6](03-gasit-nereparat-registrul-cerut-de-r-p-6.md) |
+| — | [PLANS — pe viitor](04-plans-pe-viitor.md) |
+| — | [🔧 DE FĂCUT — în ordinea priorităţii](05-de-facut-in-ordinea-prioritatii.md) |
 
 ---
 
