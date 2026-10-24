@@ -62,6 +62,17 @@ greşită fiindcă nimeni nu se uita la el.
 aşteaptă o decizie de la el, ultimele şapte build-uri, şi harta folderelor. Scriptul nu-l atinge: starea de
 acum nu se poate deduce din titluri, iar un rezumat generat ar fi sunat sigur pe el şi ar fi fost vechi.
 
+### Un defect al meu, prins imediat după livrare
+
+Primul commit a dus **200 de fişiere** în loc de 120. Scriptul scria, dar nu **ştergea**: numele poartă un
+indice (`07-...`), indicele se schimbă când adaug o secţiune, deci rularea de azi lăsa în urmă fişierele de
+la rularea de acum zece minute. `4-LIVRATE/` avea două copii ale lui b311, cu indici diferiţi.
+
+Ironia e fix clasa de greşeală pe care scriptul o păzeşte: ceva rătăcit, în linişte, într-un folder pe care
+nu te uiţi de două ori. Un generator care nu curăţă nu e un generator, e un acumulator. Acum şterge tot ce
+generează înainte de a scrie, cu o singură excepţie scrisă pe faţă (`START.md`, singurul fişier de mână).
+**Verificare, nu încredere:** 120 de fişiere, zero nume duplicate după tăierea indicelui.
+
 Cifrele din START vin din sistemul viu, nu din carte: 17 218 decizii în ultimele 24h, 750 811 în total,
 4 poziţii deschise, 165 de rânduri adunate pe geometrie, HEAD b312 dar **servit b310** — scris la vedere,
 fiindcă e genul de nepotrivire care produce o oră de vânătoare la următoarea sesiune.

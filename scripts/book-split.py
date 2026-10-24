@@ -126,9 +126,20 @@ def main():
             unclassified.append(sec)
         sec['cat'] = cat
 
-    # scrie
+    # scrie — intai CURAT, altfel rularea de ieri lasa fişiere orfane cu
+    # indicele vechi si ajungi cu doua copii ale aceleiaşi secţiuni.
+    # Se sterge DOAR ce genereaza scriptul; START.md e scris de mana si rămane.
+    KEEP = {'START.md'}
     for cat, _ in CATS:
-        os.makedirs(os.path.join(OUT, cat), exist_ok=True)
+        d = os.path.join(OUT, cat)
+        os.makedirs(d, exist_ok=True)
+        for f in os.listdir(d):
+            if f.endswith('.md') and f not in KEEP:
+                os.remove(os.path.join(d, f))
+    if os.path.isdir(OUT):
+        for f in os.listdir(OUT):
+            if f.endswith('.md') and f not in KEEP:
+                os.remove(os.path.join(OUT, f))
 
     # data din titlu, pentru ordonare in index (cele fara data merg la final)
     def datekey(sec):
