@@ -7286,6 +7286,17 @@ recomandarea mea nu mai e cea de acum o oră.
 *Cele două clase ISTORIC — `pending_fill` şi `pending_momentum`, 510 rânduri, toate legate de poziţii
 reale — nu se ating în niciun scenariu.*
 
+**Cât de urgent e, măsurat şi nu simţit:** `entry_blocked` creşte cu **849 de rânduri pe zi**, media unui
+rând e **1 475 de octeţi**, deci **~1,25 MB pe zi** şi **~457 MB pe an**. Acum ocupă **180 MB**, adunaţi
+în cinci luni. Discul are **72 GB liberi**. **Argumentul cu spaţiul nu există** — motivul pentru care
+merită reparat cândva e consecvenţa, nu locul pe disc. Deci nu e o urgenţă, şi momentul potrivit e data
+viitoare când cineva umblă oricum la retenţie, nu ca schimbare de sine stătătoare azi.
+
+**Costul real din zona asta nu e discul, e ce pot măsura.** `NO_TRADE` se taie la 30 de zile, deci orice
+afirmaţie de-a mea despre pâlnie e oarbă dincolo de o lună. Dacă vrei vreodată analize pe ferestre mai
+lungi, decizia nu e „reparăm retenţia", e **„ce fereastră de analiză vrei, şi eşti de acord cu preţul ei
+în spaţiu"** — o întrebare de produs, nu de cod.
+
 
 ---
 
