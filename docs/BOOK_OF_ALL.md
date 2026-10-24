@@ -6801,3 +6801,17 @@ eşec spune de ce" s-a plătit la prima folosire.
 
 Ordinea corectă, pentru data viitoare: **fă întâi eşecurile să vorbească, apoi cere o
 captură.** Nu invers, şi în niciun caz cinci runde de dedus.
+
+### ✅ CONFIRMAT DE OPERATOR (2026-10-24)
+
+*„merge gata"* — desenul funcţionează pe telefon. Dosarul b306→b311 se închide.
+
+Bilanţul cinstit al celor şase runde: **cinci cauze reale reparate care NU erau cauza
+lui**, şi una care era. Toate cinci meritau reparate — armarea desincronizată, starea
+armată fără indicaţie vizuală, trendline-ul de lungime zero, panoramarea care fura
+gestul, filtrul care arunca atingerile atente, ciotul de chart care se dădea drept
+chart, punctul care cădea în spaţiul gol — dar niciuna nu era ce îl bloca pe el.
+
+Ce a rezolvat: **o captură**, citibilă doar pentru că adăugasem mesajele de eşec cu două
+runde înainte. Şi asta rămâne lecţia, nu bugul: *fă întâi eşecurile să vorbească, apoi
+cere o captură* — [[R-V-14]], [[R-V-15]].
