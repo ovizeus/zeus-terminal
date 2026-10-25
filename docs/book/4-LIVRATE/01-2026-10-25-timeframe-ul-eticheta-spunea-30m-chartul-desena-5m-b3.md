@@ -2,6 +2,11 @@
 
 ## ⏱️ 2026-10-25 — TIMEFRAME-UL: eticheta spunea 30m, chartul desena 5m (b320 v1.7.294)
 
+> ✅ **CONFIRMAT DE OPERATOR**, la scurt timp după livrare: *„da pare ca merge acum e ok"*.
+> Asta închide singurul lucru pe care îl lăsasem neverificat mai jos — **nu-l puteam da eu**, fiindcă
+> cere ieşit din aplicaţie şi intrat la loc pe telefonul lui. Testele dovedeau că răspunsul învechit
+> nu mai scrie; **el a dovedit că asta chiar înseamnă chartul pe 30m, fără refresh.**
+
 > Raport operator: *„eu setez pe 30 min sau 1h sau 15 etc ies din zeus si cand intru starea e la fel pe
 > 30 min sau 1h dar chartul nu e dece pacaleste ca ar fi dau refres si dupa aia se schimba la cat e"*.
 
