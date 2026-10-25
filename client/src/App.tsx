@@ -22,6 +22,7 @@ import { startMarketRadarRealtime, stopMarketRadarRealtime } from './services/ma
 import { start as startLiqFeedClient, stop as stopLiqFeedClient } from './services/liqFeedClient'
 import './app.css'
 import './styles/institutional.css'
+import './styles/liqmap.css'
 
 export function App() {
   const theme = useUiStore((s) => s.theme)

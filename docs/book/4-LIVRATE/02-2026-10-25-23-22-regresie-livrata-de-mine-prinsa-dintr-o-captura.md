@@ -47,3 +47,5 @@ Aici am tăiat **istoricul clientului** şi am păstrat **un server gol**, ceea 
 
 **Şi cine a prins-o:** nu testele mele, nu verificările mele pe baza vie — **captura lui.** Toate cele
 27 de teste de la b321 erau verzi peste regresia asta.
+
+---

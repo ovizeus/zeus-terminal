@@ -1,0 +1,264 @@
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
+import { fmtUsd, fmtPct, intensity, cellColor, barColor, LIQ } from '../../liqmap/scale'
+
+// ══════════════════════════════════════════════════════════════════
+// LIQUIDATION MAP — trei vederi, toate din date măsurate
+// ══════════════════════════════════════════════════════════════════
+//
+// [LIQ-PANEL 2026-10-25] Cerut de operator: „o pictogramă total nouă lângă
+// omega, liquidation map cu date reale, construită exact ca la Coinglass dar
+// mult mai pro… vreau ceva real, nu fake".
+//
+// Diferenţa faţă de Coinglass, spusă o dată şi scrisă în panou: harta LOR
+// colorată PREZICE unde ar fi lichidările, presupunând că lumea intră la
+// 10x/25x/50x/100x. Nicio bursă nu publică poziţiile reale. Aici nu se prezice
+// nimic — fiecare bară şi fiecare celulă e suma dolarilor lichidaţi chiar
+// acolo, chiar atunci.
+//
+// De aceea panoul îşi arată ACOPERIREA sus. Fără ea, o scară goală arată
+// identic cu una stricată — confuzia care a pornit toată discuţia şi care a
+// costat o regresie în aceeaşi zi.
+
+const VIEWS = [
+    { id: 'map', label: 'MAP' },
+    { id: 'heat', label: 'HEATMAP' },
+    { id: 'live', label: 'LIVE' },
+] as const
+type ViewId = typeof VIEWS[number]['id']
+
+const REFRESH_MS = 60_000
+const HEAT_COLS = 90
+
+const w = window as any
+
+function currentSymbol(): string {
+    try { return String(w.S?.symbol || 'BTCUSDT').toUpperCase() } catch { return 'BTCUSDT' }
+}
+function currentPrice(): number {
+    try { const p = Number(w.S?.price); return Number.isFinite(p) && p > 0 ? p : 0 } catch { return 0 }
+}
+
+export function LiqMapPanel() {
+    const [view, setView] = useState<ViewId>('map')
+    const [data, setData] = useState<PanelData>(EMPTY)
+    const [tape, setTape] = useState<LiqEvent[]>([])
+    const [days, setDays] = useState(90)
+    const [price, setPrice] = useState(currentPrice)
+    const [loading, setLoading] = useState(true)
+    const alive = useRef(true)
+
+    const load = useCallback(async () => {
+        const p = currentPrice()
+        if (p > 0) setPrice(p)
+        const d = await fetchPanel(currentSymbol(), p, days, HEAT_COLS)
+        if (alive.current) { setData(d); setLoading(false) }
+    }, [days])
+
+    useEffect(() => {
+        alive.current = true
+        load()
+        const iv = setInterval(load, REFRESH_MS)
+        // Preţul se mişcă între aduceri; scara trebuie ancorată pe preţul de
+        // ACUM, altfel procentele mint încet.
+        const pv = setInterval(() => { const p = currentPrice(); if (p > 0) setPrice(p) }, 3000)
+        // Live: folosim evenimentul care există deja în Zeus şi prin care trec
+        // toate bursele, inclusiv Gate. Nu deschidem o a doua cale.
+        const onLiq = (e: Event) => {
+            const ev = normalizeLive((e as CustomEvent).detail)
+            if (ev) setTape((t) => pushTape(t, ev))
+        }
+        window.addEventListener('zeus:liq', onLiq as EventListener)
+        return () => {
+            alive.current = false
+            clearInterval(iv); clearInterval(pv)
+            window.removeEventListener('zeus:liq', onLiq as EventListener)
+        }
+    }, [load])
+
+    const stats = data.stats
+    const map = data.map
+    const heat = data.heat
+
+    return (
+        <div className="zlq">
+            <Honesty stats={stats} map={map} days={days} setDays={setDays} loading={loading} />
+
+            <div className="zlq-tabs" role="tablist">
+                {VIEWS.map((v) => (
+                    <button key={v.id} role="tab" aria-selected={view === v.id}
+                        className={'zlq-tab' + (view === v.id ? ' act' : '')}
+                        onClick={() => setView(v.id)}>{v.label}</button>
+                ))}
+            </div>
+
+            <div className="zlq-body">
+                {view === 'map' && <MapView map={map} price={price} />}
+                {view === 'heat' && <HeatView heat={heat} price={price} />}
+                {view === 'live' && <LiveView tape={tape} />}
+            </div>
+        </div>
+    )
+}
+
+// ── Banda de onestitate ───────────────────────────────────────────
+// Spune ce ştim, de când, şi de la cine. Binance lipseşte din listă fiindcă
+// Binance chiar nu livrează nimic către serverul ăsta — şi e mai bine să se
+// vadă decât să fie ghicit.
+function Honesty({ stats, map, days, setDays, loading }: any) {
+    const since = stats?.since ? new Date(stats.since) : null
+    const cov = map?.coverage
+    return (
+        <div className="zlq-hon">
+            <div className="zlq-hon-main">
+                <span className="zlq-k">ISTORIC</span>
+                <b>{loading ? '…' : (stats?.events ?? 0).toLocaleString('ro-RO')}</b>
+                <span className="zlq-dim">lichidări</span>
+                <b className="zlq-usd">{fmtUsd(stats?.totalUsd ?? 0)}</b>
+            </div>
+            <div className="zlq-hon-sub">
+                {since && <span>din {since.toLocaleDateString('ro-RO')} {since.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}</span>}
+                {cov && <span>acoperire <b style={{ color: LIQ.short }}>{fmtPct(cov.upPct)}</b> / <b style={{ color: LIQ.long }}>{fmtPct(cov.downPct)}</b></span>}
+                <span className="zlq-ex">
+                    {(stats?.exchanges || []).map((e: any) => (
+                        <i key={e.exchange} title={`${e.n} evenimente · ${fmtUsd(e.usd)}`}>{e.exchange}</i>
+                    ))}
+                    {!stats?.exchanges?.length && <i className="zlq-off">nicio sursă încă</i>}
+                </span>
+                <span className="zlq-win">
+                    {[7, 30, 90].map((d) => (
+                        <button key={d} className={days === d ? 'act' : ''} onClick={() => setDays(d)}>{d}z</button>
+                    ))}
+                </span>
+            </div>
+        </div>
+    )
+}
+
+// ── Vederea MAP: scara pe niveluri de preţ ────────────────────────
+function MapView({ map, price }: { map: any; price: number }) {
+    if (!map || !map.buckets?.length) return <Empty what="scara" />
+    const buckets = [...map.buckets].sort((a: any, b: any) => b.pct - a.pct)
+    const max = buckets.reduce((m: number, b: any) => Math.max(m, b.longUsd + b.shortUsd), 0) || 1
+    return (
+        <div className="zlq-map">
+            {buckets.map((b: any) => {
+                const tot = b.longUsd + b.shortUsd
+                const isLong = b.longUsd >= b.shortUsd
+                const wpc = Math.max(1.5, (tot / max) * 100)
+                const above = b.pct >= 0
+                return (
+                    <div key={b.pct} className={'zlq-row' + (above ? ' up' : ' dn')}>
+                        <span className="zlq-px">{Math.round(b.price || price * (1 + b.pct / 100))}</span>
+                        <span className="zlq-pc">{fmtPct(b.pct)}</span>
+                        <span className="zlq-bar">
+                            <i style={{ width: wpc + '%', background: barColor(isLong) }} />
+                        </span>
+                        <span className="zlq-v">{fmtUsd(tot)}</span>
+                    </div>
+                )
+            })}
+            <div className="zlq-now">PREŢ {Math.round(price)}</div>
+        </div>
+    )
+}
+
+// ── Vederea HEATMAP: timp × preţ ──────────────────────────────────
+// Canvas, nu DOM: 90 de coloane × zeci de niveluri ar însemna mii de noduri,
+// iar pe telefon asta se simte imediat.
+function HeatView({ heat, price }: { heat: any; price: number }) {
+    const ref = useRef<HTMLCanvasElement | null>(null)
+    useEffect(() => {
+        const cv = ref.current
+        if (!cv) return
+        const box = cv.parentElement
+        const W = Math.max(240, box?.clientWidth || 320)
+        const H = Math.max(220, Math.min(460, Math.round(W * 1.15)))
+        const dpr = Math.min(2, window.devicePixelRatio || 1)
+        cv.width = W * dpr; cv.height = H * dpr
+        cv.style.width = W + 'px'; cv.style.height = H + 'px'
+        const g = cv.getContext('2d')
+        if (!g) return
+        g.setTransform(dpr, 0, 0, dpr, 0, 0)
+        g.clearRect(0, 0, W, H)
+        g.fillStyle = '#070a0e'; g.fillRect(0, 0, W, H)
+        if (!heat || !heat.cells?.length) return
+
+        const pcts = heat.cells.map((c: any) => c.pct)
+        const lo = Math.min(...pcts), hi = Math.max(...pcts)
+        const span = Math.max(0.25, hi - lo)
+        const cols = heat.cols || HEAT_COLS
+        const cw = W / cols
+        const rows = Math.max(1, Math.round(span * 4) + 1)
+        const rh = H / rows
+
+        for (const c of heat.cells) {
+            const tot = c.longUsd + c.shortUsd
+            const isLong = c.longUsd >= c.shortUsd
+            const i = intensity(tot, heat.maxUsd)
+            g.fillStyle = cellColor(isLong, i)
+            const x = c.t * cw
+            const y = H - ((c.pct - lo) / span) * (H - rh) - rh
+            g.fillRect(x, y, Math.max(1.5, cw - 0.5), Math.max(1.5, rh - 0.5))
+        }
+        // Linia preţului curent, dacă e în interval.
+        const nowPct = 0
+        if (nowPct >= lo && nowPct <= hi) {
+            const y = H - ((nowPct - lo) / span) * (H - rh) - rh / 2
+            g.strokeStyle = 'rgba(255,214,102,.55)'; g.lineWidth = 1
+            g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke()
+        }
+    }, [heat, price])
+
+    if (!heat || !heat.cells?.length) return <Empty what="grila" />
+    return (
+        <div className="zlq-heat">
+            <canvas ref={ref} />
+            <div className="zlq-heat-legend">
+                <span><i style={{ background: LIQ.long }} /> long lichidat</span>
+                <span><i style={{ background: LIQ.short }} /> short lichidat</span>
+                <span className="zlq-dim">vechi → nou · max {fmtUsd(heat.maxUsd)}</span>
+            </div>
+        </div>
+    )
+}
+
+// ── Vederea LIVE: fiecare lichidare, pe măsură ce se întâmplă ─────
+function LiveView({ tape }: { tape: LiqEvent[] }) {
+    if (!tape.length) {
+        return (
+            <div className="zlq-empty">
+                <b>aştept o lichidare</b>
+                <span>fiecare rând de aici va fi o poziţie închisă forţat, chiar în clipa aia</span>
+            </div>
+        )
+    }
+    return (
+        <div className="zlq-tape">
+            {tape.map((e, i) => (
+                <div key={e.time + '-' + i} className={'zlq-tp' + (i === 0 ? ' fresh' : '')}>
+                    <span className="zlq-tp-dot" style={{ background: barColor(!!e.isLong) }} />
+                    <span className="zlq-tp-side" style={{ color: barColor(!!e.isLong) }}>
+                        {e.isLong ? 'LONG' : 'SHORT'}
+                    </span>
+                    <span className="zlq-tp-sym">{e.symbol || ''}</span>
+                    <span className="zlq-tp-px">{e.p >= 1 ? Math.round(e.p) : e.p}</span>
+                    <span className="zlq-tp-v">{fmtUsd(e.vol)}</span>
+                    <span className="zlq-tp-ex">{e.exchange}</span>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+function Empty({ what }: { what: string }) {
+    return (
+        <div className="zlq-empty">
+            <b>{what} e goală — şi asta e un răspuns</b>
+            <span>
+                aici apar doar lichidări care chiar s-au întâmplat. unde nu scrie nimic,
+                nu s-a lichidat nimeni — preţul n-a fost acolo
+            </span>
+        </div>
+    )
+}

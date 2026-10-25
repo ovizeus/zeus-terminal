@@ -1,0 +1,205 @@
+/* ══════════════════════════════════════════════════════════════════
+   LIQUIDATION MAP
+   ══════════════════════════════════════════════════════════════════
+
+   [LIQ-PANEL 2026-10-25] Operatorul citeşte Zeus de pe telefon, şi a cerut
+   explicit „să se citească uşor, să se înţeleagă". Deci:
+
+   - numerele în monospace tabular, ca să se alinieze pe coloană şi ochiul
+     să compare pe verticală fără să citească fiecare cifră;
+   - o singură îndrăzneală, pulsul din tape; restul tăcut, ca mişcarea să
+     însemne ceva;
+   - două familii de culoare, nu două capete ale aceleiaşi. Verdele clasic de
+     lumânări înseamnă „preţ sus"; aici ar însemna „short lichidat", care se
+     întâmplă tot când preţul urcă — s-ar citi greşit exact în clipa care
+     contează.
+
+   LONG lichidat  (vândut cu forţa)    → chihlimbar #ff8c42
+   SHORT lichidat (cumpărat cu forţa)  → cyan rece  #35e0d0
+*/
+
+.zlq {
+    --liq-long: #ff8c42;
+    --liq-short: #35e0d0;
+    --liq-bg: #070a0e;
+    --liq-line: #18212c;
+    --liq-dim: #5d7183;
+    --liq-txt: #c3d4e2;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--liq-bg);
+    color: var(--liq-txt);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ── banda de onestitate ── */
+.zlq-hon {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--liq-line);
+    flex: 0 0 auto;
+}
+.zlq-hon-main {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.zlq-k {
+    font-size: 10px;
+    letter-spacing: .14em;
+    color: var(--liq-dim);
+}
+.zlq-hon-main b {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 19px;
+    color: #eaf2f8;
+}
+.zlq-hon-main .zlq-usd { color: var(--liq-long); font-size: 16px; }
+.zlq-dim { color: var(--liq-dim); font-size: 11px; }
+
+.zlq-hon-sub {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+    font-size: 11px;
+    color: var(--liq-dim);
+}
+.zlq-hon-sub b { font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.zlq-ex { display: flex; gap: 5px; }
+.zlq-ex i {
+    font-style: normal;
+    font-size: 10px;
+    letter-spacing: .06em;
+    padding: 1px 6px;
+    border: 1px solid var(--liq-line);
+    border-radius: 999px;
+    color: #8fa6b8;
+}
+.zlq-ex .zlq-off { color: #7b5a3a; border-color: #3a2a1c; }
+.zlq-win { margin-left: auto; display: flex; gap: 4px; }
+.zlq-win button {
+    background: none;
+    border: 1px solid var(--liq-line);
+    color: var(--liq-dim);
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.zlq-win button.act { color: #eaf2f8; border-color: #35506a; background: #0e1720; }
+
+/* ── taburi ── */
+.zlq-tabs { display: flex; gap: 2px; padding: 8px 12px 0; flex: 0 0 auto; }
+.zlq-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--liq-dim);
+    font-size: 11px;
+    letter-spacing: .12em;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+.zlq-tab.act { color: #eaf2f8; border-bottom-color: var(--liq-long); }
+
+.zlq-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 12px 18px; }
+
+/* ── MAP ── */
+.zlq-map { display: flex; flex-direction: column; gap: 2px; }
+.zlq-row {
+    display: grid;
+    grid-template-columns: 58px 54px 1fr 68px;
+    align-items: center;
+    gap: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+.zlq-px { color: #8fa6b8; }
+.zlq-pc { color: var(--liq-dim); }
+.zlq-row.up .zlq-pc { color: #6fbfa8; }
+.zlq-row.dn .zlq-pc { color: #c08a6a; }
+.zlq-bar { height: 11px; background: #0d141c; border-radius: 2px; overflow: hidden; }
+.zlq-bar i { display: block; height: 100%; border-radius: 2px; }
+.zlq-v { text-align: right; color: #d7e5f0; }
+.zlq-now {
+    margin: 8px 0;
+    text-align: center;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: .2em;
+    color: #d8b25e;
+    border-top: 1px dashed #3b3426;
+    border-bottom: 1px dashed #3b3426;
+    padding: 4px 0;
+}
+
+/* ── HEATMAP ── */
+.zlq-heat { display: flex; flex-direction: column; gap: 8px; }
+.zlq-heat canvas { width: 100%; display: block; border-radius: 4px; }
+.zlq-heat-legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 10px;
+    color: var(--liq-dim);
+    align-items: center;
+}
+.zlq-heat-legend i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: -1px;
+}
+
+/* ── LIVE ── */
+.zlq-tape { display: flex; flex-direction: column; gap: 1px; }
+.zlq-tp {
+    display: grid;
+    grid-template-columns: 8px 46px 1fr 62px 68px 42px;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid #0e151d;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+.zlq-tp-dot { width: 7px; height: 7px; border-radius: 50%; }
+.zlq-tp-side { font-size: 10px; letter-spacing: .06em; }
+.zlq-tp-sym { color: #8fa6b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zlq-tp-px { text-align: right; color: var(--liq-dim); }
+.zlq-tp-v { text-align: right; color: #eaf2f8; }
+.zlq-tp-ex { text-align: right; font-size: 9px; color: #4d6376; }
+
+/* Singura mişcare din panou: rândul proaspăt. O lichidare chiar are nevoie de
+   un puls — restul nu. */
+.zlq-tp.fresh { animation: zlq-pulse 900ms ease-out 1; }
+@keyframes zlq-pulse {
+    0% { background: rgba(255, 140, 66, .20); transform: translateX(-2px); }
+    100% { background: transparent; transform: none; }
+}
+
+/* ── gol ── */
+.zlq-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    text-align: center;
+    padding: 36px 18px;
+    color: var(--liq-dim);
+}
+.zlq-empty b { color: #8fa6b8; font-size: 12px; font-weight: 600; }
+.zlq-empty span { font-size: 11px; max-width: 34ch; line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) {
+    .zlq-tp.fresh { animation: none; }
+}

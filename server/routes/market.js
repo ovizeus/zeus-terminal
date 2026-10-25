@@ -23,6 +23,31 @@ const ALLOWED_KINDS = new Set(['gainers', 'losers', 'volume']);
 // `ref` vine de la client (pretul lui curent) ca gruparea pe procente sa fie
 // facuta dupa o SINGURA regula, aceeasi ca in liqMap.ts — nu doua care se
 // contrazic la primul caz ambiguu (R-C-23).
+// [LIQ-PANEL 2026-10-25] Tot ce-i trebuie panoului, intr-O SINGURA cerere:
+// scara pe niveluri, grila timp x pret, si banda de onestitate. Trei cereri ar
+// fi insemnat trei momente diferite, deci trei „acum" diferite in acelasi
+// ecran — iar o fereastra de timp care nu e aceeasi peste tot e exact felul in
+// care se nasc cifre care nu se potrivesc intre ele.
+router.get('/liq-panel', (req, res) => {
+    try {
+        const liqStore = require('../services/liqStore');
+        const symbol = String(req.query.symbol || 'BTCUSDT').toUpperCase();
+        const ref = Number(req.query.ref);
+        const days = Number(req.query.days) || liqStore.DEFAULT_DAYS;
+        const cols = Number(req.query.cols) || 90;
+        res.json({
+            map: liqStore.map({ symbol, ref, days }),
+            heat: liqStore.heatmap({ symbol, ref, days, cols }),
+            stats: liqStore.stats({ symbol, days }),
+            symbol, ref, days,
+        });
+    } catch (err) {
+        // Un panou gol e onest; un 500 il lasa pe operator sa creada ca
+        // s-a stricat altceva.
+        res.status(200).json({ map: null, heat: null, stats: null, error: 'unavailable' });
+    }
+});
+
 router.get('/liq-map', (req, res) => {
     try {
         const liqStore = require('../services/liqStore');

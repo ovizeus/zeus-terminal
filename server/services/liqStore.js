@@ -48,6 +48,9 @@ function _s() {
             'SELECT side, price, usd, ts FROM liq_events WHERE symbol = ? AND ts >= ?'),
         // Lotizat, ca retenţia de la G-5: better-sqlite3 e SINCRON, iar un
         // DELETE nelimitat pe o tabelă mare îngheaţă bucla de evenimente.
+        stats: db.db.prepare(
+            'SELECT exchange, COUNT(*) AS n, SUM(usd) AS usd, MIN(ts) AS oldest, MAX(ts) AS newest'
+            + ' FROM liq_events WHERE symbol = ? AND ts >= ? GROUP BY exchange'),
         pruneBatch: db.db.prepare(
             'DELETE FROM liq_events WHERE rowid IN (SELECT rowid FROM liq_events WHERE ts < ? LIMIT ?)'),
     };
@@ -153,4 +156,85 @@ async function prune(now = Date.now(), days = DEFAULT_DAYS, batchLimit = 2000, m
     return total;
 }
 
-module.exports = { record, map, prune, DEFAULT_DAYS };
+/**
+ * [LIQ-PANEL 2026-10-25] Grila timp × preţ pentru vederea HEATMAP.
+ *
+ * Aici e diferenţa faţă de Coinglass, şi merită spusă o dată în plus: harta
+ * lor colorată **prezice** unde ar fi lichidările, presupunând că lumea intră
+ * la 10x/25x/50x/100x. Grila asta nu prezice nimic — fiecare celulă e suma
+ * dolarilor lichidaţi **chiar acolo, chiar atunci**.
+ */
+function heatmap({ symbol, ref, days, cols } = {}) {
+    const out = { cells: [], cols: 0, events: 0, maxUsd: 0, days: DEFAULT_DAYS, tMin: 0, tMax: 0 };
+    try {
+        const sym = typeof symbol === 'string' ? symbol.trim() : '';
+        const p = Number(ref);
+        const d = Number.isFinite(Number(days)) && Number(days) > 0 ? Math.min(Number(days), 365) : DEFAULT_DAYS;
+        // Mărginit: o cerere cu un milion de coloane ar construi un tablou
+        // uriaş şi ar îngheţa răspunsul. 240 e deja mai fin decât poate desena
+        // un telefon.
+        let c = Math.floor(Number(cols));
+        if (!Number.isFinite(c) || c <= 0) c = 90;
+        c = Math.max(12, Math.min(c, 240));
+        out.cols = c;
+        out.days = d;
+        if (!sym || !Number.isFinite(p) || p <= 0) return out;
+
+        const tMax = Date.now();
+        const tMin = tMax - d * DAY_MS;
+        out.tMin = tMin; out.tMax = tMax;
+        const span = Math.max(1, tMax - tMin);
+
+        const rows = _s().range.all(sym, tMin);
+        const acc = new Map();
+        for (const r of rows) {
+            const pct = ((r.price - p) / p) * 100;
+            const a = Math.abs(pct);
+            if (a < MIN_PCT || a > MAX_PCT) continue;
+            const key = Math.round(pct * BUCKET) / BUCKET;
+            let col = Math.floor(((r.ts - tMin) / span) * c);
+            if (col < 0) col = 0; if (col >= c) col = c - 1;
+            const k = col + '|' + key;
+            let cell = acc.get(k);
+            if (!cell) { cell = { t: col, pct: key, longUsd: 0, shortUsd: 0, n: 0 }; acc.set(k, cell); }
+            if (r.side === 'SELL') cell.longUsd += r.usd; else cell.shortUsd += r.usd;
+            cell.n++;
+            out.events++;
+        }
+        for (const cell of acc.values()) {
+            const tot = cell.longUsd + cell.shortUsd;
+            if (tot > out.maxUsd) out.maxUsd = tot;
+        }
+        out.cells = [...acc.values()];
+    } catch (_) { /* o grilă goală e onestă */ }
+    return out;
+}
+
+/**
+ * Banda de onestitate: ce ştim, de când, şi de la cine.
+ *
+ * Fără ea, o scară goală arată identic cu una stricată — confuzia care a
+ * pornit toată discuţia despre lichidări şi care a costat o regresie azi.
+ * Raportarea PE BURSĂ face vizibil şi ce lipseşte: Binance nu apare, fiindcă
+ * Binance chiar nu livrează nimic către serverul ăsta.
+ */
+function stats({ symbol, days } = {}) {
+    const out = { events: 0, totalUsd: 0, since: 0, exchanges: [], days: DEFAULT_DAYS };
+    try {
+        const sym = typeof symbol === 'string' ? symbol.trim() : '';
+        const d = Number.isFinite(Number(days)) && Number(days) > 0 ? Math.min(Number(days), 365) : DEFAULT_DAYS;
+        out.days = d;
+        if (!sym) return out;
+        const rows = _s().stats.all(sym, Date.now() - d * DAY_MS);
+        for (const r of rows) {
+            out.events += r.n;
+            out.totalUsd += r.usd;
+            if (!out.since || r.oldest < out.since) out.since = r.oldest;
+            out.exchanges.push({ exchange: r.exchange, n: r.n, usd: r.usd, last: r.newest });
+        }
+        out.exchanges.sort((a, b) => b.usd - a.usd);
+    } catch (_) { /* zero e onest */ }
+    return out;
+}
+
+module.exports = { record, map, heatmap, stats, prune, DEFAULT_DAYS };

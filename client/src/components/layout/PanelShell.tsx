@@ -39,6 +39,7 @@ import { NovaPanel } from '../dock/NovaPanel'
 import { AdaptivePanel } from '../dock/AdaptivePanel'
 import { FlowPanel } from '../dock/FlowPanel'
 import { QuantMonitorPanel } from '../dock/QuantMonitorPanel'
+import { LiqMapPanel } from '../dock/LiqMapPanel'
 import { MTFPanel } from '../dock/MTFPanel'
 import { TeacherDockPanel } from '../dock/TeacherDockPanel'
 import { SignalRegistryPanel } from '../dock/SignalRegistryPanel'
@@ -100,6 +101,7 @@ const DOCK_TITLES: Record<string, string> = {
   'theia': 'THEIA',
   'flow': 'Flow',
   'quantmonitor': 'Quantitative Monitor',
+  'liqmap': 'Liquidation Map',
   'mtf': 'MTF',
   'teacher': 'Teacher',
   'sigreg': 'Signals',
@@ -591,6 +593,9 @@ export function PanelShell() {
           </div>
           <div data-panel-id="quantmonitor" className={dockActive === 'quantmonitor' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <QuantMonitorPanel />
+          </div>
+          <div data-panel-id="liqmap" className={dockActive === 'liqmap' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <LiqMapPanel />
           </div>
           <div data-panel-id="mtf" className={dockActive === 'mtf' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <MTFPanel />
