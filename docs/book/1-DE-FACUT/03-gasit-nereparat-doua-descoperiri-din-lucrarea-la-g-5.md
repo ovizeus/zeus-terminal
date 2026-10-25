@@ -25,13 +25,39 @@ tabelă, compoziţia etichetei `TRADE` e:
 | `pending_fill` | 409 | **da** |
 | `pending_momentum` | 54 | **da** |
 
-**Total 181 135, din care tranzacţii adevărate 1 683. Adică 0,93%.** ML-ul a învăţat luni de zile dintr-o
-clasă numită „TRADE" care e 99% ne-tranzacţii.
+**Total 181 135, din care tranzacţii adevărate 1 683. Adică 0,93%.**
+
+> ### ⛔ CORECŢIE, scrisă două ore mai târziu — am spus-o mai tare decât e
+>
+> Scrisesem aici: *„ML-ul a învăţat luni de zile dintr-o clasă numită TRADE care e 99% ne-tranzacţii."*
+> **Am verificat fiecare cititor al coloanei, şi nu există niciunul.** `snapshot_event_type` nu e filtrat,
+> nu e ramificat, nu e citit: `omega.js` cere `auditTrail` şi **nu-l apelează niciodată**, `replayEngine`
+> nu pomeneşte coloana deloc, `serverAT` citeşte doar digestul, iar funcţiile de citire din `auditTrail`
+> n-au niciun apelant. Şi `mlTelemetryRetention` taie tabela la **30 de zile** — confirmat pe date, cel
+> mai vechi rând e din 2026-09-25 — deci nici „luni de zile" nu stă.
+>
+> **Deci nu e otrăvire de ML. E o coloană scrisă greşit pe care n-o citeşte nimeni** — scrisă, indexată,
+> cu `CHECK`, şi niciodată interogată. Ceea ce face reparaţia **fără nicio schimbare de comportament**,
+> exact pe dos de cum ţi-o prezentasem („schimbă ce consumă ML-ul, deci e decizia ta"). Cifra de 99,07%
+> rămâne corectă; **consecinţa pe care i-o atribuisem, nu.** [[R-V-18]] cere să spun ce n-am verificat;
+> aici n-am verificat **dacă cineva citeşte**, şi am dedus efectul din volum.
 
 **Şi mai e o scăpare în acelaşi `if`,** la `brainLogger.js:79`: decizia dacă rândul trece prin
 **eşantionarea** NO_TRADE. `entry_blocked` are tier `SMALL`/`MEDIUM`/`LARGE` — verificat, niciun rând cu
 `NO_TRADE` — deci nu intră nici pe prima condiţie, nici pe a doua: **se stochează toate, neeşantionate.**
-Aia e şi explicaţia pentru care sunt atât de multe.
+
+> ### ⛔ A DOUA CORECŢIE — „de aia sunt atât de multe" e greşit
+>
+> Scăparea de la eşantionare e reală în cod, dar **măsurat, aproape că n-are efect.**
+> `_shouldStoreNoTrade` păstrează **tot** ce are încrederea ≥50, iar **52 893 din 54 268** de rânduri
+> `entry_blocked` (97,5%) sunt la ≥50. Deci trecerea lor prin eşantionator ar schimba **cel mult 2,5%**
+> din rânduri, şi chiar şi acelea mai trec prin celelalte condiţii (`confScore ≥ 60`, bătaia de inimă
+> la 10 cicluri, schimbarea de regim).
+>
+> **Sunt multe fiindcă AT refuză mult, nu fiindcă scapă de eşantionare.** Şi fiindcă acele 2,5% sunt
+> refuzuri pe calea banilor — exact rândurile care merită păstrate — **nu e un bug de reparat, e un
+> comportament de păstrat.** L-am lăsat neatins, dar l-am făcut **deliberat**: comentariu la locul lui
+> şi un test care cade dacă cineva „face ordine" fără să citească raţionamentul. Acelaşi tipar ca G-4.
 
 *De ce nu l-am făcut:* schimbă ce consumă ML-ul la antrenare, pe un sistem cu bani. E decizia ta, şi e
 exact ce cere „nu înlănţui schimbări riscante". Reparaţia e o linie în fiecare loc, odată ce modulul
@@ -69,3 +95,5 @@ cu zero rânduri acum.
 - cifrele din G-6 sunt calculate aplicând regula scriitorului peste `brain_decisions`, **nu** citite din
   `ml_decision_snapshots` rând cu rând — digestul MD5 nu se poate potrivi ieftin pe 376 000 de rânduri,
   deci e o reconstituire a regulii, nu o numărătoare a efectului ei.
+
+---

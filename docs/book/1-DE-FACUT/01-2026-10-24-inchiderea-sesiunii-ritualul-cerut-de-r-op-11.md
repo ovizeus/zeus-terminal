@@ -24,7 +24,7 @@ iar rubrica a crescut de la 45 la **66 de reguli**.
 |---|---|---|
 | **G-4** | `atPruneClosed` e cod mort care ar tăia istoricul de tranzacţionare | trei opţiuni scrise, niciuna nu e a mea de ales |
 | **G-5** | ✅ **ÎNCHIS 2026-10-25 (b315)** — `entry_blocked` intră în clasa blocate prin listă comună; retenţia lotizată, de la 8,7 s de îngheţare la bucăţi de ~114 ms | — |
-| **G-6** | eticheta `TRADE` pentru ML stă pe 179 452 de rânduri care nu sunt tranzacţii (99,07%), acelaşi prefix dar în scriitor | schimbă ce consumă ML-ul la antrenare — a ta |
+| **G-6** | ✅ **ÎNCHIS 2026-10-25 (b316)** — eticheta întreabă clasificarea, nu forma numelui; **şi am corectat două afirmaţii prea tari de-ale mele**: coloana n-are niciun cititor, iar scăparea de la eşantionare atinge 2,5% din rânduri | — |
 | **G-7** | 77 688 de rânduri `pending_expire` + `pending_created` fără nicio regulă de retenţie | ce fereastră de analiză vrei pe ciclul de viaţă al pending-urilor |
 | **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
 | **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |

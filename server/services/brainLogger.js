@@ -8,6 +8,9 @@ const crypto = require('crypto');
 const logger = require('./logger');
 const db = require('./database');
 const MF = require('../migrationFlags');
+// [G-6 2026-10-25] What each final_action name MEANS, in one place.
+// The ML event label below asks this instead of reading the name's shape.
+const _BRAIN_ACTIONS = require('./brainActions');
 
 // ── No-trade dedup state (per symbol) ──
 const _lastNoTrade = new Map(); // symbol → { ts, confScore, regime, gateKey, ddTier }
@@ -75,7 +78,21 @@ function logDecision(fields) {
         const finalAction = fields.finalAction || 'unknown';
         const cycle = fields.cycle || 0;
 
-        // No-trade sampling
+        // No-trade sampling.
+        //
+        // [G-6 2026-10-25] This prefix test is DELIBERATELY left alone, even
+        // though the label site twenty lines below stopped using it.
+        // entry_blocked does not match it, so every autotrade rejection is
+        // stored unsampled — and that is the behaviour worth keeping:
+        //
+        //   _shouldStoreNoTrade keeps everything at confidence >= 50, and
+        //   52,893 of 54,268 entry_blocked rows (97.5%) are at >= 50. So
+        //   routing them through the sampler would change at most 2.5% of
+        //   them, and those 2.5% are rejections on the money path — the rows
+        //   most worth having.
+        //
+        // Do not "make this consistent" with the label. Consistency here costs
+        // money-path detail and buys nothing measurable.
         if (finalTier === 'NO_TRADE' || finalAction.startsWith('blocked_')) {
             if (!_shouldStoreNoTrade(fields.symbol, fields, cycle)) return null;
             _updateNoTradeState(fields.symbol, fields, cycle);
@@ -121,9 +138,28 @@ function logDecision(fields) {
                     ? fields.resolvedEnv
                     : 'DEMO';
 
-                // Map finalTier to a valid snapshot_event_type
+                // [G-6 2026-10-25] The label answers one question — did this
+                // decision become a trade? — and it asks the classification,
+                // not the shape of the name.
+                //
+                // It used to be `finalAction.startsWith('blocked_')`, which
+                // entry_blocked does not match even though autotrade had just
+                // refused the entry. So entry_blocked, pending_created and
+                // pending_expire all fell through to TRADE. Applying that rule
+                // over brain_decisions: 181,135 rows labelled TRADE, of which
+                // 1,683 are trades. 0.93%.
+                //
+                // isHistory() is the right question because those are exactly
+                // the three actions that can carry a linked_seq, i.e. that can
+                // point at a real position. Anything else did not trade.
+                // An unclassified name falls on ABSTAIN_CRITIC — fails safe,
+                // and the classification test fails loudly in CI.
+                //
+                // NOTE this changes no behaviour: snapshot_event_type has no
+                // reader anywhere in server/ or client/ — it is written,
+                // indexed and CHECK-constrained, and never queried. See G-6.
                 let eventType;
-                if (finalTier === 'NO_TRADE' || finalAction.startsWith('blocked_')) {
+                if (finalTier === 'NO_TRADE' || !_BRAIN_ACTIONS.isHistory(finalAction)) {
                     eventType = 'ABSTAIN_CRITIC';
                 } else if (fields.finalConfidence >= 50 && fields.finalConfidence < 60) {
                     eventType = 'NEAR_THRESHOLD';
