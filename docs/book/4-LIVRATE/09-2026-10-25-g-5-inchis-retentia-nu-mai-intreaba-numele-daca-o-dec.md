@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7436 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7440 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗃️ 2026-10-25 — G-5 ÎNCHIS: retenţia nu mai întreabă NUMELE dacă o decizie a fost blocată (b315 v1.7.289)
 

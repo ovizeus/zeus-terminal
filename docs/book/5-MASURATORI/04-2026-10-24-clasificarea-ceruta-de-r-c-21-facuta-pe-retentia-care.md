@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7326 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7330 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗃️ 2026-10-24 — CLASIFICAREA CERUTĂ DE R-C-21, făcută pe retenţia care rulează ACUM
 

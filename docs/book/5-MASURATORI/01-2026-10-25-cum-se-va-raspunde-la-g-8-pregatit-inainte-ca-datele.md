@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 8235 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 8239 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ⏰ 2026-10-25 — CUM se va răspunde la G-8, pregătit înainte ca datele să existe
 

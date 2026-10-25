@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6805 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6809 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🏁 2026-10-24 — GĂSIT: desenul întreba seria de lumânări ŞTEARSĂ (b311 v1.7.285)
 

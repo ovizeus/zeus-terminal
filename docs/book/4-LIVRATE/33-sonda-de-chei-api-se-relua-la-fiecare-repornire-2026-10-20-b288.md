@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5568 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5572 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔁 Sonda de chei API se relua la fiecare repornire — 2026-10-20 (b288 v1.7.262)
 

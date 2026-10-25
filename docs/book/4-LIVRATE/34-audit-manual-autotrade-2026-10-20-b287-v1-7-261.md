@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5382 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5386 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔎 Audit manual + autotrade — 2026-10-20 (b287 v1.7.261)
 

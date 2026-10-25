@@ -48,6 +48,9 @@ function _s() {
             'SELECT side, price, usd, ts FROM liq_events WHERE symbol = ? AND ts >= ?'),
         // Lotizat, ca retenţia de la G-5: better-sqlite3 e SINCRON, iar un
         // DELETE nelimitat pe o tabelă mare îngheaţă bucla de evenimente.
+        topSymbols: db.db.prepare(
+            'SELECT symbol, COUNT(*) AS n, SUM(usd) AS usd FROM liq_events'
+            + ' WHERE ts >= ? GROUP BY symbol ORDER BY n DESC LIMIT ?'),
         stats: db.db.prepare(
             'SELECT exchange, COUNT(*) AS n, SUM(usd) AS usd, MIN(ts) AS oldest, MAX(ts) AS newest'
             + ' FROM liq_events WHERE symbol = ? AND ts >= ? GROUP BY exchange'),
@@ -237,4 +240,25 @@ function stats({ symbol, days } = {}) {
     return out;
 }
 
-module.exports = { record, map, heatmap, stats, prune, DEFAULT_DAYS };
+/**
+ * Simbolurile cu cele mai multe lichidări în fereastră.
+ *
+ * Operatorul: „vreau liquidation map să se vadă". Panoul urmează simbolul
+ * activ — iar dacă pe ĂLA nu s-a lichidat nimeni, scara e goală. Corect, dar
+ * inutil. Banda asta arată unde CHIAR sunt date, ca să poată sări acolo
+ * dintr-o atingere, în loc să se întrebe dacă s-a stricat ceva.
+ */
+function symbols({ days, limit } = {}) {
+    try {
+        const d = Number.isFinite(Number(days)) && Number(days) > 0 ? Math.min(Number(days), 365) : DEFAULT_DAYS;
+        let l = Math.floor(Number(limit));
+        if (!Number.isFinite(l) || l <= 0) l = 12;
+        l = Math.max(1, Math.min(l, 50));
+        const rows = _s().topSymbols.all(Date.now() - d * DAY_MS, l);
+        return rows.map((r) => ({ symbol: r.symbol, n: r.n, usd: r.usd }));
+    } catch (_) {
+        return [];
+    }
+}
+
+module.exports = { record, map, heatmap, stats, symbols, prune, DEFAULT_DAYS };

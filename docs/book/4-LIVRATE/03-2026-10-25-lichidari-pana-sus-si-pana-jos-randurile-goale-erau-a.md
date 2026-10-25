@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 8397 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 8401 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🩸 2026-10-25 — LICHIDĂRI „până sus şi până jos": răndurile goale erau ADEVĂRUL (b321 v1.7.295)
 

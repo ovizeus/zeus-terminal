@@ -439,8 +439,8 @@ function _connectGate() {
 let _gateMultTimer = null;
 async function _loadGateMultipliers() {
     const n = await liqGate.loadMultipliers();
-    if (n > 0) logger.info('LIQ-FEED', `GATE multiplicatori contract: ${n}`);
-    else logger.warn('LIQ-FEED', 'GATE multiplicatori NU au putut fi incarcati — evenimentele se arunca pana reusim');
+    if (n > 0) logger.info('LIQ-FEED', `GATE contract multipliers loaded: ${n}`);
+    else logger.warn('LIQ-FEED', 'GATE contract multipliers could NOT be loaded — events are dropped until they are');
     return n;
 }
 

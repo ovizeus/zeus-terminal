@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5725 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5729 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔧 Paznicul nu păzea plasa — 2026-10-20 (b290 v1.7.264)
 

@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7196 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7200 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔭 GĂSIT, NEREPARAT — registrul cerut de R-P-6
 

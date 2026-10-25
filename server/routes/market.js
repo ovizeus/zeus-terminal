@@ -39,6 +39,8 @@ router.get('/liq-panel', (req, res) => {
             map: liqStore.map({ symbol, ref, days }),
             heat: liqStore.heatmap({ symbol, ref, days, cols }),
             stats: liqStore.stats({ symbol, days }),
+            // Unde CHIAR sunt date — ca o scara goala sa nu para o defectiune.
+            top: liqStore.symbols({ days, limit: 12 }),
             symbol, ref, days,
         });
     } catch (err) {

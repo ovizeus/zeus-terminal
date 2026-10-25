@@ -23,10 +23,13 @@ export type PanelData = {
     map: { buckets: any[]; events: number; coverage: { upPct: number; downPct: number }; since: number; asOf: number } | null
     heat: { cells: any[]; cols: number; events: number; maxUsd: number; tMin: number; tMax: number } | null
     stats: { events: number; totalUsd: number; since: number; exchanges: any[]; days: number } | null
+    // Unde CHIAR sunt date. Fara asta, un simbol fara lichidari arata ca o
+    // defectiune — iar operatorul a cerut explicit „sa se vada".
+    top: { symbol: string; n: number; usd: number }[]
     error?: string
 }
 
-export const EMPTY: PanelData = { map: null, heat: null, stats: null }
+export const EMPTY: PanelData = { map: null, heat: null, stats: null, top: [] }
 
 /** O cerere, toate vederile. Niciodată nu aruncă — un panou gol e onest. */
 export async function fetchPanel(symbol: string, ref: number, days: number, cols: number): Promise<PanelData> {
@@ -36,7 +39,7 @@ export async function fetchPanel(symbol: string, ref: number, days: number, cols
         if (!r || !r.ok) return EMPTY
         const j = await r.json()
         if (!j || typeof j !== 'object') return EMPTY
-        return { map: j.map || null, heat: j.heat || null, stats: j.stats || null, error: j.error }
+        return { map: j.map || null, heat: j.heat || null, stats: j.stats || null, top: Array.isArray(j.top) ? j.top : [], error: j.error }
     } catch (_) {
         return EMPTY
     }

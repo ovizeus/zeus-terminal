@@ -83,6 +83,28 @@ describe('panoul chiar cere date si asculta live-ul', () => {
     expect(PANEL.slice(i, i + 320)).toMatch(/clearInterval/)
   })
 
+  it('TOT UI-ul e in ENGLEZA — regula veche a operatorului, incalcata de mine ieri', () => {
+    // „tot in engleza, scrie asta ca regula, fara romana". Regula exista din
+    // 14 aprilie si am scris panoul in romana. Testul pazeste CLASA, nu
+    // instanta: orice cuvant romanesc reintrodus in sirurile vizibile cade aici.
+    const ro = /\b(lichid\w*|acoperire|a[sş]tept|goal[aă]|PRE[TŢ]|nicio|vechi|eveniment\w*|simbol\w*|pre[tţ]ul|din clipa)\b/i
+    const visible = PANEL
+      .replace(/\/\*[\s\S]*?\*\//g, '')          // comentarii bloc
+      .split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+    const hits = visible.split('\n').filter(l => ro.test(l) && /['"`>]/.test(l))
+    expect(hits).toEqual([])
+  })
+
+  it('titlul si simbolul se VAD in panou, nu doar in bara dock-ului', () => {
+    expect(PANEL).toMatch(/LIQUIDATION MAP/)
+    expect(PANEL).toMatch(/zlq-sym/)
+  })
+
+  it('banda de simboluri exista — o scara goala nu mai pare defectiune', () => {
+    expect(PANEL).toMatch(/SymbolStrip/)
+    expect(PANEL).toMatch(/setSymbol/)
+  })
+
   it('are toate cele trei vederi', () => {
     expect(PANEL).toMatch(/'map'/)
     expect(PANEL).toMatch(/'heat'/)

@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5216 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5220 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🕸️ 2026-10-19 — ARACHNE: trendline-uri și S/R desenate singure (b284 v1.7.258)
 

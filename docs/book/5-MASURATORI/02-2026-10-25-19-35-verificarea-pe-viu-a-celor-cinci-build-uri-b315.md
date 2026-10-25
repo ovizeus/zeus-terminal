@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 8164 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 8168 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ✅ 2026-10-25 19:35 — VERIFICAREA PE VIU a celor cinci build-uri (b315–b319)
 

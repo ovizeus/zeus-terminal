@@ -44,6 +44,9 @@ export function LiqMapPanel() {
     const [data, setData] = useState<PanelData>(EMPTY)
     const [tape, setTape] = useState<LiqEvent[]>([])
     const [days, setDays] = useState(90)
+    // Simbolul afisat. Implicit il urmeaza pe cel din chart, dar operatorul il
+    // poate fixa pe oricare are date — altfel o scara goala pare defectiune.
+    const [symbol, setSymbol] = useState(currentSymbol)
     const [price, setPrice] = useState(currentPrice)
     const [loading, setLoading] = useState(true)
     const alive = useRef(true)
@@ -51,9 +54,9 @@ export function LiqMapPanel() {
     const load = useCallback(async () => {
         const p = currentPrice()
         if (p > 0) setPrice(p)
-        const d = await fetchPanel(currentSymbol(), p, days, HEAT_COLS)
+        const d = await fetchPanel(symbol, p, days, HEAT_COLS)
         if (alive.current) { setData(d); setLoading(false) }
-    }, [days])
+    }, [days, symbol])
 
     useEffect(() => {
         alive.current = true
@@ -82,7 +85,17 @@ export function LiqMapPanel() {
 
     return (
         <div className="zlq">
+            <div className="zlq-head">
+                <span className="zlq-title">LIQUIDATION MAP</span>
+                <span className="zlq-sym">{symbol}</span>
+                <span className="zlq-real" title="every bar is a liquidation that actually happened — nothing is modelled">
+                    MEASURED · NOT MODELLED
+                </span>
+            </div>
+
             <Honesty stats={stats} map={map} days={days} setDays={setDays} loading={loading} />
+
+            <SymbolStrip top={data.top} symbol={symbol} setSymbol={setSymbol} />
 
             <div className="zlq-tabs" role="tablist">
                 {VIEWS.map((v) => (
@@ -111,19 +124,19 @@ function Honesty({ stats, map, days, setDays, loading }: any) {
     return (
         <div className="zlq-hon">
             <div className="zlq-hon-main">
-                <span className="zlq-k">ISTORIC</span>
+                <span className="zlq-k">HISTORY</span>
                 <b>{loading ? '…' : (stats?.events ?? 0).toLocaleString('ro-RO')}</b>
-                <span className="zlq-dim">lichidări</span>
+                <span className="zlq-dim">liquidations</span>
                 <b className="zlq-usd">{fmtUsd(stats?.totalUsd ?? 0)}</b>
             </div>
             <div className="zlq-hon-sub">
-                {since && <span>din {since.toLocaleDateString('ro-RO')} {since.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}</span>}
-                {cov && <span>acoperire <b style={{ color: LIQ.short }}>{fmtPct(cov.upPct)}</b> / <b style={{ color: LIQ.long }}>{fmtPct(cov.downPct)}</b></span>}
+                {since && <span>since {since.toLocaleDateString('en-GB')} {since.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>}
+                {cov && <span>coverage <b style={{ color: LIQ.short }}>{fmtPct(cov.upPct)}</b> / <b style={{ color: LIQ.long }}>{fmtPct(cov.downPct)}</b></span>}
                 <span className="zlq-ex">
                     {(stats?.exchanges || []).map((e: any) => (
-                        <i key={e.exchange} title={`${e.n} evenimente · ${fmtUsd(e.usd)}`}>{e.exchange}</i>
+                        <i key={e.exchange} title={`${e.n} events · ${fmtUsd(e.usd)}`}>{e.exchange}</i>
                     ))}
-                    {!stats?.exchanges?.length && <i className="zlq-off">nicio sursă încă</i>}
+                    {!stats?.exchanges?.length && <i className="zlq-off">no source yet</i>}
                 </span>
                 <span className="zlq-win">
                     {[7, 30, 90].map((d) => (
@@ -135,9 +148,32 @@ function Honesty({ stats, map, days, setDays, loading }: any) {
     )
 }
 
+// ── Banda de simboluri: unde CHIAR sunt date ──────────────────────
+// Panoul urmează simbolul din chart, dar dacă pe ăla nu s-a lichidat nimeni,
+// scara e goală — corect, şi complet inutil. Banda arată unde s-a întâmplat
+// ceva, ca saltul acolo să coste o atingere.
+function SymbolStrip({ top, symbol, setSymbol }: any) {
+    if (!top || !top.length) return null
+    const has = top.some((t: any) => t.symbol === symbol)
+    return (
+        <div className="zlq-syms">
+            {!has && <button className="zlq-sym-b act" onClick={() => setSymbol(symbol)}>{symbol}</button>}
+            {top.map((t: any) => (
+                <button key={t.symbol}
+                    className={'zlq-sym-b' + (t.symbol === symbol ? ' act' : '')}
+                    onClick={() => setSymbol(t.symbol)}
+                    title={`${t.n} liquidations · ${fmtUsd(t.usd)}`}>
+                    {t.symbol.replace(/USDT$/, '')}
+                    <i>{t.n}</i>
+                </button>
+            ))}
+        </div>
+    )
+}
+
 // ── Vederea MAP: scara pe niveluri de preţ ────────────────────────
 function MapView({ map, price }: { map: any; price: number }) {
-    if (!map || !map.buckets?.length) return <Empty what="scara" />
+    if (!map || !map.buckets?.length) return <Empty what="The ladder" />
     const buckets = [...map.buckets].sort((a: any, b: any) => b.pct - a.pct)
     const max = buckets.reduce((m: number, b: any) => Math.max(m, b.longUsd + b.shortUsd), 0) || 1
     return (
@@ -158,7 +194,7 @@ function MapView({ map, price }: { map: any; price: number }) {
                     </div>
                 )
             })}
-            <div className="zlq-now">PREŢ {Math.round(price)}</div>
+            <div className="zlq-now">PRICE {Math.round(price)}</div>
         </div>
     )
 }
@@ -210,14 +246,14 @@ function HeatView({ heat, price }: { heat: any; price: number }) {
         }
     }, [heat, price])
 
-    if (!heat || !heat.cells?.length) return <Empty what="grila" />
+    if (!heat || !heat.cells?.length) return <Empty what="The grid" />
     return (
         <div className="zlq-heat">
             <canvas ref={ref} />
             <div className="zlq-heat-legend">
-                <span><i style={{ background: LIQ.long }} /> long lichidat</span>
-                <span><i style={{ background: LIQ.short }} /> short lichidat</span>
-                <span className="zlq-dim">vechi → nou · max {fmtUsd(heat.maxUsd)}</span>
+                <span><i style={{ background: LIQ.long }} /> longs liquidated</span>
+                <span><i style={{ background: LIQ.short }} /> shorts liquidated</span>
+                <span className="zlq-dim">older → newer · peak {fmtUsd(heat.maxUsd)}</span>
             </div>
         </div>
     )
@@ -228,8 +264,8 @@ function LiveView({ tape }: { tape: LiqEvent[] }) {
     if (!tape.length) {
         return (
             <div className="zlq-empty">
-                <b>aştept o lichidare</b>
-                <span>fiecare rând de aici va fi o poziţie închisă forţat, chiar în clipa aia</span>
+                <b>waiting for a liquidation</b>
+                <span>every row here will be a position force-closed, the moment it happens</span>
             </div>
         )
     }
@@ -254,10 +290,10 @@ function LiveView({ tape }: { tape: LiqEvent[] }) {
 function Empty({ what }: { what: string }) {
     return (
         <div className="zlq-empty">
-            <b>{what} e goală — şi asta e un răspuns</b>
+            <b>{what} is empty — and that is an answer</b>
             <span>
-                aici apar doar lichidări care chiar s-au întâmplat. unde nu scrie nimic,
-                nu s-a lichidat nimeni — preţul n-a fost acolo
+                only liquidations that actually happened show up here. where nothing is
+                written, nobody was liquidated — price was never there
             </span>
         </div>
     )

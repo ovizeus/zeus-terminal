@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 8084 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 8088 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔒 2026-10-25 — G-9 ÎNCHIS: portul 3000 nu mai depinde de firewall ca să fie închis (b319 v1.7.293)
 

@@ -96,6 +96,40 @@ describe('HEATMAP — timp x pret, din evenimente reale', () => {
     });
 });
 
+describe('TOP SIMBOLURI — ca harta sa nu fie niciodata misterios goala', () => {
+    // Operatorul: „vreau liquidation map sa se vada". Panoul urmeaza simbolul
+    // activ, iar daca pe ALA nu s-a lichidat nimeni, scara e goala — corect,
+    // dar inutil. Banda asta arata unde CHIAR sunt date, ca sa poata sari
+    // acolo dintr-o atingere.
+
+    test('intoarce simbolurile cu cele mai multe lichidari', () => {
+        for (let i = 0; i < 5; i++) store.record(ev({ symbol: 'BTCUSDT', vol: 100 }));
+        for (let i = 0; i < 2; i++) store.record(ev({ symbol: 'ETHUSDT', vol: 100 }));
+        store.record(ev({ symbol: 'SOLUSDT', vol: 100 }));
+        const top = store.symbols({ days: 90, limit: 10 });
+        expect(top[0].symbol).toBe('BTCUSDT');
+        expect(top[0].n).toBe(5);
+        expect(top.map(t => t.symbol)).toEqual(['BTCUSDT', 'ETHUSDT', 'SOLUSDT']);
+    });
+
+    test('limita e respectata SI marginita — nu cerem o mie de simboluri', () => {
+        for (let i = 0; i < 12; i++) store.record(ev({ symbol: 'S' + i + 'USDT' }));
+        expect(store.symbols({ days: 90, limit: 3 })).toHaveLength(3);
+        expect(store.symbols({ days: 90, limit: 9999 }).length).toBeLessThanOrEqual(50);
+    });
+
+    test('fara date, lista e goala — nu null', () => {
+        expect(store.symbols({ days: 90 })).toEqual([]);
+    });
+
+    test('nu arunca pe parametri absurzi', () => {
+        store.record(ev());
+        for (const l of [0, -1, NaN, null, 'x']) {
+            expect(() => store.symbols({ days: 90, limit: l })).not.toThrow();
+        }
+    });
+});
+
 describe('BANDA DE ONESTITATE — ce stim si de cand', () => {
 
     test('raporteaza pe BURSA, ca sa se vada cine lipseste', () => {

@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 6217 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 6221 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ⛔ 2026-10-24 — RETRAGERE MAJORĂ: contrafactualul din 22 oct avea SEMNUL ÎNTORS
 

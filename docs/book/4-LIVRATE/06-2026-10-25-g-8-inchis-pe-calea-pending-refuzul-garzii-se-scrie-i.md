@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7985 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7989 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🧿 2026-10-25 — G-8 ÎNCHIS: pe calea pending, refuzul gărzii se scrie în sfârşit (b318 v1.7.292)
 

@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7819 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7823 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔍 GĂSIT, NEREPARAT — G-8: pe calea pending, refuzul gărzii nu se scrie nicăieri
 

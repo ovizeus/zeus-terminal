@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 8286 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 8290 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ⏱️ 2026-10-25 — TIMEFRAME-UL: eticheta spunea 30m, chartul desena 5m (b320 v1.7.294)
 

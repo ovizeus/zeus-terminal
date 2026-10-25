@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7734 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7738 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ⏳ 2026-10-25 — G-7 ÎNCHIS: ciclul de viaţă al pending-urilor are retenţie, dar nu cea evidentă (b317 v1.7.291)
 

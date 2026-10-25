@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7888 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7892 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔒 2026-10-25 — CE A ZIS UN PRIETEN PE DISCORD, verificat pe serverul TĂU punct cu punct
 

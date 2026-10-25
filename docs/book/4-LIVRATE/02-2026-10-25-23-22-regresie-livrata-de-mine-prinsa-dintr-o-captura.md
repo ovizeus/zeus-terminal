@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 8553 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 8557 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## ⛔ 2026-10-25 23:22 — REGRESIE LIVRATĂ DE MINE, prinsă dintr-o captură (b322 v1.7.296)
 

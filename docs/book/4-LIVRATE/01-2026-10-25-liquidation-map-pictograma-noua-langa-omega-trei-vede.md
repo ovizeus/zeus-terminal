@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 8603 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 8607 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗺️ 2026-10-25 — LIQUIDATION MAP: pictogramă nouă lângă OMEGA, trei vederi, zero model (b323 v1.7.297)
 

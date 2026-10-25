@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 5861 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 5865 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🎨 Jurnalul full — casete în loc de rânduri lipite (b292 v1.7.266)
 

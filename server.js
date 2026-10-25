@@ -1775,9 +1775,9 @@ try { require('./server/cron/mlTelemetryRetention').schedule(); } catch (_) {}
 const _runLiqPrune = () => {
   try {
     require('./server/services/liqStore').prune()
-      .then((n) => { if (n > 0) logger.info('LIQ-STORE', `retentie: ${n} evenimente sterse (>30 zile)`); })
-      .catch((e) => logger.warn('LIQ-STORE', 'retentie esuata: ' + (e && e.message)));
-  } catch (e) { logger.warn('LIQ-STORE', 'retentie esuata (sync): ' + (e && e.message)); }
+      .then((n) => { if (n > 0) logger.info('LIQ-STORE', `retention: ${n} events removed (older than window)`); })
+      .catch((e) => logger.warn('LIQ-STORE', 'retention failed: ' + (e && e.message)));
+  } catch (e) { logger.warn('LIQ-STORE', 'retention failed (sync): ' + (e && e.message)); }
 };
 setTimeout(_runLiqPrune, 180000);
 setInterval(_runLiqPrune, 86400000);

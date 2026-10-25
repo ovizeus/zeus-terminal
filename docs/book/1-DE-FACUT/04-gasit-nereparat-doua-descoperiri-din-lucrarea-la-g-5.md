@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7547 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7551 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔭 GĂSIT, NEREPARAT — două descoperiri din lucrarea la G-5
 
