@@ -48,3 +48,5 @@ scris de codul **vechi**. Reperul scriptului e `ts > 1792956933593`, momentul po
 
 **Ramura a doua e scrisă cu aceeaşi apăsare ca prima, dinadins.** Un criteriu care admite doar un
 rezultat nu e un criteriu, e o aşteptare.
+
+---

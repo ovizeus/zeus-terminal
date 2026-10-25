@@ -118,7 +118,20 @@ export async function fetchKlines(tf: any): Promise<void> {
     if (!r || !r.ok) throw new Error(`HTTP ${r ? r.status : 'no response'}`)
     const d = await r.json()
     if (!Array.isArray(d) || !d.length) return
+    // [2026-10-25] Un raspuns trebuie sa DOVEDEASCA faptul ca mai e dorit
+    // inainte sa scrie — pe TOATE axele care il pot invechi, nu doar pe cea de
+    // care ne-am lovit prima oara.
+    //
+    // Pana aici se verifica numai simbolul. Timeframe-ul nu, si de acolo venea
+    // „setez 30 min, ies, cand intru eticheta e pe 30 min dar chartul e pe 5":
+    // pornirea cerea 5m (un literal, vezi bootstrapStartApp), restaurarea chema
+    // setTF('30m') care face FetchLock.release('klines') fara sa se uite cine
+    // tine lacatul, si astfel doua cereri de lumanari zburau deodata. Cine
+    // ateriza ULTIMUL scria w.S.klines si desena. Cand 5m intarzia, chartul
+    // ramanea pe 5m cu eticheta pe 30m. Un refresh schimba ordinea, si de aia
+    // „dupa aia se face" — ceea ce facea bugul sa para intermitent.
     if (w.S.symbol !== sym) { console.warn('[fetchKlines] stale response for ' + sym); return }
+    if (w.S.chartTf !== tf) { console.warn('[fetchKlines] stale response for tf ' + tf + ' (now ' + w.S.chartTf + ')'); return }
     const _rawKlines = d.map((k: any) => ({ time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }))
     // [2026-06-19] Validate each bar with a PURE per-bar integrity predicate, NOT the
     // live cross-symbol _isPriceSane. On a symbol switch the live baseline (window.S.price)
@@ -171,6 +184,10 @@ export async function fetchKlines(tf: any): Promise<void> {
       const _pollKline = async () => {
         if (w.__wsGen !== _klineGen) return
         if (w.S.symbol !== sym) return
+        // [2026-10-25] Si pe timeframe: altfel un poll ramas din timeframe-ul
+        // vechi continua sa impinga bare in seria curenta. Calea WS_PROXY
+        // verifica deja `msg.tf !== tf`; asta e perechea ei de pe calea veche.
+        if (w.S.chartTf !== tf) return
         try {
           const _pr = await fetch(`/api/market/klines?symbol=${sym}&interval=${tf}&limit=1`, { signal: AbortSignal.timeout(8000) })
           if (!_pr || !_pr.ok) return

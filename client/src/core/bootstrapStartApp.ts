@@ -225,7 +225,12 @@ export async function startApp(): Promise<void> {
   w.ZLOG.push('INFO', '[ZLOG v90] installed \u2014 safeAsync hooks active on 10 functions')
   console.log('[ZLOG v90] install complete | safeAsync hooks: 10 functions wrapped')
 
-  w.fetchKlines('5m'); w.fetchAllRSI(); w.fetchFG(); w.fetchATR(); w.fetchOI(); w.fetchLS(); w.fetch24h()
+  // [2026-10-25] Era `fetchKlines('5m')` — un literal, la fiecare pornire,
+  // indiferent ce timeframe avea operatorul salvat. config.ts pune deja
+  // S.chartTf din USER_SETTINGS inainte de punctul asta, deci cererea de
+  // pornire poate fi direct cea buna: una singura, pe timeframe-ul corect,
+  // in loc de doua care se bat pe aceeasi serie.
+  w.fetchKlines(w.S.chartTf || '5m'); w.fetchAllRSI(); w.fetchFG(); w.fetchATR(); w.fetchOI(); w.fetchLS(); w.fetch24h()
 
   // ATR parity check
   setTimeout(function () {
