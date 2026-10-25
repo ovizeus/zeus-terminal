@@ -1,17 +1,18 @@
 # Index complet — toate secţiunile cartii
 
-Toate cele 121 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde sta.
+Toate cele 122 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde sta.
 
 | Data | Coş | Secţiunea |
 |---|---|---|
+| 2026-10-25 | `5-MASURATORI` | [✅ 2026-10-25 19:35 — VERIFICAREA PE VIU a celor cinci build-uri (b315–b319)](5-MASURATORI/01-2026-10-25-19-35-verificarea-pe-viu-a-celor-cinci-build-uri-b315.md) |
 | 2026-10-25 | `4-LIVRATE` | [🔒 2026-10-25 — G-9 ÎNCHIS: portul 3000 nu mai depinde de firewall ca să fie închis (b319 v1.7.293)](4-LIVRATE/01-2026-10-25-g-9-inchis-portul-3000-nu-mai-depinde-de-firewall-ca.md) |
 | 2026-10-25 | `4-LIVRATE` | [🧿 2026-10-25 — G-8 ÎNCHIS: pe calea pending, refuzul gărzii se scrie în sfârşit (b318 v1.7.292)](4-LIVRATE/02-2026-10-25-g-8-inchis-pe-calea-pending-refuzul-garzii-se-scrie-i.md) |
-| 2026-10-25 | `5-MASURATORI` | [🔒 2026-10-25 — CE A ZIS UN PRIETEN PE DISCORD, verificat pe serverul TĂU punct cu punct](5-MASURATORI/01-2026-10-25-ce-a-zis-un-prieten-pe-discord-verificat-pe-serverul.md) |
+| 2026-10-25 | `5-MASURATORI` | [🔒 2026-10-25 — CE A ZIS UN PRIETEN PE DISCORD, verificat pe serverul TĂU punct cu punct](5-MASURATORI/02-2026-10-25-ce-a-zis-un-prieten-pe-discord-verificat-pe-serverul.md) |
 | 2026-10-25 | `4-LIVRATE` | [⏳ 2026-10-25 — G-7 ÎNCHIS: ciclul de viaţă al pending-urilor are retenţie, dar nu cea evidentă (b317 v1.7.291)](4-LIVRATE/03-2026-10-25-g-7-inchis-ciclul-de-viata-al-pending-urilor-are-rete.md) |
 | 2026-10-25 | `4-LIVRATE` | [🏷️ 2026-10-25 — G-6 ÎNCHIS: eticheta ML întreabă clasificarea, nu forma numelui (b316 v1.7.290)](4-LIVRATE/04-2026-10-25-g-6-inchis-eticheta-ml-intreaba-clasificarea-nu-forma.md) |
 | 2026-10-25 | `4-LIVRATE` | [🗃️ 2026-10-25 — G-5 ÎNCHIS: retenţia nu mai întreabă NUMELE dacă o decizie a fost blocată (b315 v1.7.289)](4-LIVRATE/05-2026-10-25-g-5-inchis-retentia-nu-mai-intreaba-numele-daca-o-dec.md) |
 | 2026-10-24 | `1-DE-FACUT` | [🏁 2026-10-24, ÎNCHIDEREA SESIUNII — ritualul cerut de R-OP-11](1-DE-FACUT/01-2026-10-24-inchiderea-sesiunii-ritualul-cerut-de-r-op-11.md) |
-| 2026-10-24 | `5-MASURATORI` | [🗃️ 2026-10-24 — CLASIFICAREA CERUTĂ DE R-C-21, făcută pe retenţia care rulează ACUM](5-MASURATORI/02-2026-10-24-clasificarea-ceruta-de-r-c-21-facuta-pe-retentia-care.md) |
+| 2026-10-24 | `5-MASURATORI` | [🗃️ 2026-10-24 — CLASIFICAREA CERUTĂ DE R-C-21, făcută pe retenţia care rulează ACUM](5-MASURATORI/03-2026-10-24-clasificarea-ceruta-de-r-c-21-facuta-pe-retentia-care.md) |
 | 2026-10-24 | `4-LIVRATE` | [🗂️ 2026-10-24 — INTRAREA E O GRILĂ DE FOLDERE, nimic de citit (b314 v1.7.288)](4-LIVRATE/06-2026-10-24-intrarea-e-o-grila-de-foldere-nimic-de-citit-b314-v1.md) |
 | 2026-10-24 | `4-LIVRATE` | [📖 2026-10-24 — CARTEA SE CITEŞTE ÎN APLICAŢIE: coşuri + randorul reparat (b313 v1.7.287)](4-LIVRATE/07-2026-10-24-cartea-se-citeste-in-aplicatie-cosuri-randorul-repara.md) |
 | 2026-10-24 | `4-LIVRATE` | [🗂️ 2026-10-24 — CARTEA ARE FOLDERE: `docs/book/`, cu o singură pagină de intrare](4-LIVRATE/08-2026-10-24-cartea-are-foldere-docs-book-cu-o-singura-pagina-de-i.md) |
@@ -23,22 +24,22 @@ Toate cele 121 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-24 | `4-LIVRATE` | [🖐️ 2026-10-24 — „nu merge să trag dungi": chartul se muta sub tine (b307 v1.7.281)](4-LIVRATE/13-2026-10-24-nu-merge-sa-trag-dungi-chartul-se-muta-sub-tine-b307.md) |
 | 2026-10-24 | `4-LIVRATE` | [✏️ 2026-10-24 — „dungile nu se pun": desenul se dezarma în secret (b306 v1.7.280)](4-LIVRATE/14-2026-10-24-dungile-nu-se-pun-desenul-se-dezarma-in-secret-b306-v.md) |
 | 2026-10-24 | `6-RETRACTARI` | [⛔ 2026-10-24 — RETRAGERE MAJORĂ: contrafactualul din 22 oct avea SEMNUL ÎNTORS](6-RETRACTARI/01-2026-10-24-retragere-majora-contrafactualul-din-22-oct-avea-semn.md) |
-| 2026-10-24 | `5-MASURATORI` | [🔒 AVIZ HETZNER (PHP) — verificat: NU ne priveşte. Plus o trecere de securitate — 2026-10-24](5-MASURATORI/03-aviz-hetzner-php-verificat-nu-ne-priveste-plus-o-trecere-de-secu.md) |
-| 2026-10-23 | `5-MASURATORI` | [🎯 SINCRONIZAREA, ascuţită — sunt de acord când nu fac nimic, şi opuse când contează — 2026-10-23](5-MASURATORI/04-sincronizarea-ascutita-sunt-de-acord-cand-nu-fac-nimic-si-opuse.md) |
-| 2026-10-23 | `5-MASURATORI` | [🚫 GĂSIT — brain-ul e MATEMATIC interzis să tranzacţioneze în 68,5% din momente — 2026-10-23](5-MASURATORI/05-gasit-brain-ul-e-matematic-interzis-sa-tranzactioneze-in-68-5-di.md) |
+| 2026-10-24 | `5-MASURATORI` | [🔒 AVIZ HETZNER (PHP) — verificat: NU ne priveşte. Plus o trecere de securitate — 2026-10-24](5-MASURATORI/04-aviz-hetzner-php-verificat-nu-ne-priveste-plus-o-trecere-de-secu.md) |
+| 2026-10-23 | `5-MASURATORI` | [🎯 SINCRONIZAREA, ascuţită — sunt de acord când nu fac nimic, şi opuse când contează — 2026-10-23](5-MASURATORI/05-sincronizarea-ascutita-sunt-de-acord-cand-nu-fac-nimic-si-opuse.md) |
+| 2026-10-23 | `5-MASURATORI` | [🚫 GĂSIT — brain-ul e MATEMATIC interzis să tranzacţioneze în 68,5% din momente — 2026-10-23](5-MASURATORI/06-gasit-brain-ul-e-matematic-interzis-sa-tranzactioneze-in-68-5-di.md) |
 | 2026-10-23 | `6-RETRACTARI` | [🧪 PREDICŢIE INFIRMATĂ — vetoul de `LiqDanger` NU explică desincronizarea — 2026-10-23](6-RETRACTARI/02-predictie-infirmata-vetoul-de-liqdanger-nu-explica-desincronizar.md) |
 | 2026-10-23 | `6-RETRACTARI` | [🔇 Ipoteză INFIRMATĂ — „clientul rulează cu intrările lipsă" (depăşită de secţiunea de deasupra) — 2026-10-23](6-RETRACTARI/03-ipoteza-infirmata-clientul-ruleaza-cu-intrarile-lipsa-depasita-d.md) |
 | 2026-10-23 | `6-RETRACTARI` | [🧨 RĂSTURNARE — „cele două creiere se contrazic" era un ARTEFACT. Sunt de acord în 99% — 2026-10-23](6-RETRACTARI/04-rasturnare-cele-doua-creiere-se-contrazic-era-un-artefact-sunt-d.md) |
 | 2026-10-23 | `6-RETRACTARI` | [⛔ RETRACTARE + RĂSPUNSUL REAL — vetoul de 68,5% era iar instrumentul. Calea vie e alta — 2026-10-23](6-RETRACTARI/05-retractare-raspunsul-real-vetoul-de-68-5-era-iar-instrumentul-ca.md) |
-| 2026-10-23 | `5-MASURATORI` | [🪣 PÂLNIA COMPLETĂ, pe calea vie — de ce din 100 de evaluări rămâne o jumătate de intrare — 2026-10-23](5-MASURATORI/06-palnia-completa-pe-calea-vie-de-ce-din-100-de-evaluari-ramane-o.md) |
-| 2026-10-23 | `5-MASURATORI` | [🔄 CONTRAFACTUAL — selecţia e ANTI-SELECTIVĂ: ce trece e mai prost ca ce se aruncă — 2026-10-23](5-MASURATORI/07-contrafactual-selectia-e-anti-selectiva-ce-trece-e-mai-prost-ca.md) |
-| 2026-10-23 | `5-MASURATORI` | [🎯 NUMIT — filtrul care costă bani: blocajul pe UN SINGUR anti-pattern — 2026-10-23](5-MASURATORI/08-numit-filtrul-care-costa-bani-blocajul-pe-un-singur-anti-pattern.md) |
-| 2026-10-22 | `5-MASURATORI` | [📌 LIMITARE a măsurătorii de paritate — se adună doar cât ai aplicaţia deschisă — 2026-10-22](5-MASURATORI/09-limitare-a-masuratorii-de-paritate-se-aduna-doar-cat-ai-aplicati.md) |
+| 2026-10-23 | `5-MASURATORI` | [🪣 PÂLNIA COMPLETĂ, pe calea vie — de ce din 100 de evaluări rămâne o jumătate de intrare — 2026-10-23](5-MASURATORI/07-palnia-completa-pe-calea-vie-de-ce-din-100-de-evaluari-ramane-o.md) |
+| 2026-10-23 | `5-MASURATORI` | [🔄 CONTRAFACTUAL — selecţia e ANTI-SELECTIVĂ: ce trece e mai prost ca ce se aruncă — 2026-10-23](5-MASURATORI/08-contrafactual-selectia-e-anti-selectiva-ce-trece-e-mai-prost-ca.md) |
+| 2026-10-23 | `5-MASURATORI` | [🎯 NUMIT — filtrul care costă bani: blocajul pe UN SINGUR anti-pattern — 2026-10-23](5-MASURATORI/09-numit-filtrul-care-costa-bani-blocajul-pe-un-singur-anti-pattern.md) |
+| 2026-10-22 | `5-MASURATORI` | [📌 LIMITARE a măsurătorii de paritate — se adună doar cât ai aplicaţia deschisă — 2026-10-22](5-MASURATORI/10-limitare-a-masuratorii-de-paritate-se-aduna-doar-cat-ai-aplicati.md) |
 | 2026-10-22 | `6-RETRACTARI` | [🔁 CORECŢIE MAJORĂ — titlul auditului descria un regim care s-a încheiat în iunie — 2026-10-22](6-RETRACTARI/06-corectie-majora-titlul-auditului-descria-un-regim-care-s-a-inche.md) |
 | 2026-10-22 | `6-RETRACTARI` | [❌ AM GREŞIT — un ordin DSL Drive pe o poziţie în pierdere EXISTĂ, de două ori — 2026-10-22](6-RETRACTARI/07-am-gresit-un-ordin-dsl-drive-pe-o-pozitie-in-pierdere-exista-de.md) |
-| 2026-10-22 | `5-MASURATORI` | [✅ ÎNCHIS — cele 51 de conflicte „cu cale nedeterminată" sunt explicate 100% — 2026-10-22](5-MASURATORI/10-inchis-cele-51-de-conflicte-cu-cale-nedeterminata-sunt-explicate.md) |
-| 2026-10-22 | `5-MASURATORI` | [📸 INSTANTANEU VIU — „câştigul e plat" văzut pe poziţiile deschise acum — 2026-10-22 03:03 UTC](5-MASURATORI/11-instantaneu-viu-castigul-e-plat-vazut-pe-pozitiile-deschise-acum.md) |
-| 2026-10-22 | `5-MASURATORI` | [✅ VERIFICAT LIVE — colectarea pe geometrie scrie, şi presetele se diferenţiază — 2026-10-22](5-MASURATORI/12-verificat-live-colectarea-pe-geometrie-scrie-si-presetele-se-dif.md) |
+| 2026-10-22 | `5-MASURATORI` | [✅ ÎNCHIS — cele 51 de conflicte „cu cale nedeterminată" sunt explicate 100% — 2026-10-22](5-MASURATORI/11-inchis-cele-51-de-conflicte-cu-cale-nedeterminata-sunt-explicate.md) |
+| 2026-10-22 | `5-MASURATORI` | [📸 INSTANTANEU VIU — „câştigul e plat" văzut pe poziţiile deschise acum — 2026-10-22 03:03 UTC](5-MASURATORI/12-instantaneu-viu-castigul-e-plat-vazut-pe-pozitiile-deschise-acum.md) |
+| 2026-10-22 | `5-MASURATORI` | [✅ VERIFICAT LIVE — colectarea pe geometrie scrie, şi presetele se diferenţiază — 2026-10-22](5-MASURATORI/13-verificat-live-colectarea-pe-geometrie-scrie-si-presetele-se-dif.md) |
 | 2026-10-21 | `4-LIVRATE` | [🔬 Audit de buguri pe Quant — 2026-10-21 (b294 v1.7.268)](4-LIVRATE/15-audit-de-buguri-pe-quant-2026-10-21-b294-v1-7-268.md) |
 | 2026-10-21 | `4-LIVRATE` | [📐 MTF REAL — stiva multi-timeframe nu mai minte — 2026-10-21 (b295 v1.7.269)](4-LIVRATE/16-mtf-real-stiva-multi-timeframe-nu-mai-minte-2026-10-21-b295-v1-7.md) |
 | 2026-10-21 | `4-LIVRATE` | [🖥️ Quant se citește — contrast, font potrivit la lățime, nimic tăiat — 2026-10-21 (b296 v1.7.270)](4-LIVRATE/17-quant-se-citeste-contrast-font-potrivit-la-latime-nimic-taiat-20.md) |
@@ -54,7 +55,7 @@ Toate cele 121 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-21 | `4-LIVRATE` | [🔗 REPARAT — paritatea DSL se alimentează, şi acum ştim CÂT de desincronizate sunt — 2026-10-21 (b298 v1.7.272)](4-LIVRATE/24-reparat-paritatea-dsl-se-alimenteaza-si-acum-stim-cat-de-desincr.md) |
 | 2026-10-21 | `4-LIVRATE` | [🛡️ REPARAT — garda cedează ÎNCHIS, iar poziţia îşi scrie provenienţa — 2026-10-21 (b297 v1.7.271)](4-LIVRATE/25-reparat-garda-cedeaza-inchis-iar-pozitia-isi-scrie-provenienta-2.md) |
 | 2026-10-21 | `4-LIVRATE` | [🩸 DE CE NU IESE PE CÂȘTIG — auditul cerut de operator (2026-10-21, fără schimbări de cod)](4-LIVRATE/26-de-ce-nu-iese-pe-castig-auditul-cerut-de-operator-2026-10-21-far.md) |
-| 2026-10-20 | `5-MASURATORI` | [🔎 Poarta SP1 măsoară o axă care nu poate trece — 2026-10-20 (b291 v1.7.265)](5-MASURATORI/13-poarta-sp1-masoara-o-axa-care-nu-poate-trece-2026-10-20-b291-v1.md) |
+| 2026-10-20 | `5-MASURATORI` | [🔎 Poarta SP1 măsoară o axă care nu poate trece — 2026-10-20 (b291 v1.7.265)](5-MASURATORI/14-poarta-sp1-masoara-o-axa-care-nu-poate-trece-2026-10-20-b291-v1.md) |
 | 2026-10-20 | `4-LIVRATE` | [🔧 Paznicul nu păzea plasa — 2026-10-20 (b290 v1.7.264)](4-LIVRATE/27-paznicul-nu-pazea-plasa-2026-10-20-b290-v1-7-264.md) |
 | 2026-10-20 | `4-LIVRATE` | [🔧 Întreținere + audit server-side — 2026-10-20 (b289 v1.7.263)](4-LIVRATE/28-intretinere-audit-server-side-2026-10-20-b289-v1-7-263.md) |
 | 2026-10-20 | `4-LIVRATE` | [🔁 Sonda de chei API se relua la fiecare repornire — 2026-10-20 (b288 v1.7.262)](4-LIVRATE/29-sonda-de-chei-api-se-relua-la-fiecare-repornire-2026-10-20-b288.md) |
@@ -70,16 +71,16 @@ Toate cele 121 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-19 | `6-RETRACTARI` | [🧾 2026-10-19 — P1 era o atribuire greșită, și am dovada într-o singură linie de log](6-RETRACTARI/10-2026-10-19-p1-era-o-atribuire-gresita-si-am-dovada-intr-o-singur.md) |
 | 2026-10-19 | `7-INCIDENTE` | [2026-10-19 — Backup Zeus (admin) + incidentul care l-a cerut](7-INCIDENTE/02-2026-10-19-backup-zeus-admin-incidentul-care-l-a-cerut.md) |
 | 2026-10-19 | `2-DECIZII-ALE-TALE` | [⏸️ R16 — **DECIZIA OPERATORULUI 2026-10-19: A, nu facem nimic (provizoriu)**](2-DECIZII-ALE-TALE/01-r16-decizia-operatorului-2026-10-19-a-nu-facem-nimic-provizoriu.md) |
-| 2026-10-18 | `5-MASURATORI` | [2026-10-18 — TERMINATOR confirmat de operator + ETA real pentru poarta de paritate](5-MASURATORI/14-2026-10-18-terminator-confirmat-de-operator-eta-real-pentru-poar.md) |
+| 2026-10-18 | `5-MASURATORI` | [2026-10-18 — TERMINATOR confirmat de operator + ETA real pentru poarta de paritate](5-MASURATORI/15-2026-10-18-terminator-confirmat-de-operator-eta-real-pentru-poar.md) |
 | 2026-10-18 | `4-LIVRATE` | [✅ 2026-10-18 — PRUNING-UL LIVRAT ȘI DOVEDIT PE DATE VII](4-LIVRATE/38-2026-10-18-pruning-ul-livrat-si-dovedit-pe-date-vii.md) |
-| 2026-10-18 | `5-MASURATORI` | [📊 2026-10-18 — PRIMA MĂSURĂTOARE REALĂ DE PARITATE (operatorul e în aplicație)](5-MASURATORI/15-2026-10-18-prima-masuratoare-reala-de-paritate-operatorul-e-in-a.md) |
+| 2026-10-18 | `5-MASURATORI` | [📊 2026-10-18 — PRIMA MĂSURĂTOARE REALĂ DE PARITATE (operatorul e în aplicație)](5-MASURATORI/16-2026-10-18-prima-masuratoare-reala-de-paritate-operatorul-e-in-a.md) |
 | 2026-10-18 | `4-LIVRATE` | [✂️ 2026-10-18 — ELIMINAT DECALAJUL DE ÎNCĂLZIRE (prezis, apoi măsurat, acum reparat)](4-LIVRATE/39-2026-10-18-eliminat-decalajul-de-incalzire-prezis-apoi-masurat-a.md) |
-| 2026-10-16 | `5-MASURATORI` | [✅ 2026-10-16 — POARTA CIRCULARĂ: CONFIRMATĂ PE DATE REALE](5-MASURATORI/16-2026-10-16-poarta-circulara-confirmata-pe-date-reale.md) |
+| 2026-10-16 | `5-MASURATORI` | [✅ 2026-10-16 — POARTA CIRCULARĂ: CONFIRMATĂ PE DATE REALE](5-MASURATORI/17-2026-10-16-poarta-circulara-confirmata-pe-date-reale.md) |
 | 2026-10-16 | `7-INCIDENTE` | [🔴 2026-10-16 — INCIDENT PROVOCAT DE MINE: am pornit cron-urile într-un al doilea proces](7-INCIDENTE/03-2026-10-16-incident-provocat-de-mine-am-pornit-cron-urile-intr-u.md) |
 | 2026-10-16 | `4-LIVRATE` | [✂️ 2026-10-16 — ÎNGUSTAT SCOPUL PARITĂȚII (comis; **așteaptă reload**)](4-LIVRATE/40-2026-10-16-ingustat-scopul-paritatii-comis-asteapta-reload.md) |
-| 2026-10-16 | `5-MASURATORI` | [📉 2026-10-16 — R16 RE-MĂSURAT: 14 banuri în total, toate pe testnet, și tendința e ÎN SCĂDERE](5-MASURATORI/17-2026-10-16-r16-re-masurat-14-banuri-in-total-toate-pe-testnet-si.md) |
-| 2026-10-16 | `5-MASURATORI` | [🧹 2026-10-16 — CEA MAI MARE TABELĂ: curățenia ei era anulată de fiecare restart](5-MASURATORI/18-2026-10-16-cea-mai-mare-tabela-curatenia-ei-era-anulata-de-fieca.md) |
-| 2026-10-16 | `5-MASURATORI` | [🎨 2026-10-16 — RAPORTAT DE OPERATOR: „TERMINATOR nu bate culorile corespunzătoare"](5-MASURATORI/19-2026-10-16-raportat-de-operator-terminator-nu-bate-culorile-core.md) |
+| 2026-10-16 | `5-MASURATORI` | [📉 2026-10-16 — R16 RE-MĂSURAT: 14 banuri în total, toate pe testnet, și tendința e ÎN SCĂDERE](5-MASURATORI/18-2026-10-16-r16-re-masurat-14-banuri-in-total-toate-pe-testnet-si.md) |
+| 2026-10-16 | `5-MASURATORI` | [🧹 2026-10-16 — CEA MAI MARE TABELĂ: curățenia ei era anulată de fiecare restart](5-MASURATORI/19-2026-10-16-cea-mai-mare-tabela-curatenia-ei-era-anulata-de-fieca.md) |
+| 2026-10-16 | `5-MASURATORI` | [🎨 2026-10-16 — RAPORTAT DE OPERATOR: „TERMINATOR nu bate culorile corespunzătoare"](5-MASURATORI/20-2026-10-16-raportat-de-operator-terminator-nu-bate-culorile-core.md) |
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14 — PASUL 1 LIVRAT: paritatea scrie din nou (b272 v1.7.246)](4-LIVRATE/41-2026-10-14-pasul-1-livrat-paritatea-scrie-din-nou-b272-v1-7-246.md) |
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14 — BUG TELEGRAM REPARAT ȘI LIVRAT (b273, reload 20:54 — **zero eșecuri de atunci**)](4-LIVRATE/42-2026-10-14-bug-telegram-reparat-si-livrat-b273-reload-20-54-zero.md) |
 | 2026-10-14 | `7-INCIDENTE` | [🔴 2026-10-14 — INCIDENT PROVOCAT DE MINE: suita de teste a mâncat 6,6 GB și a fost ucisă de OOM](7-INCIDENTE/04-2026-10-14-incident-provocat-de-mine-suita-de-teste-a-mancat-6-6.md) |
@@ -87,33 +88,33 @@ Toate cele 121 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14 — REPARAT: testul flaky și cauza lui (un timer care nu se oprea)](4-LIVRATE/44-2026-10-14-reparat-testul-flaky-si-cauza-lui-un-timer-care-nu-se.md) |
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14 — REPARAT: cinci cron-uri care porneau în teste și PUTEAU să-ți trimită alerte false](4-LIVRATE/45-2026-10-14-reparat-cinci-cron-uri-care-porneau-in-teste-si-putea.md) |
 | 2026-10-14 | `6-RETRACTARI` | [🔴 2026-10-14 TÂRZIU — CORECTEZ PLANUL PE CARE TOCMAI L-AM DAT: paritatea NU se poate aduna peste noapte](6-RETRACTARI/11-2026-10-14-tarziu-corectez-planul-pe-care-tocmai-l-am-dat-parita.md) |
-| 2026-10-14 | `5-MASURATORI` | [🧩 2026-10-14, 21:10 — DIAGNOSTIC ÎNCHIS: poarta de migrare e CIRCULARĂ, nu doar neîndeplinită](5-MASURATORI/20-2026-10-14-21-10-diagnostic-inchis-poarta-de-migrare-e-circulara.md) |
+| 2026-10-14 | `5-MASURATORI` | [🧩 2026-10-14, 21:10 — DIAGNOSTIC ÎNCHIS: poarta de migrare e CIRCULARĂ, nu doar neîndeplinită](5-MASURATORI/21-2026-10-14-21-10-diagnostic-inchis-poarta-de-migrare-e-circulara.md) |
 | 2026-10-14 | `4-LIVRATE` | [🛡️ 2026-10-14, 21:05 — FIXAT CU TESTE: singurul lucru care te apără de execuție dublă](4-LIVRATE/46-2026-10-14-21-05-fixat-cu-teste-singurul-lucru-care-te-apara-de.md) |
-| 2026-10-14 | `5-MASURATORI` | [🔍 2026-10-14, 21:10 — AUDIT: două flag-uri PORNITE care nu fac nimic](5-MASURATORI/21-2026-10-14-21-10-audit-doua-flag-uri-pornite-care-nu-fac-nimic.md) |
-| 2026-10-14 | `5-MASURATORI` | [🩺 2026-10-14, 21:20 — TRECERE DE SĂNĂTATE (/doctor) — sistem curat](5-MASURATORI/22-2026-10-14-21-20-trecere-de-sanatate-doctor-sistem-curat.md) |
-| 2026-10-14 | `5-MASURATORI` | [🧾 2026-10-14, 21:25 — AUDITUL FLAG-URILOR, COMPLET (toate cele 34 ON)](5-MASURATORI/23-2026-10-14-21-25-auditul-flag-urilor-complet-toate-cele-34-on.md) |
+| 2026-10-14 | `5-MASURATORI` | [🔍 2026-10-14, 21:10 — AUDIT: două flag-uri PORNITE care nu fac nimic](5-MASURATORI/22-2026-10-14-21-10-audit-doua-flag-uri-pornite-care-nu-fac-nimic.md) |
+| 2026-10-14 | `5-MASURATORI` | [🩺 2026-10-14, 21:20 — TRECERE DE SĂNĂTATE (/doctor) — sistem curat](5-MASURATORI/23-2026-10-14-21-20-trecere-de-sanatate-doctor-sistem-curat.md) |
+| 2026-10-14 | `5-MASURATORI` | [🧾 2026-10-14, 21:25 — AUDITUL FLAG-URILOR, COMPLET (toate cele 34 ON)](5-MASURATORI/24-2026-10-14-21-25-auditul-flag-urilor-complet-toate-cele-34-on.md) |
 | 2026-10-14 | `4-LIVRATE` | [🧪 2026-10-14, 21:30 — GARDĂ AUTOMATĂ: modulele orfane nu mai pot trece neobservate](4-LIVRATE/47-2026-10-14-21-30-garda-automata-modulele-orfane-nu-mai-pot-trece.md) |
-| 2026-10-14 | `5-MASURATORI` | [📏 2026-10-14, 21:40 — CÂT DIN ML RULEAZĂ DE FAPT: 82 din 284 de module](5-MASURATORI/24-2026-10-14-21-40-cat-din-ml-ruleaza-de-fapt-82-din-284-de-module.md) |
-| 2026-10-14 | `5-MASURATORI` | [🧹 2026-10-14, 22:00 — ȘI CLIENTUL: doi orfani reali din ~30 de candidați](5-MASURATORI/25-2026-10-14-22-00-si-clientul-doi-orfani-reali-din-30-de-candidat.md) |
-| 2026-10-14 | `5-MASURATORI` | [🗄️ 2026-10-14, 22:05 — ȘI SCHEMA: 6 tabele moarte din 400](5-MASURATORI/26-2026-10-14-22-05-si-schema-6-tabele-moarte-din-400.md) |
-| 2026-10-14 | `5-MASURATORI` | [⏰ 2026-10-14, 22:10 — CRON-URILE: toate 7 sănătoase (verificat prin date, nu prin loguri)](5-MASURATORI/27-2026-10-14-22-10-cron-urile-toate-7-sanatoase-verificat-prin-dat.md) |
-| 2026-10-14 | `5-MASURATORI` | [🔌 2026-10-14, 22:15 — RUTE API MOARTE: 9 din 43, confirmate prin 3 metode](5-MASURATORI/28-2026-10-14-22-15-rute-api-moarte-9-din-43-confirmate-prin-3-meto.md) |
-| 2026-10-14 | `5-MASURATORI` | [🚨 2026-10-14, 22:25 — DOUĂ butoane de panică: unul funcționează, celălalt e dormant](5-MASURATORI/29-2026-10-14-22-25-doua-butoane-de-panica-unul-functioneaza-celala.md) |
-| 2026-10-14 | `5-MASURATORI` | [✅ 2026-10-14, 22:30 — LANȚUL CARE CONTEAZĂ CEL MAI MULT: ML-ul nu poate atinge banii reali fără acordul tău](5-MASURATORI/30-2026-10-14-22-30-lantul-care-conteaza-cel-mai-mult-ml-ul-nu-poat.md) |
-| 2026-10-14 | `5-MASURATORI` | [✔️ 2026-10-14, 21:27 — PREDICȚIA S-A CONFIRMAT: paritatea scrie în gol peste noapte](5-MASURATORI/31-2026-10-14-21-27-predictia-s-a-confirmat-paritatea-scrie-in-gol.md) |
+| 2026-10-14 | `5-MASURATORI` | [📏 2026-10-14, 21:40 — CÂT DIN ML RULEAZĂ DE FAPT: 82 din 284 de module](5-MASURATORI/25-2026-10-14-21-40-cat-din-ml-ruleaza-de-fapt-82-din-284-de-module.md) |
+| 2026-10-14 | `5-MASURATORI` | [🧹 2026-10-14, 22:00 — ȘI CLIENTUL: doi orfani reali din ~30 de candidați](5-MASURATORI/26-2026-10-14-22-00-si-clientul-doi-orfani-reali-din-30-de-candidat.md) |
+| 2026-10-14 | `5-MASURATORI` | [🗄️ 2026-10-14, 22:05 — ȘI SCHEMA: 6 tabele moarte din 400](5-MASURATORI/27-2026-10-14-22-05-si-schema-6-tabele-moarte-din-400.md) |
+| 2026-10-14 | `5-MASURATORI` | [⏰ 2026-10-14, 22:10 — CRON-URILE: toate 7 sănătoase (verificat prin date, nu prin loguri)](5-MASURATORI/28-2026-10-14-22-10-cron-urile-toate-7-sanatoase-verificat-prin-dat.md) |
+| 2026-10-14 | `5-MASURATORI` | [🔌 2026-10-14, 22:15 — RUTE API MOARTE: 9 din 43, confirmate prin 3 metode](5-MASURATORI/29-2026-10-14-22-15-rute-api-moarte-9-din-43-confirmate-prin-3-meto.md) |
+| 2026-10-14 | `5-MASURATORI` | [🚨 2026-10-14, 22:25 — DOUĂ butoane de panică: unul funcționează, celălalt e dormant](5-MASURATORI/30-2026-10-14-22-25-doua-butoane-de-panica-unul-functioneaza-celala.md) |
+| 2026-10-14 | `5-MASURATORI` | [✅ 2026-10-14, 22:30 — LANȚUL CARE CONTEAZĂ CEL MAI MULT: ML-ul nu poate atinge banii reali fără acordul tău](5-MASURATORI/31-2026-10-14-22-30-lantul-care-conteaza-cel-mai-mult-ml-ul-nu-poat.md) |
+| 2026-10-14 | `5-MASURATORI` | [✔️ 2026-10-14, 21:27 — PREDICȚIA S-A CONFIRMAT: paritatea scrie în gol peste noapte](5-MASURATORI/32-2026-10-14-21-27-predictia-s-a-confirmat-paritatea-scrie-in-gol.md) |
 | 2026-10-14 | `2-DECIZII-ALE-TALE` | [🔬 2026-10-14, 21:45 — AM COSTAT IEȘIREA 2: nu e „mută o linie", sunt DOUĂ forme, cu preț diferit](2-DECIZII-ALE-TALE/02-2026-10-14-21-45-am-costat-iesirea-2-nu-e-muta-o-linie-sunt-doua.md) |
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14, 21:35 — IMPLEMENTAT 2b: poarta circulară e deschisă (bundle nou, FĂRĂ reload)](4-LIVRATE/48-2026-10-14-21-35-implementat-2b-poarta-circulara-e-deschisa-bund.md) |
 | 2026-10-13 | `4-LIVRATE` | [🔎 2026-10-13 — stack trace-uri citibile, FĂRĂ Sentry și fără a expune sursa](4-LIVRATE/49-2026-10-13-stack-trace-uri-citibile-fara-sentry-si-fara-a-expune.md) |
-| 2026-10-13 | `5-MASURATORI` | [🚩 2026-10-13 — AUDIT FLAG-URI: ce e oprit, de ce, și în ce ordine se pornește](5-MASURATORI/32-2026-10-13-audit-flag-uri-ce-e-oprit-de-ce-si-in-ce-ordine-se-po.md) |
+| 2026-10-13 | `5-MASURATORI` | [🚩 2026-10-13 — AUDIT FLAG-URI: ce e oprit, de ce, și în ce ordine se pornește](5-MASURATORI/33-2026-10-13-audit-flag-uri-ce-e-oprit-de-ce-si-in-ce-ordine-se-po.md) |
 | 2026-10-11 | `7-INCIDENTE` | [🚨 CRASH RAPORTAT DE OPERATOR 2026-10-11 — găsit și reparat](7-INCIDENTE/05-crash-raportat-de-operator-2026-10-11-gasit-si-reparat.md) |
 | 2026-10-11 | `2-DECIZII-ALE-TALE` | [⏸️ PAUZĂ 2026-10-11 dimineață — ce rămâne de decis](2-DECIZII-ALE-TALE/03-pauza-2026-10-11-dimineata-ce-ramane-de-decis.md) |
 | 2026-10-11 | `2-DECIZII-ALE-TALE` | [🔴 R16 — banurile Binance sunt pe TESTNET, iar protecția noastră e oarbă acolo (2026-10-11)](2-DECIZII-ALE-TALE/04-r16-banurile-binance-sunt-pe-testnet-iar-protectia-noastra-e-oar.md) |
-| 2026-10-10 | `5-MASURATORI` | [🔁 AUDIT DE PERSISTENŢĂ LA REFRESH 2026-10-10 — „ce nu se menţine"](5-MASURATORI/33-audit-de-persistenta-la-refresh-2026-10-10-ce-nu-se-mentine.md) |
+| 2026-10-10 | `5-MASURATORI` | [🔁 AUDIT DE PERSISTENŢĂ LA REFRESH 2026-10-10 — „ce nu se menţine"](5-MASURATORI/34-audit-de-persistenta-la-refresh-2026-10-10-ce-nu-se-mentine.md) |
 | 2026-10-10 | `7-INCIDENTE` | [🚨 INCIDENT 2026-10-10 16:14 — am provocat un ban de IP de la Binance cu reload-uri prea dese](7-INCIDENTE/06-incident-2026-10-10-16-14-am-provocat-un-ban-de-ip-de-la-binance.md) |
 | 2026-10-10 | `4-LIVRATE` | [🎨 CERUT 2026-10-10 — reproiectare „instituțională" AutoTrade + Manual Trade, diagnosticul în THEIA](4-LIVRATE/50-cerut-2026-10-10-reproiectare-institutionala-autotrade-manual-tr.md) |
 | 2026-10-09 | `1-DE-FACUT` | [🔌 PLAN: conectarea ML-ului neconectat *(cerut 2026-10-09, de făcut mai târziu)*](1-DE-FACUT/02-plan-conectarea-ml-ului-neconectat-cerut-2026-10-09-de-facut-mai.md) |
-| 2026-10-09 | `5-MASURATORI` | [🧠 ML — unde suntem (verificat azi, 2026-10-09)](5-MASURATORI/34-ml-unde-suntem-verificat-azi-2026-10-09.md) |
-| 2026-10-09 | `5-MASURATORI` | [🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici](5-MASURATORI/35-audit-de-buguri-2026-10-09-grave-medii-mici.md) |
+| 2026-10-09 | `5-MASURATORI` | [🧠 ML — unde suntem (verificat azi, 2026-10-09)](5-MASURATORI/35-ml-unde-suntem-verificat-azi-2026-10-09.md) |
+| 2026-10-09 | `5-MASURATORI` | [🔍 AUDIT DE BUGURI 2026-10-09 — grave / medii / mici](5-MASURATORI/36-audit-de-buguri-2026-10-09-grave-medii-mici.md) |
 | — | `1-DE-FACUT` | [🔍 GĂSIT, NEREPARAT — G-8: pe calea pending, refuzul gărzii nu se scrie nicăieri](1-DE-FACUT/03-gasit-nereparat-g-8-pe-calea-pending-refuzul-garzii-nu-se-scrie.md) |
 | — | `1-DE-FACUT` | [🔭 GĂSIT, NEREPARAT — două descoperiri din lucrarea la G-5](1-DE-FACUT/04-gasit-nereparat-doua-descoperiri-din-lucrarea-la-g-5.md) |
 | — | `1-DE-FACUT` | [🔭 GĂSIT, NEREPARAT — registrul cerut de R-P-6](1-DE-FACUT/05-gasit-nereparat-registrul-cerut-de-r-p-6.md) |

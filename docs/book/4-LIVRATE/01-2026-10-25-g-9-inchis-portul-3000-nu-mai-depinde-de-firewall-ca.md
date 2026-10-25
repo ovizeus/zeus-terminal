@@ -77,3 +77,5 @@ diferenţa dintre înainte şi după, arătată pe un socket adevărat.
 
 Dacă ceva merge prost, revenirea **nu cere cod**: `BIND_HOST=0.0.0.0` în `.env` plus un reload şi
 comportamentul e exact cel de dinainte. L-am avut pregătit înainte să apăs.
+
+---
