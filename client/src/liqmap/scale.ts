@@ -83,3 +83,66 @@ export function cellColor(isLong: boolean, i: number): string {
     const alpha = Math.max(0.12, a)
     return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`
 }
+
+export type Rung = {
+    pct: number
+    price: number
+    longUsd: number
+    shortUsd: number
+    n: number
+    empty: boolean
+    isPrice: boolean
+}
+
+/**
+ * Scara CONTINUĂ, de sus până jos, cu preţul ancorat la mijloc.
+ *
+ * [2026-10-25] Prima variantă randa doar coşurile care AVEAU date: cinci
+ * rânduri, una sub alta. Se citea ca o listă, nu ca o hartă — şi pierdea
+ * exact informaţia care contează: **cât de departe** e fiecare grămadă de
+ * preţ, şi **cât gol** e între ele. Un nivel fără lichidări nu e absenţa unei
+ * date, e o informaţie: acolo n-a murit nimeni.
+ *
+ * Deci treptele goale se desenează şi ele, palid. Scara se opreşte la ultima
+ * treaptă cu date (plus o margine), nu la un ±10% fix: altfel pe o piaţă
+ * liniştită ar fi 80 de rânduri goale şi 5 pline, şi tot n-ai vedea nimic.
+ */
+export function buildLadder(buckets: any[], price: number, step = 0.25, pad = 2): Rung[] {
+    const out: Rung[] = []
+    const p = Number(price)
+    if (!Array.isArray(buckets) || !buckets.length || !Number.isFinite(p) || p <= 0) return out
+
+    const byPct = new Map<number, any>()
+    let hi = -Infinity, lo = Infinity
+    for (const b of buckets) {
+        const pct = Number(b && b.pct)
+        if (!Number.isFinite(pct)) continue
+        byPct.set(Math.round(pct / step) * step, b)
+        if (pct > hi) hi = pct
+        if (pct < lo) lo = pct
+    }
+    if (!byPct.size) return out
+
+    // Marginea ne lasă să vedem că deasupra/dedesubt chiar nu mai e nimic.
+    hi = Math.max(hi, 0) + pad * step
+    lo = Math.min(lo, 0) - pad * step
+    const steps = Math.round((hi - lo) / step)
+    if (!Number.isFinite(steps) || steps <= 0 || steps > 400) return out
+
+    for (let i = steps; i >= 0; i--) {
+        const pct = Math.round((lo + i * step) / step) * step
+        const b = byPct.get(pct)
+        const lu = b ? Number(b.longUsd) || 0 : 0
+        const su = b ? Number(b.shortUsd) || 0 : 0
+        out.push({
+            pct,
+            price: b && Number(b.price) > 0 ? Number(b.price) : p * (1 + pct / 100),
+            longUsd: lu,
+            shortUsd: su,
+            n: b ? Number(b.n) || 0 : 0,
+            empty: lu + su <= 0,
+            isPrice: Math.abs(pct) < step / 2,
+        })
+    }
+    return out
+}

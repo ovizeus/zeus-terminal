@@ -55,3 +55,5 @@ BTC 97 · ETH 77 · SOL 28 · ZEC 28 · XRP 22 · NG 14 · DOGE 13 · PEPE 12
 **Dacă arată BINE.** Randarea dovedeşte structură şi text, nu pixeli şi nu gust. Culorile, spaţierea,
 cum se simte pe telefonul lui — alea rămân judecata lui, şi niciun test pe care l-aş scrie n-ar
 schimba asta. **Testele n-au gust.**
+
+---

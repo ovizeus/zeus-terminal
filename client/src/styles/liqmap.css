@@ -273,3 +273,10 @@
     border-color: var(--liq-long);
 }
 .zlq-sym-b.act i { color: #5a3617; }
+
+/* O treaptă fără lichidări NU e o lipsă de date — e informaţie: acolo n-a
+   fost lichidat nimeni. Se vede, dar stă în spate, ca să nu concureze cu
+   grămezile. */
+.zlq-row.void { opacity: .34; }
+.zlq-row.void .zlq-px { color: #4c5f70; }
+.zlq-row.void .zlq-bar { background: #0a1016; }

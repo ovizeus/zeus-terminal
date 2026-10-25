@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
-import { fmtUsd, fmtPct, intensity, cellColor, barColor, LIQ } from '../../liqmap/scale'
+import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, LIQ } from '../../liqmap/scale'
 
 // ══════════════════════════════════════════════════════════════════
 // LIQUIDATION MAP — trei vederi, toate din date măsurate
@@ -174,27 +174,31 @@ function SymbolStrip({ top, symbol, setSymbol }: any) {
 // ── Vederea MAP: scara pe niveluri de preţ ────────────────────────
 function MapView({ map, price }: { map: any; price: number }) {
     if (!map || !map.buckets?.length) return <Empty what="The ladder" />
-    const buckets = [...map.buckets].sort((a: any, b: any) => b.pct - a.pct)
-    const max = buckets.reduce((m: number, b: any) => Math.max(m, b.longUsd + b.shortUsd), 0) || 1
+    // Scara CONTINUĂ, nu doar nivelurile care au date: altfel se citeşte ca o
+    // listă de câteva rânduri şi se pierde exact ce face dintr-o scară o hartă
+    // — cât de departe stă fiecare grămadă, şi cât gol e între ele.
+    const rungs = buildLadder(map.buckets, price)
+    if (!rungs.length) return <Empty what="The ladder" />
+    const max = rungs.reduce((m, r) => Math.max(m, r.longUsd + r.shortUsd), 0) || 1
     return (
         <div className="zlq-map">
-            {buckets.map((b: any) => {
-                const tot = b.longUsd + b.shortUsd
-                const isLong = b.longUsd >= b.shortUsd
-                const wpc = Math.max(1.5, (tot / max) * 100)
-                const above = b.pct >= 0
+            {rungs.map((r) => {
+                if (r.isPrice) return <div key="now" className="zlq-now">PRICE {Math.round(price)}</div>
+                const tot = r.longUsd + r.shortUsd
+                const isLong = r.longUsd >= r.shortUsd
+                const wpc = tot > 0 ? Math.max(2, (tot / max) * 100) : 0
                 return (
-                    <div key={b.pct} className={'zlq-row' + (above ? ' up' : ' dn')}>
-                        <span className="zlq-px">{Math.round(b.price || price * (1 + b.pct / 100))}</span>
-                        <span className="zlq-pc">{fmtPct(b.pct)}</span>
+                    <div key={r.pct}
+                        className={'zlq-row' + (r.pct >= 0 ? ' up' : ' dn') + (r.empty ? ' void' : '')}>
+                        <span className="zlq-px">{Math.round(r.price)}</span>
+                        <span className="zlq-pc">{fmtPct(r.pct)}</span>
                         <span className="zlq-bar">
-                            <i style={{ width: wpc + '%', background: barColor(isLong) }} />
+                            {tot > 0 && <i style={{ width: wpc + '%', background: barColor(isLong) }} />}
                         </span>
-                        <span className="zlq-v">{fmtUsd(tot)}</span>
+                        <span className="zlq-v">{tot > 0 ? fmtUsd(tot) : ''}</span>
                     </div>
                 )
             })}
-            <div className="zlq-now">PRICE {Math.round(price)}</div>
         </div>
     )
 }

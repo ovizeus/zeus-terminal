@@ -95,3 +95,66 @@ describe('culorile — doua familii opuse, fiindca sunt doua lucruri opuse', () 
     }
   })
 })
+
+import { buildLadder } from '../scale'
+
+// [2026-10-25] Prima varianta randa doar nivelurile cu date: cinci randuri,
+// una sub alta. Se citea ca o LISTA, nu ca o harta — si pierdea exact ce
+// conteaza: cat de departe sta fiecare gramada de pret, si cat GOL e intre ele.
+// Un nivel fara lichidari nu e absenta unei date, e o informatie.
+describe('scara continua — ce face dintr-o lista o HARTA', () => {
+  const B = [
+    { pct: 0.5, price: 80804, longUsd: 0, shortUsd: 23137, n: 2 },
+    { pct: -0.25, price: 80194, longUsd: 12767053, shortUsd: 0, n: 9 },
+    { pct: -0.75, price: 79930, longUsd: 33092, shortUsd: 0, n: 1 },
+  ]
+
+  it('umple GOLURILE dintre niveluri', () => {
+    const l = buildLadder(B, 80489)
+    const pcts = l.map(r => r.pct)
+    expect(pcts).toContain(0.25)    // n-a avut date, dar exista ca treapta
+    expect(pcts).toContain(-0.5)
+    expect(l.length).toBeGreaterThan(B.length)
+  })
+
+  it('treptele goale sunt MARCATE, nu inventate cu zero mascat', () => {
+    const gap = buildLadder(B, 80489).find(r => r.pct === 0.25)!
+    expect(gap.empty).toBe(true)
+    expect(gap.longUsd).toBe(0)
+    expect(gap.shortUsd).toBe(0)
+  })
+
+  it('merge de SUS in JOS — cum se citeste o scara de preturi', () => {
+    const l = buildLadder(B, 80489)
+    for (let i = 1; i < l.length; i++) expect(l[i].pct).toBeLessThan(l[i - 1].pct)
+  })
+
+  it('pretul curent are treapta lui, ancorata la mijloc', () => {
+    const now = buildLadder(B, 80489).filter(r => r.isPrice)
+    expect(now).toHaveLength(1)
+  })
+
+  it('se opreste langa ultima gramada, nu la un +-10% fix', () => {
+    // Altfel, pe o piata linistita ai 80 de randuri goale si 5 pline.
+    const l = buildLadder(B, 80489)
+    expect(Math.max(...l.map(r => r.pct))).toBeLessThan(2)
+    expect(Math.min(...l.map(r => r.pct))).toBeGreaterThan(-2)
+  })
+
+  it('preturile treptelor goale sunt calculate din pret, nu lasate zero', () => {
+    const gap = buildLadder(B, 80489).find(r => r.pct === 0.25)!
+    expect(gap.price).toBeGreaterThan(80000)
+  })
+
+  it('nu explodeaza pe date absurde', () => {
+    for (const [b, p] of [[[], 80000], [B, 0], [B, NaN], [null, 80000], [B, -5]] as any[]) {
+      expect(() => buildLadder(b, p)).not.toThrow()
+      expect(Array.isArray(buildLadder(b, p))).toBe(true)
+    }
+  })
+
+  it('nu produce mii de trepte dintr-un interval urias', () => {
+    const wide = [{ pct: 34, price: 1, longUsd: 1, shortUsd: 0, n: 1 }, { pct: -34, price: 1, longUsd: 1, shortUsd: 0, n: 1 }]
+    expect(buildLadder(wide, 80000).length).toBeLessThanOrEqual(400)
+  })
+})
