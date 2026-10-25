@@ -68,3 +68,5 @@ sunt orfani** — sunt pending-uri **deschise acum**. Un pending în aşteptare 
 > **şi o scriu ca retractare, nu ca notă de subsol.**
 
 **Poziţii deschise 2, `banned_until` 0, zero 429/418 după reload.**
+
+---

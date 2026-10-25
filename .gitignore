@@ -103,3 +103,4 @@ data/admin_backups/
 # so 20+ of them are already in history. See the Book: removing them needs a
 # history rewrite, which is the operator decision.
 data/audit.jsonl.*
+data/g8-watch.log
