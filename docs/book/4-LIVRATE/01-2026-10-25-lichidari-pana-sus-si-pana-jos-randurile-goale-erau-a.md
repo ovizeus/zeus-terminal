@@ -116,6 +116,34 @@ comentariile înainte să citească codul.
 **Client: 152 de fişiere, 1 286 de teste verzi, `tsc` 0 erori. Server: shard-urile verzi.**
 **Verificat în bundle-ul servit:** `liq-map?symbol=${t}&ref=${e.price}&days=30`.
 
+### ✅ Dovedit cap-coadă pe date vii, după reload
+
+La 9 minute după repornire baza avea deja **17 lichidări reale** (OKX + Bybit), iar agregarea le-a
+întors corect: o lichidare de **LONG pe ETH, 6 868 $, la −0,25%** de preţul curent, grupată şi
+clasificată bine.
+
+**Şi o sperietură care s-a dovedit nimic:** prima citire pe `BTCUSDT` a dat **zero**, deşi existau
+rânduri. Nu era nepotrivire de simboluri — agregatorul le normalizează deja (`PEPEUSDT`, nu
+`PEPE-USDT-SWAP`). Pur şi simplu **nu fusese nicio lichidare pe BTC în acele 9 minute**. Asta spune
+ceva despre ce urmează: fără Binance, lichidările pe BTC sunt rare, deci scara **lui** se va umple mai
+încet decât a altor simboluri.
+
+### 🔨 Şi o greşeală a mea, prinsă şi reparată pe clasă
+
+Am numerotat migraţia **416**, număr deja luat de `416_ares_journal`. N-a stricat nimic — `migrate()`
+cheamă după NUME — dar azi am scris în carte despre [[R-C-24]], o regulă de pe calea banilor care
+trăia sub un număr dat între timp altcuiva. **Un număr duplicat nu doare când îl faci; doare când
+cineva spune „migraţia 416" şi sunt două.**
+
+Cauza: citisem ultimul număr cu un `grep | tail -3` care a ratat linii. **Verificarea aia nu e treaba
+mea de făcut din ochi.** Renumerotată la 420 (maximul real era 419) şi adăugat un test care cade la
+orice număr sau nume duplicat şi **spune exact care două se bat**. Mutaţie: pun 416 înapoi → pică, cu
+mesajul `416_ares_journal <-> 416_liq_events`.
+
+*Rămâne în `_migrations` un rând `416_liq_events` din rularea de azi, alături de `420_liq_events`.
+Inofensiv — tabela se creează cu `IF NOT EXISTS` — şi l-am lăsat acolo în loc să umblu în baza vie
+pentru un cosmetic.*
+
 ### 🔶 Ce NU am verificat ([[R-V-18]])
 
 - **scara nu se umple instantaneu, şi n-are cum.** Istoricul începe să se adune **de la reload**, nu

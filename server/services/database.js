@@ -10394,7 +10394,7 @@ migrate('414_backfill_indicators_from_indsettings', () => {
     db.exec("UPDATE user_settings SET data = json_set(data, '$.indicators', json(json_extract(data, '$.indSettings'))) WHERE json_type(data, '$.indSettings') = 'object' AND json_extract(data, '$.indicators') IS NULL");
 });
 
-migrate('416_liq_events', () => {
+migrate('420_liq_events', () => {
     // [LIQ-HISTORY 2026-10-25] Memoria care lipsea hărţii de lichidări.
     //
     // Operatorul a cerut să vadă lichidări „până sus şi până jos, cu date
