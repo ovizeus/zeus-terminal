@@ -10581,6 +10581,32 @@ const _stmts = {
     bdPruneTrade: db.prepare(`DELETE FROM brain_decisions WHERE rowid IN (
         SELECT rowid FROM brain_decisions
          WHERE final_action = 'entry' AND +linked_seq IS NULL AND ts < ? LIMIT ?)`),
+    // [G-7 2026-10-25] The pending lifecycle had NO rule at all: 77,692 rows
+    // outside every tier. Measuring it changed what the right rule is, twice.
+    //
+    // 365 days, not the 90 of the blocked tier, because pending_fill and
+    // pending_momentum are LINKED and therefore kept for ever (R-C-21).
+    // Pruning the denominator while keeping the numerator does not shorten the
+    // funnel, it BIASES it: a fill-rate computed over an old window would see
+    // only fills and report 100%, confidently. A short window loses
+    // information; that would manufacture it. 365 also matches the better
+    // analogy — an expired pending queued an attempt, like an unlinked `entry`,
+    // unlike a decision blocked before it tried.
+    //
+    // Cost of the longer window, measured: 265 rows/day at ~1,438 bytes is
+    // ~139 MB/year, against 72 GB free. And its first run deletes NOTHING —
+    // the oldest pending row is 2026-05-13, 165 days old. This is a bound for
+    // the future, not a cleanup. A bound that fires in 200 days is still the
+    // difference between a policy and an accident.
+    //
+    // 'pending_created' is NOT in this tier. See brainActions.js: its ending
+    // is unwritten, not unknown, and those rows are the only trace of the
+    // decisions behind them. Deleting them on a timer would destroy the
+    // evidence of a logging gap (G-8).
+    bdPrunePendingTerminal: db.prepare(`DELETE FROM brain_decisions WHERE rowid IN (
+        SELECT rowid FROM brain_decisions
+         WHERE final_action IN (${_BRAIN_ACTIONS.PENDING_TERMINAL_ACTIONS.map(() => '?').join(',')})
+           AND +linked_seq IS NULL AND ts < ? LIMIT ?)`),
     // [AUDIT-F1/F2 2026-06-11] Retention for the two unbounded ML tables
     // (created_at is INTEGER ms). Mirrors the bdPrune tiered-retention model.
     mlAuditPruneOld: db.prepare('DELETE FROM ml_influence_audit WHERE created_at < ?'),
@@ -12078,6 +12104,8 @@ module.exports = {
             ['no_trade', _stmts.bdPruneNoTrade, [now - 30 * DAY, batchLimit]],
             ['blocked', _stmts.bdPruneBlocked, [..._BRAIN_ACTIONS.BLOCKED_ACTIONS, now - 90 * DAY, batchLimit]],
             ['trade', _stmts.bdPruneTrade, [now - 365 * DAY, batchLimit]],
+            ['pending_terminal', _stmts.bdPrunePendingTerminal,
+                [..._BRAIN_ACTIONS.PENDING_TERMINAL_ACTIONS, now - 365 * DAY, batchLimit]],
         ];
         const removed = {};
         for (const [name, stmt, args] of tiers) {

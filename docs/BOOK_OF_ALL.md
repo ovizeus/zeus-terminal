@@ -7396,7 +7396,8 @@ iar rubrica a crescut de la 45 la **66 de reguli**.
 | **G-4** | `atPruneClosed` e cod mort care ar tăia istoricul de tranzacţionare | trei opţiuni scrise, niciuna nu e a mea de ales |
 | **G-5** | ✅ **ÎNCHIS 2026-10-25 (b315)** — `entry_blocked` intră în clasa blocate prin listă comună; retenţia lotizată, de la 8,7 s de îngheţare la bucăţi de ~114 ms | — |
 | **G-6** | ✅ **ÎNCHIS 2026-10-25 (b316)** — eticheta întreabă clasificarea, nu forma numelui; **şi am corectat două afirmaţii prea tari de-ale mele**: coloana n-are niciun cititor, iar scăparea de la eşantionare atinge 2,5% din rânduri | — |
-| **G-7** | 77 688 de rânduri `pending_expire` + `pending_created` fără nicio regulă de retenţie | ce fereastră de analiză vrei pe ciclul de viaţă al pending-urilor |
+| **G-7** | ✅ **ÎNCHIS 2026-10-25 (b317)** — stările terminale la 365 de zile, **nu 90**: la 90 ar fi şters 24 993 de rânduri de numitor şi ar fi strâmbat pâlnia; `pending_created` rămâne NEATINS | — |
+| **G-8** | pe calea pending, refuzul AT nu se scrie NICĂIERI — `updateAction` e chemat doar înăuntrul `if (entry)`, deci 33 677 de rânduri rămân `pending_created` pe veci | atinge bucla interioară din `serverBrain` — a ta |
 | **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
 | **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |
 | **G-3** | `changelog` = 297 KB — **neverificat** dacă ajunge la client | de verificat înainte de a propune ceva ([[R-V-18]]) |
@@ -7722,4 +7723,158 @@ G-5 + G-6, `node --check` curat.
 - rândurile VECHI rămân etichetate greşit. **Nu le-am rescris**, şi n-am propus-o: tabela se taie la
   30 de zile, deci se curăţă singură până pe 24 noiembrie. Un `UPDATE` pe 376 000 de rânduri ar fi fost
   exact ce interzice [[R-OP-13]], pe o coloană fără cititor;
+- n-am rulat suita completă de server ([[R-OP-8]]).
+
+---
+
+## ⏳ 2026-10-25 — G-7 ÎNCHIS: ciclul de viaţă al pending-urilor are retenţie, dar nu cea evidentă (b317 v1.7.291)
+
+> Cerere operator: *„fa si g7 daca zici ca e ok"*. Ţi-o dădusem ca întrebare de produs — *ce fereastră de
+> analiză vrei* — şi măsurătoarea a răspuns în locul tău, de două ori, în direcţii pe care nu le
+> prevăzusem.
+
+**Ce era:** 77 692 de rânduri în afara oricărui tier — `pending_expire` 44 015 şi `pending_created`
+33 677, amândouă cu zero `linked_seq`. Mutarea evidentă era să le pun în tierul blocate, la 90 de zile,
+cum făcusem cu `entry_blocked` la G-5. **Ar fi fost greşit, din două motive diferite.**
+
+### Prima măsurătoare: la 90 de zile pâlnia nu s-ar fi scurtat, s-ar fi STRÂMBAT
+
+`pending_fill` şi `pending_momentum` sunt **legate**, deci [[R-C-21]] le păstrează pentru totdeauna.
+`pending_expire` e numitorul. **A tăia numitorul şi a păstra numărătorul nu scurtează o măsurătoare, o
+inventează:** cine ar calcula rata de umplere pe o fereastră mai veche ar vedea **numai umpleri** şi ar
+raporta 100%, cu încredere.
+
+O fereastră scurtă **pierde** informaţie. Asta ar fi **fabricat** informaţie. Sunt lucruri diferite, şi al
+doilea e cel care m-a costat de atâtea ori în cartea asta.
+
+Măsurat pe o copie a bazei vii, şi diferenţa e exactă:
+
+| Fereastra | Ce şterge la prima rulare |
+|---|---|
+| 90 de zile | **24 993 de rânduri de numitor** |
+| **365 de zile** | **0 rânduri** |
+
+Deci am pus **365**, acelaşi tier ca un `entry` nelegat — şi e şi analogia mai bună: **un pending expirat
+A ÎNCERCAT**, a stat la coadă şi i s-a terminat timpul, pe când un `blocked_*` a fost oprit înainte să
+încerce.
+
+**Preţul ferestrei mai lungi, măsurat:** 265 de rânduri pe zi la ~1 438 de octeţi → **~139 MB pe an**,
+faţă de 72 GB liberi. **Şi spun răspicat ce NU face:** prima rulare şterge **zero** rânduri, fiindcă cel
+mai vechi rând pending e din 13 mai, adică 165 de zile. **Asta nu e o curăţenie, e un plafon** — unul
+care se declanşează în vreo 200 de zile. Merită oricum, fiindcă e diferenţa dintre o politică şi un
+accident, exact lecţia de la G-4.
+
+### A doua măsurătoare: `pending_created` nu e telemetrie cu sfârşit necunoscut
+
+**Sfârşitul lui e cunoscut şi doar nu se scrie.** Pe calea pending, `serverBrain.js:~1045` cheamă
+`linkSeq` şi `updateAction` **doar înăuntrul lui `if (entry)`**. Deci când AT refuză umplerea declanşată,
+rândul rămâne `pending_created` **pe veci**.
+
+Pe calea directă, acelaşi refuz scrie `entry_blocked`. **Pe calea pending nu scrie nimic.**
+
+Deci cele 33 677 de rânduri sunt **singura urmă a unor decizii pe care nimic altceva nu le-a înregistrat.**
+A le şterge pe un cronometru ar fi distrus dovada unei găuri de jurnalizare. **Nu au nicio retenţie, şi
+asta e deliberat**, scris atât în `brainActions.js` cât în `database.js`, cu un test care cade dacă
+cineva le adaugă în clasă.
+
+### Ce am livrat
+
+**`PENDING_TERMINAL_ACTIONS`** în `brainActions.js` — **o rafinare a clasei de telemetrie, nu o a patra
+clasă**: `pending_expire` şi `pending_cancel`, stările care sunt un **sfârşit**. Un test verifică că e
+submulţime a telemetriei, ca să nu se rupă clasificarea de la G-5.
+
+**`bdPrunePendingTerminal`** în `database.js` — lotizată, cu `+linked_seq IS NULL` şi plusul de la G-5.
+Planul verificat pe instrucţiunea reală: `SEARCH ... USING INDEX idx_bd_action (final_action=?, ts<?)`.
+
+**Şi jurnalul**, care ar fi tăcut: garda era `if (r.no_trade || r.blocked || r.trade)`, deci odată ce
+tierurile vechi ajung la regim staţionar, o rulare care ar fi şters **numai** rânduri pending ar fi
+făcut-o **în linişte**. Acum `pending_terminal` e şi în gardă şi în mesaj.
+
+### Dovada
+
+**19 teste noi**, zece pe o bază de date reală. **7 mutaţii, toate moarte:**
+
+| Mutaţia | Ce a picat |
+|---|---|
+| fereastra 365 → 90 (exact greşeala evitată) | 2 teste |
+| `pending_created` băgat în clasa terminală | 3 teste |
+| `pending_fill` (istoric!) băgat în clasa terminală | 3 teste |
+| `+` scos din `+linked_seq` | testul de plan |
+| garda `linked_seq` scoasă | 2 teste |
+| lotizarea scoasă | 5 teste |
+| `pending_terminal` scos din garda jurnalului | testul de jurnal |
+
+**Şi un test al meu care trecea în GOL:** `Object.isFrozen(undefined)` întoarce `true`, deci
+*„lista e îngheţată"* trecea înainte ca lista să existe. Întărit: verifică întâi că e tablou şi că are
+elemente. A treia dată în două zile când propriul test se dovedeşte decor — [[R-V-11]].
+
+**Verificat:** 347/347 pe shard-ul afectat (27 de fişiere), `node --check` curat pe toate trei fişierele.
+
+---
+
+## 🔍 GĂSIT, NEREPARAT — G-8: pe calea pending, refuzul gărzii nu se scrie nicăieri
+
+`serverBrain.js:~1045`, calea pending:
+
+```js
+const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId, _userIntentPending);
+if (entry) {
+    const _pendSnapId = pendingResult.pending._snapId;
+    if (_pendSnapId && entry.seq) {
+        brainLogger.linkSeq(_pendSnapId, entry.seq);
+        brainLogger.updateAction(_pendSnapId, pendingResult.action === 'FILL' ? 'pending_fill' : 'pending_momentum');
+    }
+}
+// nu există `else`
+```
+
+**Nu există `else`.** Pending-ul s-a declanşat, AT l-a refuzat, şi jurnalul de decizii rămâne la
+*„creat"* pentru totdeauna. Calea directă scrie `entry_blocked` pentru exact acelaşi refuz
+(`serverBrain.js:1655`). **Calea pending nu are echivalent.**
+
+### Ce am dovedit, şi ce doar coroborez
+
+**Dovedit, din cod:** ramura lipseşte, şi `updateAction` iese imediat pe `if (!snapId || !action) return`.
+
+**Coroborat, nu dovedit** — că asta e cauza DOMINANTĂ a celor 33 677:
+
+| | Acceptate | Refuzate | Rata |
+|---|---|---|---|
+| calea directă | `entry` 1 325 | `entry_blocked` 128 744 | **1,0%** |
+| calea pending | `pending_fill` 451 | orfani 33 677 | **1,3%** |
+
+Aceeaşi gardă, aceeaşi rată. Şi distribuţia în timp e **uniformă, nu în vârfuri** — 33–52% orfani
+în fiecare lună din şase — ceea ce arată o cauză **per-decizie**, nu evenimente rare.
+
+**Ipoteza pe care am avut-o întâi şi am respins-o pe date:** credeam că orfanii vin din ştergerea
+pending-urilor la restart, care e **deliberată şi corectă** (`_loadFromDisk`: *„intrările pending NU se
+restaurează — sunt sensibile la timp după restart"*). **Dar auditul are doar 136 de rânduri
+`PENDING_WIPED_ON_RESTART`, nu 33 677.** Restartul explică 0,4% din orfani. Ipoteza era greşită şi am
+aflat-o întrebând baza, nu citind codul mai departe.
+
+**Ce ar dovedi-o:** o ramură `else` care scrie starea — adică chiar reparaţia — şi o zi de date. Pot şi
+altele mai mici: un simbol scos din selecţie face ca `checkPending` să nu mai fie chemat deloc pentru el
+(`continue`-ul de la [MULTI-SYM]), şi atunci pending-ul zăboveşte în memorie fără sfârşit.
+
+### De ce nu am făcut-o
+
+E a **treia** schimbare de server din sesiunea asta şi prima care ar atinge **bucla interioară din
+`serverBrain`**, pe calea banilor. *„Nu înlănţui schimbări riscante"* e regula ta, şi aici se aplică
+exact. Reparaţia e mică — un `else` care cheamă `updateAction` cu un nume nou, plus numele în
+clasificare — dar merită o revizie de cale a banilor de la zero, nu coada unei sesiuni.
+
+**Şi e utilă dincolo de jurnal:** o dată scrisă starea, pâlnia pending devine măsurabilă în sfârşit, şi
+abia atunci cele 33 677 de rânduri pot intra într-un tier de retenţie, fiindcă nu mai sunt singura lor
+urmă.
+
+### 🔶 Ce NU am verificat ([[R-V-18]])
+
+- **n-am făcut reload**, al treilea ar fi fost în aceeaşi sesiune ([[R-OP-1]]). Codul e **pushuit, nu
+  servit**; b316 şi b317 intră împreună la prima repornire naturală sau la primul reload din sesiunea
+  următoare;
+- deci **n-am văzut linia de jurnal cu `pending_terminal=` pe viu** — doar în teste;
+- pe baza vie regula asta nu are nimic de şters încă, deci **nu-i pot vedea efectul** decât pe o copie cu
+  rânduri făcute de mână;
+- cauza dominantă a orfanilor din G-8 e **coroborată, nu dovedită**, şi am scris mai sus exact ce ar
+  dovedi-o;
 - n-am rulat suita completă de server ([[R-OP-8]]).

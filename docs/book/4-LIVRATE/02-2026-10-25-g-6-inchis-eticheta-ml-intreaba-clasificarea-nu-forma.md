@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7640 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7641 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🏷️ 2026-10-25 — G-6 ÎNCHIS: eticheta ML întreabă clasificarea, nu forma numelui (b316 v1.7.290)
 
@@ -86,3 +86,5 @@ G-5 + G-6, `node --check` curat.
   30 de zile, deci se curăţă singură până pe 24 noiembrie. Un `UPDATE` pe 376 000 de rânduri ar fi fost
   exact ce interzice [[R-OP-13]], pe o coloană fără cititor;
 - n-am rulat suita completă de server ([[R-OP-8]]).
+
+---

@@ -25,7 +25,8 @@ iar rubrica a crescut de la 45 la **66 de reguli**.
 | **G-4** | `atPruneClosed` e cod mort care ar tăia istoricul de tranzacţionare | trei opţiuni scrise, niciuna nu e a mea de ales |
 | **G-5** | ✅ **ÎNCHIS 2026-10-25 (b315)** — `entry_blocked` intră în clasa blocate prin listă comună; retenţia lotizată, de la 8,7 s de îngheţare la bucăţi de ~114 ms | — |
 | **G-6** | ✅ **ÎNCHIS 2026-10-25 (b316)** — eticheta întreabă clasificarea, nu forma numelui; **şi am corectat două afirmaţii prea tari de-ale mele**: coloana n-are niciun cititor, iar scăparea de la eşantionare atinge 2,5% din rânduri | — |
-| **G-7** | 77 688 de rânduri `pending_expire` + `pending_created` fără nicio regulă de retenţie | ce fereastră de analiză vrei pe ciclul de viaţă al pending-urilor |
+| **G-7** | ✅ **ÎNCHIS 2026-10-25 (b317)** — stările terminale la 365 de zile, **nu 90**: la 90 ar fi şters 24 993 de rânduri de numitor şi ar fi strâmbat pâlnia; `pending_created` rămâne NEATINS | — |
+| **G-8** | pe calea pending, refuzul AT nu se scrie NICĂIERI — `updateAction` e chemat doar înăuntrul `if (entry)`, deci 33 677 de rânduri rămân `pending_created` pe veci | atinge bucla interioară din `serverBrain` — a ta |
 | **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
 | **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |
 | **G-3** | `changelog` = 297 KB — **neverificat** dacă ajunge la client | de verificat înainte de a propune ceva ([[R-V-18]]) |

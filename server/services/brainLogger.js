@@ -304,10 +304,14 @@ function prune() {
     // caller is a maintenance timer with nothing to wait for.
     try {
         db.bdPrune().then((r) => {
-            if (r && (r.no_trade || r.blocked || r.trade)) {
+            // [G-7] pending_terminal is in the guard as well as the message:
+            // once the older tiers reach steady state, a run that removed only
+            // pending rows would otherwise have done it in silence.
+            if (r && (r.no_trade || r.blocked || r.trade || r.pending_terminal)) {
                 try {
                     logger.info('BRAIN_LOG',
-                        `[G-5] brain_decisions prune: no_trade=${r.no_trade} blocked=${r.blocked} trade=${r.trade}`);
+                        `[G-5] brain_decisions prune: no_trade=${r.no_trade} blocked=${r.blocked}`
+                        + ` trade=${r.trade} pending_terminal=${r.pending_terminal}`);
                 } catch (_) {}
             }
         }).catch((err) => {

@@ -58,6 +58,22 @@ const TELEMETRY_ACTIONS = Object.freeze([
     'unknown',
 ]);
 
+// [G-7 2026-10-25] A REFINEMENT of the telemetry class, not a fourth class:
+// the pending states that are an ENDING. A pending that expired or was
+// cancelled queued a real attempt and then stopped; nothing more will ever
+// happen to that row. Retention 365 days, the same tier as an unlinked
+// `entry`, and for the same reason — it tried.
+//
+// 'pending_created' is deliberately NOT here. Its ending is not unknown, it is
+// unwritten: on the pending path serverBrain calls updateAction only inside
+// `if (entry)`, so an autotrade refusal of a triggered fill leaves the row at
+// 'pending_created' for ever. 33,677 such rows are the only trace of decisions
+// nothing else recorded. They get NO retention until that gap is closed (G-8).
+const PENDING_TERMINAL_ACTIONS = Object.freeze([
+    'pending_expire',
+    'pending_cancel',
+]);
+
 const ALL_ACTIONS = Object.freeze([...BLOCKED_ACTIONS, ...HISTORY_ACTIONS, ...TELEMETRY_ACTIONS]);
 
 function isBlocked(action) { return BLOCKED_ACTIONS.includes(String(action)); }
@@ -76,6 +92,7 @@ module.exports = {
     BLOCKED_ACTIONS,
     HISTORY_ACTIONS,
     TELEMETRY_ACTIONS,
+    PENDING_TERMINAL_ACTIONS,
     ALL_ACTIONS,
     isBlocked,
     isHistory,
