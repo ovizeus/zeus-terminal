@@ -43,6 +43,17 @@ export function buildLiqEstimate(): void {
   //    BAZA; local adaugam doar ce e mai nou decat reperul.
   const srv = (w.__qmLiqServer && typeof w.__qmLiqServer === 'object') ? w.__qmLiqServer : null
   const srvAsOf = srv && Number.isFinite(+srv.asOf) ? +srv.asOf : 0
+  // De UNDE incepe acoperirea serverului. 0 = nu acopera nimic pe simbolul
+  // asta, deci nu avem voie sa aruncam NIMIC din ce are clientul.
+  //
+  // [REGRESIE 2026-10-25 23:22, prinsa dintr-o captura] Prima varianta sarea
+  // peste orice eveniment local mai vechi decat `asOf`, pe presupunerea ca
+  // „serverul are tot ce are clientul". FALS: serverul a inceput sa
+  // inregistreze azi la 20:28, clientul avea 24h in localStorage. Pe BTC
+  // serverul avea ZERO randuri si trimitea asOf=acum -> tot istoricul local
+  // era aruncat si nu venea nimic in loc. Scara, care avea 6 randuri cu date,
+  // a ramas complet goala.
+  const srvSince = srv && Number.isFinite(+srv.since) ? +srv.since : 0
   if (srv && Array.isArray(srv.buckets)) {
     srv.buckets.forEach((b: any) => {
       if (!b || !Number.isFinite(+b.pct)) return
@@ -65,7 +76,7 @@ export function buildLiqEstimate(): void {
     // Deja numarat de server: il sarim, altfel bara ar arata dublu fata de
     // adevar — exact genul de cifra umflata pentru care modelul sintetic a
     // fost scos la BUG5.5.
-    if (srvAsOf && liq.time && liq.time <= srvAsOf) return
+    if (srvSince && srvAsOf && liq.time && liq.time >= srvSince && liq.time <= srvAsOf) return
     const isLong = liq.side === 'SELL' || !!liq.isLong
     const pct = ((+liq.p - p) / p) * 100
     addBucket(pct, +liq.p, isLong, +liq.vol)
@@ -78,7 +89,7 @@ export function buildLiqEstimate(): void {
   for (const pkey in llv) {
     const b = llv[pkey]; if (!b || !b.price) continue
     if (b.ts && b.ts < cutoff) continue
-    if (srvAsOf && b.ts && b.ts <= srvAsOf) continue   // deja in istoric
+    if (srvSince && srvAsOf && b.ts && b.ts >= srvSince && b.ts <= srvAsOf) continue   // deja in istoric
 
     const pct = ((b.price - p) / p) * 100
     if (b.longUSD > 0) addBucket(pct, b.price, true, b.longUSD)

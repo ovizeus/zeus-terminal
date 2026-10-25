@@ -153,3 +153,5 @@ pentru un cosmetic.*
   forma pieţei — şi de aia harta raportează acoperirea;
 - **Binance lipseşte în continuare**, şi e cea mai mare sursă. Tot ce se adună e Bybit + OKX;
 - n-am văzut încă harta pe telefonul lui — asta rămâne de confirmat de el.
+
+---

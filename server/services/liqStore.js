@@ -40,7 +40,7 @@ function _s() {
         insert: db.db.prepare(
             'INSERT INTO liq_events (exchange, symbol, side, price, qty, usd, ts) VALUES (?, ?, ?, ?, ?, ?, ?)'),
         range: db.db.prepare(
-            'SELECT side, price, usd FROM liq_events WHERE symbol = ? AND ts >= ?'),
+            'SELECT side, price, usd, ts FROM liq_events WHERE symbol = ? AND ts >= ?'),
         // Lotizat, ca retenţia de la G-5: better-sqlite3 e SINCRON, iar un
         // DELETE nelimitat pe o tabelă mare îngheaţă bucla de evenimente.
         pruneBatch: db.db.prepare(
@@ -88,7 +88,12 @@ function map({ symbol, ref, days } = {}) {
     // lichidari: serverul are tot istoricul, clientul primeste aceleasi
     // evenimente si in direct. Clientul foloseste istoricul ca baza si adauga
     // local DOAR ce e mai nou decat reperul asta.
-    const out = { buckets: [], events: 0, coverage: { upPct: 0, downPct: 0 }, days: DEFAULT_DAYS, asOf: Date.now() };
+    // `since` = de unde INCEPE acoperirea serverului pe simbolul asta, 0 daca
+    // n-are nimic. Fara el, clientul nu poate sti ce parte din istoricul lui
+    // local e deja acoperita — si exact asta a costat o regresie livrata:
+    // serverul trimitea asOf=acum cu zero randuri, clientul arunca TOT
+    // istoricul lui de 24h ca „deja la server", si scara ramanea goala.
+    const out = { buckets: [], events: 0, coverage: { upPct: 0, downPct: 0 }, days: DEFAULT_DAYS, asOf: Date.now(), since: 0 };
     try {
         const sym = typeof symbol === 'string' ? symbol.trim() : '';
         const p = Number(ref);
@@ -114,6 +119,10 @@ function map({ symbol, ref, days } = {}) {
             b.price = r.price;
             out.events++;
         }
+        // Cel mai vechi rand CHIAR existent pentru simbol — nu cutoff-ul teoretic.
+        let oldest = 0;
+        for (const r of rows) { if (!oldest || r.ts < oldest) oldest = r.ts; }
+        out.since = rows.length ? oldest : 0;
         out.buckets = [...acc.values()].sort((a, b) => a.pct - b.pct);
         out.coverage.upPct = Math.round(up * 10) / 10;
         out.coverage.downPct = Math.round(down * 10) / 10;

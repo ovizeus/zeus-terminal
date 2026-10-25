@@ -85,13 +85,18 @@ describe('harta de lichidari foloseste istoricul de pe server', () => {
     expect(b[-1.5].shortVol).toBeCloseTo(250_000, 0)
   })
 
-  it('NU numara de doua ori: un eveniment local mai VECHI decat reperul e ignorat', async () => {
+  it('NU numara de doua ori: un eveniment din FEREASTRA acoperita de server e ignorat', async () => {
+    // Prima varianta a acestui test trimitea doar `asOf`, fara `since`, si
+    // codifica modelul GRESIT („sari peste tot ce e mai vechi decat asOf").
+    // Modelul ala a produs regresia din 23:22: pe un simbol fara date la
+    // server, clientul isi arunca tot istoricul. Contractul corect e
+    // FEREASTRA: serverul spune de unde pana unde acopera.
     const { QM } = await import('../state')
     const asOf = Date.now()
-    // acelasi eveniment e deja inclus in cosul de server de mai jos
+    const since = asOf - 3600_000
     QM.liqAgg.binance.btc = [{ p: 84000, vol: 400_000, side: 'SELL', time: asOf - 60_000 }] as any
     QM.liqAgg.bybit.btc = []; QM.liqAgg.okx.btc = []
-    w.__qmLiqServer = { asOf, buckets: [{ pct: 5, price: 84000, longUsd: 400_000, shortUsd: 0, n: 1 }] }
+    w.__qmLiqServer = { asOf, since, buckets: [{ pct: 5, price: 84000, longUsd: 400_000, shortUsd: 0, n: 1 }] }
     const b = await build()
     expect(b[5].longVol).toBeCloseTo(400_000, 0)   // NU 800.000
   })
@@ -101,9 +106,55 @@ describe('harta de lichidari foloseste istoricul de pe server', () => {
     const asOf = Date.now() - 120_000
     QM.liqAgg.binance.btc = [{ p: 84000, vol: 100_000, side: 'SELL', time: Date.now() }] as any
     QM.liqAgg.bybit.btc = []; QM.liqAgg.okx.btc = []
-    w.__qmLiqServer = { asOf, buckets: [{ pct: 5, price: 84000, longUsd: 400_000, shortUsd: 0, n: 1 }] }
+    w.__qmLiqServer = { asOf, since: asOf - 3600_000, buckets: [{ pct: 5, price: 84000, longUsd: 400_000, shortUsd: 0, n: 1 }] }
     const b = await build()
     expect(b[5].longVol).toBeCloseTo(500_000, 0)
+  })
+
+  // ── REGRESIE LIVRATA SI PRINSA DINTR-O CAPTURA (2026-10-25 23:22) ──
+  //
+  // Dupa livrare, scara operatorului a ramas COMPLET goala — inclusiv cele 6
+  // randuri din +-0,75% care aveau date INAINTE. Capturile lui au aratat-o.
+  //
+  // Cauza era presupunerea mea: „serverul are tot ce are clientul, deci sar
+  // peste local ce e mai vechi decat asOf". FALS. Serverul a inceput sa
+  // inregistreze abia azi la 20:28; clientul avea 24h in localStorage. Pentru
+  // BTC serverul avea ZERO randuri si trimitea asOf=acum, deci garda arunca
+  // TOT istoricul local si nu punea nimic in loc.
+  //
+  // Corect: serverul spune de UNDE incepe acoperirea lui (`since`), iar
+  // clientul sare peste local DOAR in fereastra pe care serverul chiar o are.
+
+  it('REGRESIE: fara acoperire pe server, evenimentele locale raman — ca inainte', async () => {
+    const { QM } = await import('../state')
+    QM.liqAgg.binance.btc = [{ p: 84000, vol: 300_000, side: 'SELL', time: Date.now() - 3600_000 }] as any
+    QM.liqAgg.bybit.btc = []; QM.liqAgg.okx.btc = []
+    // serverul nu are nimic pe simbolul asta: buckets gol, since 0
+    w.__qmLiqServer = { asOf: Date.now(), since: 0, buckets: [] }
+    const b = await build()
+    expect(b[5]).toBeTruthy()
+    expect(b[5].longVol).toBeCloseTo(300_000, 0)
+  })
+
+  it('un eveniment local mai VECHI decat acoperirea serverului se pastreaza', async () => {
+    const { QM } = await import('../state')
+    const since = Date.now() - 1800_000          // serverul are doar ultima jumatate de ora
+    QM.liqAgg.binance.btc = [{ p: 84000, vol: 300_000, side: 'SELL', time: since - 3600_000 }] as any
+    QM.liqAgg.bybit.btc = []; QM.liqAgg.okx.btc = []
+    w.__qmLiqServer = { asOf: Date.now(), since, buckets: [{ pct: 2, price: 81600, longUsd: 50_000, shortUsd: 0, n: 1 }] }
+    const b = await build()
+    expect(b[5].longVol).toBeCloseTo(300_000, 0)   // local, pastrat
+    expect(b[2].longVol).toBeCloseTo(50_000, 0)    // server
+  })
+
+  it('dar unul din INTERIORUL acoperirii se sare — acolo chiar se dubla', async () => {
+    const { QM } = await import('../state')
+    const since = Date.now() - 1800_000
+    QM.liqAgg.binance.btc = [{ p: 84000, vol: 300_000, side: 'SELL', time: since + 60_000 }] as any
+    QM.liqAgg.bybit.btc = []; QM.liqAgg.okx.btc = []
+    w.__qmLiqServer = { asOf: Date.now(), since, buckets: [{ pct: 5, price: 84000, longUsd: 300_000, shortUsd: 0, n: 1 }] }
+    const b = await build()
+    expect(b[5].longVol).toBeCloseTo(300_000, 0)   // NU 600.000
   })
 
   it('un raspuns stricat de la server nu darama harta', async () => {

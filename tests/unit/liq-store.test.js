@@ -150,6 +150,28 @@ describe('depozitul de lichidari — harta ceruta de client', () => {
         expect(m.asOf).toBeLessThanOrEqual(Date.now());
     });
 
+    test('raporteaza DE UNDE incepe acoperirea (`since`) — altfel clientul isi arunca istoricul', () => {
+        // Regresia din 2026-10-25 23:22: serverul trimitea asOf=acum cu ZERO
+        // randuri pe BTC, iar clientul, crezand ca serverul acopera tot pana
+        // la asOf, arunca toate cele 24h din localStorage. Scara a ramas goala.
+        const t = Date.now() - 3 * 3600000;
+        store.record(ev({ p: 82000, time: t }));
+        store.record(ev({ p: 82000, time: Date.now() }));
+        const m = store.map({ symbol: 'BTCUSDT', ref: 80000, days: 30 });
+        expect(m.since).toBe(t);               // cel mai vechi rand CHIAR existent
+        expect(m.since).toBeLessThan(m.asOf);
+    });
+
+    test('fara niciun rand, `since` e 0 — adica „nu acopar nimic, nu arunca nimic"', () => {
+        const m = store.map({ symbol: 'BTCUSDT', ref: 80000, days: 30 });
+        expect(m.since).toBe(0);
+    });
+
+    test('`since` e PE SIMBOL: date pe ETH nu dau acoperire pe BTC', () => {
+        store.record(ev({ symbol: 'ETHUSDT', p: 2400, time: Date.now() }));
+        expect(store.map({ symbol: 'BTCUSDT', ref: 80000, days: 30 }).since).toBe(0);
+    });
+
     test('un ref absurd nu arunca', () => {
         store.record(ev());
         for (const ref of [0, -1, NaN, undefined, null]) {
