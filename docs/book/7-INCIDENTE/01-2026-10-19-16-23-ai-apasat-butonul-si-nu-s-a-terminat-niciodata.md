@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4723 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4726 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔴 2026-10-19 16:23 — AI APĂSAT BUTONUL ȘI NU S-A TERMINAT NICIODATĂ. Cauză găsită, reparat (b276 v1.7.250)
 

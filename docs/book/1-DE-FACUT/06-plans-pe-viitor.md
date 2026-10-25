@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4325 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4328 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## PLANS — pe viitor
 

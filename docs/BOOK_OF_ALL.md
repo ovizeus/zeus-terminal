@@ -3853,6 +3853,9 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 **R-P-9. La finalul FIECĂREI lucrări, tot ce am găsit, reparat sau schimbat intră în `BOOK_OF_ALL.md` — inclusiv ce am găsit şi NU am reparat.** *(Cerută de operator azi, 2026-10-25, în timpul lucrării la G-5: „cand faci gasesti repari etc ceva sa modifici in book of all treceo ca si regula asta la sfarsitul fiecarei terminari de munca". Exista deja ca obicei şi ca memorie, dar nu ca regulă în rubrică — iar [[R-C-24]] spune exact ce se întâmplă atunci: o regulă care trăieşte în altă parte decât în rubrică nu se citeşte la început de sesiune, deci nu există.*
 *Incidentul care o plăteşte e în aceeaşi lucrare: reparând G-5 am dat peste două lucruri pe care nu le căutam — eticheta `TRADE` pusă greşit pe 179 452 de rânduri de antrenament ML, şi o retenţie care îngheaţă bucla de evenimente 8,7 secunde la fiecare rulare. Niciunul nu era ce mi se cerea, amândouă sunt mai mari decât ce mi se cerea. Dacă ar fi rămas doar în conversaţia asta, s-ar fi pierdut la prima repornire a sesiunii. **Ce nu e scris nu s-a întâmplat.** Corolar, din aceeaşi lucrare: descoperirile pe care NU le repar se scriu cu număr propriu — G-6, G-7 — ca să poată fi cerute, nu ca să zacă într-un paragraf.)*
 
+**R-V-21. Un lucru e „sigur" doar dacă ŢINE ŞI FĂRĂ stratul care îl acoperă — altfel e o singură plasă, şi se scrie ca atare.** *(2026-10-25, din verificarea mesajului unui prieten al operatorului. Copiile zilnice ale bazei erau `0644` — şapte fişiere de 2,9 GB, fiecare cu utilizatori, parole hash-uite, chei de exchange şi seiful. N-au fost niciodată citibile, fiindcă `data/` e `0750`: verificat practic, încercând ca `nobody`. Deci întrebarea „e expus?" avea DOUĂ răspunsuri adevărate în acelaşi timp — „nu" dacă întrebi directorul, „da" dacă întrebi fişierul — şi auditul din 24 iunie, care a ieşit „ZERO vuln", întrebase directorul.*
+*Acelaşi tipar, de două ori în aceeaşi zi: portul 3000 e legat pe `0.0.0.0` şi e închis **doar** fiindcă `ufw` îl blochează. Ambele sunt corecte azi şi greşite în ziua în care un singur strat cade.* **Corolar:** nu scriu „verificat, e în regulă" — scriu **ce anume ţine** şi **ce s-ar întâmpla fără el**. *O concluzie fără stratul care o susţine e o concluzie cu termen de valabilitate necunoscut.*)*
+
 ---
 ## 🎨 CERUT 2026-10-10 — reproiectare „instituțională" AutoTrade + Manual Trade, diagnosticul în THEIA
 
@@ -7397,7 +7400,8 @@ iar rubrica a crescut de la 45 la **66 de reguli**.
 | **G-5** | ✅ **ÎNCHIS 2026-10-25 (b315)** — `entry_blocked` intră în clasa blocate prin listă comună; retenţia lotizată, de la 8,7 s de îngheţare la bucăţi de ~114 ms | — |
 | **G-6** | ✅ **ÎNCHIS 2026-10-25 (b316)** — eticheta întreabă clasificarea, nu forma numelui; **şi am corectat două afirmaţii prea tari de-ale mele**: coloana n-are niciun cititor, iar scăparea de la eşantionare atinge 2,5% din rânduri | — |
 | **G-7** | ✅ **ÎNCHIS 2026-10-25 (b317)** — stările terminale la 365 de zile, **nu 90**: la 90 ar fi şters 24 993 de rânduri de numitor şi ar fi strâmbat pâlnia; `pending_created` rămâne NEATINS | — |
-| **G-8** | pe calea pending, refuzul AT nu se scrie NICĂIERI — `updateAction` e chemat doar înăuntrul `if (entry)`, deci 33 677 de rânduri rămân `pending_created` pe veci | atinge bucla interioară din `serverBrain` — a ta |
+| **G-8** | ✅ **ÎNCHIS 2026-10-25 (b318)** — ramura `else` scrie `pending_blocked`; pâlnia pending devine măsurabilă pentru prima oară | — |
+| **G-9** | portul 3000 e legat pe `0.0.0.0` şi e închis **doar** fiindcă `ufw` îl blochează — o singură plasă ([[R-V-21]]) | e schimbare de reţea pe serverul viu, rutarea se face **împreună cu tine** |
 | **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
 | **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |
 | **G-3** | `changelog` = 297 KB — **neverificat** dacă ajunge la client | de verificat înainte de a propune ceva ([[R-V-18]]) |
@@ -7878,3 +7882,199 @@ urmă.
 - cauza dominantă a orfanilor din G-8 e **coroborată, nu dovedită**, şi am scris mai sus exact ce ar
   dovedi-o;
 - n-am rulat suita completă de server ([[R-OP-8]]).
+
+---
+
+## 🔒 2026-10-25 — CE A ZIS UN PRIETEN PE DISCORD, verificat pe serverul TĂU punct cu punct
+
+> Captură trimisă de operator **din aplicaţie** (`data/book_uploads/`, 20:58). Mesajul, cuvânt cu cuvânt:
+>
+> *„buy claude or gpt .. ask to make a website with ai chat .. buy api credits and in 1 week someone
+> will hack you website.. steal the api and use credits or access database"*
+>
+> *„ask to install vnc on your server and it will make it 0.0.0.0 allow to public with ctrl+del to boot
+> without root"*
+
+**Avertismentul e generic, deci nu l-am comentat — l-am rulat ca listă de verificare pe Zeus.**
+Nu contează dacă are dreptate în general. Contează dacă are dreptate **aici**.
+
+### Punct cu punct
+
+| Ce spune | Pe Zeus | Dovada |
+|---|---|---|
+| **VNC instalat, legat 0.0.0.0, public** | **NU există** | niciun pachet vnc/xrdp/teamviewer/anydesk, nimic care ascultă |
+| **boot fără root** | nu se aplică | n-avem desktop la distanţă deloc |
+| **chat AI expus** | **închis** | `POST /api/omega/chat` fără sesiune → **403**; prin nginx, din afară → **403** |
+| **„access database"** prin API | **închis** | `/api/exchange/keys`, `/api/admin/users`, `/api/sync/settings`, `/api/journal` → toate **401** |
+| **„steal the api"** din git | **niciodată** | `.env` n-a fost urmărit şi nu apare în tot istoricul git; `.gitignore` are `.env` şi `.env.*` |
+| cheile în bază | **criptate** | `exchange_accounts.api_key_encrypted`, AES-256-GCM, prefix `v1:` |
+| fişierele cu secrete | **0600 zeus:zeus** | `.env`, `data/zeus.db` |
+
+**Poarta de autentificare e globală**, la `server.js:228`, înaintea tuturor rutelor, şi **respinge**, nu
+doar populează `req.user`: 401 pe `/api/`, redirect la login în rest. Verifică explicit
+`algorithms: ['HS256']` — deci nu merge trucul cu `alg: none` — plus statusul contului şi
+`token_version`. **Testat pe viu, nu citit:** toate cererile de mai sus au fost făcute fără cookie, şi
+prin nginx, exact cum ar veni de afară.
+
+### UN singur lucru nou, şi are exact forma din avertisment
+
+**Şi mă corectez din start: portul 3000 NU e o descoperire a mea.** E deja în carte, din trecerea de
+securitate anterioară, cu test extern făcut atunci (cod 000, nu se poate ocoli nginx). L-am
+re-confirmat astăzi — `ufw` activ, `deny` implicit, `ACCEPT` doar 22/80/443, `INPUT DROP` — dar nu-l
+anunţ ca nou. La fel SSH-ul: cele 8 073 de parole eşuate în 7 zile şi `PermitRootLogin yes` sunt deja
+scrise, şi rămân neatinse fiindcă aşa ai cerut.
+
+**Nou e ăsta: copiile zilnice ale bazei erau `0644`. Baza vie e `0600`.**
+
+```
+data/zeus.db                       -rw-------   0600
+data/zeus.db.bak.pre-*             -rw-------   0600   (făcute cu cp)
+data/db_backups/zeus-2026-10-*.db  -rw-r--r--   0644   ← şapte, câte 2,9 GB
+```
+
+Fiecare e o copie **completă**: utilizatori, parole hash-uite, cheile de exchange criptate, jurnalul,
+seiful. **Cauza:** `db.backup(dest)` creează fişierul cu ce dă umask-ul; copiile făcute de mână cu `cp`
+au moştenit `0600` de la sursă. **O copie a unui secret moşteneşte secretul, nu umask-ul.**
+
+**N-au fost niciodată citibile**, şi spun asta la fel de apăsat ca problema: `data/` e `0750`, deci alt
+utilizator nu poate **intra** în director. **Verificat practic, încercând ca `nobody`:** citire blocată,
+listare blocată. Pe maşină există doar `root` şi `zeus` cu shell. **Nu era o breşă, era o plasă care
+lipsea** — iar ziua în care `data/` e relaxat din orice motiv, şapte copii complete devin
+world-readable fără nicio altă greşeală.
+
+**Reparat pe clasă şi pe instanţă:** rutina de backup îşi pune singură modul
+(`fs.chmodSync(dest, 0o600)`) în loc să-l moştenească, şi cele şapte fişiere existente plus directorul
+au fost strânse acum. **5 teste noi, 1 mutaţie moartă** (scot `chmod`-ul → pică 2 teste).
+
+### Verdictul meu, de vreme ce l-ai cerut
+
+**Prietenul tău are dreptate ca tipar şi greşeşte ca diagnostic pe Zeus.** Tiparul e real şi merită
+luat în serios: un site făcut repede, cu chat AI şi credite API, **e** o ţintă, şi greşelile pe care le
+numeşte — legare pe 0.0.0.0, chei lăsate la vedere, bază accesibilă — sunt exact greşelile care se fac.
+**Nu e vorbă în vânt.**
+
+Dar pe Zeus: chat-ul e în spatele autentificării, cheile sunt criptate şi n-au atins **niciodată**
+git-ul, baza nu e expusă prin nicio rută, şi VNC nu există. **Din cinci afirmaţii, zero se aplică direct.
+Dar două au aici jumătate de urmă** — şi pe una dintre ele am găsit-o abia fiindcă el a spus-o.
+
+**Lucrul care merită reţinut, şi l-am scris ca regulă ([[R-V-21]]):** cele două nu ies la un audit care
+întreabă **un singur strat**. Portul 3000 e „închis" dacă întrebi firewall-ul şi „deschis" dacă întrebi
+aplicaţia. Copiile sunt „inaccesibile" dacă întrebi directorul şi „citibile de oricine" dacă întrebi
+fişierul. Auditul din 24 iunie a ieşit *„ZERO vuln"* — şi avea dreptate, la stratul pe care l-a întrebat.
+
+### 🔶 Ce NU am verificat ([[R-V-18]])
+
+- **n-am testat din afara maşinii.** Re-confirmarea pentru portul 3000 vine din regulile `ufw` şi
+  `iptables` citite pe loc. Testul extern din carte e de la trecerea anterioară, **nu de azi**;
+- **n-am schimbat legarea pe `127.0.0.1`.** Ar fi corect — ar face din două straturi două adevărate —
+  dar e o schimbare de reţea pe serverul viu, şi regula ta spune că rutarea se face **împreună cu tine**.
+  Dacă greşesc, Zeus devine inaccesibil. **A ta e decizia** → **G-9** în registru;
+- **n-am atins SSH-ul deloc**, cum ai cerut. Deci nu ştiu dacă s-a schimbat ceva acolo din iunie încoace,
+  şi nici dacă există fail2ban;
+- n-am citit `.env` şi n-am verificat dacă cheia de criptare a fost rotită vreodată — [[R-OP-14]] spune
+  că cheile nu apar în conversaţie, deci nu le-am scos nici ca să le număr;
+- **criptarea în repaus are o limită pe care o spun răspicat:** cheia stă în `.env`, **pe aceeaşi
+  maşină** cu baza. Protejează o copie furată — un backup pierdut, un disc scos — **nu** pe cineva care
+  ajunge să execute cod ca `zeus`. Pentru al doilea caz nu există criptare care să ajute, şi nici n-am
+  pretins că ar fi;
+- **n-am făcut un audit de securitate complet azi.** Am verificat **exact** ce a spus prietenul tău, plus
+  ce a ieşit în cale. Nu e acelaşi lucru, şi n-aş vrea să rămână în carte ca şi cum ar fi.
+
+---
+
+## 🧿 2026-10-25 — G-8 ÎNCHIS: pe calea pending, refuzul gărzii se scrie în sfârşit (b318 v1.7.292)
+
+> Cerere operator: *„fa si g8 daca zici ca e ok"*. I-o dădusem ca decizie a lui tocmai fiindcă atinge
+> **bucla interioară din `serverBrain`, pe calea banilor**. A cerut-o, deci am făcut-o — dar cu diferenţa
+> că aici întrebarea nu mai e *ce livrez*, ci *cum dovedesc că n-am stricat nimic*.
+
+**Ce era:**
+
+```js
+const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId, _userIntentPending);
+if (entry) {
+    ...
+    brainLogger.updateAction(_pendSnapId, pendingResult.action === 'FILL' ? 'pending_fill' : 'pending_momentum');
+}
+// nu exista else
+```
+
+`processBrainDecision` întoarce `null` pe **fiecare** cale de refuz. Deci când un pending se declanşa şi
+garda spunea nu, rândul de decizie rămânea `pending_created` **pentru totdeauna**. Calea directă scrie
+`entry_blocked` pentru exact acelaşi refuz; calea pending nu scria **nimic**.
+
+**33 677 de rânduri, 43% din toate pending-urile create vreodată.**
+
+### De ce conta, şi nu din cauza numărului
+
+Numărul e mare, dar nu el e problema. **Pâlnia pending nu se putea calcula deloc:** 451 de umpleri
+peste un numitor necunoscut. Orice afirmaţie despre *„cât de des se umple un pending"* era imposibil de
+făcut cinstit — şi exact de asta am refuzat la G-7 să pun rândurile alea sub retenţie: erau **singura
+urmă** a unor decizii pe care nimic altceva nu le înregistra.
+
+**De acum încolo se poate.** Un refuz pe calea pending scrie `pending_blocked`, exact paralel cu
+`entry_blocked` de pe calea directă.
+
+### Ce a costat cablarea: o linie într-o listă
+
+`pending_blocked` intră în `BLOCKED_ACTIONS` din `brainActions.js` — **şi asta e tot**. De acolo primeşte
+automat fereastra de 90 de zile (G-5) **şi** eticheta `ABSTAIN_CRITIC` pentru ML (G-6), fără nicio altă
+linie nicăieri. **Asta e răsplata pentru cele trei zile de clasificare** — când adaugi un nume nou,
+nu mai ai de umblat în trei locuri care se contrazic.
+
+Iar testul de clasificare de la G-5 a făcut poliţie singur: **mutaţia care scoate `pending_blocked` din
+listă e omorâtă de el**, nu de testele mele de azi. O gardă scrisă acum trei build-uri a prins o
+regresie pe care n-o anticipasem.
+
+### Dovada că nu am atins calea banilor
+
+**Diff-ul e pur aditiv.** `diff` pe `serverBrain.js` nu are **nicio** linie scoasă — 23 de linii
+adăugate, zero şterse. Şi fişierele de pe calea banilor sunt neatinse, verificat în diff, nu afirmat:
+
+| Fişier | Linii în diff |
+|---|---|
+| `server/services/serverAT.js` | **0** |
+| `server/services/serverPendingEntry.js` | **0** |
+| `client/src/trading/autotrade.ts` | **0** |
+
+Garda e chemată **o singură dată** — un test numără apariţiile şi cade la două — răspunsul ei decide
+ramura exact ca înainte, şi scrierea e înfăşurată în `try/catch` ca orice altă jurnalizare din buclă,
+deci nu poate arunca în ciclul AT.
+
+**9 teste noi, 5 mutaţii, toate moarte:**
+
+| Mutaţia | Ce a picat |
+|---|---|
+| scot ramura `else` (starea de dinainte) | 3 teste |
+| scriu `pending_fill` în loc de `pending_blocked` | 2 teste |
+| scot `pending_blocked` din clasificare | 2 teste, **unul fiind garda de la G-5** |
+| îl bag în ISTORIC (ar minţi pâlnia şi ar deveni de neatins) | 3 teste |
+| scot `try/catch`-ul | testul care îl păzeşte |
+
+**Şi de data asta am rulat suita COMPLETĂ**, pe shard-uri, ca `zeus`, cum cere [[R-OP-8]]:
+
+| Shard | Suite | Teste |
+|---|---|---|
+| 1/4 | 153 | 2 386 |
+| 2/4 | 153 | 2 261 (+1 sărit) |
+| 3/4 | 153 | 2 557 |
+| 4/4 | 152 | 2 509 (+2 sărite) |
+| **Total** | **611** | **9 713 trecute, 3 sărite, 0 eşecuri** |
+
+### 🔶 Ce NU am verificat ([[R-V-18]])
+
+- **n-am văzut niciun `pending_blocked` scris pe viu.** Nu se poate: cere ca un pending să se declanşeze
+  şi garda să-l refuze, pe cod **servit**, iar codul nu e servit încă. Prima dovadă adevărată vine după
+  repornire, cu `SELECT COUNT(*) FROM brain_decisions WHERE final_action='pending_blocked'`;
+- **ipoteza de la G-7 rămâne necoroborată până atunci.** Spusesem că refuzul gărzii e cauza **dominantă**
+  a celor 33 677 de orfani, pe baza ratei de acceptare (1,0% direct vs 1,3% pending). **Reparaţia asta
+  e şi experimentul care o testează:** dacă aveam dreptate, orfanii noi începând de la repornire scad
+  aproape la zero şi `pending_blocked` creşte în locul lor. Dacă nu scad, cauza e alta — cel mai
+  probabil simbolurile scoase din selecţie — şi o scriu atunci;
+- **cele 33 677 de rânduri vechi rămân `pending_created`.** Nu le-am rescris şi nici n-aş propune-o:
+  n-am de unde să ştiu, rând cu rând, care a fost refuzat şi care a fost pierdut altfel. **A le eticheta
+  retroactiv ar fi fabricat exact genul de certitudine pe care [[R-V-21]] o numeşte.** Ele rămân ce sunt:
+  o fereastră oarbă de cinci luni, acum închisă;
+- **n-am făcut reload** — ar fi fost al treilea din sesiune ([[R-OP-1]]). **b316, b317 şi b318 sunt
+  pushuite, nu servite**, şi intră împreună la prima repornire naturală sau la primul reload din sesiunea
+  următoare.

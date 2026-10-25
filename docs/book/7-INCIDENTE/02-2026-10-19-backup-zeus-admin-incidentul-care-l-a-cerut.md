@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4519 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4522 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 2026-10-19 — Backup Zeus (admin) + incidentul care l-a cerut
 

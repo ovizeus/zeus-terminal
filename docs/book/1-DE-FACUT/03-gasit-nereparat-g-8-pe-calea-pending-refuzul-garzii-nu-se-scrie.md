@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7815 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7819 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🔍 GĂSIT, NEREPARAT — G-8: pe calea pending, refuzul gărzii nu se scrie nicăieri
 
@@ -66,3 +66,5 @@ urmă.
 - cauza dominantă a orfanilor din G-8 e **coroborată, nu dovedită**, şi am scris mai sus exact ce ar
   dovedi-o;
 - n-am rulat suita completă de server ([[R-OP-8]]).
+
+---

@@ -36,6 +36,11 @@ const BLOCKED_ACTIONS = Object.freeze([
     'blocked_session',
     'blocked_drawdown',
     'entry_blocked',
+    // [G-8 2026-10-25] The pending path's equivalent of entry_blocked: the
+    // pending triggered, the guard refused the entry, nothing became a trade.
+    // Being in this list is the whole wiring — it gets the 90-day window from
+    // G-5 and the ABSTAIN_CRITIC label from G-6 without another line anywhere.
+    'pending_blocked',
 ]);
 
 // These CAN carry a linked_seq: the row is trade history. R-C-21 — never

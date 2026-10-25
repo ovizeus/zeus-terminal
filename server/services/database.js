@@ -11185,6 +11185,16 @@ function _runDailyBackup() {
         if (fs.existsSync(dest)) { _lastBackupDate = today; return; }
         const _onSuccess = () => {
             _lastBackupDate = today;
+            // [SEC 2026-10-25] The live DB is 0600; db.backup() creates its copy
+            // with whatever the umask gives, which here was 0644 — seven full
+            // copies of users, password hashes, encrypted exchange keys, the
+            // journal and the vault, readable by any local account. Not
+            // reachable today because data/ is 0750 (verified by trying as
+            // `nobody`), but that leaves ONE layer holding: the day data/ is
+            // relaxed for any reason, they are world-readable with no further
+            // mistake. A copy of a secret inherits the secret, not the umask.
+            try { fs.chmodSync(dest, 0o600); }
+            catch (e) { console.warn(`[DB] Could not restrict backup mode: ${e.message}`); }
             console.log(`[DB] Backup created: ${dest}`);
             // Prune old backups
             try {

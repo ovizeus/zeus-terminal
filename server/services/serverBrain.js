@@ -1050,6 +1050,29 @@ function _runCycle() {
                                 } catch (_) {}
                             }
                             logger.info('BRAIN', `[2G] Pending ${pendingResult.action} executed for uid=${userId} ${symbol}`);
+                        } else {
+                            // [G-8 2026-10-25] The refusal gets written down.
+                            //
+                            // processBrainDecision returns null on every refusal
+                            // path, and there was no else here — so a pending
+                            // that triggered and was then refused by the guard
+                            // left its decision row at 'pending_created' for
+                            // ever. 33,677 rows, 43% of every pending created.
+                            // The direct path records exactly this refusal as
+                            // 'entry_blocked' (see ~line 1655); the pending path
+                            // recorded nothing, which is why the pending funnel
+                            // could not be computed at all: 451 fills over an
+                            // unknown denominator.
+                            //
+                            // LOGGING ONLY. The guard is asked the same question
+                            // and its answer is obeyed exactly as before; this
+                            // branch adds no decision, no sizing, no execution.
+                            // Wrapped like every other logging call in this loop
+                            // so it can never throw into the AT cycle.
+                            const _pendSnapId = pendingResult.pending._snapId;
+                            if (_pendSnapId) {
+                                try { brainLogger.updateAction(_pendSnapId, 'pending_blocked'); } catch (_) {}
+                            }
                         }
                     }
                     // [ML] Handle EXPIRE — update snapshot action
