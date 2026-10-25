@@ -27,7 +27,7 @@ iar rubrica a crescut de la 45 la **66 de reguli**.
 | **G-6** | ✅ **ÎNCHIS 2026-10-25 (b316)** — eticheta întreabă clasificarea, nu forma numelui; **şi am corectat două afirmaţii prea tari de-ale mele**: coloana n-are niciun cititor, iar scăparea de la eşantionare atinge 2,5% din rânduri | — |
 | **G-7** | ✅ **ÎNCHIS 2026-10-25 (b317)** — stările terminale la 365 de zile, **nu 90**: la 90 ar fi şters 24 993 de rânduri de numitor şi ar fi strâmbat pâlnia; `pending_created` rămâne NEATINS | — |
 | **G-8** | ✅ **ÎNCHIS 2026-10-25 (b318)** — ramura `else` scrie `pending_blocked`; pâlnia pending devine măsurabilă pentru prima oară | — |
-| **G-9** | portul 3000 e legat pe `0.0.0.0` şi e închis **doar** fiindcă `ufw` îl blochează — o singură plasă ([[R-V-21]]) | e schimbare de reţea pe serverul viu, rutarea se face **împreună cu tine** |
+| **G-9** | ✅ **ÎNCHIS 2026-10-25 (b319)** — loopback implicit, LAN la un `BIND_HOST=0.0.0.0` distanţă; soclul nu mai există pe IP-ul public, independent de `ufw` | — |
 | **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
 | **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |
 | **G-3** | `changelog` = 297 KB — **neverificat** dacă ajunge la client | de verificat înainte de a propune ceva ([[R-V-18]]) |

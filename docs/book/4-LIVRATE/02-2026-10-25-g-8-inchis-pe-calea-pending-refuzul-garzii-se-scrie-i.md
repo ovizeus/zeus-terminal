@@ -96,3 +96,5 @@ deci nu poate arunca în ciclul AT.
 - **n-am făcut reload** — ar fi fost al treilea din sesiune ([[R-OP-1]]). **b316, b317 şi b318 sunt
   pushuite, nu servite**, şi intră împreună la prima repornire naturală sau la primul reload din sesiunea
   următoare.
+
+---

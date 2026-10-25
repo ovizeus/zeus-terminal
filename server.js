@@ -67,6 +67,10 @@ const { atCriticalLimit, globalApiLimit } = require('./server/middleware/rateLim
 
 const app = express();
 const PORT = config.port;
+// [G-9 2026-10-25] Loopback by default; LAN with BIND_HOST=0.0.0.0.
+// See server/config/bindHost.js for why that way round.
+const { resolveBindHost } = require('./server/config/bindHost');
+const BIND_HOST = resolveBindHost(process.env);
 
 // Trust proxy (Cloudflare/nginx) for correct req.ip in rate limiting
 app.set('trust proxy', 1);
@@ -1431,8 +1435,12 @@ try {
   console.error('[OMEGA-DOCTOR] Server continues but registry may be incomplete');
 }
 
-// ─── Bind to 0.0.0.0 for LAN access (phone over Wi-Fi) ───
-const server = app.listen(PORT, '0.0.0.0', () => {
+// ─── Listen address ───
+// [G-9 2026-10-25] Was hardcoded '0.0.0.0' for LAN access (phone over Wi-Fi).
+// True on a laptop; on this VPS the phone arrives over nginx on 443 and the
+// port was reachable from nowhere — closed by ufw alone, which is one layer
+// (R-V-21). Now loopback by default, LAN still one env var away.
+const server = app.listen(PORT, BIND_HOST, () => {
   // Request timeout — prevent hung connections
   server.setTimeout(30000);
   // Migrate users from JSON to SQLite (if needed)
@@ -1468,12 +1476,19 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
   console.log(`⚡ Zeus Terminal running on:`);
   console.log(`   Local:   http://localhost:${PORT}`);
-  console.log(`   Network: http://${lanIp}:${PORT}`);
+  // [G-9] Say what is actually true. The banner used to advertise a LAN URL
+  // unconditionally; on loopback that line is a lie, and a lie in the boot log
+  // is how an operator ends up debugging the wrong thing at 3am.
+  if (BIND_HOST === '0.0.0.0' || BIND_HOST === '::') {
+    console.log(`   Network: http://${lanIp}:${PORT}`);
+  } else {
+    console.log(`   Network: (not exposed — bound to ${BIND_HOST}; set BIND_HOST=0.0.0.0 for LAN)`);
+  }
   console.log(`   Trading: ${config.tradingEnabled ? '✅ ENABLED' : '🔒 DISABLED'}`);
   if (config.tradingEnabled) {
     console.log(`   Endpoint: ${config.binance.baseUrl}`);
   }
-  logger.info('SERVER', 'Zeus Terminal started on port ' + PORT);
+  logger.info('SERVER', 'Zeus Terminal started on ' + BIND_HOST + ':' + PORT);
   logger.info('MIGRATION', 'Feature flags: ' + JSON.stringify(MF.getAll()));
   // [REAL-GATE P0-4 2026-06-09] Scream (log+Telegram) if REAL flags are incoherent.
   try { require('./server/services/realGateCoherence').assertAndAlert(MF.getAll(), 'boot'); } catch (e) { console.error('[REAL_GATE] coherence guard failed to load: ' + e.message); }
