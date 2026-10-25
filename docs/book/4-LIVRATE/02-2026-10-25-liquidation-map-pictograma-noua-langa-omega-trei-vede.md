@@ -101,3 +101,5 @@ ruta, clasele de stil şi eticheta.
 - **Binance lipseşte în continuare**, şi e cea mai mare sursă. În dolari vom fi mereu sub Coinglass;
 - **cartea de ordine (etapa 2) nu e făcută** — el a ales-o pentru după. Aia ar fi stratul care
   chiar nu există nicăieri: unde stau banii ACUM peste unde au explodat înainte.
+
+---

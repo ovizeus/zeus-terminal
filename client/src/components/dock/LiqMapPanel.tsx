@@ -140,7 +140,7 @@ function Honesty({ stats, map, days, setDays, loading }: any) {
                 </span>
                 <span className="zlq-win">
                     {[7, 30, 90].map((d) => (
-                        <button key={d} className={days === d ? 'act' : ''} onClick={() => setDays(d)}>{d}z</button>
+                        <button key={d} className={days === d ? 'act' : ''} onClick={() => setDays(d)}>{d}D</button>
                     ))}
                 </span>
             </div>
