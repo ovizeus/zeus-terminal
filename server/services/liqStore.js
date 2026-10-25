@@ -28,7 +28,12 @@
 const db = require('./database');
 
 const DAY_MS = 86400000;
-const DEFAULT_DAYS = 30;
+// [2026-10-25] 30 -> 90 de zile, ales de operator dupa ce i-am aratat cat
+// acopera pretul pe fiecare fereastra: la 30 de zile BTC a atins doar
+// +8,3% / -1,7%, deci scara ramanea ingusta. Costul masurat la ritmul actual e
+// sub 1 GB pe an din 72 GB liberi — iar cu Gate in flux ritmul creste, deci
+// cifra se reverifica peste cateva zile, nu se presupune.
+const DEFAULT_DAYS = 90;
 const MAX_PCT = 35;        // dincolo de asta e zgomot, ca în liqMap.ts
 const MIN_PCT = 0.05;      // sub asta e tremurat la preţ
 const BUCKET = 4;          // sfert de procent: Math.round(pct * 4) / 4

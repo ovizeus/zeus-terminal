@@ -15,6 +15,7 @@
 
 const WebSocket = require('ws');
 const logger = require('./logger');
+const liqGate = require('./liqGate');
 // [LIQ-HISTORY 2026-10-25] Pana aici evenimentele traiau DOAR intr-un inel
 // de 1000 in RAM si 24h in localStorage-ul telefonului. Nimic nu supravietuia
 // unei reporniri. Acum harta are memorie.
@@ -24,6 +25,16 @@ const liqStore = require('./liqStore');
 const BNB_URL = 'wss://fstream.binance.com/ws/!forceOrder@arr';
 const BYB_URL = 'wss://stream.bybit.com/v5/public/linear';
 const OKX_URL = 'wss://ws.okx.com:8443/ws/v5/public';
+// [LIQ-GATE 2026-10-25] A patra sursa. Dintre cele trei propuse operatorului
+// (Hyperliquid, Bitget, Gate), Gate e SINGURA cu canal public de lichidari pe
+// toate simbolurile. Masurat la proba: 12 lichidari in 50 s, 6 simboluri —
+// de ordinul a 16x cat aduceau Bybit + OKX impreuna.
+// Hyperliquid a respins explicit toate variantele de abonare la lichidari.
+// Bitget accepta canalul `liquidation` si nu livreaza nimic (0 mesaje in 40 s
+// pe 8 simboluri), iar `liquidation-orders` da „Param error". Amandoua lasate
+// afara: o conexiune care produce zero e exact ce avem deja cu Binance.
+const GATE_URL = 'wss://fx-ws.gateio.ws/v4/ws/usdt';
+const GATE_PING_INTERVAL_MS = 20000;
 const RECONNECT_MIN_MS = 5000;
 const RECONNECT_MAX_MS = 60000;
 const PING_INTERVAL_MS = 180000;
@@ -37,6 +48,7 @@ const _state = {
     bnb: { ws: null, reconnectMs: RECONNECT_MIN_MS, pingTimer: null, reconnectTimer: null, framesReceived: 0, eventsEmitted: 0, lastEventTs: 0, connected: false },
     byb: { ws: null, reconnectMs: RECONNECT_MIN_MS, pingTimer: null, reconnectTimer: null, framesReceived: 0, eventsEmitted: 0, lastEventTs: 0, connected: false },
     okx: { ws: null, reconnectMs: RECONNECT_MIN_MS, pingTimer: null, reconnectTimer: null, framesReceived: 0, eventsEmitted: 0, lastEventTs: 0, connected: false },
+    gate: { ws: null, reconnectMs: RECONNECT_MIN_MS, pingTimer: null, reconnectTimer: null, framesReceived: 0, eventsEmitted: 0, lastEventTs: 0, connected: false },
 };
 let _running = false;
 let _closing = false;
@@ -46,6 +58,7 @@ const _buffer = {
     bnb: [],
     byb: [],
     okx: [],
+    gate: [],
     add(liq) {
         const arr = this[liq.exchange === 'bybit' ? 'byb' : liq.exchange === 'okx' ? 'okx' : 'bnb'];
         arr.push(liq);
@@ -181,7 +194,7 @@ function _emitLiq(liq) {
     // Istoricul e TELEMETRIE: nu are voie sa darame fluxul daca baza are o
     // toana. liqStore.record nu arunca niciodata, dar garda sta aici oricum.
     try { liqStore.record(liq); } catch (_) { /* niciodata fatal */ }
-    const s = _state[liq.exchange === 'bybit' ? 'byb' : liq.exchange === 'okx' ? 'okx' : 'bnb'];
+    const s = _state[liq.exchange === 'bybit' ? 'byb' : liq.exchange === 'okx' ? 'okx' : liq.exchange === 'gate' ? 'gate' : 'bnb'];
     s.eventsEmitted++;
     s.lastEventTs = liq.time;
 }
@@ -363,6 +376,74 @@ function _startDiagLog() {
     _diagTimer.unref && _diagTimer.unref();
 }
 
+// ── WS lifecycle: GATE.IO ──
+//
+// `futures.public_liquidates` cu payload `!all` = toate simbolurile deodata,
+// spre deosebire de Bitget care cere abonare pe fiecare simbol. Normalizarea
+// (inclusiv multiplicatorul de contract, unde se nasc cifrele fantoma) sta in
+// liqGate.js, cu testele ei.
+function _connectGate() {
+    if (_closing) return;
+    const s = _state.gate;
+    try { s.ws = new WebSocket(GATE_URL); } catch (err) {
+        logger.error('LIQ-FEED', `GATE ctor failed: ${err.message}`);
+        _scheduleReconnect('gate', _connectGate);
+        return;
+    }
+    s.ws.on('open', () => {
+        s.connected = true;
+        s.reconnectMs = RECONNECT_MIN_MS;
+        logger.info('LIQ-FEED', 'GATE connected — futures.public_liquidates (!all)');
+        try {
+            s.ws.send(JSON.stringify({
+                time: Math.floor(Date.now() / 1000),
+                channel: 'futures.public_liquidates',
+                event: 'subscribe',
+                payload: ['!all'],
+            }));
+        } catch (_) {}
+        s.pingTimer = setInterval(() => {
+            try {
+                if (s.ws && s.ws.readyState === WebSocket.OPEN) {
+                    s.ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'futures.ping' }));
+                }
+            } catch (_) { /* ignored */ }
+        }, GATE_PING_INTERVAL_MS);
+    });
+    s.ws.on('message', (raw) => {
+        s.framesReceived++;
+        let j; try { j = JSON.parse(raw.toString()); } catch (_) { return; }
+        if (!j || j.channel !== 'futures.public_liquidates' || j.event !== 'update') return;
+        const data = Array.isArray(j.result) ? j.result : (j.result ? [j.result] : []);
+        for (const d of data) {
+            const liq = liqGate.normalize(d);
+            // normalize() intoarce null si cand NU STIM multiplicatorul —
+            // deliberat: mai bine un eveniment pierdut decat o cifra falsa.
+            if (liq) _emitLiq(liq);
+        }
+    });
+    s.ws.on('error', (err) => { logger.error('LIQ-FEED', `GATE error: ${err.message}`); });
+    s.ws.on('close', (code) => {
+        s.connected = false;
+        _clearTimers('gate');
+        if (_closing) return;
+        logger.warn('LIQ-FEED', `GATE closed (${code}) — reconnecting in ${s.reconnectMs}ms`);
+        _scheduleReconnect('gate', _connectGate);
+    });
+}
+
+// Multiplicatorii de contract, fara de care valorile in dolari ar fi inventate.
+// Se incarca INAINTE de a deschide fluxul si se improspateaza periodic (apar
+// contracte noi aproape zilnic). Daca incarcarea pica, pastram harta veche si
+// evenimentele de pe contracte necunoscute se arunca — nu se ghicesc.
+let _gateMultTimer = null;
+async function _loadGateMultipliers() {
+    const n = await liqGate.loadMultipliers();
+    if (n > 0) logger.info('LIQ-FEED', `GATE multiplicatori contract: ${n}`);
+    else logger.warn('LIQ-FEED', 'GATE multiplicatori NU au putut fi incarcati — evenimentele se arunca pana reusim');
+    return n;
+}
+
 // ── Public API ──
 function start() {
     if (_running) return;
@@ -371,13 +452,24 @@ function start() {
     _connectBnb();
     _connectByb();
     _connectOkx();
+    // Gate porneste DUPA ce avem multiplicatorii: altfel primele evenimente
+    // s-ar arunca degeaba in secundele de dupa boot.
+    _loadGateMultipliers().then(() => { if (!_closing) _connectGate(); }).catch(() => { if (!_closing) _connectGate(); });
+    if (!_gateMultTimer) {
+        _gateMultTimer = setInterval(() => { if (liqGate.needsRefresh()) _loadGateMultipliers(); }, 3600000);
+        if (_gateMultTimer.unref) _gateMultTimer.unref();
+    }
     _startDiagLog();
-    logger.info('LIQ-FEED', 'aggregator started (BNB + BYB + OKX)');
+    logger.info('LIQ-FEED', 'aggregator started (BNB + BYB + OKX + GATE)');
 }
 
 function stop() {
     _closing = true;
-    for (const ex of ['bnb', 'byb', 'okx']) {
+    // [LIQ-GATE 2026-10-25] 'gate' e in lista. Fara el ramanea o conexiune si
+    // un temporizator vii dupa stop() — exact clasa de scurgere pe care am
+    // pazit-o azi si in client.
+    if (_gateMultTimer) { clearInterval(_gateMultTimer); _gateMultTimer = null; }
+    for (const ex of ['bnb', 'byb', 'okx', 'gate']) {
         _clearTimers(ex);
         const s = _state[ex];
         if (s.ws) { try { s.ws.close(); } catch (_) {} s.ws = null; }
@@ -392,7 +484,8 @@ function getState() {
         bnb: { connected: _state.bnb.connected, frames: _state.bnb.framesReceived, events: _state.bnb.eventsEmitted, lastEventTs: _state.bnb.lastEventTs },
         byb: { connected: _state.byb.connected, frames: _state.byb.framesReceived, events: _state.byb.eventsEmitted, lastEventTs: _state.byb.lastEventTs },
         okx: { connected: _state.okx.connected, frames: _state.okx.framesReceived, events: _state.okx.eventsEmitted, lastEventTs: _state.okx.lastEventTs },
-        bufferSizes: { bnb: _buffer.bnb.length, byb: _buffer.byb.length, okx: _buffer.okx.length },
+        gate: { connected: _state.gate.connected, frames: _state.gate.framesReceived, events: _state.gate.eventsEmitted, lastEventTs: _state.gate.lastEventTs, multipliers: liqGate.multiplierCount() },
+        bufferSizes: { bnb: _buffer.bnb.length, byb: _buffer.byb.length, okx: _buffer.okx.length, gate: _buffer.gate.length },
     };
 }
 

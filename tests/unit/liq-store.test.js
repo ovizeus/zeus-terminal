@@ -112,7 +112,7 @@ describe('depozitul de lichidari — harta ceruta de client', () => {
     });
 
     test('fereastra chiar taie: ce e mai vechi decat `days` nu intra', () => {
-        store.record(ev({ p: 82000, time: Date.now() - 40 * DAY }));
+        store.record(ev({ p: 82000, time: Date.now() - 100 * DAY }));
         store.record(ev({ p: 82000, time: Date.now() - 2 * DAY }));
         expect(store.map({ symbol: 'BTCUSDT', ref: 80000, days: 30 }).events).toBe(1);
     });
@@ -182,10 +182,15 @@ describe('depozitul de lichidari — harta ceruta de client', () => {
 
 describe('depozitul de lichidari — retentia', () => {
 
-    test('sterge ce e mai vechi de 30 de zile, pastreaza restul', async () => {
-        store.record(ev({ time: Date.now() - 40 * DAY }));
-        store.record(ev({ time: Date.now() - 31 * DAY }));
-        store.record(ev({ time: Date.now() - 29 * DAY }));
+    test('sterge ce e mai vechi decat fereastra, pastreaza restul', async () => {
+        // Fereastra e 90 de zile (aleasa de operator). Testul foloseste
+        // DEFAULT_DAYS, nu un 90 scris de mana: altfel o schimbare de politica
+        // ar trece pe langa test si l-ar face sa verifice alta regula decat
+        // cea vie.
+        const W = store.DEFAULT_DAYS;
+        store.record(ev({ time: Date.now() - (W + 10) * DAY }));
+        store.record(ev({ time: Date.now() - (W + 1) * DAY }));
+        store.record(ev({ time: Date.now() - (W - 1) * DAY }));
         store.record(ev({ time: Date.now() }));
         const n = await store.prune();
         expect(n).toBe(2);
@@ -193,8 +198,8 @@ describe('depozitul de lichidari — retentia', () => {
     });
 
     test('e LOTIZATA — un DELETE nelimitat pe o tabela mare inghetata bucla (lectia G-5)', async () => {
-        for (let i = 0; i < 25; i++) store.record(ev({ time: Date.now() - 40 * DAY }));
-        const n = await store.prune(Date.now(), 30, 5);   // loturi de 5
+        for (let i = 0; i < 25; i++) store.record(ev({ time: Date.now() - (store.DEFAULT_DAYS + 10) * DAY }));
+        const n = await store.prune(Date.now(), store.DEFAULT_DAYS, 5);   // loturi de 5
         expect(n).toBe(25);
         expect(db.prepare('SELECT COUNT(*) c FROM liq_events').get().c).toBe(0);
     });
