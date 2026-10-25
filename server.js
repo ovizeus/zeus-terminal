@@ -1767,6 +1767,21 @@ try { require('./server/cron/posClassRetention').schedule(); } catch (_) {}
 // the event loop and kept GLOBAL_HALT armed for 2 months.
 try { require('./server/cron/mlTelemetryRetention').schedule(); } catch (_) {}
 
+// [LIQ-HISTORY 2026-10-25] Retentia istoricului de lichidari — 30 de zile.
+// O rulare la 3 minute dupa boot SI pe interval zilnic, nu doar pe interval:
+// un proces care reporneste mai des decat ruleaza cronul nu curata NICIODATA.
+// Exact ce s-a intamplat cu brain_decisions, unde reziduul a fost masurabil.
+// Lotizata in liqStore.prune, deci nu inghetata bucla (lectia G-5).
+const _runLiqPrune = () => {
+  try {
+    require('./server/services/liqStore').prune()
+      .then((n) => { if (n > 0) logger.info('LIQ-STORE', `retentie: ${n} evenimente sterse (>30 zile)`); })
+      .catch((e) => logger.warn('LIQ-STORE', 'retentie esuata: ' + (e && e.message)));
+  } catch (e) { logger.warn('LIQ-STORE', 'retentie esuata (sync): ' + (e && e.message)); }
+};
+setTimeout(_runLiqPrune, 180000);
+setInterval(_runLiqPrune, 86400000);
+
 // [DD3] ML bandit feature scan — 4h auto-quarantine check
 try { require('./server/cron/mlScanCron').schedule(); } catch (_) {}
 

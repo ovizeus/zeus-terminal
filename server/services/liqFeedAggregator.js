@@ -15,6 +15,10 @@
 
 const WebSocket = require('ws');
 const logger = require('./logger');
+// [LIQ-HISTORY 2026-10-25] Pana aici evenimentele traiau DOAR intr-un inel
+// de 1000 in RAM si 24h in localStorage-ul telefonului. Nimic nu supravietuia
+// unei reporniri. Acum harta are memorie.
+const liqStore = require('./liqStore');
 
 // ── Config ──
 const BNB_URL = 'wss://fstream.binance.com/ws/!forceOrder@arr';
@@ -174,6 +178,9 @@ function _broadcast(liq) {
 function _emitLiq(liq) {
     _buffer.add(liq);
     _broadcast(liq);
+    // Istoricul e TELEMETRIE: nu are voie sa darame fluxul daca baza are o
+    // toana. liqStore.record nu arunca niciodata, dar garda sta aici oricum.
+    try { liqStore.record(liq); } catch (_) { /* niciodata fatal */ }
     const s = _state[liq.exchange === 'bybit' ? 'byb' : liq.exchange === 'okx' ? 'okx' : 'bnb'];
     s.eventsEmitted++;
     s.lastEventTs = liq.time;

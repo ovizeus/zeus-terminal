@@ -108,3 +108,5 @@ if(L.S.chartTf!==e){console.warn(`[fetchKlines] stale response for tf `+e+` (now
   nu se piardă**;
 - reparaţia e **doar de client**, deci nu cere reload ([[R-OP-2]]) — intră la un refresh. **Numărul de
   build servit va arăta b319 până la următoarea repornire naturală**, deşi codul de client e deja b320.
+
+---

@@ -16,6 +16,28 @@ const marketRadar = require('../services/marketRadar');
 
 const ALLOWED_KINDS = new Set(['gainers', 'losers', 'volume']);
 
+// [LIQ-HISTORY 2026-10-25] Harta de lichidari REALE, din istoricul de pe
+// server. Clientul tinea 24h in localStorage, pe un singur telefon; asta e
+// aceeasi harta dar pe 30 de zile si la fel pe orice dispozitiv.
+//
+// `ref` vine de la client (pretul lui curent) ca gruparea pe procente sa fie
+// facuta dupa o SINGURA regula, aceeasi ca in liqMap.ts — nu doua care se
+// contrazic la primul caz ambiguu (R-C-23).
+router.get('/liq-map', (req, res) => {
+    try {
+        const liqStore = require('../services/liqStore');
+        const symbol = String(req.query.symbol || 'BTCUSDT').toUpperCase();
+        const ref = Number(req.query.ref);
+        const days = Number(req.query.days) || liqStore.DEFAULT_DAYS;
+        const m = liqStore.map({ symbol, ref, days });
+        // `coverage` pleaca spre client dinadins: fara el o scara goala in jos
+        // arata identic cu una care n-are date deloc.
+        res.json(m);
+    } catch (err) {
+        res.status(200).json({ buckets: [], events: 0, coverage: { upPct: 0, downPct: 0 }, error: 'unavailable' });
+    }
+});
+
 router.get('/top', (req, res) => {
     const kindRaw = String(req.query.kind || 'volume').toLowerCase();
     const kind = ALLOWED_KINDS.has(kindRaw) ? kindRaw : 'volume';

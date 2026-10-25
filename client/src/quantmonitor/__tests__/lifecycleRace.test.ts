@@ -38,7 +38,11 @@ vi.mock('../../data/onChainMetrics', () => ({
 }))
 vi.mock('../../data/okxLiqWS', () => ({ connectOKXLiq: vi.fn(), disconnectOKXLiq: vi.fn() }))
 vi.mock('../engines/liqMap', () => ({
-  buildLiqEstimate: vi.fn(), fetchTopTraderPositionRatio,
+  // [LIQ-HISTORY 2026-10-25] fetchLiqHistory e nou. Fabrica asta nu-l avea,
+  // deci iesea `undefined` si init() crapa la apel — testul a prins CORECT
+  // o cablare incompleta, nu a devenit obsolet. Mock, nu stergere: cursa pe
+  // care o apara (doua seturi de temporizatoare) ramane verificata.
+  buildLiqEstimate: vi.fn(), fetchTopTraderPositionRatio, fetchLiqHistory: vi.fn(),
 }))
 vi.mock('../engines/intel', () => ({ runIntel: vi.fn() }))
 vi.mock('../engines/flow', () => ({ calcFLOW: vi.fn() }))

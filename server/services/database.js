@@ -10394,6 +10394,34 @@ migrate('414_backfill_indicators_from_indsettings', () => {
     db.exec("UPDATE user_settings SET data = json_set(data, '$.indicators', json(json_extract(data, '$.indSettings'))) WHERE json_type(data, '$.indSettings') = 'object' AND json_extract(data, '$.indicators') IS NULL");
 });
 
+migrate('416_liq_events', () => {
+    // [LIQ-HISTORY 2026-10-25] Memoria care lipsea hărţii de lichidări.
+    //
+    // Operatorul a cerut să vadă lichidări „până sus şi până jos, cu date
+    // reale". Rândurile goale din Quantitative Monitor NU erau un bug: harta
+    // arată numai lichidări care chiar s-au întâmplat, pe o fereastră de 24h,
+    // iar BTC s-a mişcat +0,6% / -0,6% în 24h. Măsurat pe preţul real, la 30
+    // de zile acoperirea devine +8,3% / -1,7%.
+    //
+    // Până acum evenimentele trăiau într-un inel de 1000 în RAM
+    // (liqFeedAggregator) plus 24h în localStorage PE TELEFONUL LUI. Nimic nu
+    // supravieţuia unei reporniri, nimic nu era comun între dispozitive.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS liq_events (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            exchange TEXT    NOT NULL,
+            symbol   TEXT    NOT NULL,
+            side     TEXT    NOT NULL,   -- canonic: 'SELL' = LONG lichidat
+            price    REAL    NOT NULL,
+            qty      REAL    NOT NULL,
+            usd      REAL    NOT NULL,
+            ts       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_liq_symbol_ts ON liq_events(symbol, ts);
+        CREATE INDEX IF NOT EXISTS idx_liq_ts ON liq_events(ts);
+    `);
+});
+
 migrate('415_users_app_version', () => {
     // [2026-06-26] App version reporting. The native Android app reports its installed APK
     // versionCode/Name on boot so the admin can see who is on the latest build and who is behind.

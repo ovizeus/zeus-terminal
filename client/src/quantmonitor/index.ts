@@ -8,7 +8,7 @@ import { fetchMtfKlines } from './engines/mtf'
 import { sumDepthVolume } from './engines/depth'
 import { normalizeKlines } from './engines/klinesNorm'
 import { calcWyckoff, calcCVDDivergence, calcVolumeProfile } from './engines/wyckoff'
-import { buildLiqEstimate, fetchTopTraderPositionRatio } from './engines/liqMap'
+import { buildLiqEstimate, fetchTopTraderPositionRatio, fetchLiqHistory } from './engines/liqMap'
 import { fetchBasisRate } from '../data/basisRate'
 import { fetchCrossExchangeFR } from '../data/crossExchangeFR'
 import { fetchBTCDominance, fetchStablecoins } from '../data/btcDominance'
@@ -290,6 +290,11 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
   intervals.push(setInterval(fetchBTCDominance, 300000))
   intervals.push(setInterval(fetchStablecoins, 600000))
   intervals.push(setInterval(fetchTopTraderPositionRatio, 10000))
+  // [LIQ-HISTORY 2026-10-25] Istoricul de 30 de zile. O data la deschidere ca
+  // scara sa fie plina IMEDIAT, apoi la 60 s — mai des n-ar aduce nimic, e
+  // istoric, iar reperul `asOf` acopera oricum golul cu evenimente in direct.
+  fetchLiqHistory()
+  intervals.push(setInterval(fetchLiqHistory, 60000))
   // Stiva MTF: 3 cereri (5m/1h/1d) la 3 minute = 1 cerere/minut. Cache-ul
   // serverului ţine klines 60 s, deci o cadenta mai rapida n-ar aduce date mai
   // proaspete, doar trafic spre Binance pe un sistem cu istoric de banuri.
