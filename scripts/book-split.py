@@ -105,7 +105,22 @@ def classify(title):
     for key, cat in OVERRIDES:
         if key in t:
             return cat, 'override:' + key
+    # [2026-10-25] Numarul de build se verifica INAINTEA regulilor pe cuvinte,
+    # nu dupa ele. Era ultimul, ca plasa de siguranţa, si asta a fost o greşeala
+    # de ordine: titlul „G-5 INCHIS: retenţia…(b315 v1.7.289)" a aterizat in
+    # 5-MASURATORI, fiindca „INCHIS" si „RETENTIA" sunt cuvinte de masuratoare.
+    # Dar un numar de build nu e o bănuiala, e o dovada ca s-a livrat cod — iar
+    # un semnal obiectiv nu are ce căuta in spatele unei potriviri pe cuvant.
+    #
+    # Se verifica DUPA coşurile care descriu cum am greşit (6-RETRACTARI,
+    # 7-INCIDENTE) si dupa cele care spun ca munca nu e gata (1, 2, 3): acelea
+    # bat livrarea chiar daca s-a livrat cod in aceeaşi secţiune. Reparaţie pe
+    # clasa, nu pe instanţa: nu am adaugat un OVERRIDE pentru titlul meu.
+    _BEFORE_BUILD = ('8-REGULI', '9-ARHIVA', '6-RETRACTARI', '7-INCIDENTE',
+                     '3-IN-COLECTARE', '2-DECIZII-ALE-TALE', '1-DE-FACUT')
     for cat, keys in RULES:
+        if cat not in _BEFORE_BUILD and BUILD_TAG.search(t):
+            return '4-LIVRATE', 'build-tag'
         for k in keys:
             if k in t:
                 return cat, k

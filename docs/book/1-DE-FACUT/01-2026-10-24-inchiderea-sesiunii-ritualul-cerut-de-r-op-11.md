@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7371 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7374 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🏁 2026-10-24, ÎNCHIDEREA SESIUNII — ritualul cerut de R-OP-11
 
@@ -23,7 +23,9 @@ iar rubrica a crescut de la 45 la **66 de reguli**.
 | # | Ce | De ce n-am făcut-o |
 |---|---|---|
 | **G-4** | `atPruneClosed` e cod mort care ar tăia istoricul de tranzacţionare | trei opţiuni scrise, niciuna nu e a mea de ales |
-| **G-5** | `entry_blocked`, 128 187 de rânduri care scapă retenţiei pe o nepotrivire de nume | reparaţia curată atinge ce se scrie pe calea vie; cea sigură lasă numele inconsecvent |
+| **G-5** | ✅ **ÎNCHIS 2026-10-25 (b315)** — `entry_blocked` intră în clasa blocate prin listă comună; retenţia lotizată, de la 8,7 s de îngheţare la bucăţi de ~114 ms | — |
+| **G-6** | eticheta `TRADE` pentru ML stă pe 179 452 de rânduri care nu sunt tranzacţii (99,07%), acelaşi prefix dar în scriitor | schimbă ce consumă ML-ul la antrenare — a ta |
+| **G-7** | 77 688 de rânduri `pending_expire` + `pending_created` fără nicio regulă de retenţie | ce fereastră de analiză vrei pe ciclul de viaţă al pending-urilor |
 | **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
 | **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |
 | **G-3** | `changelog` = 297 KB — **neverificat** dacă ajunge la client | de verificat înainte de a propune ceva ([[R-V-18]]) |
@@ -52,3 +54,5 @@ tocmai o reparasem în randor.
 - cum arată grila de foldere **pe telefonul tău** — testele dovedesc structura, nu cum se vede;
 - `tsc` nu e o poartă: pot spune doar „n-am adăugat erori", nu „e curat";
 - n-am rulat suita completă de server, doar shard-urile atinse (admin + book), conform [[R-OP-8]].
+
+---

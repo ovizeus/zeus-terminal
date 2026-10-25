@@ -3850,6 +3850,9 @@ Un mutant viu are trei explicații, în ordinea probabilității: **testul nu aj
 
 **R-P-8. O regulă fără prag, fără domeniu şi fără incident nu apără nimic — se scrie cu cifra şi cu cazul.** Regulă despre reguli. *(Scrisă azi, din lotul tău: „minim N tranzacţii demo" nu se poate încălca până nu există N — l-am propus 30 şi 14 zile, ca să aibă ce fi încălcat. „Timpul se stochează cu convenţia în nume" se năştea încălcată în 400 de tabele, deci trebuia să-şi spună domeniul: **coloane noi**. Şi invers: regulile care chiar funcţionează în cartea asta au toate un incident lipit de ele — [[R-OP-1]] are banul de IP, [[R-V-11]] are mutantul supravieţuitor, [[R-V-16]] are telefonul tău. **O regulă fără incident e o preferinţă; cu incident e o datorie plătită.**)*
 
+**R-P-9. La finalul FIECĂREI lucrări, tot ce am găsit, reparat sau schimbat intră în `BOOK_OF_ALL.md` — inclusiv ce am găsit şi NU am reparat.** *(Cerută de operator azi, 2026-10-25, în timpul lucrării la G-5: „cand faci gasesti repari etc ceva sa modifici in book of all treceo ca si regula asta la sfarsitul fiecarei terminari de munca". Exista deja ca obicei şi ca memorie, dar nu ca regulă în rubrică — iar [[R-C-24]] spune exact ce se întâmplă atunci: o regulă care trăieşte în altă parte decât în rubrică nu se citeşte la început de sesiune, deci nu există.*
+*Incidentul care o plăteşte e în aceeaşi lucrare: reparând G-5 am dat peste două lucruri pe care nu le căutam — eticheta `TRADE` pusă greşit pe 179 452 de rânduri de antrenament ML, şi o retenţie care îngheaţă bucla de evenimente 8,7 secunde la fiecare rulare. Niciunul nu era ce mi se cerea, amândouă sunt mai mari decât ce mi se cerea. Dacă ar fi rămas doar în conversaţia asta, s-ar fi pierdut la prima repornire a sesiunii. **Ce nu e scris nu s-a întâmplat.** Corolar, din aceeaşi lucrare: descoperirile pe care NU le repar se scriu cu număr propriu — G-6, G-7 — ca să poată fi cerute, nu ca să zacă într-un paragraf.)*
+
 ---
 ## 🎨 CERUT 2026-10-10 — reproiectare „instituțională" AutoTrade + Manual Trade, diagnosticul în THEIA
 
@@ -7271,7 +7274,7 @@ E exact clasa numită de [[R-C-22]] şi de corolarul ei: **o potrivire pe prefix
 înţeles.** Acelaşi tipar ca „NEREPARAT" care ateriza în coşul LIVRAT, doar că aici costă 128 187 de
 rânduri care cresc la nesfârşit.
 
-*Nereparat, şi nu din lene.* **Dar corectez ce scrisesem acum o oră: pusesem două opţiuni, şi pe cea
+*✅ **ÎNCHIS pe 2026-10-25, b315** — vezi secţiunea „G-5 ÎNCHIS" de la finalul cărţii. Ce urmează mai jos e raţionamentul de atunci, păstrat fiindcă arată şi recomandarea pe care am dat-o greşit.* **Corectez ce scrisesem acum o oră: pusesem două opţiuni, şi pe cea
 greşită o numisem „mai sigură".**
 
 Scrisesem că retenţia s-ar putea uita la `blockedReason` în loc de forma numelui, şi că asta ar fi
@@ -7356,7 +7359,7 @@ adică fix clasa pe care tocmai ai declarat-o intangibilă. *Nereparat — [[R-P
 acoperă `NO_TRADE`, `blocked_*` şi `entry`. Tot ce nu e niciuna dintre ele — 205 989 de rânduri, cea mai
 veche din 13 mai — **creşte nelimitat**. Nu e urgent (tabela are 744 822 de rânduri în total şi discul e
 la 47%), dar e singura clasă fără plafon dintr-o tabelă care primeşte 17 000 de rânduri pe zi.
-*Nereparat. Vezi G-5.*
+*✅ ÎNCHIS pe 2026-10-25 (b315). Vezi G-5 la finalul cărţii.*
 
 ### Ce înseamnă pentru măsurătorile mele, şi e o constrângere reală
 
@@ -7391,7 +7394,9 @@ iar rubrica a crescut de la 45 la **66 de reguli**.
 | # | Ce | De ce n-am făcut-o |
 |---|---|---|
 | **G-4** | `atPruneClosed` e cod mort care ar tăia istoricul de tranzacţionare | trei opţiuni scrise, niciuna nu e a mea de ales |
-| **G-5** | `entry_blocked`, 128 187 de rânduri care scapă retenţiei pe o nepotrivire de nume | reparaţia curată atinge ce se scrie pe calea vie; cea sigură lasă numele inconsecvent |
+| **G-5** | ✅ **ÎNCHIS 2026-10-25 (b315)** — `entry_blocked` intră în clasa blocate prin listă comună; retenţia lotizată, de la 8,7 s de îngheţare la bucăţi de ~114 ms | — |
+| **G-6** | eticheta `TRADE` pentru ML stă pe 179 452 de rânduri care nu sunt tranzacţii (99,07%), acelaşi prefix dar în scriitor | schimbă ce consumă ML-ul la antrenare — a ta |
+| **G-7** | 77 688 de rânduri `pending_expire` + `pending_created` fără nicio regulă de retenţie | ce fereastră de analiză vrei pe ciclul de viaţă al pending-urilor |
 | **G-1** | `tsc`: 68 de erori preexistente în cinci fişiere | în afara sarcinii — [[R-P-6]] |
 | **G-2** | rutele inexistente sub `/api/admin` răspund 401, nu 404 | atinge middleware-ul de autentificare al întregului `/api/admin` |
 | **G-3** | `changelog` = 297 KB — **neverificat** dacă ajunge la client | de verificat înainte de a propune ceva ([[R-V-18]]) |
@@ -7420,3 +7425,186 @@ tocmai o reparasem în randor.
 - cum arată grila de foldere **pe telefonul tău** — testele dovedesc structura, nu cum se vede;
 - `tsc` nu e o poartă: pot spune doar „n-am adăugat erori", nu „e curat";
 - n-am rulat suita completă de server, doar shard-urile atinse (admin + book), conform [[R-OP-8]].
+
+---
+
+## 🗃️ 2026-10-25 — G-5 ÎNCHIS: retenţia nu mai întreabă NUMELE dacă o decizie a fost blocată (b315 v1.7.289)
+
+> Cerere operator: *„fa si g5 daca zici ca e bine"*. I-am spus cu o zi înainte că nu e urgent şi că
+> momentul potrivit e data viitoare când cineva umblă oricum la retenţie. A cerut-o, deci asta e data viitoare.
+
+**Ce era.** Regula de 90 de zile întreba un şir de caractere:
+
+```sql
+DELETE FROM brain_decisions WHERE final_action LIKE 'blocked_%' AND ts < ?
+```
+
+`entry_blocked` înseamnă exact ce spune numele — stratul AT a refuzat intrarea, `serverBrain.js:1655` —
+dar **nu începe cu `blocked_`**, deci regula nu l-a văzut niciodată. **128 744 de rânduri, cel mai vechi
+de 152 de zile, pe o tabelă a cărei proprie regulă spune 90.**
+
+**O potrivire pe prefix nu e o clasificare.** Aia e toată cauza, şi e [[R-C-22]] încă o dată.
+
+### Ce s-a livrat
+
+**`server/services/brainActions.js`** — o singură sursă de adevăr pentru numele de acţiuni, în trei clase:
+
+| Clasa | Nume | Ce înseamnă | Retenţie |
+|---|---|---|---|
+| **blocate** | `blocked_gates`, `blocked_reflection`, `blocked_reflection_penalty`, `blocked_correlation`, `blocked_correlation_penalty`, `blocked_session`, `blocked_drawdown`, **`entry_blocked`** | o intenţie care n-a devenit tranzacţie, nu poate purta `linked_seq` | **90 de zile** |
+| **ISTORIC** | `entry`, `pending_fill`, `pending_momentum` | **pot** purta `linked_seq` → sunt istoric de tranzacţionare | **niciodată, cât timp sunt legate** ([[R-C-21]]) |
+| telemetrie | `no_trade`, `pending_created`, `pending_expire`, `pending_cancel`, `unknown` | ciclu de viaţă fără tranzacţie | 30 de zile doar pentru `no_trade`, pe tier; restul — vezi **G-7** |
+
+**Trei nume din listă n-aveau niciun rând în baza de date:** `blocked_session`, `blocked_drawdown`,
+`blocked_reflection_penalty`. Se scriu în cod, nu s-au declanşat încă. Erau acoperite de potrivirea pe
+prefix; dacă aş fi trecut la o listă fixă fără ele, le-aş fi scos din retenţie **fără să observ nimeni**.
+De aceea lista nu e scrisă din ce arată baza, e scrisă din ce scrie **codul**, şi un test o verifică.
+
+### Trei schimbări în retenţie, fiecare măsurată înainte de a fi scrisă
+
+**(1) Filtrul citeşte lista**, nu forma numelui. Rămâne pe coloana `final_action`, deci pe index — exact
+a treia opţiune pe care o recomandasem în G-5, nu una din cele două false.
+
+**(2) `+linked_seq IS NULL`** — plusul e deliberat. Cu garda adăugată naiv, **planificatorul alege
+indexul greşit**:
+
+| Interogare | Planul | Timp |
+|---|---|---|
+| `linked_seq IS NULL` | `idx_bd_linked (linked_seq=?)` — potriveşte ~750 000 de rânduri | **0,72 s** |
+| `+linked_seq IS NULL` | `idx_bd_action (final_action=?, ts<?)` | **0,14 s** |
+
+Plusul spune SQLite să nu folosească index pentru termenul ăla. Verificat pe instrucţiunea **reală**,
+pregătită din cod, nu pe una scrisă de mână: `SEARCH … USING INDEX idx_bd_action`.
+
+**(3) Lotizare — şi aici am găsit ceva ce nu căutam.** Am măsurat `DELETE`-ul pe o copie a bazei vii:
+
+| | Rânduri | Timp |
+|---|---|---|
+| retenţia **de acum**, aşa cum rulează azi | 6 491 | **8,666 s** |
+| regula lărgită, într-o singură instrucţiune | 80 970 | **6,8 s** |
+| regula lărgită, **lotizată** | 80 985 în 41 de loturi | **cel mai lung lot: 183 ms** |
+
+**`better-sqlite3` e sincron.** Adică retenţia care rulează azi, la fiecare 24 de ore şi la 180 de
+secunde după fiecare boot, **îngheaţă bucla de evenimente aproape nouă secunde**. Procesul are 1 116
+reporniri. Asta e exact clasa incidentului din **7 octombrie**, când un `PRAGMA integrity_check` inline
+în tick-ul doctorului a oprit Zeus — doar că de data asta nimeni nu s-a uitat.
+
+Mărimea lotului a fost **aleasă pe date, nu din gust**, pe copii proaspete ale bazei de 2,9 GB:
+
+| Lot | Loturi | Cel mai lung | Mediu |
+|---|---|---|---|
+| 500 | 162 | 196 ms | 37 ms |
+| **1000** | **81** | **114 ms** | **84 ms** |
+| 2000 | 41 | 183 ms | 124 ms |
+
+Cel mai lung lot e dominat de un checkpoint WAL şi apare la orice mărime; media creşte cu mărimea.
+1000 a avut cea mai mică îngheţare observată şi jumătate din media lui 2000. **De la o îngheţare de
+8,7 s la bucăţi de ~114 ms, cu 80 ms de pauză între ele în care scriitorul viu trece.**
+
+`bdPrune` e acum `async` şi întoarce câte rânduri a şters pe fiecare tier, deci jurnalul spune ce s-a
+întâmplat în loc să presupună. Tiparul e copiat din `pruneParityLogs`, care stă cu câteva sute de linii
+mai jos în acelaşi fişier şi făcea deja exact asta ([[R-C-23]]).
+
+### Dovada că testele apără, nu decorează
+
+**20 de teste noi** (`tests/unit/brain-actions-retention.test.js`), şapte dintre ele pe o bază de date
+reală. **Şapte mutaţii, toate moarte:**
+
+| Mutaţia | Ce a picat |
+|---|---|
+| scot `entry_blocked` din lista blocate | 4 teste |
+| bag `entry` în lista blocate (ar şterge istoric) | 3 teste |
+| scot `+` din `+linked_seq` | testul de plan |
+| scot lotizarea | 3 teste |
+| scot garda `linked_seq` din tierul blocat | **testul funcţional**, pe baza reală |
+| un nume de acţiune nou, neclasificat, în `serverBrain` | testul de clasificare |
+| listă literală de nume în loc de modulul comun | testul de sursă unică |
+
+**Şi o greşeală a mea, prinsă de mutaţie.** Trei teste citeau 600 de caractere după `bdPruneBlocked`.
+Fereastra aia intră în instrucţiunea **următoare**, `bdPruneTrade`, care are propria ei gardă
+`+linked_seq IS NULL` — deci scoţând garda din tierul blocat, **testul de text trecea senin**, şi doar
+testul funcţional a omorât mutantul. Exact lecţia scrisă deja în testul vecin: **vecinătatea nu e
+cablare.** Testele taie acum instrucţiunea exact, şi un assert verifică însăşi tăietura.
+
+### Ce NU am atins, deliberat
+
+`brainLogger.js` decide **şi el** „a fost blocat?", în două locuri, tot cu `startsWith('blocked_')`.
+**Nu le-am mutat pe modulul comun**, deşi ar fi fost o linie fiecare, fiindcă amândouă schimbă ce
+consumă ML-ul. E **G-6**, decizia ta. Comentariul din `brainActions.js` spune explicit să nu fie
+„făcute ordine" fără să citeşti G-6.
+
+**Verificat:** 258/258 pe shard-ul de retenţie (21 de fişiere), `node --check` pe toate trei fişierele
+atinse, planul confirmat pe instrucţiunea reală, cele 7 mutaţii moarte, fişierele restaurate bit cu bit
+după fiecare.
+
+---
+
+## 🔭 GĂSIT, NEREPARAT — două descoperiri din lucrarea la G-5
+
+### G-6. Eticheta `TRADE` pentru ML e pusă pe 179 452 de rânduri care nu sunt tranzacţii (99,07%)
+
+Acelaşi `startsWith('blocked_')`, dar în **scriitor**, nu în retenţie. `brainLogger.js:125` decide ce
+tip de eveniment ajunge în `ml_decision_snapshots`:
+
+```js
+if (finalTier === 'NO_TRADE' || finalAction.startsWith('blocked_')) eventType = 'ABSTAIN_CRITIC';
+else if (conf >= 50 && conf < 60) eventType = 'NEAR_THRESHOLD';
+else eventType = 'TRADE';
+```
+
+`entry_blocked` nu trece niciun test, deci cade pe `else` → **`TRADE`**. Rulat cu aceeaşi regulă peste
+tabelă, compoziţia etichetei `TRADE` e:
+
+| `final_action` | Rânduri etichetate `TRADE` | Chiar e o tranzacţie? |
+|---|---|---|
+| `entry_blocked` | **110 678** | nu — AT a refuzat |
+| `pending_expire` | **38 260** | nu — a expirat |
+| `pending_created` | **30 514** | nu — nerezolvat |
+| `entry` | 1 220 | **da** |
+| `pending_fill` | 409 | **da** |
+| `pending_momentum` | 54 | **da** |
+
+**Total 181 135, din care tranzacţii adevărate 1 683. Adică 0,93%.** ML-ul a învăţat luni de zile dintr-o
+clasă numită „TRADE" care e 99% ne-tranzacţii.
+
+**Şi mai e o scăpare în acelaşi `if`,** la `brainLogger.js:79`: decizia dacă rândul trece prin
+**eşantionarea** NO_TRADE. `entry_blocked` are tier `SMALL`/`MEDIUM`/`LARGE` — verificat, niciun rând cu
+`NO_TRADE` — deci nu intră nici pe prima condiţie, nici pe a doua: **se stochează toate, neeşantionate.**
+Aia e şi explicaţia pentru care sunt atât de multe.
+
+*De ce nu l-am făcut:* schimbă ce consumă ML-ul la antrenare, pe un sistem cu bani. E decizia ta, şi e
+exact ce cere „nu înlănţui schimbări riscante". Reparaţia e o linie în fiecare loc, odată ce modulul
+comun există — care acum există.
+
+### G-7. 77 688 de rânduri de telemetrie fără nicio regulă de retenţie
+
+Rămase în afara oricărui tier, după ce `entry_blocked` a intrat în cel de 90 de zile:
+
+| `final_action` | Rânduri | Legate | Cel mai vechi |
+|---|---|---|---|
+| `pending_expire` | 44 013 | 0 | 2026-05-13 |
+| `pending_created` | 33 675 | 0 | 2026-05-13 |
+
+**Şi o corecţie la propria mea citire de ieri:** scrisesem că un `pending_created` care se umple ar
+rămâne nelegat, deci ştergerea lor ar pierde actul de naştere al tranzacţiilor reale. **E greşit.**
+`brainLogger.updateAction` **mută acelaşi rând** din `pending_created` în `pending_fill`, şi abia atunci
+`linkSeq` îl leagă. Deci un `pending_created` rămas nelegat chiar n-a devenit niciodată tranzacţie.
+Argumentul meu de ieri împotrivă nu stă.
+
+*Două lucruri de spus şi care tot nu-l fac o urgenţă:* `pending_cancel` se scrie în cod
+(`serverBrain.js:1059`) şi are **zero rânduri de când există tabela** — ori ramura nu se atinge, ori nu
+ajunge să fie scrisă; şi `unknown`, valoarea de rezervă din `brainLogger.js:75`, n-are nici el retenţie,
+cu zero rânduri acum.
+
+### 🔶 Ce NU am verificat ([[R-V-18]])
+
+- **n-am rulat suita completă de server**, doar shard-ul de retenţie — 21 de fişiere, 258 de teste
+  ([[R-OP-8]]);
+- n-am verificat retenţia **pe baza vie** — tot ce am măsurat distructiv a fost pe copii, iar prima
+  rulare adevărată va fi la 180 de secunde după reload. Jurnalul va spune `[G-5] brain_decisions prune:`
+  cu cele trei cifre; **asta rămâne de citit după reload**, n-am citit-o încă;
+- cele **114 ms** sunt măsurate pe o copie, nu pe baza vie sub trafic: pe baza vie scriitorul concurent
+  poate face lotul mai lent;
+- cifrele din G-6 sunt calculate aplicând regula scriitorului peste `brain_decisions`, **nu** citite din
+  `ml_decision_snapshots` rând cu rând — digestul MD5 nu se poate potrivi ieftin pe 376 000 de rânduri,
+  deci e o reconstituire a regulii, nu o numărătoare a efectului ei.

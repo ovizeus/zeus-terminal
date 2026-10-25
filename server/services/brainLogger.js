@@ -262,10 +262,23 @@ function updateAction(snapId, action) {
  * Run retention cleanup (call daily).
  */
 function prune() {
+    // [G-5 2026-10-25] bdPrune is async now — batched + yielding, so a single
+    // DELETE can no longer hold the event loop for seconds. Fire-and-forget
+    // with a .catch, same shape as the parity prune in serverBrain.js; the
+    // caller is a maintenance timer with nothing to wait for.
     try {
-        db.bdPrune();
+        db.bdPrune().then((r) => {
+            if (r && (r.no_trade || r.blocked || r.trade)) {
+                try {
+                    logger.info('BRAIN_LOG',
+                        `[G-5] brain_decisions prune: no_trade=${r.no_trade} blocked=${r.blocked} trade=${r.trade}`);
+                } catch (_) {}
+            }
+        }).catch((err) => {
+            try { logger.error('BRAIN_LOG', 'prune failed: ' + err.message); } catch (_) {}
+        });
     } catch (err) {
-        try { logger.error('BRAIN_LOG', 'prune failed: ' + err.message); } catch (_) {}
+        try { logger.error('BRAIN_LOG', 'prune failed (sync): ' + err.message); } catch (_) {}
     }
     // [AUDIT-F1/F2 2026-06-11] Retention for the two previously-unbounded ML
     // tables — separate try/catch so a failure in one never skips the others.

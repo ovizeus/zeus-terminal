@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 7320 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 7323 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 🗃️ 2026-10-24 — CLASIFICAREA CERUTĂ DE R-C-21, făcută pe retenţia care rulează ACUM
 
@@ -39,7 +39,7 @@ adică fix clasa pe care tocmai ai declarat-o intangibilă. *Nereparat — [[R-P
 acoperă `NO_TRADE`, `blocked_*` şi `entry`. Tot ce nu e niciuna dintre ele — 205 989 de rânduri, cea mai
 veche din 13 mai — **creşte nelimitat**. Nu e urgent (tabela are 744 822 de rânduri în total şi discul e
 la 47%), dar e singura clasă fără plafon dintr-o tabelă care primeşte 17 000 de rânduri pe zi.
-*Nereparat. Vezi G-5.*
+*✅ ÎNCHIS pe 2026-10-25 (b315). Vezi G-5 la finalul cărţii.*
 
 ### Ce înseamnă pentru măsurătorile mele, şi e o constrângere reală
 

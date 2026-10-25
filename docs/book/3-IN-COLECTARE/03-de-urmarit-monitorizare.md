@@ -1,4 +1,4 @@
-<!-- generat din docs/BOOK_OF_ALL.md linia 4269 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
+<!-- generat din docs/BOOK_OF_ALL.md linia 4272 — NU edita aici, editeaza cartea si rulezi scripts/book-split.py -->
 
 ## 👀 DE URMĂRIT — monitorizare
 

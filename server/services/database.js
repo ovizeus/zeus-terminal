@@ -41,6 +41,9 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 // deleted) and retries; corruption in the database proper still throws, because
 // starting on a broken database would be worse than staying down.
 const { openWithWalRecovery } = require('./dbOpen');
+// [G-5 2026-10-25] The classification of brain_decisions.final_action names.
+// Retention reads this instead of guessing from the name's prefix.
+const _BRAIN_ACTIONS = require('./brainActions');
 const db = openWithWalRecovery(DB_PATH, {
     open: (p) => new Database(p),
     log: (m) => { try { console.warn(m); } catch (_) { /* */ } },
@@ -10548,9 +10551,36 @@ const _stmts = {
     bdUpdateAction: db.prepare('UPDATE brain_decisions SET final_action = ? WHERE snap_id = ?'),
     bdGetBySnap: db.prepare('SELECT snap_id, data FROM brain_decisions WHERE snap_id = ?'),
     bdGetBySeq: db.prepare('SELECT snap_id, data FROM brain_decisions WHERE linked_seq = ?'),
-    bdPruneNoTrade: db.prepare("DELETE FROM brain_decisions WHERE final_tier = 'NO_TRADE' AND linked_seq IS NULL AND ts < ?"),
-    bdPruneBlocked: db.prepare("DELETE FROM brain_decisions WHERE final_action LIKE 'blocked_%' AND ts < ?"),
-    bdPruneTrade: db.prepare("DELETE FROM brain_decisions WHERE final_action = 'entry' AND ts < ? AND linked_seq IS NULL"),
+    // [G-5 2026-10-25] Tiered retention for brain_decisions. Three changes, and
+    // every one of them was measured on the live 2.9 GB database before it was
+    // written. See server/services/brainActions.js for the WHY of the first.
+    //
+    // (1) The blocked tier no longer asks the NAME whether a decision was
+    //     blocked. It reads the shared list. A prefix test let entry_blocked —
+    //     128,744 rows, oldest 152 days — outlive a 90-day rule.
+    //
+    // (2) +linked_seq IS NULL. The + is deliberate, not a typo: it tells SQLite
+    //     not to use an index for that term. Without it the planner picks
+    //     idx_bd_linked (linked_seq=?), which matches ~750k rows — 0.72 s
+    //     instead of 0.14 s. With it, idx_bd_action (final_action=?, ts<?).
+    //
+    // (3) LIMIT. Each statement removes at most `limit` rows per call, because
+    //     better-sqlite3 is SYNCHRONOUS and this table is 1.4 GB of the file.
+    //     Measured: the previous unbatched blocked DELETE took 8.7 s on 6,491
+    //     rows, and the widened rule would have taken 6.8 s on 80,970 — a
+    //     multi-second event-loop freeze, the exact class of the 2026-10-07
+    //     outage. rowid IN (SELECT ... LIMIT ?) is the same idiom as
+    //     _parityPruneBatch a few hundred lines below.
+    bdPruneNoTrade: db.prepare(`DELETE FROM brain_decisions WHERE rowid IN (
+        SELECT rowid FROM brain_decisions
+         WHERE final_tier = 'NO_TRADE' AND linked_seq IS NULL AND ts < ? LIMIT ?)`),
+    bdPruneBlocked: db.prepare(`DELETE FROM brain_decisions WHERE rowid IN (
+        SELECT rowid FROM brain_decisions
+         WHERE final_action IN (${_BRAIN_ACTIONS.BLOCKED_ACTIONS.map(() => '?').join(',')})
+           AND +linked_seq IS NULL AND ts < ? LIMIT ?)`),
+    bdPruneTrade: db.prepare(`DELETE FROM brain_decisions WHERE rowid IN (
+        SELECT rowid FROM brain_decisions
+         WHERE final_action = 'entry' AND +linked_seq IS NULL AND ts < ? LIMIT ?)`),
     // [AUDIT-F1/F2 2026-06-11] Retention for the two unbounded ML tables
     // (created_at is INTEGER ms). Mirrors the bdPrune tiered-retention model.
     mlAuditPruneOld: db.prepare('DELETE FROM ml_influence_audit WHERE created_at < ?'),
@@ -12025,14 +12055,44 @@ module.exports = {
         for (const r of rows) { try { r.data = JSON.parse(r.data); } catch (_) { r.data = {}; } }
         return rows;
     },
-    bdPrune: () => {
-        const now = Date.now();
-        const d30 = now - 30 * 86400000;
-        const d90 = now - 90 * 86400000;
-        const d365 = now - 365 * 86400000;
-        _stmts.bdPruneNoTrade.run(d30);
-        _stmts.bdPruneBlocked.run(d90);
-        _stmts.bdPruneTrade.run(d365);
+    // [G-5 2026-10-25] Batched + yielding, and async because of it. Mirrors
+    // pruneParityLogs: a bounded number of bounded deletes with a yield between
+    // them, so the live writer gets through and the event loop is never held
+    // for seconds at a time. Returns rows removed per tier, so the caller can
+    // log what actually happened instead of assuming it did.
+    //
+    // maxBatches bounds the work per call: the daily schedule plus this cap
+    // drain a backlog over a few runs rather than in one long freeze.
+    // batchLimit = 1000 was chosen by measurement, not taste. On a fresh copy
+    // of the live 2.9 GB database, draining the whole 80,988-row backlog:
+    //   lot 500  → 162 batches, longest 196 ms, mean 37 ms
+    //   lot 1000 →  81 batches, longest 114 ms, mean 84 ms
+    //   lot 2000 →  41 batches, longest 183 ms, mean 124 ms
+    // The longest batch is dominated by a WAL checkpoint and shows up at every
+    // size; the mean scales with the size. 1000 had the lowest observed
+    // longest and half the mean of 2000. Before batching, the single DELETE
+    // was one 6.8 s freeze.
+    bdPrune: async (now = Date.now(), batchLimit = 1000, maxBatches = 200, yieldMs = 80) => {
+        const DAY = 86400000;
+        const tiers = [
+            ['no_trade', _stmts.bdPruneNoTrade, [now - 30 * DAY, batchLimit]],
+            ['blocked', _stmts.bdPruneBlocked, [..._BRAIN_ACTIONS.BLOCKED_ACTIONS, now - 90 * DAY, batchLimit]],
+            ['trade', _stmts.bdPruneTrade, [now - 365 * DAY, batchLimit]],
+        ];
+        const removed = {};
+        for (const [name, stmt, args] of tiers) {
+            let total = 0;
+            for (let i = 0; i < maxBatches; i++) {
+                let n = 0;
+                try { n = stmt.run(...args).changes; }
+                catch (e) { console.warn('[G-5] bdPrune batch failed', name, e.message); break; }
+                total += n;
+                if (n < batchLimit) break; // caught up
+                await new Promise(r => setTimeout(r, yieldMs)); // let the live writer through
+            }
+            removed[name] = total;
+        }
+        return removed;
     },
     // [AUDIT-F1 2026-06-11] ml_influence_audit retention — keep 30 days.
     mlAuditPrune: (now = Date.now()) => _stmts.mlAuditPruneOld.run(now - 30 * 86400000).changes,
