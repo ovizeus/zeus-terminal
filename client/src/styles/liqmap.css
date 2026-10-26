@@ -644,3 +644,43 @@
     padding: 1px 4px;
     border-radius: 3px;
 }
+
+/* „e bine dar nu stiu sa-l citesc" — un panou care are nevoie de mine alaturi
+   nu si-a facut treaba. Explicatia sta DESCHISA pana cand o inchide el. */
+.zbk-help { display: flex; flex-direction: column; gap: 5px; }
+.zbk-help-t {
+    align-self: flex-start;
+    background: none;
+    border: 1px solid var(--liq-line);
+    color: var(--liq-dim);
+    font-size: 9px;
+    letter-spacing: .12em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.zbk-help-b {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 7px 9px;
+    border: 1px solid var(--liq-line);
+    border-radius: 5px;
+    background: #090d12;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: #8fa6b8;
+}
+.zbk-help-b b { color: #eaf2f8; font-weight: 600; }
+.zbk-help-b > div { display: flex; gap: 7px; align-items: flex-start; }
+.zbk-help-b i {
+    flex: 0 0 auto;
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    margin-top: 4px;
+}
+.zbk-help-b i.c { background: var(--liq-short); }
+.zbk-help-b i.a { background: var(--liq-long); }
+.zbk-help-b i.b { background: #6d8396; }
+.zbk-help-b i.f { background: #d8b25e; }
+.zbk-help-b i.z { background: #35506a; }

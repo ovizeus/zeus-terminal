@@ -57,6 +57,10 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     'zeus_groups': 1, 'zeus_ui_context': 1,
     'zt_cloud_last_hash': 1,
     'zeus_dsl_strip_open': 1, 'zeus_at_strip_open': 1,
+    // [BOOKMAP 2026-10-26] Explicatia din tabul BOOK: daca ar rameane
+    // nescopata, doi useri pe acelasi telefon si-ar inchide-o unul altuia.
+    // Testul lsUserScoping m-a prins cand am uitat-o.
+    'zbk.help': 1,
     'zeus_pt_strip_open': 1, 'zeus_mtf_open': 1,
     'zeus_dsl_mode': 1, 'zeus_adaptive_strip_open': 1,
     'zeus_theme': 1, 'zeus_llv_settings': 1, 'zeus_ui_scale': 1,

@@ -9407,3 +9407,36 @@ Reprodus cu intervalele reale: **29 de cadre ⇒ 19 coloane cu date, 10 GOALE (3
 Şi eticheta `PRICE` stătea peste linia preţului şi se citea prost în captură — are acum un fundal minim.
 
 **6 teste noi pe pieptene + 3 de randare, 5 mutaţii moarte. 63 pe Bookmap în total.**
+
+### 📖 „e bine dar nu ştiu să-l citesc" — panoul se explică singur (b339)
+
+El, după ce a deschis tabul. **Şi asta nu e vina lui:** un panou care are nevoie de mine alături nu şi-a făcut treaba.
+
+Bloc **HOW TO READ**, deschis din start, cu cinci rânduri care spun ce **înseamnă** fiecare lucru, nu cum se numeşte:
+
+- **cyan sub preţ** = ordine de cumpărare care aşteaptă ⇒ preţul încetineşte peste ele
+- **chihlimbar deasupra** = ordine de vânzare prin care trebuie să mănânce ca să urce
+- **mai aprins = mai mulţi bani**; stânga-dreapta e timpul, linia punctată e preţul de acum
+- în lista de jos, **fermitatea e cheia**: 100% = nivelul a stat acolo tot timpul; 30% = a licărit şi a dispărut
+- **BAND** = cât de departe de preţ te uiţi; **SPAN** = cât de mult înapoi în timp
+
+Se poate închide, şi alegerea se ţine minte — cu gardă pe modul privat (`localStorage` poate arunca).
+
+### 🔴 Un test vechi al Zeus-ului m-a prins
+
+`lsUserScoping` cere ca **orice cheie de localStorage pe user să fie legată de user**. Eu pusesem `zbk.help` nescopată ⇒ **doi useri pe acelaşi telefon şi-ar fi închis explicaţia unul altuia.** Adăugată în `_USER_KEYS`.
+
+Regula există din **10 octombrie** şi a funcţionat exact cum trebuie — a căzut doar în suita completă, nu izolat, şi la prima vedere părea poluare între teste. Nu era.
+
+### ✅ Verificat că totul e activ, cum a cerut
+
+| | |
+|---|---|
+| flux adânc | **266 apeluri / 1h**, zero erori 4xx/5xx/reţea, latenţă 244 ms |
+| ritm | **4,45/min** — lent aproape tot timpul, rapid cât s-a uitat el |
+| WS banda de sus | deschis (dovada e **captura lui**: spread 0,10 / 0,01bp vin numai de acolo) |
+| rute | toate trei răspund şi cer sesiune |
+| lichidări | **19 049 / 466 simboluri** |
+| PREDICT | 16 instantanee, **14 rezolvate** |
+
+**8 teste noi, 5 mutaţii moarte. 68 pe Bookmap în total.**

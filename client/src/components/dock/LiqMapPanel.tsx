@@ -473,6 +473,19 @@ function PredictCard({ r }: { r: PredictSymbol }) {
 // adânc în bandă şi mai departe pe timp.
 function BookView({ data, band, setBand, win, setWin, symbol }: any) {
     const cv = useRef<HTMLCanvasElement | null>(null)
+    // „e bine dar nu stiu sa-l citesc" — un panou care are nevoie de mine
+    // alaturi nu si-a facut treaba. Explicatia sta DESCHISA pana cand o inchide
+    // el; alegerea se tine minte pe telefonul lui.
+    const [help, setHelp] = useState<boolean>(() => {
+        try { return localStorage.getItem('zbk.help') !== '0' } catch { return true }
+    })
+    const toggleHelp = useCallback(() => {
+        setHelp((v) => {
+            const n = !v
+            try { localStorage.setItem('zbk.help', n ? '1' : '0') } catch { /* mod privat */ }
+            return n
+        })
+    }, [])
     const heat = data?.heat
     const walls: Wall[] = data?.walls || []
     const top = data?.top
@@ -685,6 +698,27 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                     <span className="zbk-held">
                         {heat.heldCols} held between snapshots
                     </span>
+                )}
+            </div>
+
+            <div className="zbk-help">
+                <button className="zbk-help-t" onClick={toggleHelp}>
+                    {help ? '− HOW TO READ' : '? HOW TO READ'}
+                </button>
+                {help && (
+                    <div className="zbk-help-b">
+                        <div><i className="c" />Cyan below the price: <b>buy orders waiting</b>. Someone
+                            is ready to buy there, so the price tends to slow down over it.</div>
+                        <div><i className="a" />Amber above the price: <b>sell orders waiting</b>. The
+                            price has to eat through them to go up.</div>
+                        <div><i className="b" />Brighter = <b>more money</b> resting at that price. Left
+                            to right is time; the dashed line is where the price is now.</div>
+                        <div><i className="f" />In the list below, <b>firmness</b> is what matters: 100%
+                            means the level stayed there the whole time; 30% means it flashed and vanished.</div>
+                        <div><i className="z" /><b>BAND</b> is how far from the price you look,
+                            <b> SPAN</b> is how far back in time. The whole book is only a few hundred
+                            dollars wide — there is nothing to see further out.</div>
+                    </div>
                 )}
             </div>
 

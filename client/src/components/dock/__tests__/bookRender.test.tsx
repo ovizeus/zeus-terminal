@@ -404,3 +404,72 @@ describe('⛔ coloanele TINUTE — pieptenele din captura lui', () => {
         expect(new Set(alfe.map((a: number) => a.toFixed(3))).size).toBeGreaterThan(1)
     })
 })
+
+describe('⛔ „nu stiu sa-l citesc" — panoul trebuie sa se explice SINGUR', () => {
+    it('explicatia e DESCHISA din start — el nu trebuie sa o caute', async () => {
+        try { localStorage.removeItem('zbk.help') } catch { /* */ }
+        const { container } = await openBook()
+        expect(container.querySelector('.zbk-help-b')).toBeTruthy()
+    })
+
+    it('spune ce inseamna FIECARE culoare, nu doar cum se numeste', async () => {
+        const { container } = await openBook()
+        const t = container.querySelector('.zbk-help-b')!.textContent || ''
+        expect(t).toMatch(/buy orders waiting/i)
+        expect(t).toMatch(/sell orders waiting/i)
+        expect(t).toMatch(/brighter/i)
+    })
+
+    it('explica FERMITATEA cu cifre, fiindca aia e cheia listei de jos', async () => {
+        const { container } = await openBook()
+        const t = container.querySelector('.zbk-help-b')!.textContent || ''
+        expect(t).toMatch(/firmness/i)
+        expect(t).toMatch(/100%/)
+        expect(t).toMatch(/30%/)
+    })
+
+    it('explica la ce foloseste fiecare axa de zoom', async () => {
+        const { container } = await openBook()
+        const t = container.querySelector('.zbk-help-b')!.textContent || ''
+        expect(t).toMatch(/BAND/)
+        expect(t).toMatch(/SPAN/)
+    })
+
+    it('se poate INCHIDE, si alegerea se tine minte', async () => {
+        const { container } = await openBook()
+        fireEvent.click(screen.getByText(/HOW TO READ/))
+        await waitFor(() => expect(container.querySelector('.zbk-help-b')).toBeNull())
+        let stocat: string | null = null
+        try { stocat = localStorage.getItem('zbk.help') } catch { /* */ }
+        expect(stocat).toBe('0')
+    })
+
+    it('odata inchisa, rameane inchisa la urmatoarea deschidere', async () => {
+        try { localStorage.setItem('zbk.help', '0') } catch { /* */ }
+        const { container } = await openBook()
+        expect(container.querySelector('.zbk-help-b')).toBeNull()
+        expect(screen.getByText(/HOW TO READ/)).toBeTruthy()
+        try { localStorage.removeItem('zbk.help') } catch { /* */ }
+    })
+
+    it('fara localStorage (mod privat) NU crapa si explicatia e vizibila', async () => {
+        const orig = Object.getOwnPropertyDescriptor(window, 'localStorage')
+        Object.defineProperty(window, 'localStorage', {
+            configurable: true,
+            get() { throw new Error('blocked') },
+        })
+        try {
+            const { container } = await openBook()
+            expect(container.querySelector('.zbk-help-b')).toBeTruthy()
+        } finally {
+            if (orig) Object.defineProperty(window, 'localStorage', orig)
+        }
+    })
+
+    it('explicatia e in ENGLEZA', async () => {
+        const { container } = await openBook()
+        const t = (container.querySelector('.zbk-help-b') as HTMLElement).textContent!.toLowerCase()
+        for (const r of ['cumpar', 'vanzare', 'pretul', 'banda', 'timp', 'fermitate'])
+            expect(t).not.toContain(r)
+    })
+})
