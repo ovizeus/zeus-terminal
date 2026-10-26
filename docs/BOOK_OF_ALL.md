@@ -9374,3 +9374,13 @@ L-am găsit verificând ce se întâmplă pe un simbol care **NU** e în listă,
 **4 teste noi de randare pe simbol nepotrivit, 3 mutaţii moarte** (inclusiv bugul original). **53 pe Bookmap în total.**
 
 Client-only: intră la refresh, fără reload.
+
+### 🧪 Contractul dintre rută şi panou (b337, fără schimbare de comportament)
+
+Nimic nu dovedea că răspunsul rutei conţine exact câmpurile pe care clientul le **citeşte**. O nepotrivire **nu aruncă şi nu apare în loguri** — dă un panou rupt în linişte, adică exact clasa de bug care a costat cel mai mult în sesiunea asta: serviciul PREDICT plecat mort, şi tape-ul care arăta alt simbol decât antetul.
+
+Testul **citeşte sursa clientului**, scoate câmpurile accesate (`heat.*`, `data.*`, `ladder.*`, `wl.*`) şi verifică că formele produse de `heat()`, `aggregate()` şi `walls()` le au pe toate — **inclusiv pe forma goală**, ca panoul să nu crape pe o hartă fără date.
+
+**Un test al meu nu dovedea nimic, şi l-am prins la mutaţie:** căuta cheia în **tot** corpul rutei, deci trecea chiar când o redenumeam pe calea de succes — fiindcă o găsea în ramura de **eroare** (`walls: []`). Acum cele două ramuri se verifică **separat**. Şi ramura de eroare trebuie să trimită aceleaşi chei, altfel panoul citeşte `undefined` exact când serverul are o problemă.
+
+**5 mutaţii moarte** (inclusiv `loUsd` nemai-trimis, `colsAsked` scos, `walls`/`source` redenumite pe calea de succes). **58 pe Bookmap în total.**
