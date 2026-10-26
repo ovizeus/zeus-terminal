@@ -611,3 +611,24 @@
    arata ca una stricata — exact confuzia care a pornit discutia despre
    lichidari. */
 .zbk-fill { color: #d8b25e; }
+
+/* Simbolul pentru care e CHIAR cartea, si avertismentul cand nu e cel din
+   chart. Cartea exista doar pe BTCUSDT si ETHUSDT; fara asta, un SOLUSDT in
+   chart ar fi afisat date BTC cu preturi perfect plauzibile — aceeasi clasa cu
+   tape-ul de la b328, dar mai rea, fiindca nimic n-ar fi aratat strain. */
+.zbk-sym {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: .06em;
+    color: #8fa6b8;
+}
+.zbk-mismatch {
+    font-size: 10px;
+    line-height: 1.45;
+    color: #d8b25e;
+    background: rgba(216, 178, 94, .07);
+    border: 1px solid #3b3426;
+    border-radius: 4px;
+    padding: 5px 7px;
+}
+.zbk-mismatch b { color: #eaf2f8; }

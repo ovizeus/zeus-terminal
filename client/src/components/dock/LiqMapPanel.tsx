@@ -476,6 +476,15 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
     const heat = data?.heat
     const walls: Wall[] = data?.walls || []
     const top = data?.top
+    // ⚠️ SIMBOLUL AFIŞAT E CEL PE CARE SERVERUL L-A DAT, nu cel din chart.
+    //
+    // Cartea de ordine există doar pe BTCUSDT şi ETHUSDT. Dacă în chart e
+    // SOLUSDT, ruta cade în linişte pe BTCUSDT — iar prima variantă a panoului
+    // scria „the visible book on SOLUSDT" peste date BTC, cu preţuri perfect
+    // plauzibile. Aceeaşi clasă cu tape-ul de la b328, dar mai rea: acolo se
+    // vedeau simboluri străine, aici doar numere care păreau în regulă.
+    const bookSym: string = data?.symbol || symbol
+    const mismatch = !!(data?.symbol && String(symbol) !== String(data.symbol))
 
     useEffect(() => {
         const c = cv.current
@@ -606,8 +615,16 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                 <span className="zbk-ba" style={{ color: `rgb(${BOOK.ask})` }}>
                     {top ? Math.round(top.bestAsk).toLocaleString('en-US') : '—'}
                 </span>
+                <span className="zbk-sym">{bookSym}</span>
                 <span className="zbk-real">RESTING LIQUIDITY · NOT A FORECAST</span>
             </div>
+
+            {mismatch && (
+                <div className="zbk-mismatch">
+                    Order book is available for BTCUSDT and ETHUSDT only — showing <b>{bookSym}</b>,
+                    not the charted {symbol}.
+                </div>
+            )}
 
             <div className="zbk-zoom">
                 <span className="zlq-k">BAND</span>
@@ -691,7 +708,7 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                     : ''}
             </div>
             <div className="zbk-note">
-                The visible book on {symbol} spans a few hundred dollars around price — there are no
+                The visible book on {bookSym} spans a few hundred dollars around price — there are no
                 walls 1% away, they simply do not exist in the book. Zoom goes <b>deeper</b> and
                 <b> further back in time</b>, not wider.
             </div>

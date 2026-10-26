@@ -327,3 +327,46 @@ describe('⛔ incape pe telefon — masurat, nu din gust', () => {
         expect(w!.children.length).toBe(5)
     })
 })
+
+describe('⛔ SIMBOLUL — cartea exista doar pe BTC si ETH (clasa bugului de la b328)', () => {
+    it('afiseaza simbolul pe care SERVERUL l-a dat, nu pe cel din chart', async () => {
+        w.S = { symbol: 'SOLUSDT', price: 180 }
+        mockFetch(mkBook({ symbol: 'BTCUSDT' }))
+        const r = render(<LiqMapPanel />)
+        await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+        fireEvent.click(screen.getByText('BOOK'))
+        await waitFor(() => expect(r.container.querySelector('.zbk')).toBeTruthy())
+        expect(r.container.querySelector('.zbk-sym')!.textContent).toBe('BTCUSDT')
+    })
+
+    it('SPUNE raspicat cand cartea nu e a simbolului din chart', async () => {
+        w.S = { symbol: 'SOLUSDT', price: 180 }
+        mockFetch(mkBook({ symbol: 'BTCUSDT' }))
+        const r = render(<LiqMapPanel />)
+        await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+        fireEvent.click(screen.getByText('BOOK'))
+        await waitFor(() => expect(r.container.querySelector('.zbk-mismatch')).toBeTruthy())
+        const t = r.container.querySelector('.zbk-mismatch')!.textContent || ''
+        expect(t).toMatch(/BTCUSDT/)
+        expect(t).toMatch(/SOLUSDT/)
+        expect(t).toMatch(/only/i)
+    })
+
+    it('nota de jos NU mai pretinde ca e cartea simbolului din chart', async () => {
+        w.S = { symbol: 'SOLUSDT', price: 180 }
+        mockFetch(mkBook({ symbol: 'BTCUSDT' }))
+        const r = render(<LiqMapPanel />)
+        await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+        fireEvent.click(screen.getByText('BOOK'))
+        await waitFor(() => expect(r.container.querySelector('.zbk-note')).toBeTruthy())
+        const t = r.container.querySelector('.zbk-note')!.textContent || ''
+        expect(t).toMatch(/BTCUSDT/)
+        expect(t).not.toMatch(/SOLUSDT/)
+    })
+
+    it('cand simbolul se potriveste NU apare niciun avertisment — zgomot pe ecran', async () => {
+        const { container } = await openBook()
+        expect(container.querySelector('.zbk-mismatch')).toBeNull()
+        expect(container.querySelector('.zbk-sym')!.textContent).toBe('BTCUSDT')
+    })
+})

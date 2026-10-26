@@ -9355,3 +9355,22 @@ Numărasem **nivelurile** care contribuie, nu **cadrele** în care palierul a av
 **O lămurire:** presetările de bandă se opresc la 0,2% fiindcă **atât** acoperă cartea **pe BTC**; pe ETH se întinde până la 0,233%, deci presetarea de 0,2% taie puţin, iar **AUTO** e varianta corectă acolo — şi e şi implicită.
 
 **5 mutaţii noi moarte**, inclusiv bugul original de fermitate. **50 pe Bookmap în total.**
+
+### 🔴 Panoul putea arăta cartea BTC cu eticheta altui simbol (b336)
+
+**Aceeaşi clasă cu tape-ul de la b328 — dar mai rea.**
+
+Cartea de ordine există doar pe **BTCUSDT şi ETHUSDT** (aşa e construit fluxul). Dacă în chart era **SOLUSDT**, ruta cădea **în linişte** pe BTCUSDT, iar panoul scria *„the visible book on SOLUSDT"* peste date BTC.
+
+La tape, cel puţin, se vedeau simboluri străine care te puneau pe gând. **Aici nimic nu arăta străin — doar numere perfect plauzibile.** E cel mai urât fel de minciună posibil în panoul ăsta.
+
+L-am găsit verificând ce se întâmplă pe un simbol care **NU** e în listă, nu pe cel implicit.
+
+**Reparat:**
+1. Panoul afişează simbolul pe care **serverul** l-a dat, nu pe cel din chart — şi îl scrie lângă spread.
+2. **Şi spune** când nu se potrivesc: *„Order book is available for BTCUSDT and ETHUSDT only — showing BTCUSDT, not the charted SOLUSDT."* Când se potrivesc, **tace** — altfel ar fi zgomot.
+3. Nota de jos nu mai pretinde că e cartea simbolului din chart.
+
+**4 teste noi de randare pe simbol nepotrivit, 3 mutaţii moarte** (inclusiv bugul original). **53 pe Bookmap în total.**
+
+Client-only: intră la refresh, fără reload.
