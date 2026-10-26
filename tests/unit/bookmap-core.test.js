@@ -293,8 +293,17 @@ describe('CHARTUL — timp x pret, cu linia pretului peste (cerut: „sa arate c
     test('o coloana FARA cadre e NULL, nu zero si nu interpolata', () => {
         // Zero ar desena linia la 0, iar interpolarea ar inventa un pret care
         // n-a existat. NULL se vede ca o intrerupere, adica adevarul.
-        const frames = [f(T0, 80000), f(T0 + 59000, 80100)];
-        const h = B.heat({ frames, cols: 10, rows: 24, bandPct: 0.2, windowMs: 60000, now: T0 + 59000 });
+        //
+        // [2026-10-26] Prima versiune declansa cazul cerand mai multe coloane
+        // decat cadre — ceea ce nu se mai poate, fiindca grila e acum marginita
+        // la numarul de cadre (vezi nota despre pieptene). Dar proprietatea
+        // rameane valabila pe cadre GRUPATE NEUNIFORM, care e si cazul real:
+        // fluxul se intrerupe o vreme, apoi revine.
+        const frames = [
+            f(T0, 80000), f(T0 + 500, 80010), f(T0 + 1000, 80020), f(T0 + 1500, 80030),
+            f(T0 + 58000, 80090), f(T0 + 58500, 80095), f(T0 + 59000, 80100),
+        ];
+        const h = B.heat({ frames, cols: 7, rows: 24, bandPct: 0.2, windowMs: 60000, now: T0 + 59000 });
         expect(h.mids.filter(m => m === null).length).toBeGreaterThan(0);
         expect(h.mids.filter(m => m === 0).length).toBe(0);
     });
@@ -377,5 +386,48 @@ describe('grila: doua mutatii mi-au supravietuit si le acopar aici', () => {
         expect(c1).toBeGreaterThan(0);
         // egale, nu de 8 ori diferite
         expect(Math.abs(c1 - c0) / c0).toBeLessThan(0.05);
+    });
+});
+
+describe('⛔ COLOANELE nu pot fi mai multe decat CADRELE — altfel harta e un pieptene', () => {
+    // [2026-10-26] Verificat aritmetic pe starea reala a serverului, dupa
+    // livrare: la ritm lent (nimeni nu s-a uitat inca) se strang ~20 de cadre
+    // in fereastra de 10 minute, iar clientul cere 110 coloane.
+    //   20 cadre -> 20 coloane cu date, 90 GOALE (82%)
+    //   13 cadre -> 13 coloane cu date, 97 GOALE (88%)
+    // Adica exact ce vede el la PRIMA deschidere: dungi subtiri cu gauri intre
+    // ele. E aceeasi clasa cu bugul de la b327 — daca desenezi grila CERUTA in
+    // loc de cea care incape in date, ascunzi exact ce ai.
+    const frames = (n, stepMs = 31000) => Array.from({ length: n }, (_, i) => B.normalize({
+        exchange: 'x', symbol: 'B', ts: T0 + i * stepMs, mult: 1,
+        bids: [['79990', '1']], asks: [['80010', '1']],
+    }));
+
+    test('cu 20 de cadre si 110 coloane cerute, grila are 20 de coloane PLINE', () => {
+        const h = B.heat({ frames: frames(20), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: T0 + 19 * 31000 });
+        expect(h.cols).toBeLessThanOrEqual(20);
+        const cuDate = new Set(h.cells.map(c => c.col)).size;
+        expect(cuDate).toBe(h.cols);
+        expect(h.mids.filter(m => m === null).length).toBe(0);
+    });
+
+    test('cu destule cadre, coloanele cerute se respecta', () => {
+        const h = B.heat({ frames: frames(200, 3000), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: T0 + 199 * 3000 });
+        expect(h.cols).toBe(110);
+        expect(h.mids.filter(m => m === null).length).toBe(0);
+    });
+
+    test('un singur cadru NU da o grila de o coloana ilizibila — exista un minim', () => {
+        const h = B.heat({ frames: frames(1), cols: 110, rows: 24, bandPct: 0.1 });
+        expect(h.cols).toBeGreaterThanOrEqual(2);
+    });
+
+    test('raporteaza cate coloane a CERUT clientul, ca sa se poata spune pe ecran', () => {
+        const h = B.heat({ frames: frames(20), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: T0 + 19 * 31000 });
+        expect(h.colsAsked).toBe(110);
+        expect(h.cols).toBeLessThan(h.colsAsked);
     });
 });

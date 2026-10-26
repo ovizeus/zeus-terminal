@@ -605,3 +605,9 @@
     .zbk-wall { grid-template-columns: 26px 52px 46px 1fr 30px; gap: 4px; font-size: 9.5px; }
     .zbk-z { font-size: 9px; padding: 2px 5px; }
 }
+
+/* Cand grila are mai putine coloane decat s-au cerut, se spune. O harta cu 20
+   de coloane late e CORECTA (atatea instantanee exista), dar fara eticheta
+   arata ca una stricata — exact confuzia care a pornit discutia despre
+   lichidari. */
+.zbk-fill { color: #d8b25e; }

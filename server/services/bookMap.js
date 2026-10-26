@@ -218,7 +218,7 @@ function walls(agg, limit = 6) {
  * zero; şi nu interpolat — ar inventa un preţ care n-a existat.
  */
 function heat({ frames, cols, rows, bandPct, windowMs, now }) {
-    const C = Math.max(2, Math.min(600, Number(cols) || 90));
+    const asked = Math.max(2, Math.min(600, Number(cols) || 90));
     const R = Math.max(4, Math.min(MAX_ROWS, Number(rows) || DEFAULT_ROWS));
     const all = Array.isArray(frames) ? frames.filter(Boolean) : [];
     const win = Number(windowMs);
@@ -227,10 +227,22 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
         .slice().sort((a, b) => a.ts - b.ts);
 
     if (!used.length) {
-        return { cells: [], mids: new Array(C).fill(null), cols: C, rows: R,
-            bandPct: _band([], bandPct), tMin: null, tMax: null, maxUsd: 0, frames: 0,
+        return { cells: [], mids: new Array(asked).fill(null), cols: asked, colsAsked: asked,
+            rows: R, bandPct: _band([], bandPct), tMin: null, tMax: null, maxUsd: 0, frames: 0,
             exchanges: [], spread: null };
     }
+
+    // ⚠️ COLOANELE NU POT FI MAI MULTE DECÂT CADRELE.
+    //
+    // Verificat aritmetic pe starea reală a serverului: la ritm lent se strâng
+    // ~20 de cadre în fereastra de 10 minute, iar clientul cere 110 coloane ⇒
+    // 20 de coloane cu date şi 90 GOALE (82%). Harta ar fi ieşit un pieptene de
+    // dungi subţiri cu găuri — exact ce ar fi văzut el la PRIMA deschidere.
+    //
+    // Aceeaşi clasă cu bugul de la b327: dacă desenezi grila CERUTĂ în loc de
+    // cea care încape în date, ascunzi exact ce ai. Pe măsură ce se adună
+    // cadre, coloanele cresc până la cât s-a cerut.
+    const C = Math.max(2, Math.min(asked, used.length));
 
     const band = _band(used, bandPct);
     const rowPct = (2 * band) / R;
@@ -280,7 +292,7 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
         }
     }
 
-    return { cells, mids, cols: C, rows: R, bandPct: band, rowPct, tMin, tMax,
+    return { cells, mids, cols: C, colsAsked: asked, rows: R, bandPct: band, rowPct, tMin, tMax,
         maxUsd, frames: used.length, exchanges: [...exch].sort(),
         spread: used[used.length - 1].spread };
 }

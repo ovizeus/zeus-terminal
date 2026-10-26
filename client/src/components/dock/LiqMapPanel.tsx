@@ -649,6 +649,15 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                 <span><i style={{ background: `rgb(${BOOK.ask})` }} />asks</span>
                 <span>{bandLabel(heat.bandPct === undefined ? band : Number(heat.bandPct.toFixed(3)))}</span>
                 <span>{windowLabel(win)} span · {fmtSpan(Math.max(0, (heat.tMax || 0) - (heat.tMin || 0)))} drawn</span>
+                {/* Grila e marginita la numarul de instantanee: altfel 20 de
+                    cadre in 110 coloane ar desena un pieptene de dungi cu
+                    gauri. Dar atunci trebuie SPUS, altfel o harta cu putine
+                    coloane late arata ca una stricata. */}
+                {heat.colsAsked && heat.cols < heat.colsAsked && (
+                    <span className="zbk-fill">
+                        {heat.cols}/{heat.colsAsked} columns · filling in
+                    </span>
+                )}
             </div>
 
             {/* PEREŢII, cu fermitatea alături: a treia capcană notată în carte

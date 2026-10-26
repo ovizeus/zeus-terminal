@@ -9299,3 +9299,26 @@ Am măsurat greutatea raportată de Binance la fiecare 10 secunde, în aceeaşi 
 **Două teste ale mele au căzut pe schimbarea de structură, nu pe comportament** (unul căuta `DEEP_MS_SLOW` lângă `const next`, logica mutându-se în `_intervalFor`; altul citea doar primii 2200 de caractere din rută). Actualizate, cu motivul scris în ele.
 
 **5 mutaţii noi, toate moarte** — inclusiv bugul chiar măsurat. **40 pe Bookmap în total.**
+
+### 🔴 Adăugat: harta ar fi arătat ca un PIEPTENE la prima deschidere (b334)
+
+Judecata vizuală e a lui. Dar partea **obiectivă** din „să se citească uşor" se poate calcula — şi am calculat-o pe starea reală a serverului.
+
+**Găsit:** la ritm lent (nimeni nu s-a uitat încă) se strâng ~20 de cadre în fereastra de 10 minute, iar clientul cere **110 coloane**.
+
+| cadre | coloane cu date | GOALE |
+|---|---|---|
+| 20 | 20 | **90 (82%)** |
+| 13 | 13 | **97 (88%)** |
+
+Prima deschidere i-ar fi arătat **dungi subţiri cu găuri între ele**. Aceeaşi clasă cu b327 şi cu scara continuă de la b326: *dacă desenezi grila CERUTĂ în loc de cea care încape în date, ascunzi exact ce ai.*
+
+**Reparat:** grila e mărginită la numărul de instantanee (minim 2). Cu 20 de cadre ies **20 de coloane late şi pline**; pe măsură ce se adună, coloanele cresc până la cât s-a cerut.
+
+**Dar o hartă cu 20 de coloane late arată ca una stricată dacă nu se spune de ce** — deci panoul scrie `20/110 columns · filling in`, şi **tace** când grila e completă.
+
+**Lăţimea pe telefon, calculată:** rândul de perete are sub 380px coloanele `26+52+46+1fr+30` cu goluri de 4px = **170px fixi din 296 utili** pe un iPhone SE ⇒ **126px** pentru coloana de dolari. Testul **citeşte** `grid-template-columns` şi `gap` din foaia de stil şi face suma — dacă cineva lăţeşte o coloană sau face dolarii coloană fixă, cade.
+
+**Un test al meu declanşa cazul greşit:** cerea coloane goale cerând *mai multe coloane decât cadre*, ceea ce nu se mai poate. Rescris pe cazul **real** — cadre grupate neuniform, adică fluxul se întrerupe o vreme şi apoi revine.
+
+**5 mutaţii noi moarte. 45 pe Bookmap în total.**

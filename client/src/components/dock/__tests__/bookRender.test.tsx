@@ -12,6 +12,8 @@
 //   - starea „inca nu am instantanee" NU arata ca o defectiune
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { LiqMapPanel } from '../LiqMapPanel'
 
 const w = window as any
@@ -263,4 +265,65 @@ describe('onestitatea despre ce se vede', () => {
     for (const r of ['carte', 'pereti', 'pereţi', 'fermitate', 'lichiditate', 'banda', 'bandă', 'adanc'])
       expect(txt).not.toContain(r)
   })
+})
+
+describe('⛔ grila ingusta la inceput: CORECTA, dar trebuie SPUSA', () => {
+    // Verificat aritmetic pe starea reala a serverului: la ritm lent se strang
+    // ~20 de cadre in fereastra de 10 minute iar clientul cere 110 coloane.
+    // Serverul margineste grila la numarul de cadre (altfel ar fi un pieptene
+    // de dungi cu gauri — clasa bugului de la b327). Dar o harta cu 20 de
+    // coloane late arata ca una stricata daca nu se spune de ce.
+    it('spune cate coloane din cate, cand sunt mai puţine', async () => {
+        mockFetch(mkBook({ heat: { ...mkBook().heat, cols: 20, colsAsked: 110 } }))
+        const { container } = await openBook()
+        const t = container.querySelector('.zbk-legend')!.textContent || ''
+        expect(t).toMatch(/20\/110 columns/)
+        expect(t).toMatch(/filling in/)
+    })
+
+    it('cand grila e completa NU mai spune nimic — zgomot pe ecran', async () => {
+        mockFetch(mkBook({ heat: { ...mkBook().heat, cols: 110, colsAsked: 110 } }))
+        const { container } = await openBook()
+        expect(container.querySelector('.zbk-legend')!.textContent).not.toMatch(/filling in/)
+    })
+
+    it('fara colsAsked nu arunca si nu inventeaza eticheta', async () => {
+        const h: any = { ...mkBook().heat }
+        delete h.colsAsked
+        mockFetch(mkBook({ heat: h }))
+        const { container } = await openBook()
+        expect(container.querySelector('.zbk-legend')).toBeTruthy()
+        expect(container.querySelector('.zbk-legend')!.textContent).not.toMatch(/filling in/)
+    })
+})
+
+describe('⛔ incape pe telefon — masurat, nu din gust', () => {
+    it('randul de perete INCAPE pe 320px — citit din foaia de stil, calculat', () => {
+        // Operatorul citeste Zeus de pe TELEFON, deci lizibilitatea e
+        // aritmetica, nu gust. iPhone SE: 320px minus 12px padding x2 = 296
+        // utili. Testul CITESTE grid-template-columns si gap din CSS si face
+        // suma — daca cineva lataeste o coloana, testul cade.
+        const css = readFileSync(join(__dirname, '..', '..', '..', 'styles', 'liqmap.css'), 'utf8')
+        const i = css.indexOf('@media (max-width: 380px)', css.indexOf('.zbk'))
+        expect(i).toBeGreaterThan(-1)
+        const bloc = css.slice(i, i + 700)
+        const m = bloc.match(/\.zbk-wall\s*\{[^}]*grid-template-columns:\s*([^;]+);[^}]*gap:\s*(\d+)px/)
+        expect(m).toBeTruthy()
+        const coloane = m![1].trim().split(/\s+/)
+        const gap = parseInt(m![2], 10)
+        const fixe = coloane.filter(c => c.endsWith('px')).map(c => parseInt(c, 10))
+        expect(coloane).toContain('1fr')
+        const total = fixe.reduce((a, b) => a + b, 0) + gap * (coloane.length - 1)
+        const UTILI = 296
+        expect(total).toBeLessThan(UTILI)
+        // Coloanei de dolari trebuie sa-i rameana destul ca sa incapa „116.0M"
+        expect(UTILI - total).toBeGreaterThanOrEqual(60)
+    })
+
+    it('coloana dolarilor rameane 1fr — ea poarta cifra care conteaza', async () => {
+        const { container } = await openBook()
+        const w = container.querySelector('.zbk-wall')
+        expect(w).toBeTruthy()
+        expect(w!.children.length).toBe(5)
+    })
 })
