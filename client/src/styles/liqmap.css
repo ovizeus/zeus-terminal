@@ -301,3 +301,20 @@
 /* Rândurile simbolului urmărit, vizibile în fluxul general fără să ţipe. */
 .zlq-tp.mine { background: rgba(255, 140, 66, .055); }
 .zlq-tp.mine .zlq-tp-sym { color: #e8d5c2; }
+
+/* Pe ecrane înguste (320px, un iPhone SE) tape-ul lăsa 40px pentru simbol —
+   adică „BTCUS…". Preţul şi bursa se strâng; simbolul NU, fiindcă el spune
+   ce s-a lichidat. Nimic nu dispare: se îngustează ce poate fi îngustat. */
+@media (max-width: 380px) {
+    .zlq-tp {
+        grid-template-columns: 7px 42px 1fr 52px 58px 30px;
+        gap: 4px;
+        font-size: 10px;
+    }
+    .zlq-tp-ex { font-size: 8px; }
+    .zlq-row {
+        grid-template-columns: 52px 48px 1fr 60px;
+        gap: 5px;
+        font-size: 10px;
+    }
+}

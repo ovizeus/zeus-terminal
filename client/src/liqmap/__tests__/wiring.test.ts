@@ -111,3 +111,48 @@ describe('panoul chiar cere date si asculta live-ul', () => {
     expect(PANEL).toMatch(/'live'/)
   })
 })
+
+// [2026-10-26] Operatorul citeste Zeus de pe TELEFON. Coloanele sunt in pixeli
+// ficsi, deci incaperea nu e o chestiune de gust — e aritmetica, si se verifica.
+//
+// Calculat: pe 360px, tape-ul lasa 80px pentru simbol. Pe 320px (iPhone SE)
+// lasa 40px, adica „BTCUS…". De aia exista regula pentru ecrane inguste.
+describe('incape pe telefon — aritmetica, nu gust', () => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const CSS: string = fs.readFileSync('/opt/zeus-terminal/client/src/styles/liqmap.css', 'utf8')
+
+  function track(css: string, cls: string) {
+    const m = new RegExp('\\.' + cls + '\\s*\\{[^}]*grid-template-columns:\\s*([^;]+);[^}]*gap:\\s*(\\d+)px', 's').exec(css)
+    if (!m) return null
+    const px = (m[1].match(/(\d+)px/g) || []).map(x => parseInt(x, 10))
+    const cols = m[1].trim().split(/\s+/).length
+    return px.reduce((a, b) => a + b, 0) + parseInt(m[2], 10) * (cols - 1)
+  }
+
+  it('pe 360px, fiecare rand lasa loc real pentru continut', () => {
+    for (const cls of ['zlq-row', 'zlq-tp']) {
+      const t = track(CSS, cls)!
+      expect(t).toBeTruthy()
+      expect(336 - t).toBeGreaterThanOrEqual(60)   // 360 minus gutiera panoului
+    }
+  })
+
+  it('exista o regula pentru ecrane INGUSTE, si chiar strange coloanele', () => {
+    const i = CSS.indexOf('@media (max-width: 380px)')
+    expect(i).toBeGreaterThan(-1)
+    const narrow = CSS.slice(i)
+    for (const cls of ['zlq-row', 'zlq-tp']) {
+      const wide = track(CSS.slice(0, i), cls)!
+      const tight = track(narrow, cls)!
+      expect(tight).toBeLessThan(wide)            // chiar strange
+      expect(296 - tight).toBeGreaterThanOrEqual(60)  // 320 minus gutiera
+    }
+  })
+
+  it('simbolul NU e coloana care se strange cel mai tare — el spune CE s-a lichidat', () => {
+    // Simbolul e `1fr`: ia ce ramane. Daca ar fi fost fix, s-ar fi taiat primul.
+    const i = CSS.indexOf('@media (max-width: 380px)')
+    const m = /\.zlq-tp\s*\{[^}]*grid-template-columns:\s*([^;]+);/s.exec(CSS.slice(i))!
+    expect(m[1]).toMatch(/1fr/)
+  })
+})
