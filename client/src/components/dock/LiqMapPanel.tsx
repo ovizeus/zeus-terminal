@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
 import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, fmtSpan, LIQ } from '../../liqmap/scale'
+import {
+    fetchPredict, sideLabel, hitLabel, horizonLabel, strengthBar, targetLabel,
+    historyLabel, crowdLabel, oiLabel, liftLabel, type PredictSymbol,
+} from '../../liqmap/predict'
 
 // ══════════════════════════════════════════════════════════════════
 // LIQUIDATION MAP — trei vederi, toate din date măsurate
@@ -24,10 +28,15 @@ const VIEWS = [
     { id: 'map', label: 'MAP' },
     { id: 'heat', label: 'HEATMAP' },
     { id: 'live', label: 'LIVE' },
+    // [LIQ-PREDICT 2026-10-26] Cerut de operator: „lângă map heat map live sus
+    // mai vreau o rubrică, prediction long short pe btc şi eth".
+    { id: 'pred', label: 'PREDICT' },
 ] as const
 type ViewId = typeof VIEWS[number]['id']
 
 const REFRESH_MS = 60_000
+// Serverul recalculeaza la 2 minute; mai des de atat ar fi cereri pe degeaba.
+const PREDICT_REFRESH_MS = 60_000
 const HEAT_COLS = 90
 
 const w = window as any
@@ -49,6 +58,7 @@ export function LiqMapPanel() {
     const [symbol, setSymbol] = useState(currentSymbol)
     const [price, setPrice] = useState(currentPrice)
     const [loading, setLoading] = useState(true)
+    const [pred, setPred] = useState<PredictSymbol[]>([])
     const alive = useRef(true)
 
     const load = useCallback(async () => {
@@ -57,6 +67,19 @@ export function LiqMapPanel() {
         const d = await fetchPanel(symbol, p, days, HEAT_COLS)
         if (alive.current) { setData(d); setLoading(false) }
     }, [days, symbol])
+
+    useEffect(() => {
+        if (view !== 'pred') return
+        let on = true
+        const ac = new AbortController()
+        const go = async () => {
+            const d = await fetchPredict(ac.signal)
+            if (on) setPred(d)
+        }
+        go()
+        const iv = setInterval(go, PREDICT_REFRESH_MS)
+        return () => { on = false; ac.abort(); clearInterval(iv) }
+    }, [view])
 
     useEffect(() => {
         alive.current = true
@@ -109,6 +132,7 @@ export function LiqMapPanel() {
                 {view === 'map' && <MapView map={map} price={price} />}
                 {view === 'heat' && <HeatView heat={heat} price={price} />}
                 {view === 'live' && <LiveView tape={tape} mine={symbol} />}
+                {view === 'pred' && <PredictView rows={pred} />}
             </div>
         </div>
     )
@@ -314,6 +338,90 @@ function Empty({ what }: { what: string }) {
                 only liquidations that actually happened show up here. where nothing is
                 written, nobody was liquidated — price was never there
             </span>
+        </div>
+    )
+}
+
+// ── PREDICT ───────────────────────────────────────────────────────
+//
+// [LIQ-PREDICT 2026-10-26] Operatorul: „prediction long short pe btc si eth…
+// să socotească din lichidările reale unde e atracţia, magnetul… date reale,
+// nu fake".
+//
+// Trei lucruri pe care rubrica le face şi care o deosebesc de o ghicitoare:
+//
+// 1. SPUNE CÂND NU ŞTIE. 'NO EDGE' e un rezultat afişat, nu un eşec ascuns.
+//    Un panou care arată mereu o direcţie minte jumătate din timp.
+// 2. NU AFIŞEAZĂ UN PROCENT NEMĂSURAT. Până sunt destule cazuri rezolvate pe
+//    klines reale, scrie CALIBRATING n/30. Decizia operatorului, întrebat.
+// 3. ÎŞI ARATĂ ISTORICUL. El a cerut „azi, ieri, acum 3 zile"; la 13 ore de
+//    colectare „acum 3 zile" nu există, şi rubrica o spune în loc să lase
+//    impresia unei ferestre pe care n-o are.
+function PredictView({ rows }: { rows: PredictSymbol[] }) {
+    if (!rows || !rows.length) {
+        return <Empty what="Prediction" />
+    }
+    return (
+        <div className="zlq-pr">
+            {rows.map((r) => <PredictCard key={r.symbol} r={r} />)}
+            <div className="zlq-pr-note">
+                Direction is derived from measured liquidations: the magnet points at the side
+                that has <b>not</b> burned yet. Hit rate is counted on real klines after the
+                horizon elapses — never estimated.
+            </div>
+        </div>
+    )
+}
+
+function PredictCard({ r }: { r: PredictSymbol }) {
+    const s = r.signal
+    const live = s.side === 'UP' || s.side === 'DOWN'
+    const col = s.side === 'UP' ? LIQ.short : s.side === 'DOWN' ? LIQ.long : '#5d7183'
+    return (
+        <div className={'zlq-pr-card' + (live ? '' : ' flat')}>
+            <div className="zlq-pr-hd">
+                <span className="zlq-pr-sym">{r.symbol}</span>
+                <span className="zlq-pr-px">{r.price ? Math.round(r.price).toLocaleString('en-US') : '—'}</span>
+            </div>
+
+            <div className="zlq-pr-side" style={{ color: col }}>
+                <b>{sideLabel(s.side)}</b>
+                {live && <><i className="zlq-pr-bar">{strengthBar(s.strength)}</i><em>{s.strength}</em></>}
+            </div>
+
+            {live ? (
+                <div className="zlq-pr-rows">
+                    <div><span>Target</span><b>{targetLabel(s.target, r.price)}</b></div>
+                    <div><span>Burned</span><b>
+                        <i style={{ color: LIQ.long }}>↓{fmtUsd(s.longBurnedUsd)}</i>
+                        {'  '}
+                        <i style={{ color: LIQ.short }}>↑{fmtUsd(s.shortBurnedUsd)}</i>
+                    </b></div>
+                    <div><span>Crowd</span><b>{crowdLabel(r.context.crowdLongPct)}</b></div>
+                    <div><span>Leverage</span><b>{oiLabel(r.context.oiChangePct)}</b></div>
+                    {r.baseline && <div><span>Normal</span><b>
+                        {Math.round(100 * r.baseline.longUsd / (r.baseline.longUsd + r.baseline.shortUsd))}% of
+                        burned $ are longs, for this market
+                    </b></div>}
+                </div>
+            ) : (
+                // Motivul tăcerii se SPUNE. „NO EDGE" fără motiv ar arăta ca o
+                // defecţiune — exact confuzia care a pornit toată discuţia.
+                <div className="zlq-pr-why">{s.reason}</div>
+            )}
+
+            <div className="zlq-pr-hor">
+                {r.horizons.map((h) => (
+                    <div key={h.horizonMs} className={'zlq-pr-h' + (h.calibrating ? ' cal' : '')}>
+                        <span>{horizonLabel(h.horizonMs)}</span>
+                        <b>{liftLabel(h)}</b>
+                    </div>
+                ))}
+            </div>
+
+            <div className="zlq-pr-ft">
+                {historyLabel(r.oldestEventTs)} · {(r.eventsInWindow || 0).toLocaleString('en-US')} liquidations in 24h
+            </div>
         </div>
     )
 }

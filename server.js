@@ -1782,6 +1782,27 @@ const _runLiqPrune = () => {
 setTimeout(_runLiqPrune, 180000);
 setInterval(_runLiqPrune, 86400000);
 
+// [LIQ-PREDICT 2026-10-26] Rubrica de predictie long/short pe BTC si ETH.
+// Porneste serviciul care calculeaza semnalul din lichidarile MASURATE,
+// il salveaza (ca procentul sa poata fi NUMARAT, nu afirmat) si pune
+// verdictele pe semnalele scadente, din klines reale.
+try {
+  require('./server/services/liqPredictService').start();
+} catch (e) {
+  logger.warn('LIQPRED', 'start failed: ' + (e && e.message));
+}
+
+// Retentia instantaneelor de predictie. Aceeasi lectie ca la G-5: lotizata,
+// fiindca better-sqlite3 e SINCRON si un DELETE nelimitat ingheata bucla.
+const _runLiqPredictPrune = () => {
+  try {
+    const n = require('./server/services/liqPredictStore').prune();
+    if (n > 0) logger.info('LIQPRED', `retention: ${n} snapshots removed`);
+  } catch (e) { logger.warn('LIQPRED', 'retention failed: ' + (e && e.message)); }
+};
+setTimeout(_runLiqPredictPrune, 240000);
+setInterval(_runLiqPredictPrune, 86400000);
+
 // [DD3] ML bandit feature scan — 4h auto-quarantine check
 try { require('./server/cron/mlScanCron').schedule(); } catch (_) {}
 

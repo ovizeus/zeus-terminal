@@ -273,4 +273,24 @@ function symbols({ days, limit } = {}) {
     }
 }
 
-module.exports = { record, map, heatmap, stats, symbols, prune, DEFAULT_DAYS };
+/**
+ * Evenimentele brute dintr-o fereastră, pentru predicţie.
+ *
+ * [LIQ-PREDICT 2026-10-26] `map()` şi `heatmap()` agregă deja pe paliere, iar
+ * predicţia are nevoie de evenimentul întreg (parte, preţ, dolari, moment) ca
+ * să-l poată pondera după vârstă — un palier nu mai ştie CÂND s-a întâmplat.
+ * Nu agreg aici: fereastra e de ore, nu de zile, deci numărul de rânduri e mic.
+ */
+function events(symbol, sinceMs) {
+    try {
+        const sym = String(symbol || '').toUpperCase();
+        if (!sym) return [];
+        const since = Number(sinceMs);
+        return _s().range.all(sym, Number.isFinite(since) ? since : 0);
+    } catch (e) {
+        logger.error('LIQ', 'events failed: ' + e.message);
+        return [];
+    }
+}
+
+module.exports = { record, map, heatmap, stats, symbols, events, prune, DEFAULT_DAYS };

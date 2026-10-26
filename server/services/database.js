@@ -10422,6 +10422,73 @@ migrate('420_liq_events', () => {
     `);
 });
 
+migrate('421_liq_predict_snapshots', () => {
+    // [LIQ-PREDICT 2026-10-26] Tabela care face procentul MĂSURABIL.
+    //
+    // Operatorul a cerut o rubrică de predicţie long/short pe BTC şi ETH, „dar
+    // date reale, nu fake". Un procent de probabilitate nu se poate deduce
+    // dintr-o formulă — înseamnă „din 100 de ori când semnalul a arătat aşa,
+    // în N a nimerit", deci se NUMĂRĂ. Tabela asta e numărătoarea.
+    //
+    // Un rând = un semnal, pe un orizont. La naştere are doar ce se ştia atunci
+    // (inclusiv preţul, altfel randamentul de după n-ar avea reper). Coloanele
+    // de rezultat se umplu MAI TÂRZIU, din klines reale, de un rezolvator.
+    //
+    // ⚠️ Nimic din tabela asta nu se afişează ca procent până sunt cel puţin
+    // MIN_SAMPLES rânduri rezolvate (liqPredict.hitRate). Decizia operatorului,
+    // întrebat explicit: până atunci panoul scrie CALIBRATING.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS liq_predict_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol          TEXT    NOT NULL,
+            ts              INTEGER NOT NULL,
+            horizon_ms      INTEGER NOT NULL,
+            side            TEXT    NOT NULL,   -- 'UP' | 'DOWN'
+            strength        INTEGER NOT NULL,
+            price_at        REAL    NOT NULL,
+            target_price    REAL,               -- NULL = n-a existat palier cartografiat
+            imbalance       REAL,
+            long_burned_usd REAL,
+            short_burned_usd REAL,
+            crowd_long_pct  REAL,
+            oi_change_pct   REAL,
+            resolved_at     INTEGER,            -- NULL = încă nu a trecut timpul
+            outcome         TEXT,               -- 'HIT' | 'MISS'
+            rule            TEXT,               -- 'TARGET' | 'DIRECTION'
+            ret_pct         REAL,
+            extreme_pct     REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_lps_sym_hor ON liq_predict_snapshots(symbol, horizon_ms);
+        CREATE INDEX IF NOT EXISTS idx_lps_unresolved ON liq_predict_snapshots(resolved_at, ts);
+    `);
+});
+
+migrate('422_liq_predict_control', () => {
+    // [LIQ-PREDICT 2026-10-26] GRUPUL DE CONTROL, adaugat dupa o masuratoare
+    // care a schimbat tot felul in care rubrica raporteaza.
+    //
+    // Masurat pe 125 de ore de bare reale: o ţinta la -0,58% pe BTC e atinsa
+    // NECONDITIONAT in 9% din cazuri pe 1h, dar in 86% pe 24h. Deci un procent
+    // singur induce in eroare in AMBELE direcţii: „30% pe 1h" pare slab desi e
+    // de 3 ori rata de baza, iar „86% pe 24h" pare excelent desi e EXACT rata
+    // de baza, adica zero informaţie.
+    //
+    // Oglinda rezolva asta fara date suplimentare: pentru fiecare semnal se
+    // verifica si ţinta simetrica, pe aceleasi bare. Raportul dintre cele doua
+    // rate e singura cifra care se poate citi.
+    //
+    // Tabela 421 exista deja (migratia rulase), deci coloanele se ADAUGA.
+    const cols = db.prepare("SELECT name FROM pragma_table_info('liq_predict_snapshots')")
+        .all().map(r => r.name);
+    if (!cols.includes('control_outcome')) {
+        db.exec('ALTER TABLE liq_predict_snapshots ADD COLUMN control_outcome TEXT');
+    }
+    if (!cols.includes('target_pct')) {
+        db.exec('ALTER TABLE liq_predict_snapshots ADD COLUMN target_pct REAL');
+    }
+});
+
+
 migrate('415_users_app_version', () => {
     // [2026-06-26] App version reporting. The native Android app reports its installed APK
     // versionCode/Name on boot so the admin can see who is on the latest build and who is behind.

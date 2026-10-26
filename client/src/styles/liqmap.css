@@ -318,3 +318,133 @@
         font-size: 10px;
     }
 }
+
+/* ── PREDICT ──
+   [LIQ-PREDICT 2026-10-26] Rubrica cerută de operator. Regula de design e
+   aceeaşi ca în tot panoul: o singură îndrăzneală. Aici îndrăzneala e culoarea
+   direcţiei; tot restul e tăcut, ca să nu concureze cu singurul lucru care
+   trebuie citit dintr-o privire.
+
+   Cartonaşul fără semnal e vizibil ESTOMPAT, nu ascuns: „nu ştiu" e un răspuns
+   care trebuie să se vadă, dar nu trebuie să atragă ochiul ca unul care ştie. */
+.zlq-pr { display: flex; flex-direction: column; gap: 10px; }
+
+.zlq-pr-card {
+    border: 1px solid var(--liq-line);
+    border-radius: 6px;
+    padding: 10px 11px;
+    background: #090d12;
+}
+.zlq-pr-card.flat { opacity: .62; }
+
+.zlq-pr-hd {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 7px;
+}
+.zlq-pr-sym {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    letter-spacing: .08em;
+    color: #eaf2f8;
+}
+.zlq-pr-px {
+    font-family: ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    color: #8fa6b8;
+}
+
+.zlq-pr-side {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.zlq-pr-side b { font-size: 12px; letter-spacing: .1em; }
+.zlq-pr-bar {
+    font-style: normal;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: -.5px;
+    opacity: .85;
+}
+.zlq-pr-side em {
+    font-style: normal;
+    font-family: ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: var(--liq-dim);
+    margin-left: auto;
+}
+
+.zlq-pr-rows { display: flex; flex-direction: column; gap: 3px; }
+.zlq-pr-rows > div {
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 11px;
+}
+.zlq-pr-rows span { color: var(--liq-dim); font-size: 10px; letter-spacing: .06em; }
+.zlq-pr-rows b {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    color: #d7e5f0;
+}
+.zlq-pr-rows i { font-style: normal; }
+
+.zlq-pr-why {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--liq-dim);
+    padding: 2px 0 4px;
+}
+
+/* Cele trei orizonturi, pe un rând. În calibrare stau în spate: cifra care nu
+   există încă n-are voie să arate ca una care există. */
+.zlq-pr-hor {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    margin-top: 9px;
+    padding-top: 8px;
+    border-top: 1px solid var(--liq-line);
+}
+.zlq-pr-h { display: flex; flex-direction: column; gap: 2px; }
+.zlq-pr-h span { font-size: 9px; letter-spacing: .14em; color: #4d6376; }
+.zlq-pr-h b {
+    font-family: ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    font-weight: 500;
+    color: #d7e5f0;
+}
+.zlq-pr-h.cal b { color: #5d7183; font-weight: 400; }
+
+.zlq-pr-ft {
+    margin-top: 7px;
+    font-size: 9.5px;
+    color: #4d6376;
+    font-family: ui-monospace, monospace;
+}
+
+.zlq-pr-note {
+    font-size: 10px;
+    line-height: 1.55;
+    color: #4d6376;
+    padding: 2px 2px 6px;
+}
+.zlq-pr-note b { color: #8fa6b8; font-weight: 600; }
+
+/* Pe telefon îngust cele trei orizonturi s-ar strivi la ~30px fiecare, adică
+   „CALIBR…". Trec pe un rând fiecare, cu eticheta în faţă. */
+@media (max-width: 380px) {
+    .zlq-pr-hor { grid-template-columns: 1fr; gap: 3px; }
+    .zlq-pr-h { flex-direction: row; align-items: baseline; gap: 7px; }
+    .zlq-pr-h span { min-width: 26px; }
+    .zlq-pr-rows > div { grid-template-columns: 56px 1fr; gap: 6px; }
+}

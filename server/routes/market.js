@@ -50,6 +50,38 @@ router.get('/liq-panel', (req, res) => {
     }
 });
 
+// [LIQ-PREDICT 2026-10-26] Rubrica de predictie. Operatorul: „prediction long
+// short pe btc si eth… sa socoteasca din lichidarile reale unde e magnetul…
+// date reale, nu fake".
+//
+// O SINGURA cerere pentru amandoua simbolurile, din acelasi motiv ca la
+// liq-panel: doua cereri ar insemna doua „acum" in acelasi ecran.
+//
+// Raspunsul cuprinde DELIBERAT si ce NU stim: `horizons[].calibrating` si
+// `need` — clientul nu are voie sa inventeze un procent cand serverul spune ca
+// nu are destule cazuri masurate.
+router.get('/liq-predict', async (req, res) => {
+    try {
+        const svc = require('../services/liqPredictService');
+        const want = String(req.query.symbols || svc.SYMBOLS.join(','))
+            .toUpperCase().split(',').map(x => x.trim()).filter(Boolean).slice(0, 4);
+        const syms = want.filter(x => svc.SYMBOLS.includes(x));
+        const list = syms.length ? syms : svc.SYMBOLS;
+
+        const out = [];
+        for (const sym of list) {
+            // Rezultatul calculat de tick, daca exista: ruta NU declanseaza
+            // cereri catre Binance la fiecare deschidere de panou.
+            const cached = svc.lastFor(sym);
+            out.push(cached || await svc.computeFor(sym));
+        }
+        res.json({ symbols: out, at: Date.now() });
+    } catch (err) {
+        // Panou gol, nu 500: un 500 il lasa sa creada ca s-a stricat altceva.
+        res.status(200).json({ symbols: [], at: Date.now(), error: 'unavailable' });
+    }
+});
+
 router.get('/liq-map', (req, res) => {
     try {
         const liqStore = require('../services/liqStore');
