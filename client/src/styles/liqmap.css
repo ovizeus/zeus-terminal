@@ -632,3 +632,15 @@
     padding: 5px 7px;
 }
 .zbk-mismatch b { color: #eaf2f8; }
+
+/* Coloanele TINUTE intre instantanee. Cartea chiar a persistat acolo, dar n-am
+   privit-o — deci se deseneaza mai stins SI se spune. */
+.zbk-held { color: #6d8396; }
+
+/* Eticheta PRICE statea peste linia pretului si se citea prost in captura lui.
+   Un fundal minim o desprinde fara sa adauge zgomot. */
+.zbk-price-tag {
+    background: rgba(7, 10, 14, .82);
+    padding: 1px 4px;
+    border-radius: 3px;
+}

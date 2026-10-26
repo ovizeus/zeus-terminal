@@ -230,6 +230,15 @@ function walls(agg, limit = 6) {
  * `mids[col]` e NULL pentru coloanele fără cadre. Nu zero — ar desena linia la
  * zero; şi nu interpolat — ar inventa un preţ care n-a existat.
  */
+/** Intervalul TIPIC intre instantanee — mediana, ca o pauza sa nu-l traga. */
+function _medianGap(sorted) {
+    if (!sorted || sorted.length < 2) return Infinity;
+    const g = [];
+    for (let i = 1; i < sorted.length; i++) g.push(sorted[i].ts - sorted[i - 1].ts);
+    g.sort((a, b) => a - b);
+    return g[Math.floor(g.length / 2)] || Infinity;
+}
+
 function heat({ frames, cols, rows, bandPct, windowMs, now }) {
     const asked = Math.max(2, Math.min(600, Number(cols) || 90));
     const R = Math.max(4, Math.min(MAX_ROWS, Number(rows) || DEFAULT_ROWS));
@@ -242,7 +251,7 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
     if (!used.length) {
         return { cells: [], mids: new Array(asked).fill(null), cols: asked, colsAsked: asked,
             rows: R, bandPct: _band([], bandPct), tMin: null, tMax: null, maxUsd: 0, loUsd: 0,
-            frames: 0, exchanges: [], spread: null };
+            heldCols: 0, frames: 0, exchanges: [], spread: null };
     }
 
     // ⚠️ COLOANELE NU POT FI MAI MULTE DECÂT CADRELE.
@@ -323,8 +332,48 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
     const vals = cells.map(c => Math.max(c.bidUsd, c.askUsd)).filter(v => v > 0).sort((a, b) => a - b);
     const loUsd = vals.length ? vals[Math.floor(0.05 * (vals.length - 1))] : 0;
 
+    // ⚠️ TINEREA INTRE INSTANTANEE — reparatia pieptenelui din captura lui.
+    //
+    // [2026-10-26] Harta avea benzi de culoare cu GOLURI NEGRE intre ele, si
+    // linia pretului rupta. La b334 marginisem coloanele la numarul de cadre,
+    // dar asta repara doar jumatate: cadrele nu vin la intervale egale (31 s
+    // cand nu se uita nimeni, 5 s cat timp se uita), deci mai multe cad in
+    // aceeasi coloana si altele rameane goale. Masurat: 29 de cadre ⇒ 19
+    // coloane cu date, 10 goale (34%).
+    //
+    // Reparatia e un ADEVAR FIZIC, nu o cosmetizare: cartea de ordine NU dispare
+    // intre instantanee — doar n-am privit. Deci fiecare instantaneu TINE pana
+    // la urmatorul, iar celulele tinute sunt MARCATE (`held`), ca sa nu se dea
+    // drept observatii noi.
+    //
+    // DAR NU LA NESFARSIT: o pana reala de flux nu are voie sa fie pictata ca
+    // date. Tinerea se opreste dupa HOLD_MAX_COLS coloane, deci un gol adevarat
+    // rameane gol.
+    const colMs = span / C;
+    const maxHold = Math.max(1, Math.ceil((2.5 * _medianGap(used)) / Math.max(1, colMs)));
+    let heldCols = 0;
+    let lastCol = -1;
+    // Celulele MASURATE se indexeaza o data, inainte de umplere. Prima varianta
+    // impingea in `cells` chiar in timp ce itera peste el — se termina doar
+    // fiindca sarea peste cele marcate `held`, adica se baza pe noroc si era
+    // patratica. Un index e si corect, si ieftin.
+    const srcByCol = new Map();
+    for (const c of cells) {
+        if (!srcByCol.has(c.col)) srcByCol.set(c.col, []);
+        srcByCol.get(c.col).push(c);
+    }
+    const adaugate = [];
+    for (let i = 0; i < C; i++) {
+        if (byCol.has(i)) { lastCol = i; continue; }
+        if (lastCol < 0 || i - lastCol > maxHold) continue;   // inainte de primul, sau pana reala
+        mids[i] = mids[lastCol];
+        for (const c of (srcByCol.get(lastCol) || [])) adaugate.push({ ...c, col: i, held: true });
+        heldCols++;
+    }
+    for (const c of adaugate) cells.push(c);
+
     return { cells, mids, cols: C, colsAsked: asked, rows: R, bandPct: band, rowPct, tMin, tMax,
-        maxUsd, loUsd, frames: used.length, exchanges: [...exch].sort(),
+        maxUsd, loUsd, heldCols, frames: used.length, exchanges: [...exch].sort(),
         spread: used[used.length - 1].spread };
 }
 

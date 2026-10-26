@@ -9384,3 +9384,26 @@ Testul **citeşte sursa clientului**, scoate câmpurile accesate (`heat.*`, `dat
 **Un test al meu nu dovedea nimic, şi l-am prins la mutaţie:** căuta cheia în **tot** corpul rutei, deci trecea chiar când o redenumeam pe calea de succes — fiindcă o găsea în ramura de **eroare** (`walls: []`). Acum cele două ramuri se verifică **separat**. Şi ramura de eroare trebuie să trimită aceleaşi chei, altfel panoul citeşte `undefined` exact când serverul are o problemă.
 
 **5 mutaţii moarte** (inclusiv `loUsd` nemai-trimis, `colsAsked` scos, `walls`/`source` redenumite pe calea de succes). **58 pe Bookmap în total.**
+
+### 🔴🔴 PIEPTENELE — văzut în captura LUI (b338)
+
+A deschis tabul şi mi-a trimis o captură: harta avea **nouă benzi de culoare cu goluri negre** între ele, şi **linia preţului ruptă** în bucăţi. Nu se citea.
+
+**Cauza:** la b334 mărginisem coloanele la numărul de instantanee — dar asta repara doar **jumătate**. Cadrele **nu vin la intervale egale**: 31 s când nu se uită nimeni, 5 s cât timp se uită. Deci mai multe cad în aceeaşi coloană şi altele rămân goale.
+
+Reprodus cu intervalele reale: **29 de cadre ⇒ 19 coloane cu date, 10 GOALE (34%)**:
+```
+##.#.#.##.#.#.#.##.#.#.######
+```
+
+**Reparaţia e un adevăr fizic, nu o cosmetizare:** cartea de ordine **nu dispare** între instantanee — doar n-am privit-o. Deci fiecare instantaneu **ţine** până la următorul. După: **29 din 29 de coloane pline**, zero goale, linia preţului neîntreruptă.
+
+**Dar nu la nesfârşit.** O pană reală de flux nu are voie să fie pictată ca date: ţinerea se opreşte după **2,5 intervale tipice** (mediana, ca o pauză să nu tragă media), deci un gol adevărat rămâne gol. Un test cu o gaură de 5 minute o verifică.
+
+**Şi se vede că sunt ţinute:** celulele ţinute se desenează la **72%** din opacitate, iar panoul scrie câte coloane sunt ţinute. Când nu e niciuna, tace. *O celulă ţinută nu e o observaţie nouă, şi diferenţa trebuie să se VADĂ, nu doar să fie scrisă.*
+
+**O neglijenţă a mea, reparată înainte de livrare:** prima variantă împingea în `cells` chiar în timp ce itera peste el — se termina doar fiindcă sărea peste cele marcate, adică se baza pe noroc şi era pătratică. Acum sursa se indexează o dată.
+
+Şi eticheta `PRICE` stătea peste linia preţului şi se citea prost în captură — are acum un fundal minim.
+
+**6 teste noi pe pieptene + 3 de randare, 5 mutaţii moarte. 63 pe Bookmap în total.**

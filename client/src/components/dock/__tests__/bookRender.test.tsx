@@ -79,7 +79,7 @@ beforeEach(() => {
   // fiecarei coloane). Deci testul se uita la ce s-a desenat.
   drawn.length = 0
   ;(HTMLCanvasElement.prototype as any).getContext = function () {
-    const rec: any = { ops: [], pts: [], fills: 0, strokes: 0 }
+    const rec: any = { ops: [], pts: [], fills: 0, strokes: 0, alphas: [] }
     drawn.push(rec)
     return {
       setTransform() {}, clearRect() {}, setLineDash() {},
@@ -88,7 +88,11 @@ beforeEach(() => {
       moveTo(x: number, y: number) { rec.pts.push([x, y]) },
       lineTo(x: number, y: number) { rec.pts.push([x, y]) },
       stroke() { rec.strokes++ },
-      set fillStyle(_v: any) {}, set strokeStyle(_v: any) {}, set lineWidth(_v: any) {},
+      set fillStyle(v: any) {
+        const m = String(v).match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/)
+        if (m) rec.alphas.push(parseFloat(m[1]))
+      },
+      set strokeStyle(_v: any) {}, set lineWidth(_v: any) {},
     }
   }
 })
@@ -368,5 +372,35 @@ describe('⛔ SIMBOLUL — cartea exista doar pe BTC si ETH (clasa bugului de la
         const { container } = await openBook()
         expect(container.querySelector('.zbk-mismatch')).toBeNull()
         expect(container.querySelector('.zbk-sym')!.textContent).toBe('BTCUSDT')
+    })
+})
+
+describe('⛔ coloanele TINUTE — pieptenele din captura lui', () => {
+    it('spune cate coloane sunt tinute intre instantanee', async () => {
+        mockFetch(mkBook({ heat: { ...mkBook().heat, heldCols: 10 } }))
+        const { container } = await openBook()
+        expect(container.querySelector('.zbk-legend')!.textContent).toMatch(/10 held between snapshots/)
+    })
+
+    it('cand nimic nu e tinut, TACE — altfel e zgomot pe ecran', async () => {
+        mockFetch(mkBook({ heat: { ...mkBook().heat, heldCols: 0 } }))
+        const { container } = await openBook()
+        expect(container.querySelector('.zbk-legend')!.textContent).not.toMatch(/held between/)
+    })
+
+    it('celulele tinute se deseneaza MAI STINS decat cele masurate', async () => {
+        // Nu e cosmetica: o celula tinuta nu e o observaţie noua, si diferenta
+        // trebuie sa se VADA, nu doar sa fie scrisa.
+        const b = mkBook()
+        const cells = [
+            { col: 0, row: 3, pct: -0.04, bidUsd: 1.2e6, askUsd: 0 },
+            { col: 1, row: 3, pct: -0.04, bidUsd: 1.2e6, askUsd: 0, held: true },
+        ]
+        mockFetch(mkBook({ heat: { ...b.heat, cells, cols: 2, heldCols: 1 } }))
+        await openBook()
+        await waitFor(() => expect(drawn.some((d: any) => d.fills > 1)).toBe(true))
+        const alfe = drawn.flatMap((d: any) => d.alphas || [])
+        // doua umpleri de celula cu aceiasi dolari, dar opacitati DIFERITE
+        expect(new Set(alfe.map((a: number) => a.toFixed(3))).size).toBeGreaterThan(1)
     })
 })

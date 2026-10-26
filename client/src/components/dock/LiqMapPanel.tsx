@@ -510,12 +510,16 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
         for (const cell of cells) {
             const x = colToX(cell.col, cols, w)
             const y = rowToY(cell.row, rows, h)
+            // O celulă ŢINUTĂ între instantanee se desenează mai stins decât
+            // una măsurată. Cartea chiar a persistat acolo — dar n-am privit-o,
+            // şi diferenţa asta trebuie să se vadă, nu doar să fie scrisă.
+            const k = cell.held ? 0.72 : 1
             if (cell.bidUsd > 0) {
-                ctx.fillStyle = bookColor('bid', bookIntensity(cell.bidUsd, maxUsd, loUsd))
+                ctx.fillStyle = bookColor('bid', bookIntensity(cell.bidUsd, maxUsd, loUsd) * k)
                 ctx.fillRect(x, y, Math.max(1, cw), Math.max(1, ch))
             }
             if (cell.askUsd > 0) {
-                ctx.fillStyle = bookColor('ask', bookIntensity(cell.askUsd, maxUsd, loUsd))
+                ctx.fillStyle = bookColor('ask', bookIntensity(cell.askUsd, maxUsd, loUsd) * k)
                 ctx.fillRect(x, y, Math.max(1, cw), Math.max(1, ch))
             }
         }
@@ -673,6 +677,13 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                 {heat.colsAsked && heat.cols < heat.colsAsked && (
                     <span className="zbk-fill">
                         {heat.cols}/{heat.colsAsked} columns · filling in
+                    </span>
+                )}
+                {/* Coloanele ţinute: cartea a persistat, dar n-am privit-o.
+                    Spus, nu ascuns — şi desenat mai stins. */}
+                {heat.heldCols > 0 && (
+                    <span className="zbk-held">
+                        {heat.heldCols} held between snapshots
                     </span>
                 )}
             </div>

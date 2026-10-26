@@ -531,3 +531,81 @@ describe('⛔ REFERINTA DE JOS pentru intensitate — raportul pe CELULA e 3x, n
         expect(h.loUsd).toBe(0);
     });
 });
+
+describe('⛔ PIEPTENELE — vazut in captura LUI, cu goluri negre intre benzi', () => {
+    // [2026-10-26] El a trimis o captura: harta avea 9 benzi de culoare cu
+    // GOLURI NEGRE intre ele, si linia pretului rupta in bucati.
+    //
+    // La b334 marginisem coloanele la numarul de cadre — dar asta repara doar
+    // jumatate: cadrele NU vin la intervale egale (31 s cand nu se uita nimeni,
+    // 5 s cat timp se uita), deci mai multe cad in aceeasi coloana si altele
+    // rameane goale. Reprodus: 29 de cadre -> 19 coloane cu date, 10 GOALE (34%).
+    //
+    // REPARATIA E UN ADEVAR FIZIC, nu o cosmetizare: cartea de ordine NU dispare
+    // intre instantanee — doar n-am privit. Deci fiecare instantaneu TINE pana
+    // la urmatorul. Dar nu la nesfarsit: o pana reala de flux nu are voie sa fie
+    // pictata ca date, deci tinerea se opreste dupa cateva intervale tipice.
+    const neegale = () => {
+        const ts = [];
+        let t = T0;
+        for (let i = 0; i < 14; i++) { ts.push(t); t += 31000; }
+        for (let i = 0; i < 15; i++) { ts.push(t); t += 5000; }
+        return { ts, end: t };
+    };
+    const mk = (ts) => ts.map(x => B.normalize({ exchange: 'b', symbol: 'B', ts: x, mult: 1,
+        bids: [['79990', '1'], ['79950', '2']], asks: [['80010', '1'], ['80050', '3']] }));
+
+    test('cu intervale NEEGALE nu mai rameane nicio coloana goala', () => {
+        const { ts, end } = neegale();
+        const h = B.heat({ frames: mk(ts), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: end });
+        const cuDate = new Set(h.cells.map(c => c.col));
+        expect(cuDate.size).toBe(h.cols);
+    });
+
+    test('si linia pretului nu mai e rupta', () => {
+        const { ts, end } = neegale();
+        const h = B.heat({ frames: mk(ts), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: end });
+        expect(h.mids.filter(m => m === null).length).toBe(0);
+    });
+
+    test('raporteaza cate coloane sunt TINUTE, ca sa se poata spune pe ecran', () => {
+        const { ts, end } = neegale();
+        const h = B.heat({ frames: mk(ts), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: end });
+        expect(h.heldCols).toBeGreaterThan(0);
+        expect(h.heldCols).toBeLessThan(h.cols);
+    });
+
+    test('o PANA reala de flux NU se picteaza ca date', () => {
+        // Cadre dese, apoi o gaura de 5 minute, apoi dese iar. Golul trebuie sa
+        // rameana gol: altfel harta ar afirma ca stia ce e in carte cand nu stia.
+        const ts = [];
+        let t = T0;
+        for (let i = 0; i < 20; i++) { ts.push(t); t += 5000; }
+        t += 5 * 60000;
+        for (let i = 0; i < 20; i++) { ts.push(t); t += 5000; }
+        const h = B.heat({ frames: mk(ts), cols: 40, rows: 24, bandPct: 0.1,
+            windowMs: 15 * 60000, now: t });
+        expect(h.mids.filter(m => m === null).length).toBeGreaterThan(0);
+    });
+
+    test('tinerea NU inventeaza coloane inainte de primul instantaneu', () => {
+        const { ts, end } = neegale();
+        const h = B.heat({ frames: mk(ts), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: end });
+        expect(h.mids[0]).not.toBeNull();
+        expect(h.tMin).toBe(ts[0]);
+    });
+
+    test('celulele tinute sunt MARCATE, nu se dau drept observatii noi', () => {
+        const { ts, end } = neegale();
+        const h = B.heat({ frames: mk(ts), cols: 110, rows: 24, bandPct: 0.1,
+            windowMs: 600000, now: end });
+        const tinute = h.cells.filter(c => c.held);
+        const masurate = h.cells.filter(c => !c.held);
+        expect(tinute.length).toBeGreaterThan(0);
+        expect(masurate.length).toBeGreaterThan(0);
+    });
+});
