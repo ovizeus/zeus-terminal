@@ -171,3 +171,27 @@ describe('RAPORTUL fata de oglinda — fara el procentul nu se poate citi', () =
             expect(all).not.toContain(r)
     })
 })
+
+describe('CAND vine verdictul — pe ecran, nu doar in discuţie', () => {
+    it('in calibrare arata si estimarea', () => {
+        const t = liftLabel(H({ resolved: 10, need: 30, perDay: 10, etaDays: 2 } as any))
+        expect(t).toMatch(/CALIBRATING 10\/30/)
+        expect(t).toMatch(/~2d/)
+    })
+
+    it('estimarea in luni se scrie limpede, nu ca 70 de zile', () => {
+        const t = liftLabel(H({ resolved: 1, need: 30, perDay: 0.4, etaDays: 72.5 } as any))
+        expect(t).toMatch(/~2\.4mo|~2mo|~3mo/)
+    })
+
+    it('fara ritm masurat NU se promite un termen', () => {
+        const t = liftLabel(H({ resolved: 0, need: 30, perDay: null, etaDays: null } as any))
+        expect(t).toBe('CALIBRATING 0/30')
+        expect(t).not.toMatch(/~/)
+    })
+
+    it('peste prag nu apare nicio estimare', () => {
+        const t = liftLabel(H({ calibrating: false, pct: 30, controlPct: 9, lift: 3.3, etaDays: null } as any))
+        expect(t).not.toMatch(/~/)
+    })
+})

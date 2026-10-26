@@ -26,6 +26,11 @@ export type Horizon = {
     lift?: number | null
     controlResolved?: number
     avgTargetPct?: number | null
+    // Ritmul MASURAT de strangere a cazurilor, si cat mai e pana la prag.
+    // Operatorul a intrebat „peste cateva zile poate prezice?" — panoul
+    // raspunde cu o estimare din ritm real, nu cu o promisiune.
+    perDay?: number | null
+    etaDays?: number | null
 }
 
 export type PredictTarget = { price: number; usd: number; n: number; pct: number }
@@ -99,7 +104,15 @@ export function hitLabel(h: Horizon | null | undefined): string {
  */
 export function liftLabel(h: Horizon | null | undefined): string {
     if (!h) return 'NO DATA'
-    if (h.calibrating) return `CALIBRATING ${h.resolved}/${h.need}`
+    if (h.calibrating) {
+        const base = `CALIBRATING ${h.resolved}/${h.need}`
+        const eta = Number(h.etaDays)
+        if (!Number.isFinite(eta) || eta <= 0) return base
+        // Peste ~6 saptamani „72 de zile" nu se citeste; lunile da. Si un termen
+        // lung trebuie sa se vada ca e lung, nu sa fie ascuns in zile.
+        const txt = eta >= 45 ? `~${(eta / 30).toFixed(1)}mo` : eta >= 1 ? `~${Math.round(eta)}d` : '~today'
+        return `${base}  ${txt}`
+    }
     const pct = h.pct
     const ctrl = h.controlPct
     const lf = h.lift

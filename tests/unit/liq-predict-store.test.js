@@ -73,11 +73,25 @@ describe('tabela si scrierea', () => {
             .toBe(store.HORIZONS_MS.length);
     });
 
-    test('dupa fereastra de dublare se scrie din nou', () => {
+    test('dupa pauza PROPRIE fiecarui orizont se scrie din nou', () => {
+        // [2026-10-26] Testul asta cerea DEDUPE_MS pentru toate orizonturile.
+        // Contractul s-a schimbat dinadins: pauza e LUNGIMEA ORIZONTULUI, ca
+        // ferestrele sa nu se suprapuna si cazurile sa fie independente (vezi
+        // dedupeFor). Deci la DEDUPE_MS + 1s nu se mai scrie NIMIC, iar fiecare
+        // orizont se redeschide la timpul LUI.
         store.record(sig(), T0);
         store.record(sig(), T0 + store.DEDUPE_MS + 1000);
         expect(db.prepare('SELECT COUNT(*) n FROM liq_predict_snapshots').get().n)
-            .toBe(store.HORIZONS_MS.length * 2);
+            .toBe(store.HORIZONS_MS.length);
+
+        for (const h of store.HORIZONS_MS) {
+            const inainte = db.prepare(
+                'SELECT COUNT(*) n FROM liq_predict_snapshots WHERE horizon_ms = ?').get(h).n;
+            store.record(sig(), T0 + store.dedupeFor(h) + 1000);
+            const dupa = db.prepare(
+                'SELECT COUNT(*) n FROM liq_predict_snapshots WHERE horizon_ms = ?').get(h).n;
+            expect(dupa).toBe(inainte + 1);
+        }
     });
 });
 
@@ -243,5 +257,104 @@ describe('oglinda se SCRIE si intra in rate — altfel ar fi calculata degeaba',
         expect(s.pct).toBeNull();
         expect(s.lift).toBeNull();
         expect(s.controlPct).toBeNull();
+    });
+});
+
+describe('⛔ CAZURILE TREBUIE SA FIE INDEPENDENTE — altfel 30/30 e un caz numarat de 30 de ori', () => {
+    // [2026-10-26] Operatorul a intrebat daca „peste cateva zile poate prezice".
+    // Verificand cat de repede ajunge la 30 de cazuri am gasit un defect in ce
+    // construisem: cu o pauza de 15 minute pe TOATE orizonturile, doua
+    // instantanee consecutive pe orizontul de 24h masoara ferestre care SE
+    // SUPRAPUN 99%. Contorul ar fi atins 30/30 intr-o zi, si procentul afisat
+    // ar fi fost un singur episod numarat de 30 de ori — adica exact cifra
+    // falsa pe care el a interzis-o.
+    //
+    // Reparat: pauza = LUNGIMEA ORIZONTULUI. Ferestrele nu se mai suprapun,
+    // deci fiecare caz e independent. Costul e timpul, si e spus pe faţa.
+
+    test('pauza creste cu orizontul — nu e aceeasi pentru toate', () => {
+        for (const h of store.HORIZONS_MS) {
+            expect(store.dedupeFor(h)).toBeGreaterThanOrEqual(h);
+        }
+        expect(store.dedupeFor(24 * 3600000)).toBeGreaterThan(store.dedupeFor(3600000));
+    });
+
+    test('pe 24h, doua semnale la 15 minute distanţa dau UN SINGUR rand', () => {
+        store.record(sig(), T0);
+        store.record(sig(), T0 + 15 * 60000);
+        const n = db.prepare('SELECT COUNT(*) n FROM liq_predict_snapshots WHERE horizon_ms = ?').get(H24).n;
+        expect(n).toBe(1);
+    });
+
+    test('pe 1h, la 15 minute tot e UN rand; dupa o ora apare al doilea', () => {
+        store.record(sig(), T0);
+        store.record(sig(), T0 + 15 * 60000);
+        expect(db.prepare('SELECT COUNT(*) n FROM liq_predict_snapshots WHERE horizon_ms = ?').get(H1).n).toBe(1);
+        store.record(sig(), T0 + H1 + 60000);
+        expect(db.prepare('SELECT COUNT(*) n FROM liq_predict_snapshots WHERE horizon_ms = ?').get(H1).n).toBe(2);
+    });
+
+    test('FERESTRELE NU SE SUPRAPUN — proprietatea care face cazurile independente', () => {
+        // Scriu la fiecare 5 minute timp de 3 zile si verific, pe fiecare
+        // orizont, ca intervalele [ts, ts+horizon] sunt disjuncte.
+        for (let t = T0; t < T0 + 3 * 86400000; t += 5 * 60000) store.record(sig(), t);
+        for (const h of store.HORIZONS_MS) {
+            const rows = db.prepare(
+                'SELECT ts FROM liq_predict_snapshots WHERE horizon_ms = ? ORDER BY ts').all(h);
+            expect(rows.length).toBeGreaterThan(1);
+            for (let i = 1; i < rows.length; i++) {
+                expect(rows[i].ts - rows[i - 1].ts).toBeGreaterThanOrEqual(h);
+            }
+        }
+    });
+
+    test('pe 3 zile, orizontul de 24h strange CEL MULT 3 cazuri — cifra reala, nu umflata', () => {
+        for (let t = T0; t < T0 + 3 * 86400000; t += 5 * 60000) store.record(sig(), t);
+        const n = db.prepare('SELECT COUNT(*) n FROM liq_predict_snapshots WHERE horizon_ms = ?').get(H24).n;
+        expect(n).toBeLessThanOrEqual(3);
+        expect(n).toBeGreaterThanOrEqual(2);
+    });
+});
+
+describe('CAND vine verdictul — estimat din ritmul MASURAT, nu promis', () => {
+    // Operatorul a intrebat „peste cateva zile poate prezice?". Raspunsul
+    // trebuie sa fie pe ECRAN, nu doar in discutie — si trebuie sa vina din
+    // ritmul cu care chiar se strang cazuri, nu dintr-o promisiune.
+    function seedAt(horizon, times) {
+        const ins = db.prepare(
+            'INSERT INTO liq_predict_snapshots (symbol, ts, horizon_ms, side, strength, price_at,'
+            + ' resolved_at, outcome) VALUES (?,?,?,?,?,?,?,?)');
+        for (const t of times) ins.run('BTCUSDT', t, horizon, 'UP', 60, 80000, t + horizon, 'HIT');
+    }
+
+    test('cu 10 cazuri in ultima zi, ritmul masurat e ~10/zi', () => {
+        const now = T0;
+        seedAt(H1, Array.from({ length: 10 }, (_, i) => now - i * 2 * 3600000));
+        const s = store.stats('BTCUSDT', H1, now);
+        expect(s.perDay).toBeGreaterThan(5);
+        expect(s.perDay).toBeLessThan(20);
+    });
+
+    test('estimarea pana la prag se calculeaza din ritm', () => {
+        const now = T0;
+        seedAt(H1, Array.from({ length: 10 }, (_, i) => now - i * 2 * 3600000));
+        const s = store.stats('BTCUSDT', H1, now);
+        expect(s.etaDays).toBeGreaterThan(0);
+        // 20 de cazuri lipsa la ~10/zi ⇒ ordinul a 2 zile
+        expect(s.etaDays).toBeLessThan(10);
+    });
+
+    test('fara cazuri NU se estimeaza nimic — nu se inventeaza un termen', () => {
+        const s = store.stats('BTCUSDT', H24, T0);
+        expect(s.perDay).toBeNull();
+        expect(s.etaDays).toBeNull();
+    });
+
+    test('peste prag nu mai exista estimare — nu mai are rost', () => {
+        const now = T0;
+        seedAt(H4, Array.from({ length: 40 }, (_, i) => now - i * 3600000));
+        const s = store.stats('BTCUSDT', H4, now);
+        expect(s.calibrating).toBe(false);
+        expect(s.etaDays).toBeNull();
     });
 });

@@ -20,6 +20,32 @@ const HORIZONS_MS = [3600000, 4 * 3600000, 24 * 3600000];
 // Un semnal nu se renotează la fiecare tick: altfel o singură cascadă ar
 // produce sute de rânduri „independente" şi rata ar măsura cascada, nu semnalul.
 const DEDUPE_MS = 15 * 60000;
+
+/**
+ * Pauza dintre două instantanee PE ACELAŞI ORIZONT = lungimea orizontului.
+ *
+ * ⚠️ DE CE NU O PAUZĂ FIXĂ, şi de ce asta e important pentru cifra afişată:
+ *
+ * Cu 15 minute pe toate orizonturile, două instantanee consecutive pe
+ * orizontul de 24h măsoară ferestre care **se suprapun 99%**. Contorul ar fi
+ * atins 30/30 într-o singură zi, dar cele 30 de cazuri ar fi fost UN episod
+ * numărat de 30 de ori — iar procentul afişat ar fi arătat solid fiind gol.
+ *
+ * Suprapunerea, măsurată: 1h → 75%, 4h → 94%, 24h → 99%.
+ *
+ * Cu pauza egală cu orizontul, ferestrele [ts, ts+orizont] sunt DISJUNCTE,
+ * deci fiecare caz e independent şi procentul înseamnă ce pare să însemne.
+ *
+ * Costul e timpul, şi se spune pe faţă în loc să fie ascuns: pe 1h ~10 cazuri
+ * pe zi (la ritmul măsurat de semnalizare), pe 4h ~2,6, pe 24h ~0,4. Un
+ * verdict pe 24h cere luni. Asta nu e o întârziere de implementare — e preţul
+ * unei cifre în care se poate avea încredere.
+ */
+function dedupeFor(horizonMs) {
+    const h = Number(horizonMs);
+    if (!Number.isFinite(h) || h <= 0) return DEDUPE_MS;
+    return Math.max(DEDUPE_MS, h);
+}
 const RETENTION_DAYS = 180;
 // Marjă după orizont, ca bara care închide fereastra să existe pe REST.
 const SETTLE_MS = 6 * 60000;
@@ -47,6 +73,9 @@ function _s() {
             + " SUM(CASE WHEN control_outcome = 'HIT' THEN 1 ELSE 0 END) AS controlHits,"
             + ' AVG(ABS(target_pct)) AS avgTargetPct'
             + ' FROM liq_predict_snapshots WHERE symbol = ? AND horizon_ms = ? AND resolved_at IS NOT NULL'),
+        rate: db.db.prepare(
+            'SELECT COUNT(*) AS n, MIN(ts) AS oldest FROM liq_predict_snapshots'
+            + ' WHERE symbol = ? AND horizon_ms = ? AND ts >= ?'),
         pending: db.db.prepare(
             'SELECT COUNT(*) AS n FROM liq_predict_snapshots WHERE symbol = ? AND resolved_at IS NULL'),
         recent: db.db.prepare(
@@ -77,7 +106,7 @@ function record(signal, now = Date.now()) {
     let n = 0;
     for (const h of HORIZONS_MS) {
         const last = _s().lastFor.get(sym, h);
-        if (last && now - Number(last.ts) < DEDUPE_MS) continue;
+        if (last && now - Number(last.ts) < dedupeFor(h)) continue;
         _s().insert.run(
             sym, now, h, signal.side, Math.round(Number(signal.strength) || 0), price,
             signal.target && Number.isFinite(Number(signal.target.price)) ? Number(signal.target.price) : null,
@@ -119,7 +148,7 @@ function resolveWith(row, bars, now = Date.now()) {
 }
 
 /** Rata măsurată pe un orizont, plus câte aşteaptă încă. */
-function stats(symbol, horizonMs) {
+function stats(symbol, horizonMs, now = Date.now()) {
     const sym = String(symbol || '').toUpperCase();
     const row = _s().stats.get(sym, horizonMs)
         || { resolved: 0, hits: 0, controlResolved: 0, controlHits: 0, avgTargetPct: null };
@@ -135,6 +164,21 @@ function stats(symbol, horizonMs) {
     hr.lift = hr.calibrating ? null : (lf.ratio === null ? null : Math.round(lf.ratio * 100) / 100);
     hr.controlResolved = Number(row.controlResolved) || 0;
     hr.avgTargetPct = Number.isFinite(Number(row.avgTargetPct)) ? Number(row.avgTargetPct) : null;
+
+    // CAND vine verdictul, din ritmul MASURAT. Operatorul a intrebat „peste
+    // cateva zile poate prezice?" — raspunsul trebuie sa fie pe ecran, si sa
+    // vina din cate cazuri se strang chiar acum, nu dintr-o promisiune a mea.
+    //
+    // Fereastra de 7 zile: destul ca ritmul sa fie un ritm, nu un accident.
+    const r7 = _s().rate.get(sym, horizonMs, now - 7 * 86400000) || { n: 0, oldest: null };
+    const spanDays = r7.oldest ? Math.max(1 / 24, (now - Number(r7.oldest)) / 86400000) : 0;
+    hr.perDay = (r7.n > 0 && spanDays > 0) ? Math.round((r7.n / spanDays) * 10) / 10 : null;
+    // Nicio estimare daca nu exista ritm, si niciuna dupa ce pragul e atins:
+    // acolo n-ar fi informatie, ar fi zgomot pe ecran.
+    const lipsa = LP.MIN_SAMPLES - hr.resolved;
+    hr.etaDays = (hr.calibrating && hr.perDay > 0 && lipsa > 0)
+        ? Math.round((lipsa / hr.perDay) * 10) / 10
+        : null;
     return hr;
 }
 
@@ -147,4 +191,5 @@ function prune(days = RETENTION_DAYS, batch = 500) {
     return _s().pruneBatch.run(cutoff, batch).changes;
 }
 
-module.exports = { record, due, resolveWith, stats, recent, prune, HORIZONS_MS, DEDUPE_MS, RETENTION_DAYS, SETTLE_MS };
+module.exports = { record, due, resolveWith, stats, recent, prune, dedupeFor,
+    HORIZONS_MS, DEDUPE_MS, RETENTION_DAYS, SETTLE_MS };
