@@ -5,6 +5,10 @@ import {
     fetchPredict, sideLabel, hitLabel, horizonLabel, strengthBar, targetLabel,
     historyLabel, crowdLabel, oiLabel, liftLabel, type PredictSymbol,
 } from '../../liqmap/predict'
+import {
+    fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
+    rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
+} from '../../bookmap/book'
 
 // ══════════════════════════════════════════════════════════════════
 // LIQUIDATION MAP — trei vederi, toate din date măsurate
@@ -31,12 +35,18 @@ const VIEWS = [
     // [LIQ-PREDICT 2026-10-26] Cerut de operator: „lângă map heat map live sus
     // mai vreau o rubrică, prediction long short pe btc şi eth".
     { id: 'pred', label: 'PREDICT' },
+    // [BOOKMAP 2026-10-26] „acum sus lângă predict poţi să faci bookmap… să
+    // arate chartul, preţul, să avem zoom". Era etapa 2 în carte; condiţia de
+    // pornire era să judece el harta de lichidări ca bună, şi a judecat-o.
+    { id: 'book', label: 'BOOK' },
 ] as const
 type ViewId = typeof VIEWS[number]['id']
 
 const REFRESH_MS = 60_000
 // Serverul recalculeaza la 2 minute; mai des de atat ar fi cereri pe degeaba.
 const PREDICT_REFRESH_MS = 60_000
+// Serverul ia un instantaneu adanc la 5 s; mai des n-ar aduce coloane noi.
+const BOOK_REFRESH_MS = 5_000
 const HEAT_COLS = 90
 
 const w = window as any
@@ -59,6 +69,9 @@ export function LiqMapPanel() {
     const [price, setPrice] = useState(currentPrice)
     const [loading, setLoading] = useState(true)
     const [pred, setPred] = useState<PredictSymbol[]>([])
+    const [book, setBook] = useState<any>(null)
+    const [bookBand, setBookBand] = useState<number | 'auto'>('auto')
+    const [bookWin, setBookWin] = useState(600)
     const alive = useRef(true)
 
     const load = useCallback(async () => {
@@ -67,6 +80,24 @@ export function LiqMapPanel() {
         const d = await fetchPanel(symbol, p, days, HEAT_COLS)
         if (alive.current) { setData(d); setLoading(false) }
     }, [days, symbol])
+
+    // Cartea de ordine se aduce NUMAI cu rubrica deschisă: serverul o
+    // reîmprospătează oricum la 5 s, iar o cerere pe secundă pentru un ecran
+    // la care nu se uită nimeni e taxă curată.
+    useEffect(() => {
+        if (view !== 'book') return
+        let on = true
+        const ac = new AbortController()
+        const go = async () => {
+            const d = await fetchBook(symbol, {
+                band: bookBand, windowSec: bookWin, cols: 110, rows: 56,
+            }, ac.signal)
+            if (on && d) setBook(d)
+        }
+        go()
+        const iv = setInterval(go, BOOK_REFRESH_MS)
+        return () => { on = false; ac.abort(); clearInterval(iv) }
+    }, [view, symbol, bookBand, bookWin])
 
     useEffect(() => {
         if (view !== 'pred') return
@@ -133,6 +164,10 @@ export function LiqMapPanel() {
                 {view === 'heat' && <HeatView heat={heat} price={price} />}
                 {view === 'live' && <LiveView tape={tape} mine={symbol} />}
                 {view === 'pred' && <PredictView rows={pred} />}
+                {view === 'book' && (
+                    <BookView data={book} band={bookBand} setBand={setBookBand}
+                        win={bookWin} setWin={setBookWin} symbol={symbol} />
+                )}
             </div>
         </div>
     )
@@ -421,6 +456,235 @@ function PredictCard({ r }: { r: PredictSymbol }) {
 
             <div className="zlq-pr-ft">
                 {historyLabel(r.oldestEventTs)} · {(r.eventsInWindow || 0).toLocaleString('en-US')} liquidations in 24h
+            </div>
+        </div>
+    )
+}
+
+// ── BOOK ──────────────────────────────────────────────────────────
+//
+// [BOOKMAP 2026-10-26] „sa arate chartul pretul sa avem zoom tot ce trebuie".
+//
+// Harta de lichidări arată unde au EXPLODAT banii. Asta arată unde STAU.
+//
+// ⚠️ CE AM MĂSURAT ÎNAINTE, fiindcă îi schimbă aşteptarea şi i-am spus-o:
+// cartea care EXISTĂ e lată de 253 de dolari pe BTC (−0,155% … +0,160%).
+// Nu există pereţi la 1% distanţă. Deci „zoom" nu te depărtează — te duce mai
+// adânc în bandă şi mai departe pe timp.
+function BookView({ data, band, setBand, win, setWin, symbol }: any) {
+    const cv = useRef<HTMLCanvasElement | null>(null)
+    const heat = data?.heat
+    const walls: Wall[] = data?.walls || []
+    const top = data?.top
+
+    useEffect(() => {
+        const c = cv.current
+        if (!c || !heat) return
+        const ctx = c.getContext('2d')
+        if (!ctx) return
+        const dpr = Math.min(2, (window as any).devicePixelRatio || 1)
+        const w = c.clientWidth || 320
+        const h = 240
+        c.width = Math.round(w * dpr)
+        c.height = Math.round(h * dpr)
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.clearRect(0, 0, w, h)
+
+        // Fundalul: aceeaşi tăcere ca în restul panoului.
+        ctx.fillStyle = '#070a0e'
+        ctx.fillRect(0, 0, w, h)
+
+        const { cols, rows, cells, maxUsd, mids } = heat
+        const cw = w / cols
+        const ch = h / rows
+
+        for (const cell of cells) {
+            const x = colToX(cell.col, cols, w)
+            const y = rowToY(cell.row, rows, h)
+            if (cell.bidUsd > 0) {
+                ctx.fillStyle = bookColor('bid', bookIntensity(cell.bidUsd, maxUsd))
+                ctx.fillRect(x, y, Math.max(1, cw), Math.max(1, ch))
+            }
+            if (cell.askUsd > 0) {
+                ctx.fillStyle = bookColor('ask', bookIntensity(cell.askUsd, maxUsd))
+                ctx.fillRect(x, y, Math.max(1, cw), Math.max(1, ch))
+            }
+        }
+
+        // ⚠️ DE CE PREŢUL NU SE DESENEAZĂ ÎN HARTĂ, cu măsurătoarea care a
+        // decis-o: rândurile sunt ancorate pe mijlocul FIECĂREI coloane, deci
+        // preţul stă prin construcţie exact la mijloc şi linia ar ieşi dreaptă
+        // — adică n-ar fi un chart, ar fi o decoraţie.
+        //
+        // Şi nu pot ancora pe preţ ABSOLUT: măsurat pe 1000 de bare de 1 minut,
+        // într-o fereastră de 10 minute preţul depăşeşte chiar şi cea mai largă
+        // bandă (±0,16%) în 21% din cazuri pe BTC şi 46% pe ETH; la ±0,05% în
+        // 90–100%. Cu ancoră absolută, lichiditatea ar ieşi din cadru şi harta
+        // s-ar goli exact când se mişcă ceva.
+        //
+        // Deci: harta rămâne RELATIVĂ (aşa lichiditatea e comparabilă în timp),
+        // iar preţul are banda lui, cu scara lui — deasupra. Aici marchez doar
+        // linia de zero, ca să se vadă unde e preţul în bandă.
+        ctx.strokeStyle = 'rgba(216, 178, 94, .45)'
+        ctx.lineWidth = 1
+        ctx.setLineDash([3, 3])
+        ctx.beginPath()
+        ctx.moveTo(0, h / 2)
+        ctx.lineTo(w, h / 2)
+        ctx.stroke()
+        ctx.setLineDash([])
+        void mids
+    }, [heat])
+
+    // ── CHARTUL preţului: bandă proprie, scară proprie ──
+    const pcv = useRef<HTMLCanvasElement | null>(null)
+    useEffect(() => {
+        const c = pcv.current
+        if (!c || !heat) return
+        const ctx = c.getContext('2d')
+        if (!ctx) return
+        const dpr = Math.min(2, (window as any).devicePixelRatio || 1)
+        const w = c.clientWidth || 320
+        const h = 54
+        c.width = Math.round(w * dpr)
+        c.height = Math.round(h * dpr)
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.clearRect(0, 0, w, h)
+        ctx.fillStyle = '#070a0e'
+        ctx.fillRect(0, 0, w, h)
+
+        const ms: (number | null)[] = heat.mids || []
+        const real = ms.filter((m): m is number => m !== null && m !== undefined)
+        if (real.length < 2) return
+        let lo = Math.min(...real), hi = Math.max(...real)
+        if (hi - lo <= 0) { hi = lo * 1.0001; lo = lo * 0.9999 }
+        const pad = (hi - lo) * 0.12
+        lo -= pad; hi += pad
+        const cwp = w / Math.max(1, ms.length)
+
+        ctx.strokeStyle = `rgba(${BOOK.line}, .95)`
+        ctx.lineWidth = 1.6
+        ctx.beginPath()
+        let open = false
+        for (let i = 0; i < ms.length; i++) {
+            const m = ms[i]
+            // O coloană fără cadre se ÎNTRERUPE. Nu interpolez: ar inventa un
+            // preţ care n-a existat.
+            if (m === null || m === undefined) { open = false; continue }
+            const y = h - ((m - lo) / (hi - lo)) * h
+            const x = i * cwp + cwp / 2
+            if (!open) { ctx.moveTo(x, y); open = true } else ctx.lineTo(x, y)
+        }
+        ctx.stroke()
+    }, [heat])
+
+    const realMids: number[] = (heat?.mids || []).filter((m: any) => m !== null && m !== undefined)
+    const priceLo = realMids.length ? Math.min(...realMids) : null
+    const priceHi = realMids.length ? Math.max(...realMids) : null
+
+    if (!data) return <Empty what="The order book" />
+    if (!heat || !heat.frames) {
+        return (
+            <div className="zlq-empty">
+                <b>Waiting for the first snapshot</b>
+                <span>{sourceLabel(data.source || null)}</span>
+            </div>
+        )
+    }
+
+    return (
+        <div className="zbk">
+            {/* Banda de sus vine din fluxul RAPID (WS), nu din medii — cele
+                două surse nu se amestecă, altfel densitatea desenată ar depinde
+                de proporţia cadrelor, nu de piaţă. */}
+            <div className="zbk-top">
+                <span className="zlq-k">SPREAD</span>
+                <b>{fmtSpread(top?.spread ?? null, top?.mid ?? null)}</b>
+                <span className="zbk-bb" style={{ color: `rgb(${BOOK.bid})` }}>
+                    {top ? Math.round(top.bestBid).toLocaleString('en-US') : '—'}
+                </span>
+                <span className="zbk-ba" style={{ color: `rgb(${BOOK.ask})` }}>
+                    {top ? Math.round(top.bestAsk).toLocaleString('en-US') : '—'}
+                </span>
+                <span className="zbk-real">RESTING LIQUIDITY · NOT A FORECAST</span>
+            </div>
+
+            <div className="zbk-zoom">
+                <span className="zlq-k">BAND</span>
+                {BANDS.map((b) => (
+                    <button key={String(b.value)}
+                        className={'zbk-z' + (String(b.value) === String(band) ? ' act' : '')}
+                        onClick={() => setBand(b.value)}>{b.label}</button>
+                ))}
+                <span className="zlq-k zbk-sep">SPAN</span>
+                {WINDOWS.map((wd) => (
+                    <button key={wd.value}
+                        className={'zbk-z' + (wd.value === win ? ' act' : '')}
+                        onClick={() => setWin(wd.value)}>{wd.label}</button>
+                ))}
+            </div>
+
+            {/* CHARTUL: preţul pe fereastra desenată, cu scara LUI. Separat de
+                hartă fiindcă harta e relativă la mijloc — vezi nota din canvas. */}
+            <div className="zbk-price">
+                <canvas ref={pcv} />
+                <div className="zbk-price-ax">
+                    <span>{priceHi !== null ? Math.round(priceHi).toLocaleString('en-US') : ''}</span>
+                    <span>{priceLo !== null ? Math.round(priceLo).toLocaleString('en-US') : ''}</span>
+                </div>
+                <span className="zbk-price-tag">PRICE</span>
+            </div>
+
+            <div className="zbk-canvas">
+                <canvas ref={cv} />
+                <div className="zbk-axis">
+                    <span>+{heat.bandPct.toFixed(3)}%</span>
+                    <span className="zbk-axis-mid">PRICE</span>
+                    <span>-{heat.bandPct.toFixed(3)}%</span>
+                </div>
+            </div>
+
+            <div className="zbk-legend">
+                <span><i style={{ background: `rgb(${BOOK.bid})` }} />bids</span>
+                <span><i style={{ background: `rgb(${BOOK.ask})` }} />asks</span>
+                <span>{bandLabel(heat.bandPct === undefined ? band : Number(heat.bandPct.toFixed(3)))}</span>
+                <span>{windowLabel(win)} span · {fmtSpan(Math.max(0, (heat.tMax || 0) - (heat.tMin || 0)))} drawn</span>
+            </div>
+
+            {/* PEREŢII, cu fermitatea alături: a treia capcană notată în carte
+                era „un perete care dispare când preţul se apropie nu e perete". */}
+            <div className="zbk-walls">
+                <div className="zbk-walls-hd">
+                    <span>THICKEST RESTING LEVELS</span>
+                    <span className="zlq-dim">firmness = share of snapshots it was actually there</span>
+                </div>
+                {walls.length === 0 && (
+                    <div className="zbk-wall-none">no level thick enough to call a wall yet</div>
+                )}
+                {walls.map((wl, i) => (
+                    <div key={i} className={'zbk-wall ' + (wl.side === 'BID' ? 'b' : 'a')}>
+                        <span>{wl.side}</span>
+                        <b>{Math.round(wl.price).toLocaleString('en-US')}</b>
+                        <i>{wl.distUsd >= 0 ? '+' : ''}{Math.round(wl.distUsd).toLocaleString('en-US')}</i>
+                        <em>{fmtUsd(wl.usd)}</em>
+                        <u>{Math.round(wl.firmness * 100)}%</u>
+                    </div>
+                ))}
+            </div>
+
+            <div className="zbk-src">
+                {sourceLabel(data.source || null)}
+                {data.source?.health?.usedWeight1m
+                    ? ` · binance weight ${data.source.health.usedWeight1m}/2400`
+                    : ''}
+                {data.ladder?.excludedLevels
+                    ? ` · ${data.ladder.excludedLevels.toLocaleString('en-US')} levels outside band`
+                    : ''}
+            </div>
+            <div className="zbk-note">
+                The visible book on {symbol} spans a few hundred dollars around price — there are no
+                walls 1% away, they simply do not exist in the book. Zoom goes <b>deeper</b> and
+                <b> further back in time</b>, not wider.
             </div>
         </div>
     )

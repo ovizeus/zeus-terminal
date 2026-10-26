@@ -82,6 +82,75 @@ router.get('/liq-predict', async (req, res) => {
     }
 });
 
+// [BOOKMAP 2026-10-26] Cartea de ordine: unde stau banii ACUM, peste unde au
+// explodat inainte. Operatorul: „sa fie full, sa se citeasca usor, sa arate
+// chartul, pretul, sa avem zoom, totul functional".
+//
+// O SINGURA cerere pentru tot ecranul, ca la liq-panel: grila timp x pret,
+// scara pe niveluri, pereţii, si banda de sus. Trei cereri ar insemna trei
+// „acum" diferite in acelasi ecran.
+//
+// ⚠️ ZOOM-UL E MARGINIT AICI, nu in client: `cols` si `rows` ajung in bucle si
+// in alocari, deci o cerere cu rows=1e9 ar fi o cale de a inghetat serverul.
+// `band` accepta 'auto' — si auto chiar inseamna banda care EXISTA (lectia
+// b326/b327), nu una presupusa.
+router.get('/bookmap', (req, res) => {
+    try {
+        const BM = require('../services/bookMap');
+        const feed = require('../services/bookFeed');
+
+        const symbol = String(req.query.symbol || 'BTCUSDT').toUpperCase();
+        const sym = feed.SYMBOLS.includes(symbol) ? symbol : feed.SYMBOLS[0];
+
+        const bandRaw = String(req.query.band || 'auto');
+        const band = bandRaw === 'auto'
+            ? 'auto'
+            : Math.max(0.005, Math.min(1, Number(bandRaw) || BM.DEFAULT_BAND_PCT));
+
+        const windowMs = Math.max(30000, Math.min(BM.DEFAULT_WINDOW_MS * 2,
+            (Number(req.query.window) || 600) * 1000));
+        const cols = Math.max(10, Math.min(240, Number(req.query.cols) || 90));
+        const rows = Math.max(8, Math.min(BM.MAX_ROWS, Number(req.query.rows) || 48));
+
+        const deep = feed.deepFrames(sym);
+        const now = Date.now();
+        const heat = BM.heat({ frames: deep, cols, rows, bandPct: band, windowMs, now });
+        const ladder = BM.aggregate({ frames: deep, bandPct: band, rows, windowMs, now });
+
+        // Banda de sus vine din cadrele RAPIDE (WS) si NU din medii — vezi nota
+        // din bookFeed despre de ce cele doua surse nu se amesteca.
+        const top = feed.topFrames(sym);
+        const last = top.length ? top[top.length - 1] : null;
+
+        res.json({
+            symbol: sym,
+            heat,
+            ladder: { cells: ladder.cells, mid: ladder.mid, bandPct: ladder.bandPct,
+                rowPct: ladder.rowPct, maxUsd: ladder.maxUsd, frames: ladder.frames,
+                excludedLevels: ladder.excludedLevels },
+            walls: BM.walls(ladder, 8),
+            top: last ? {
+                bestBid: last.bestBid, bestAsk: last.bestAsk, spread: last.spread,
+                mid: last.mid, ts: last.ts,
+                bidTopUsd: last.bids.reduce((x, [pp, q]) => x + pp * q, 0),
+                askTopUsd: last.asks.reduce((x, [pp, q]) => x + pp * q, 0),
+            } : null,
+            // Spus pe faţa: de unde vin cifrele si cat de adanc vedem. Fara
+            // asta o harta ingusta arata identic cu una stricata.
+            source: {
+                deepLevels: deep.length ? (deep[deep.length - 1].levels || null) : null,
+                deepFrames: deep.length, topFrames: top.length,
+                health: feed.health(),
+            },
+            asked: { band: bandRaw, windowMs, cols, rows },
+            at: now,
+        });
+    } catch (err) {
+        res.status(200).json({ symbol: null, heat: null, ladder: null, walls: [],
+            top: null, error: 'unavailable', at: Date.now() });
+    }
+});
+
 router.get('/liq-map', (req, res) => {
     try {
         const liqStore = require('../services/liqStore');

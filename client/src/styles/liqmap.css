@@ -448,3 +448,160 @@
     .zlq-pr-h span { min-width: 26px; }
     .zlq-pr-rows > div { grid-template-columns: 56px 1fr; gap: 6px; }
 }
+
+/* ── BOOK (bookmap) ──
+   [BOOKMAP 2026-10-26] Cartea de ordine. Aceeaşi disciplină ca în tot panoul:
+   numerele în monospace tabular, o singură îndrăzneală (aici harta însăşi),
+   restul tăcut.
+
+   Culorile NU sunt preferinţă: cyan = partea de CUMPĂRARE, chihlimbar = partea
+   de VÂNZARE — exact semantica din LIQ MAP, unde cyan era short lichidat
+   (cumpărare forţată) şi chihlimbar long lichidat (vânzare forţată). Roşu/verde
+   ar fi citit ca „sus/jos", nu ca „cerere/ofertă". */
+.zbk { display: flex; flex-direction: column; gap: 8px; }
+
+.zbk-top {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+.zbk-top b { color: #eaf2f8; font-weight: 500; }
+.zbk-bb, .zbk-ba { font-size: 12px; }
+.zbk-real {
+    margin-left: auto;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    color: #4d6376;
+    border: 1px solid var(--liq-line);
+    border-radius: 999px;
+    padding: 1px 7px;
+    white-space: nowrap;
+}
+
+/* Zoom-ul. Două axe, fiindcă doar astea două au sens pe datele care există:
+   cât de adânc în bandă, şi cât de departe în timp. */
+.zbk-zoom { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.zbk-zoom .zlq-k { margin-right: 2px; }
+.zbk-sep { margin-left: 6px; }
+.zbk-z {
+    background: none;
+    border: 1px solid var(--liq-line);
+    color: var(--liq-dim);
+    font-family: ui-monospace, monospace;
+    font-size: 9.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.zbk-z.act { color: #0a0f14; background: #35e0d0; border-color: #35e0d0; }
+
+/* Chartul preţului: bandă proprie, scară proprie. În hartă n-ar avea sens —
+   acolo rândurile sunt ancorate pe mijlocul fiecărei coloane. */
+.zbk-price { position: relative; }
+.zbk-price canvas { width: 100%; height: 54px; display: block; border-radius: 4px; }
+.zbk-price-ax {
+    position: absolute;
+    top: 2px; right: 4px; bottom: 2px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+    font-family: ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 9px;
+    color: #6d8396;
+}
+.zbk-price-tag {
+    position: absolute;
+    top: 3px; left: 5px;
+    font-size: 8px;
+    letter-spacing: .16em;
+    color: #4d6376;
+}
+
+.zbk-canvas { position: relative; }
+.zbk-canvas canvas { width: 100%; height: 240px; display: block; border-radius: 4px; }
+.zbk-axis {
+    position: absolute;
+    top: 2px; right: 4px; bottom: 2px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
+    font-family: ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 9px;
+    color: #6d8396;
+}
+.zbk-axis-mid { color: #d8b25e; letter-spacing: .1em; font-size: 8px; }
+
+.zbk-legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 9.5px;
+    color: var(--liq-dim);
+}
+.zbk-legend i {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: -1px;
+}
+
+/* Pereţii, cu FERMITATEA alături. Fără ea un instantaneu static minte: un
+   perete care dispare când preţul se apropie nu e perete. */
+.zbk-walls { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.zbk-walls-hd {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 8.5px;
+    letter-spacing: .12em;
+    color: var(--liq-dim);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--liq-line);
+}
+.zbk-walls-hd .zlq-dim { letter-spacing: 0; font-size: 9px; text-transform: none; }
+.zbk-wall {
+    display: grid;
+    grid-template-columns: 30px 60px 54px 1fr 34px;
+    gap: 6px;
+    align-items: baseline;
+    padding: 2px 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 10.5px;
+}
+.zbk-wall span { font-size: 9px; letter-spacing: .06em; }
+.zbk-wall.b span { color: var(--liq-short); }
+.zbk-wall.a span { color: var(--liq-long); }
+.zbk-wall b { color: #d7e5f0; font-weight: 500; }
+.zbk-wall i { font-style: normal; color: var(--liq-dim); }
+.zbk-wall em { font-style: normal; color: #eaf2f8; text-align: right; }
+.zbk-wall u { text-decoration: none; color: var(--liq-dim); text-align: right; font-size: 9.5px; }
+.zbk-wall-none { font-size: 10px; color: var(--liq-dim); padding: 6px 0; }
+
+.zbk-src, .zbk-note {
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: #4d6376;
+}
+.zbk-src { font-family: ui-monospace, monospace; }
+.zbk-note b { color: #8fa6b8; font-weight: 600; }
+
+@media (max-width: 380px) {
+    .zbk-canvas canvas { height: 200px; }
+    .zbk-wall { grid-template-columns: 26px 52px 46px 1fr 30px; gap: 4px; font-size: 9.5px; }
+    .zbk-z { font-size: 9px; padding: 2px 5px; }
+}

@@ -9185,3 +9185,93 @@ Lângă `CALIBRATING n/30` apare o estimare calculată **din ritmul real** de st
 Cerea pauză fixă pentru toate orizonturile. **L-am actualizat dinadins, nu l-am ocolit** — şi am scris în el de ce s-a schimbat contractul. Un test care cere un comportament nu dovedeşte că e cel dorit; compară datele (regula din aprilie).
 
 **46 de mutaţii moarte în total pe rubrică**, dintre care 3 noi — inclusiv bugul original (pauză fixă).
+
+---
+
+## 📙 2026-10-26 — BOOKMAP: cartea de ordine, al cincilea tab (b332 v1.7.306)
+
+**Cerut de el:** *„acum sus lângă predict dacă vrei poţi să faci bookmap… tot aşa date reale ce se poate lua din piaţă, să fie full, să se citească uşor, să arate chartul preţul, să avem zoom, tot ce trebuie… totul funcţional"*.
+
+Era **etapa 2** în carte. Condiţia de pornire pe care o scrisesem era *să judece el harta de lichidări ca bună* — a judecat-o („e bine aşa cum l-ai făcut"), deci am început.
+
+### ⛔ Patru măsurători înainte de prima linie de cod — fiecare a schimbat designul
+
+**1. Cartea care EXISTĂ e lată de 253 de dolari.**
+Pe BTC la 80 322, cea mai mare adâncime disponibilă (Binance REST `limit=1000`) acoperă **−0,155% … +0,160%**, 92 M$. OKX cu 400 de niveluri: ±0,07%.
+
+**Nu există pereţi la 1% distanţă.** Nu-s ascunşi, nu-s inaccesibili — **nu există.** I-am spus asta *înainte*, nu după: zoom-ul nu te depărtează de preţ, te duce **mai adânc** în bandă şi **mai departe pe timp**.
+
+**2. Raportul max/median pe nivel e 427×** (median 3 459 $, max 1 478 544 $). Intensitatea trebuie logaritmică, şi scara am ales-o **pe tabel**:
+
+| fracţie din maxim | liniar | 1e3 | **1e4** | 1e5 |
+|---|---|---|---|---|
+| 1/1 (max) | 1,000 | 1,000 | **1,000** | 1,000 |
+| **1/427 (MEDIAN)** | 0,0023 | 0,175 | **0,347** | 0,474 |
+| 1/5000 (zgomot) | 0,0002 | 0,026 | **0,119** | 0,264 |
+| 1/50000 | 0,00002 | 0,003 | **0,020** | 0,095 |
+
+La 1e3 medianul e 17% ⇒ harta stinsă. La 1e5 zgomotul sare la 26% ⇒ harta pare uniform aglomerată şi pereţii nu mai ies. **1e4.**
+
+**3. OKX dă mărimea în CONTRACTE** (`ctVal` 0,01 BTC). Văzusem 3 016 M$ pe o bandă de ±0,07% — imposibil, şi aşa am prins-o. Aceeaşi capcană ca Gate la lichidări, acelaşi răspuns: **multiplicator necunoscut ⇒ aruncă cadrul.**
+
+**4. Preţul iese din bandă.** Pe 1000 de bare de 1 minut, într-o fereastră de 10 minute preţul depăşeşte chiar şi banda de ±0,16% în **21%** din cazuri pe BTC şi **46%** pe ETH; din ±0,05%, în 90–100%. Deci rândurile **nu pot** fi ancorate pe preţ absolut — lichiditatea ar ieşi din cadru exact când se mişcă ceva.
+
+### Şi de aici a ieşit un defect pe care l-am prins înainte să-l vadă
+
+Cu rândurile ancorate pe mijlocul **fiecărei coloane**, preţul stă prin construcţie la mijloc ⇒ **linia ar fi ieşit dreaptă.** Adică nu un chart — o decoraţie.
+
+**Reparat:** harta rămâne **relativă** (aşa lichiditatea e comparabilă în timp), iar **chartul preţului are banda lui şi scara lui**, deasupra, cu întreruperi acolo unde n-au fost cadre (nu interpolat — ar inventa un preţ care n-a existat). Un test se uită la **punctele desenate** şi cade dacă linia redevine dreaptă.
+
+### Cele două surse sunt ţinute SEPARAT — o minciună subtilă evitată
+
+| | niveluri | bandă |
+|---|---|---|
+| WS `depth20@100ms` | 40 | ±0,005% |
+| REST `limit=1000` | 2000 | ±0,155% |
+
+Amestecate în aceeaşi medie, rândurile de **lângă** preţ ar primi contribuţii din amândouă iar cele **depărtate** numai din REST ⇒ densitatea desenată ar depinde de **proporţia cadrelor**, nu de piaţă. Ar fi apărut un gât îngroşat la mijloc care nu există.
+
+**Harta se desenează NUMAI din REST.** WS alimentează banda de sus (spread, cea mai bună cerere/ofertă), unde e util tocmai fiindcă e rapid.
+
+### Spoofing — a treia capcană notată la amânare
+
+*„Un perete care dispare când preţul se apropie nu e perete."*
+
+Răspunsul care **nu** pretinde că citeşte intenţii: valoarea celulei e **media ponderată cu cadrele, nu maximul**. Un perete fulgerat într-un cadru din 100 contribuie 1% şi nu mai domină harta. Maximul se păstrează separat. Şi un nivel prezent în **sub 25%** din instantanee nu intră în lista de pereţi — iar **fermitatea e pe ecran** lângă fiecare.
+
+### 🔴 O corecţie la mine, repetată de mai multe ori în aceeaşi zi
+
+Spuneam că **„WS-ul de futures Binance e mort către acest VPS"**. **Prea larg.**
+
+Testat serial, câte unul singur pe conexiune:
+
+| flux | rezultat |
+|---|---|
+| `markPrice@1s` | MUT |
+| `aggTrade` | MUT |
+| `kline_1m` | MUT |
+| `forceOrder` | MUT |
+| `!forceOrder@arr` | MUT |
+| **`depth20@100ms`** | **CURGE** (135 cadre / 15 s) |
+
+Deci mut e aproape tot, **dar nu carnetul** — şi se nimereşte că singurul flux care merge e exact cel de care Bookmap are nevoie.
+
+### Costul de rată, măsurat înainte
+
+Binance raporta **748 din 2400** greutate/minut cu Zeus în funcţiune (31%). `limit=1000` are greutate 20; la 5 s pe două simboluri = 480/min ⇒ total ~51%. Am loc, dar nu nelimitat, deci **ritmul se încetineşte singur la 20 s** când greutatea raportată trece de 1700. Tot prin `binanceGateway`.
+
+### Ce NU am inclus, şi de ce
+
+**OKX şi Bybit.** Amândouă trimit instantaneu apoi **diferenţe**, deci ar cere o carte locală reconstruită cu verificare de secvenţă şi resincronizare pe gaură. **O carte reconstruită greşit e o hartă care minte.** Prefer o sursă corectă decât trei aproximative. Etapa următoare.
+
+### Greşelile mele
+
+1. **Două teste ale mele s-au înşelat, nu codul:** unul cerea doar să existe *un* `Math.min` pe undeva în rută şi trecea deşi `cols`/`rows` plecau nemărginite; altul căuta `const window` când în cod e `windowMs`, şi cădea pe o rută **corectă**. A cincea şi a şasea oară.
+2. **Trei mutaţii mi-au supravieţuit** la prima trecere: garda redundantă de cadru pe jumătate, banda AUTO (testul trecea şi cu bandă fixă), şi excluderea din bandă pe grilă — testele existau doar pe scară, nu pe grilă.
+3. **Testul vechi cerea exact patru taburi.** Contractul s-a schimbat fiindcă el a cerut al cincilea — actualizat dinadins, cu motivul scris în test.
+
+### Dovada
+
+**35 de mutaţii noi, toate moarte** — inclusiv multiplicator presupus 1, ce iese din bandă înghesuit la margine, maximul în loc de medie, spoof acceptat ca perete, WS amestecat în hartă, greutate declarată fals, zoom nemărginit şi chartul redevenit dreaptă.
+
+**Server 233 de teste** pe shardurile bookmap+lichidări, **client 161 fişiere / 1 459 teste**, `tsc` 0 erori, build ✓, verificat în bundle-ul servit.

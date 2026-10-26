@@ -1,0 +1,381 @@
+'use strict';
+// tests/unit/bookmap-core.test.js
+//
+// [BOOKMAP 2026-10-26] Operatorul: „langa predict poti sa faci bookmap, tot asa
+// date reale ce se poate lua din piata, sa fie full, sa se citeasca usor, sa
+// arate chartul, pretul, sa avem zoom, totul functional".
+//
+// ⚠️ TREI LUCRURI MASURATE INAINTE DE ORICE COD, si fiecare schimba designul:
+//
+// 1. CARTEA CARE EXISTA E LATA DE 253 DE DOLARI. Pe BTC la 80.322, adancimea
+//    maxima disponibila (Binance REST limit=1000) acopera -0,155% .. +0,160%.
+//    Nu exista pereti la 1% distanta. Deci harta e o BANDA STRANSA, iar zoom
+//    inseamna mai adanc in banda si mai mult pe timp — nu mai departe.
+//
+// 2. OKX DA MARIMEA IN CONTRACTE (ctVal = 0,01 BTC). Fara multiplicator,
+//    notionalul iese de 100x. Aceeasi capcana ca Gate la lichidari, si acelasi
+//    raspuns: multiplicator necunoscut ⇒ ARUNCA, nu presupune 1.
+//
+// 3. RAPORTUL max/median PE NIVEL E 427x. Deci intensitatea TREBUIE sa fie
+//    logaritmica; liniar, un nivel median langa unul mare ar fi negru, adica
+//    ar minti ca nu e nimic acolo.
+
+const B = require('../../server/services/bookMap');
+
+const T0 = 1793000000000;
+const book = (mid, levels) => ({
+    bids: levels.filter(l => l[0] < mid),
+    asks: levels.filter(l => l[0] >= mid),
+});
+
+describe('multiplicatorul — aceeasi lectie ca la Gate', () => {
+    test('marime in CONTRACTE cu multiplicator cunoscut se converteste', () => {
+        const r = B.normalize({
+            exchange: 'okx', symbol: 'BTCUSDT', ts: T0,
+            bids: [['80000', '100']], asks: [['80010', '50']],
+            mult: 0.01,
+        });
+        // 100 contracte x 0,01 BTC = 1 BTC
+        expect(r.bids[0][1]).toBeCloseTo(1, 6);
+        expect(r.asks[0][1]).toBeCloseTo(0.5, 6);
+    });
+
+    test('multiplicator NECUNOSCUT ⇒ cadrul se ARUNCA, nu se presupune 1', () => {
+        for (const mult of [undefined, null, 0, -1, NaN, 'x']) {
+            expect(B.normalize({
+                exchange: 'okx', symbol: 'BTCUSDT', ts: T0,
+                bids: [['80000', '100']], asks: [['80010', '50']], mult,
+            })).toBeNull();
+        }
+    });
+
+    test('multiplicator 1 e EXPLICIT, nu implicit', () => {
+        const r = B.normalize({
+            exchange: 'binance', symbol: 'BTCUSDT', ts: T0,
+            bids: [['80000', '2']], asks: [['80010', '3']], mult: 1,
+        });
+        expect(r.bids[0][1]).toBeCloseTo(2, 6);
+    });
+
+    test('un cadru fara ambele parti NU intra — mijlocul n-ar fi definit', () => {
+        expect(B.normalize({ exchange: 'x', symbol: 'B', ts: T0, bids: [], asks: [['1', '1']], mult: 1 })).toBeNull();
+        expect(B.normalize({ exchange: 'x', symbol: 'B', ts: T0, bids: [['1', '1']], asks: [], mult: 1 })).toBeNull();
+    });
+
+    test('nivelurile stricate se arunca, cadrul supravietuieste', () => {
+        const r = B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0, mult: 1,
+            bids: [['80000', '1'], ['abc', '2'], ['80001', '-5'], ['0', '3']],
+            asks: [['80010', '1']],
+        });
+        expect(r.bids).toHaveLength(1);
+    });
+});
+
+describe('agregarea pe paliere — relativ la MIJLOC, nu la un pret fix', () => {
+    test('mijlocul se calculeaza din varful celor doua parti', () => {
+        const r = B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0, mult: 1,
+            bids: [['79990', '1']], asks: [['80010', '1']],
+        });
+        expect(r.mid).toBeCloseTo(80000, 6);
+    });
+
+    test('palierele sunt in PROCENTE fata de mijloc, ca sa fie comparabile in timp', () => {
+        const agg = B.aggregate({
+            frames: [B.normalize({
+                exchange: 'x', symbol: 'B', ts: T0, mult: 1,
+                bids: [['79960', '1']], asks: [['80040', '2']],
+            })],
+            bandPct: 0.1, rows: 20,
+        });
+        const bid = agg.cells.find(c => c.bidUsd > 0);
+        const ask = agg.cells.find(c => c.askUsd > 0);
+        expect(bid.pct).toBeLessThan(0);
+        expect(ask.pct).toBeGreaterThan(0);
+        expect(Math.abs(bid.pct)).toBeCloseTo(0.05, 2);
+    });
+
+    test('ce iese din banda NU se inghesuie la margine — se exclude', () => {
+        // Altfel marginea aduna tot ce e departe si arata ca un perete care
+        // nu exista. Aceeasi clasa cu axa heatmap-ului de la b327.
+        const agg = B.aggregate({
+            frames: [B.normalize({
+                exchange: 'x', symbol: 'B', ts: T0, mult: 1,
+                bids: [['79990', '1'], ['40000', '1000']],
+                asks: [['80010', '1']],
+            })],
+            bandPct: 0.1, rows: 20,
+        });
+        const total = agg.cells.reduce((s, c) => s + c.bidUsd, 0);
+        expect(total).toBeLessThan(200000);   // 1 BTC, nu 1000
+        expect(agg.excludedLevels).toBe(1);
+    });
+
+    test('notionalul e pret x cantitate, nu cantitatea', () => {
+        const agg = B.aggregate({
+            frames: [B.normalize({
+                exchange: 'x', symbol: 'B', ts: T0, mult: 1,
+                bids: [['79990', '2']], asks: [['80010', '1']],
+            })],
+            bandPct: 0.1, rows: 20,
+        });
+        const bid = agg.cells.find(c => c.bidUsd > 0);
+        expect(bid.bidUsd).toBeCloseTo(159980, 0);
+    });
+});
+
+describe('PERSISTENTA — un perete care dispare cand pretul se apropie NU e perete', () => {
+    // A treia capcana notata in carte inainte de a incepe. Un instantaneu
+    // static MINTE: spoofing-ul arata identic cu lichiditate reala.
+    //
+    // Raspunsul care nu pretinde ca detecteaza intentii: valoarea celulei e
+    // media PONDERATA CU TIMPUL, nu maximul. Un perete fulgerat intr-un cadru
+    // din 100 contribuie 1%, deci nu mai domina harta.
+    const mk = (ts, bidQty) => B.normalize({
+        exchange: 'x', symbol: 'B', ts, mult: 1,
+        bids: [['79990', String(bidQty)]], asks: [['80010', '1']],
+    });
+
+    test('un perete prezent in TOATE cadrele cantareste complet', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => mk(T0 + i * 1000, 10));
+        const agg = B.aggregate({ frames, bandPct: 0.1, rows: 20 });
+        const c = agg.cells.find(x => x.bidUsd > 0);
+        expect(c.bidUsd).toBeCloseTo(79990 * 10, 0);
+        expect(c.bidFirmness).toBeCloseTo(1, 2);
+    });
+
+    test('un perete FULGERAT intr-un cadru din 10 NU domina harta', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => mk(T0 + i * 1000, i === 3 ? 100 : 0.0001));
+        const agg = B.aggregate({ frames, bandPct: 0.1, rows: 20 });
+        const c = agg.cells.find(x => x.bidUsd > 0);
+        // media, nu maximul: ~10 BTC echivalent, nu 100
+        expect(c.bidUsd).toBeLessThan(79990 * 15);
+        expect(c.bidUsd).toBeGreaterThan(79990 * 5);
+    });
+
+    test('fermitatea spune in CATE cadre a fost chiar acolo', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => mk(T0 + i * 1000, i < 3 ? 10 : 0));
+        const agg = B.aggregate({ frames, bandPct: 0.1, rows: 20 });
+        const c = agg.cells.find(x => x.bidUsd > 0);
+        expect(c.bidFirmness).toBeCloseTo(0.3, 1);
+    });
+
+    test('maximul se pastreaza SEPARAT — se vede si varful, dar nu ca medie', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => mk(T0 + i * 1000, i === 3 ? 100 : 1));
+        const agg = B.aggregate({ frames, bandPct: 0.1, rows: 20 });
+        const c = agg.cells.find(x => x.bidUsd > 0);
+        expect(c.bidPeakUsd).toBeCloseTo(79990 * 100, 0);
+        expect(c.bidPeakUsd).toBeGreaterThan(c.bidUsd * 5);
+    });
+});
+
+describe('ZOOM — pe banda si pe timp, din datele care EXISTA', () => {
+    const frames = (n) => Array.from({ length: n }, (_, i) => B.normalize({
+        exchange: 'x', symbol: 'B', ts: T0 + i * 1000, mult: 1,
+        bids: [['79990', '1'], ['79950', '2']], asks: [['80010', '1'], ['80060', '3']],
+    }));
+
+    test('banda mai stransa arata mai PUTINE niveluri, dar mai fin', () => {
+        const larg = B.aggregate({ frames: frames(5), bandPct: 0.2, rows: 40 });
+        const strans = B.aggregate({ frames: frames(5), bandPct: 0.02, rows: 40 });
+        expect(strans.rowPct).toBeLessThan(larg.rowPct);
+        expect(strans.excludedLevels).toBeGreaterThan(larg.excludedLevels);
+    });
+
+    test('banda AUTO se LARGESTE cand datele depasesc implicitul', () => {
+        // Lectia de la b326/b327: daca desenezi intervalul CERUT in loc de cel
+        // care EXISTA, ascunzi exact ce ai.
+        //
+        // Prima versiune a testului asta trecea si cu banda FIXA, fiindca datele
+        // incapeau in implicitul de 0,1%. Acum nivelurile sunt DINCOLO de el,
+        // deci numai o banda chiar automata le poate cuprinde.
+        const larg = Array.from({ length: 5 }, (_, i) => B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0 + i * 1000, mult: 1,
+            bids: [['79990', '1'], ['79700', '2']],   // -0,37%, mult peste 0,1%
+            asks: [['80010', '1'], ['80300', '3']],
+        }));
+        const auto = B.aggregate({ frames: larg, bandPct: 'auto', rows: 40 });
+        const fix = B.aggregate({ frames: larg, bandPct: B.DEFAULT_BAND_PCT, rows: 40 });
+        expect(auto.bandPct).toBeGreaterThan(B.DEFAULT_BAND_PCT);
+        expect(auto.excludedLevels).toBe(0);
+        expect(fix.excludedLevels).toBeGreaterThan(0);
+    });
+
+    test('banda AUTO se STRANGE cand datele sunt mai inguste decat implicitul', () => {
+        const ingust = Array.from({ length: 5 }, (_, i) => B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0 + i * 1000, mult: 1,
+            bids: [['79996', '1']], asks: [['80004', '1']],   // ±0,005%
+        }));
+        const auto = B.aggregate({ frames: ingust, bandPct: 'auto', rows: 40 });
+        expect(auto.bandPct).toBeLessThan(B.DEFAULT_BAND_PCT);
+        expect(auto.bandPct).toBeGreaterThan(0);
+    });
+
+    test('fereastra de timp taie cadrele vechi', () => {
+        const f = frames(60);
+        const a = B.aggregate({ frames: f, bandPct: 0.1, rows: 20, windowMs: 10000, now: T0 + 59000 });
+        expect(a.frames).toBeLessThanOrEqual(11);
+        expect(a.frames).toBeGreaterThan(5);
+    });
+
+    test('fara cadre intoarce o harta GOALA, nu arunca', () => {
+        const a = B.aggregate({ frames: [], bandPct: 0.1, rows: 20 });
+        expect(a.cells).toEqual([]);
+        expect(a.frames).toBe(0);
+        expect(a.mid).toBeNull();
+    });
+});
+
+describe('PERETII — cele mai groase niveluri, cu distanţa in dolari', () => {
+    test('se intorc sortaţi, cu partea si distanţa', () => {
+        const frames = Array.from({ length: 5 }, (_, i) => B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0 + i * 1000, mult: 1,
+            bids: [['79990', '1'], ['79950', '20']], asks: [['80010', '1']],
+        }));
+        const a = B.aggregate({ frames, bandPct: 0.1, rows: 40 });
+        const w = B.walls(a, 3);
+        expect(w.length).toBeGreaterThan(0);
+        expect(w[0].side).toBe('BID');
+        expect(w[0].distUsd).toBeLessThan(0);
+        expect(w[0].usd).toBeGreaterThan(w[1] ? w[1].usd - 1 : 0);
+    });
+
+    test('un perete fara fermitate NU intra in lista', () => {
+        // Nivelul gros apare o data din 20 de cadre: e spoof, nu perete.
+        const frames = Array.from({ length: 20 }, (_, i) => B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0 + i * 1000, mult: 1,
+            bids: [['79990', '1'], ['79950', i === 5 ? '500' : '0']], asks: [['80010', '1']],
+        }));
+        const a = B.aggregate({ frames, bandPct: 0.1, rows: 40 });
+        const w = B.walls(a, 5);
+        const spoof = w.find(x => Math.round(x.price) === 79950);
+        expect(spoof).toBeFalsy();
+    });
+
+    test('lista goala cand nu exista nimic — nu se inventeaza pereţi', () => {
+        expect(B.walls(B.aggregate({ frames: [], bandPct: 0.1, rows: 20 }), 5)).toEqual([]);
+    });
+});
+
+describe('CHARTUL — timp x pret, cu linia pretului peste (cerut: „sa arate chartul pretul")', () => {
+    const f = (ts, mid, bidQty = 1, askQty = 1) => B.normalize({
+        exchange: 'x', symbol: 'B', ts, mult: 1,
+        bids: [[mid - 10, String(bidQty)], [mid - 30, '2']],
+        asks: [[mid + 10, String(askQty)], [mid + 30, '3']],
+    });
+
+    test('grila are coloane de TIMP si randuri de PRET', () => {
+        const frames = Array.from({ length: 60 }, (_, i) => f(T0 + i * 1000, 80000));
+        const h = B.heat({ frames, cols: 20, rows: 24, bandPct: 0.1, windowMs: 60000, now: T0 + 59000 });
+        expect(h.cols).toBe(20);
+        expect(h.rows).toBe(24);
+        expect(h.cells.length).toBeGreaterThan(0);
+        for (const c of h.cells) {
+            expect(c.col).toBeGreaterThanOrEqual(0);
+            expect(c.col).toBeLessThan(20);
+            expect(c.row).toBeGreaterThanOrEqual(0);
+            expect(c.row).toBeLessThan(24);
+        }
+    });
+
+    test('LINIA PRETULUI are o valoare pe FIECARE coloana cu date', () => {
+        // Lectia de la panourile de flux: orice panou nou emite o valoare pe
+        // fiecare bara, altfel se trage in spate.
+        const frames = Array.from({ length: 60 }, (_, i) => f(T0 + i * 1000, 80000 + i * 5));
+        const h = B.heat({ frames, cols: 12, rows: 24, bandPct: 0.1, windowMs: 60000, now: T0 + 59000 });
+        const cuDate = h.mids.filter(m => m !== null);
+        expect(cuDate.length).toBe(12);
+        // pretul a urcat, deci linia trebuie sa urce
+        expect(cuDate[cuDate.length - 1]).toBeGreaterThan(cuDate[0]);
+    });
+
+    test('o coloana FARA cadre e NULL, nu zero si nu interpolata', () => {
+        // Zero ar desena linia la 0, iar interpolarea ar inventa un pret care
+        // n-a existat. NULL se vede ca o intrerupere, adica adevarul.
+        const frames = [f(T0, 80000), f(T0 + 59000, 80100)];
+        const h = B.heat({ frames, cols: 10, rows: 24, bandPct: 0.2, windowMs: 60000, now: T0 + 59000 });
+        expect(h.mids.filter(m => m === null).length).toBeGreaterThan(0);
+        expect(h.mids.filter(m => m === 0).length).toBe(0);
+    });
+
+    test('axa de timp se intinde pe datele care EXISTA, nu pe fereastra CERUTA', () => {
+        // Exact bugul de la b327, pe alt panou. Cu 2 minute de date intr-o
+        // fereastra de 30, harta ar fi 93% goala cu o dunga la margine.
+        const frames = Array.from({ length: 24 }, (_, i) => f(T0 + i * 5000, 80000));
+        const h = B.heat({ frames, cols: 30, rows: 24, bandPct: 0.1,
+            windowMs: 30 * 60000, now: T0 + 115000 });
+        const span = h.tMax - h.tMin;
+        expect(span).toBeLessThan(5 * 60000);
+        const coloane = new Set(h.cells.map(c => c.col));
+        expect(coloane.size).toBeGreaterThan(20);
+    });
+
+    test('intensitatea se raporteaza la maximul GRILEI, ca sa fie comparabila', () => {
+        const frames = Array.from({ length: 30 }, (_, i) => f(T0 + i * 1000, 80000, i === 10 ? 50 : 1));
+        const h = B.heat({ frames, cols: 15, rows: 24, bandPct: 0.1, windowMs: 60000, now: T0 + 29000 });
+        expect(h.maxUsd).toBeGreaterThan(0);
+        for (const c of h.cells) {
+            expect(c.bidUsd).toBeLessThanOrEqual(h.maxUsd + 1e-6);
+            expect(c.askUsd).toBeLessThanOrEqual(h.maxUsd + 1e-6);
+        }
+    });
+
+    test('fara cadre: grila goala, mids numai NULL, fara aruncat', () => {
+        const h = B.heat({ frames: [], cols: 10, rows: 10, bandPct: 0.1 });
+        expect(h.cells).toEqual([]);
+        expect(h.mids).toHaveLength(10);
+        expect(h.mids.every(m => m === null)).toBe(true);
+        expect(h.tMin).toBeNull();
+    });
+
+    test('randurile sunt ancorate pe mijlocul FIECAREI coloane — pretul se misca', () => {
+        // Daca randurile ar fi ancorate pe un pret fix, o miscare de 0,1% ar
+        // impinge tot carnetul in afara grilei si harta s-ar goli.
+        const frames = Array.from({ length: 60 }, (_, i) => f(T0 + i * 1000, 80000 + i * 10));
+        const h = B.heat({ frames, cols: 12, rows: 24, bandPct: 0.05, windowMs: 60000, now: T0 + 59000 });
+        const perCol = new Map();
+        for (const c of h.cells) perCol.set(c.col, (perCol.get(c.col) || 0) + 1);
+        // fiecare coloana trebuie sa aiba celule, nu doar primele
+        expect(perCol.size).toBe(12);
+    });
+});
+
+describe('grila: doua mutatii mi-au supravietuit si le acopar aici', () => {
+    // Testele pentru banda si pentru medie existau doar pe aggregate(). Pe
+    // grila, doua mutatii au trecut nepedepsite:
+    //   - scoaterea gardei de banda  -> ce e departe se INGHESUIE la margine
+    //   - suma in loc de medie       -> o coloana cu mai multe cadre pare mai grasa
+    // Amandoua ar produce o harta care MINTE, nu una care greseste discret.
+
+    test('ce iese din banda NU se inghesuie la marginea grilei', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0 + i * 1000, mult: 1,
+            bids: [['79990', '1'], ['40000', '1000']],   // al doilea e la -50%
+            asks: [['80010', '1']],
+        }));
+        const h = B.heat({ frames, cols: 10, rows: 20, bandPct: 0.1, windowMs: 60000, now: T0 + 9000 });
+        // Randul de jos NU trebuie sa poarte cei 40 de milioane
+        const jos = h.cells.filter(c => c.row === 0);
+        for (const c of jos) expect(c.bidUsd).toBeLessThan(1e6);
+        expect(h.maxUsd).toBeLessThan(1e6);
+    });
+
+    test('valoarea celulei e MEDIA pe coloana, nu SUMA — altfel coloanele dense par mai grase', () => {
+        // Doua coloane cu acelasi carnet, dar una cu 1 cadru si alta cu 8.
+        // Cu suma, a doua ar arata de 8 ori mai plina fara sa fie.
+        const lvl = (ts) => B.normalize({
+            exchange: 'x', symbol: 'B', ts, mult: 1,
+            bids: [['79990', '1']], asks: [['80010', '1']],
+        });
+        const frames = [lvl(T0)];
+        for (let i = 0; i < 8; i++) frames.push(lvl(T0 + 50000 + i * 100));
+        const h = B.heat({ frames, cols: 2, rows: 20, bandPct: 0.1, windowMs: 120000, now: T0 + 60000 });
+        const c0 = h.cells.filter(c => c.col === 0).reduce((s, c) => s + c.bidUsd, 0);
+        const c1 = h.cells.filter(c => c.col === 1).reduce((s, c) => s + c.bidUsd, 0);
+        expect(c0).toBeGreaterThan(0);
+        expect(c1).toBeGreaterThan(0);
+        // egale, nu de 8 ori diferite
+        expect(Math.abs(c1 - c0) / c0).toBeLessThan(0.05);
+    });
+});

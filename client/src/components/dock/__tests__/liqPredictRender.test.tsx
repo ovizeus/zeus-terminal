@@ -75,10 +75,14 @@ async function openPredict() {
 
 describe('rubrica exista si se deschide', () => {
   it('tabul PREDICT e al patrulea, langa LIVE', async () => {
+    // [2026-10-26] Testul cerea EXACT patru taburi. Contractul s-a schimbat
+    // fiindca operatorul a cerut al cincilea („acum sus langa predict poti sa
+    // faci bookmap"). Actualizat dinadins, cu motivul scris aici — nu ocolit.
     render(<LiqMapPanel />)
     await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
     const tabs = Array.from(document.querySelectorAll('.zlq-tab')).map(t => t.textContent)
-    expect(tabs).toEqual(['MAP', 'HEATMAP', 'LIVE', 'PREDICT'])
+    expect(tabs).toEqual(['MAP', 'HEATMAP', 'LIVE', 'PREDICT', 'BOOK'])
+    expect(tabs[3]).toBe('PREDICT')
   })
 
   it('randeaza cartonasul cu simbolul si pretul', async () => {

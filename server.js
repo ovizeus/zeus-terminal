@@ -1792,6 +1792,15 @@ try {
   logger.warn('LIQPRED', 'start failed: ' + (e && e.message));
 }
 
+// [BOOKMAP 2026-10-26] Cartea de ordine: unde stau banii ACUM. Doua surse
+// Binance tinute separat (WS rapid pentru banda de sus, REST adanc pentru
+// harta) — vezi nota din bookFeed despre de ce amestecarea ar minti.
+try {
+  require('./server/services/bookFeed').start();
+} catch (e) {
+  logger.warn('BOOKMAP', 'start failed: ' + (e && e.message));
+}
+
 // Retentia instantaneelor de predictie. Aceeasi lectie ca la G-5: lotizata,
 // fiindca better-sqlite3 e SINCRON si un DELETE nelimitat ingheata bucla.
 const _runLiqPredictPrune = () => {
