@@ -54,3 +54,5 @@ Preţul a coborât şi longurile au plătit. Aia nu era vizibilă într-o listă
 **Judecata lui.** Am dus-o cât pot duce eu cu măsurători: randat, privit, corectat ce am văzut.
 **Dacă îi place cum arată — nu pot afla decât de la el.** I-am trimis şi o previzualizare pe care o
 deschide dintr-o atingere, cu acelaşi CSS şi datele lui reale, ca judecata să-l coste un tap.
+
+---

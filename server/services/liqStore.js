@@ -184,11 +184,23 @@ function heatmap({ symbol, ref, days, cols } = {}) {
         if (!sym || !Number.isFinite(p) || p <= 0) return out;
 
         const tMax = Date.now();
-        const tMin = tMax - d * DAY_MS;
+        const cutoff = tMax - d * DAY_MS;
+        const rows = _s().range.all(sym, cutoff);
+
+        // [2026-10-25] Axa de timp se întinde pe DATELE care există, nu pe
+        // fereastra cerută.
+        //
+        // Măsurat pe viu: cu 1,3 ore de istoric într-o fereastră de 90 de zile,
+        // toate cele 5 celule cădeau în coloana 89 din 90 — harta era 89/90
+        // goală, cu o dungă subţire la margine. Avea date şi părea stricată.
+        //
+        // Aceeaşi lecţie ca la scară: dacă desenezi intervalul cerut în loc de
+        // intervalul care există, ascunzi exact ce ai.
+        let oldest = 0;
+        for (const r of rows) { if (!oldest || r.ts < oldest) oldest = r.ts; }
+        const tMin = oldest ? Math.max(cutoff, oldest) : cutoff;
         out.tMin = tMin; out.tMax = tMax;
         const span = Math.max(1, tMax - tMin);
-
-        const rows = _s().range.all(sym, tMin);
         const acc = new Map();
         for (const r of rows) {
             const pct = ((r.price - p) / p) * 100;

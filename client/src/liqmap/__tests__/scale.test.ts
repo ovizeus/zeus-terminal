@@ -158,3 +158,30 @@ describe('scara continua — ce face dintr-o lista o HARTA', () => {
     expect(buildLadder(wide, 80000).length).toBeLessThanOrEqual(400)
   })
 })
+
+import { fmtSpan } from '../scale'
+
+// [2026-10-26] Axa se intinde pe datele care EXISTA. Dar atunci eticheta
+// trebuie sa spuna CE interval s-a desenat — altfel cineva citeste 12 ore
+// crezand ca vede 90 de zile, si aia nu mai e o harta goala, e una care minte.
+describe('intervalul desenat se spune, nu se presupune', () => {
+  it('minute sub o ora si jumatate', () => {
+    expect(fmtSpan(0, 45 * 60000)).toBe('45m')
+  })
+  it('ore — zecimala doar cand chiar schimba citirea', () => {
+    // Sub 10 ore zecimala conteaza (2,5h vs 3h e o diferenta reala de citit);
+    // peste, nu — „12h" e mai curat decat „11.9h". Prima varianta a testului
+    // astepta 11.9h si codul avea DREPTATE.
+    expect(fmtSpan(0, 2.5 * 3600000)).toBe('2.5h')
+    expect(fmtSpan(0, 11.9 * 3600000)).toBe('12h')
+    expect(fmtSpan(0, 30 * 3600000)).toBe('30h')
+  })
+  it('zile peste doua zile', () => {
+    expect(fmtSpan(0, 90 * 24 * 3600000)).toBe('90d')
+  })
+  it('un interval imposibil nu scrie nimic, nu scrie NaN', () => {
+    for (const [a, b] of [[5, 5], [10, 5], [NaN, 10], [0, NaN]] as any[]) {
+      expect(fmtSpan(a, b)).toBe('')
+    }
+  })
+})

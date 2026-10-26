@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
-import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, LIQ } from '../../liqmap/scale'
+import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, fmtSpan, LIQ } from '../../liqmap/scale'
 
 // ══════════════════════════════════════════════════════════════════
 // LIQUIDATION MAP — trei vederi, toate din date măsurate
@@ -257,7 +257,9 @@ function HeatView({ heat, price }: { heat: any; price: number }) {
             <div className="zlq-heat-legend">
                 <span><i style={{ background: LIQ.long }} /> longs liquidated</span>
                 <span><i style={{ background: LIQ.short }} /> shorts liquidated</span>
-                <span className="zlq-dim">older → newer · peak {fmtUsd(heat.maxUsd)}</span>
+                <span className="zlq-dim">
+                    {fmtSpan(heat.tMin, heat.tMax) || 'older → newer'} · peak {fmtUsd(heat.maxUsd)}
+                </span>
             </div>
         </div>
     )

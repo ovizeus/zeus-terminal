@@ -88,6 +88,39 @@ describe('HEATMAP — timp x pret, din evenimente reale', () => {
         }
     });
 
+    test('AXA DE TIMP se intinde pe DATELE care exista, nu pe fereastra ceruta', () => {
+        // Masurat pe viu: cu 1,3 ore de istoric intr-o fereastra de 90 de zile,
+        // TOATE cele 5 celule cadeau in coloana 89 din 90. Heatmap-ul era 89/90
+        // gol, cu o dunga subtire la margine — practic ilizibil.
+        //
+        // Aceeasi clasa ca scara: axa trebuie sa acopere ce EXISTA, nu ce s-a
+        // cerut. Altfel panoul arata gol si pare stricat, cand de fapt are date.
+        const t0 = Date.now() - 2 * 3600000;
+        store.record(ev({ p: 82000, time: t0 }));
+        store.record(ev({ p: 81000, time: t0 + 3600000 }));
+        store.record(ev({ p: 80500, time: Date.now() - 60000 }));
+        const h = store.heatmap({ symbol: 'BTCUSDT', ref: 80000, days: 90, cols: 30 });
+        const cols = [...new Set(h.cells.map(c => c.t))].sort((a, b) => a - b);
+        expect(cols.length).toBeGreaterThan(1);          // NU toate in aceeasi coloana
+        expect(Math.min(...cols)).toBeLessThan(5);       // prima celula e la inceput
+        expect(Math.max(...cols)).toBeGreaterThan(20);   // ultima aproape de capat
+    });
+
+    test('raporteaza fereastra REALA desenata, ca sa nu para alta', () => {
+        const t0 = Date.now() - 2 * 3600000;
+        store.record(ev({ p: 82000, time: t0 }));
+        const h = store.heatmap({ symbol: 'BTCUSDT', ref: 80000, days: 90, cols: 30 });
+        // tMin e cel mai vechi rand CHIAR existent, nu acum-minus-90-zile
+        expect(h.tMin).toBeGreaterThan(Date.now() - 3 * 3600000);
+        expect(h.tMin).toBeLessThanOrEqual(t0);
+    });
+
+    test('fara date, fereastra ramane cea ceruta — nu se inventeaza una', () => {
+        const h = store.heatmap({ symbol: 'BTCUSDT', ref: 80000, days: 90, cols: 30 });
+        expect(h.cells).toEqual([]);
+        expect(h.tMin).toBeLessThan(Date.now() - 80 * 86400000);
+    });
+
     test('un ref absurd nu arunca', () => {
         store.record(ev());
         for (const ref of [0, -1, NaN, null, undefined]) {

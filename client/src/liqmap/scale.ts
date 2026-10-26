@@ -146,3 +146,22 @@ export function buildLadder(buckets: any[], price: number, step = 0.25, pad = 2)
     }
     return out
 }
+
+/**
+ * Intervalul CHIAR desenat, scris scurt.
+ *
+ * [2026-10-26] Axa de timp se întinde pe datele care există, nu pe fereastra
+ * cerută — altfel 12 ore de istoric într-o fereastră de 90 de zile cad toate
+ * într-o coloană şi harta pare stricată. Dar atunci eticheta trebuie să spună
+ * CE interval s-a desenat, altfel cineva citeşte 12 ore crezând că vede 90 de
+ * zile — şi aia nu mai e o hartă goală, e una care minte.
+ */
+export function fmtSpan(tMin: number, tMax: number): string {
+    const a = Number(tMin), b = Number(tMax)
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return ''
+    const min = (b - a) / 60000
+    if (min < 90) return Math.round(min) + 'm'
+    const h = min / 60
+    if (h < 48) return h.toFixed(h < 10 ? 1 : 0) + 'h'
+    return Math.round(h / 24) + 'd'
+}
