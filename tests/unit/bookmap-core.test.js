@@ -431,3 +431,103 @@ describe('⛔ COLOANELE nu pot fi mai multe decat CADRELE — altfel harta e un 
         expect(h.cols).toBeLessThan(h.colsAsked);
     });
 });
+
+describe('⛔ FERMITATEA nu poate depasi 100% — randarea a aratat 2450%', () => {
+    // Gasit randand harta cu date reale: pereţii afisau fermitate 2450%.
+    // Cauza: numaram NIVELURILE care au contribuit, nu CADRELE in care randul
+    // a avut ceva. Cu 500 de niveluri pe parte, multe cad in acelasi rand de
+    // grila, deci numaratoarea depasea numarul de cadre de 24 de ori.
+    //
+    // Testul vechi trecea fiindca folosea UN nivel pe cadru — adica exact
+    // cazul in care bugul nu se vede.
+    const multiNivel = (ts) => B.normalize({
+        exchange: 'x', symbol: 'B', ts, mult: 1,
+        // sase niveluri care cad TOATE in acelasi palier
+        bids: [['79990', '1'], ['79990.1', '1'], ['79990.2', '1'],
+               ['79990.3', '1'], ['79990.4', '1'], ['79990.5', '1']],
+        asks: [['80010', '1']],
+    });
+
+    test('cu sase niveluri pe cadru, fermitatea rameane 1, nu 6', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => multiNivel(T0 + i * 1000));
+        const agg = B.aggregate({ frames, bandPct: 0.1, rows: 20 });
+        const c = agg.cells.find(x => x.bidUsd > 0);
+        expect(c.bidFirmness).toBeCloseTo(1, 3);
+    });
+
+    test('fermitatea e MEREU intre 0 si 1, orice forma au cadrele', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => multiNivel(T0 + i * 1000));
+        const agg = B.aggregate({ frames, bandPct: 0.1, rows: 20 });
+        for (const c of agg.cells) {
+            expect(c.bidFirmness).toBeGreaterThanOrEqual(0);
+            expect(c.bidFirmness).toBeLessThanOrEqual(1);
+            expect(c.askFirmness).toBeGreaterThanOrEqual(0);
+            expect(c.askFirmness).toBeLessThanOrEqual(1);
+        }
+    });
+
+    test('prezent in 3 cadre din 10, cu multe niveluri, da 0,3 nu 1,8', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => (i < 3
+            ? multiNivel(T0 + i * 1000)
+            : B.normalize({ exchange: 'x', symbol: 'B', ts: T0 + i * 1000, mult: 1,
+                bids: [['79900', '1']], asks: [['80010', '1']] })));
+        const agg = B.aggregate({ frames, bandPct: 0.2, rows: 20 });
+        const c = agg.cells.find(x => Math.abs(x.pct + 0.0125) < 0.02 && x.bidUsd > 0)
+            || agg.cells.filter(x => x.bidUsd > 0).sort((a, b) => b.bidUsd - a.bidUsd)[0];
+        expect(c.bidFirmness).toBeLessThanOrEqual(1);
+        expect(c.bidFirmness).toBeCloseTo(0.3, 1);
+    });
+
+    test('niciun perete nu raporteaza fermitate peste 100%', () => {
+        const frames = Array.from({ length: 10 }, (_, i) => multiNivel(T0 + i * 1000));
+        const agg = B.aggregate({ frames, bandPct: 0.1, rows: 20 });
+        for (const w of B.walls(agg, 10)) expect(w.firmness).toBeLessThanOrEqual(1);
+    });
+});
+
+describe('⛔ REFERINTA DE JOS pentru intensitate — raportul pe CELULA e 3x, nu 745x', () => {
+    // Masurat pe carte reala: raportul max/median e 745x PE NIVEL, dar o celula
+    // de grila aduna ~19 niveluri, deci pe CELULA raportul e 3,0x (26 randuri)
+    // sau 6,2x (48 randuri). Cu scara logaritmica potrivita pentru 745x, toate
+    // celulele ies intre 0,79 si 1,00 — adica harta uniform aprinsa, randata si
+    // vazuta cu ochii.
+    //
+    // Deci grila trebuie sa spuna si o referinta DE JOS, ca intensitatea sa fie
+    // normalizata intre ea si maxim.
+    const f = (ts, qty) => B.normalize({
+        exchange: 'x', symbol: 'B', ts, mult: 1,
+        bids: [['79990', String(qty)], ['79950', '0.2']],
+        asks: [['80010', '1'], ['80050', '3']],
+    });
+
+    test('grila raporteaza o referinta de jos, pozitiva si sub maxim', () => {
+        const h = B.heat({ frames: [f(T0, 5), f(T0 + 1000, 5)], cols: 4, rows: 20, bandPct: 0.1 });
+        expect(h.loUsd).toBeGreaterThan(0);
+        expect(h.loUsd).toBeLessThan(h.maxUsd);
+    });
+
+    test('referinta de jos e un PERCENTIL mic al celulelor, nu minimul absolut', () => {
+        // Minimul absolut ar fi o singura celula norocoasa si ar face scara
+        // instabila de la o aducere la alta.
+        const frames = Array.from({ length: 6 }, (_, i) => f(T0 + i * 1000, 5));
+        const h = B.heat({ frames, cols: 6, rows: 40, bandPct: 0.1 });
+        const vals = h.cells.map(c => Math.max(c.bidUsd, c.askUsd)).filter(v => v > 0).sort((a, b) => a - b);
+        expect(h.loUsd).toBeGreaterThanOrEqual(vals[0]);
+        expect(h.loUsd).toBeLessThanOrEqual(vals[Math.floor(vals.length * 0.5)]);
+    });
+
+    test('scara intre referinta si maxim DISCRIMINEAZA — median nu sare la 0,88', () => {
+        const frames = Array.from({ length: 6 }, (_, i) => f(T0 + i * 1000, 5));
+        const h = B.heat({ frames, cols: 6, rows: 40, bandPct: 0.1 });
+        const vals = h.cells.map(c => Math.max(c.bidUsd, c.askUsd)).filter(v => v > 0).sort((a, b) => a - b);
+        const med = vals[Math.floor(vals.length / 2)];
+        const inten = (u) => (u > h.loUsd ? Math.log(u / h.loUsd) / Math.log(h.maxUsd / h.loUsd) : 0);
+        expect(inten(med)).toBeLessThan(0.85);
+        expect(inten(h.maxUsd)).toBeCloseTo(1, 3);
+    });
+
+    test('fara celule, referinta de jos e 0 si nu produce NaN', () => {
+        const h = B.heat({ frames: [], cols: 4, rows: 10, bandPct: 0.1 });
+        expect(h.loUsd).toBe(0);
+    });
+});

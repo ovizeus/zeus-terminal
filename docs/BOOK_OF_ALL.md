@@ -9322,3 +9322,36 @@ Prima deschidere i-ar fi arătat **dungi subţiri cu găuri între ele**. Aceea�
 **Un test al meu declanşa cazul greşit:** cerea coloane goale cerând *mai multe coloane decât cadre*, ceea ce nu se mai poate. Rescris pe cazul **real** — cadre grupate neuniform, adică fluxul se întrerupe o vreme şi apoi revine.
 
 **5 mutaţii noi moarte. 45 pe Bookmap în total.**
+
+### 🔴🔴 AM RANDAT harta — şi am găsit două buguri pe care nicio aritmetică nu le putea prinde (b335)
+
+Judecata vizuală e a lui. Dar **randarea e a mea.** Fără browser pe VPS (regula lui), am desenat grila în ASCII din **14 instantanee reale**, prin exact acelaşi `bookMap.heat()` care alimentează panoul şi cu aceeaşi scară logaritmică pe care o foloseşte clientul.
+
+**Bug 1: fermitatea afişa `2450%`.**
+Numărasem **nivelurile** care contribuie, nu **cadrele** în care palierul a avut ceva. Cu 500 de niveluri pe parte, zeci cad în acelaşi palier ⇒ contorul depăşea numărul de cadre de 24 de ori.
+**Testul meu vechi trecea fiindcă folosea UN nivel pe cadru** — adică exact cazul în care bugul nu se vede.
+
+**Bug 2: harta era uniform aprinsă** — 96% din grilă la intensitate între 0,79 şi 1,00.
+
+Şi cauza e o **greşeală de raţionament a mea**: măsurasem raportul max/median **PE NIVEL** (745×) şi potrivisem scara pentru el. Dar o **celulă** de grilă adună ~19 niveluri:
+
+| | max/median |
+|---|---|
+| pe nivel | **745×** |
+| pe celulă, 26 rânduri | **3,0×** |
+| pe celulă, 48 rânduri | 6,2× |
+
+**Cifra pe care o calculasem era corectă — doar despre alt obiect.** Nicio aritmetică n-ar fi prins asta; numai privirea.
+
+**Reparat:** grila raportează şi o **referinţă de jos** (percentila 5 a celulelor nenule — nu minimul absolut, care ar face scara să tremure între aduceri), iar intensitatea se normalizează logaritmic între ea şi maxim.
+
+| celule reale | p10 | median | p90 |
+|---|---|---|---|
+| înainte | 0,79 | 0,88 | 0,97 |
+| **după** | **0,25** | **0,50** | **0,70** |
+
+**Randat din nou**, pe BTC şi pe ETH: fermitate **100%** pe toţi pereţii, gradient real de la `.` la `@`, pereţii groşi vizibili la +0,047% şi −0,066%, zona palidă lângă preţ (acolo chiar e puţină lichiditate). **Pe ETH banda AUTO a prins singură ±0,233%**, mai largă decât pe BTC — deci scara nu era potrivită pe un singur simbol.
+
+**O lămurire:** presetările de bandă se opresc la 0,2% fiindcă **atât** acoperă cartea **pe BTC**; pe ETH se întinde până la 0,233%, deci presetarea de 0,2% taie puţin, iar **AUTO** e varianta corectă acolo — şi e şi implicită.
+
+**5 mutaţii noi moarte**, inclusiv bugul original de fermitate. **50 pe Bookmap în total.**

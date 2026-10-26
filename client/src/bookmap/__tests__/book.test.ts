@@ -178,3 +178,50 @@ describe('textele — spread, pereti, sursa', () => {
         expect(windowLabel(120)).toMatch(/2m/)
     })
 })
+
+describe('⛔ REFERINTA DE JOS — harta era uniform aprinsa, vazuta RANDAND', () => {
+    // Masurasem max/median PE NIVEL (745x) si potrivisem scara pentru el. Dar o
+    // celula aduna ~19 niveluri, deci pe CELULA raportul e 3,0x. Cu scara pentru
+    // 745x, p10 -> 0,79, median -> 0,88, p90 -> 0,97: tot aprins.
+    // Cu normalizare intre p05 si max: 0,25 / 0,50 / 0,70. Asta discrimineaza.
+    const LO = 580_000, MAX = 3_870_000, MED = 1_300_000, P90 = 2_890_000
+
+    it('cu referinta, medianul NU mai sare la 0,88', () => {
+        const v = bookIntensity(MED, MAX, LO)
+        expect(v).toBeGreaterThan(0.3)
+        expect(v).toBeLessThan(0.8)
+    })
+
+    it('intervalul se desfasoara pe toata scara, nu se inghesuie sus', () => {
+        const a = bookIntensity(LO * 1.2, MAX, LO)
+        const b = bookIntensity(MED, MAX, LO)
+        const c = bookIntensity(P90, MAX, LO)
+        expect(a).toBeLessThan(b)
+        expect(b).toBeLessThan(c)
+        expect(c - a).toBeGreaterThan(0.4)
+    })
+
+    it('fara referinta se pastreaza comportamentul vechi — harta nu rameane neagra', () => {
+        expect(bookIntensity(MED, MAX)).toBeGreaterThan(0.5)
+        expect(bookIntensity(MED, MAX, 0)).toBeGreaterThan(0.5)
+        expect(bookIntensity(MED, MAX, NaN as any)).toBeGreaterThan(0.5)
+    })
+
+    it('sub referinta e ZERO, nu o umbra', () => {
+        expect(bookIntensity(LO * 0.5, MAX, LO)).toBe(0)
+        expect(bookIntensity(LO, MAX, LO)).toBe(0)
+    })
+
+    it('maximul da mereu 1', () => {
+        expect(bookIntensity(MAX, MAX, LO)).toBeCloseTo(1, 3)
+    })
+
+    it('referinta absurda (peste maxim) nu rupe scara', () => {
+        for (const lo of [MAX * 2, -5, Infinity]) {
+            const v = bookIntensity(MED, MAX, lo as any)
+            expect(Number.isFinite(v)).toBe(true)
+            expect(v).toBeGreaterThanOrEqual(0)
+            expect(v).toBeLessThanOrEqual(1)
+        }
+    })
+})

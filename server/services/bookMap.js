@@ -130,6 +130,17 @@ function aggregate({ frames, bandPct, rows, windowMs, now }) {
 
     for (const f of used) {
         exch.add(f.exchange);
+        // ⚠️ FERMITATEA NUMARA CADRE, NU NIVELURI.
+        //
+        // [2026-10-26] Randand harta cu date reale, pereţii afişau fermitate
+        // **2450%**. Numărasem nivelurile care contribuie: cu 500 de niveluri
+        // pe parte, zeci cad în acelaşi palier, deci contorul depăşea numărul
+        // de cadre de 24 de ori. Testul vechi trecea fiindcă folosea UN nivel
+        // pe cadru — exact cazul în care bugul nu se vede.
+        //
+        // Seturile de aici marchează o singură dată per cadru ce palier a avut
+        // ceva pe fiecare parte.
+        const bidRows = new Set(), askRows = new Set();
         const put = (side, p, q) => {
             const pct = 100 * (p - f.mid) / f.mid;
             if (Math.abs(pct) > band) { excluded++; return; }
@@ -142,14 +153,16 @@ function aggregate({ frames, bandPct, rows, windowMs, now }) {
             const usd = p * q;
             if (side === 'B') {
                 c.bidSum += usd; c.bidPeak = Math.max(c.bidPeak, usd);
-                if (usd > 0) c.bidN++;
+                if (usd > 0) bidRows.add(i);
             } else {
                 c.askSum += usd; c.askPeak = Math.max(c.askPeak, usd);
-                if (usd > 0) c.askN++;
+                if (usd > 0) askRows.add(i);
             }
         };
         for (const [p, q] of f.bids) put('B', p, q);
         for (const [p, q] of f.asks) put('A', p, q);
+        for (const i of bidRows) acc.get(i).bidN++;
+        for (const i of askRows) acc.get(i).askN++;
     }
 
     const n = used.length;
@@ -164,7 +177,7 @@ function aggregate({ frames, bandPct, rows, windowMs, now }) {
             row: i, pct, price: mid * (1 + pct / 100),
             bidUsd, askUsd,
             bidPeakUsd: c.bidPeak, askPeakUsd: c.askPeak,
-            bidFirmness: c.bidN / n, askFirmness: c.askN / n,
+            bidFirmness: Math.min(1, c.bidN / n), askFirmness: Math.min(1, c.askN / n),
         });
     }
     cells.sort((x, y) => y.pct - x.pct);
@@ -228,8 +241,8 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
 
     if (!used.length) {
         return { cells: [], mids: new Array(asked).fill(null), cols: asked, colsAsked: asked,
-            rows: R, bandPct: _band([], bandPct), tMin: null, tMax: null, maxUsd: 0, frames: 0,
-            exchanges: [], spread: null };
+            rows: R, bandPct: _band([], bandPct), tMin: null, tMax: null, maxUsd: 0, loUsd: 0,
+            frames: 0, exchanges: [], spread: null };
     }
 
     // ⚠️ COLOANELE NU POT FI MAI MULTE DECÂT CADRELE.
@@ -292,8 +305,26 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
         }
     }
 
+    // ⚠️ REFERINTA DE JOS, si de ce nu lipseste.
+    //
+    // [2026-10-26] Masurasem raportul max/median **PE NIVEL**: 745×. Si am
+    // aplicat o scara logaritmica potrivita pentru asta. Dar o CELULA de grila
+    // aduna ~19 niveluri, deci pe celula raportul real e **3,0×** (26 randuri)
+    // sau 6,2× (48). Cu scara pentru 745×, toate celulele ies intre 0,79 si
+    // 1,00 — adica harta uniform aprinsa, care nu discrimineaza nimic.
+    //
+    // Am vazut-o RANDAND harta in ASCII cu date reale; nicio aritmetica nu
+    // putea prinde asta, fiindca cifra pe care o calculasem era corecta — doar
+    // despre alt obiect.
+    //
+    // Deci grila spune si o referinta de jos: percentila 5 a celulelor
+    // nenule. NU minimul absolut — ar fi o celula norocoasa si scara ar
+    // tremura de la o aducere la alta.
+    const vals = cells.map(c => Math.max(c.bidUsd, c.askUsd)).filter(v => v > 0).sort((a, b) => a - b);
+    const loUsd = vals.length ? vals[Math.floor(0.05 * (vals.length - 1))] : 0;
+
     return { cells, mids, cols: C, colsAsked: asked, rows: R, bandPct: band, rowPct, tMin, tMax,
-        maxUsd, frames: used.length, exchanges: [...exch].sort(),
+        maxUsd, loUsd, frames: used.length, exchanges: [...exch].sort(),
         spread: used[used.length - 1].spread };
 }
 

@@ -494,7 +494,7 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
         ctx.fillStyle = '#070a0e'
         ctx.fillRect(0, 0, w, h)
 
-        const { cols, rows, cells, maxUsd, mids } = heat
+        const { cols, rows, cells, maxUsd, loUsd, mids } = heat
         const cw = w / cols
         const ch = h / rows
 
@@ -502,11 +502,11 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
             const x = colToX(cell.col, cols, w)
             const y = rowToY(cell.row, rows, h)
             if (cell.bidUsd > 0) {
-                ctx.fillStyle = bookColor('bid', bookIntensity(cell.bidUsd, maxUsd))
+                ctx.fillStyle = bookColor('bid', bookIntensity(cell.bidUsd, maxUsd, loUsd))
                 ctx.fillRect(x, y, Math.max(1, cw), Math.max(1, ch))
             }
             if (cell.askUsd > 0) {
-                ctx.fillStyle = bookColor('ask', bookIntensity(cell.askUsd, maxUsd))
+                ctx.fillStyle = bookColor('ask', bookIntensity(cell.askUsd, maxUsd, loUsd))
                 ctx.fillRect(x, y, Math.max(1, cw), Math.max(1, ch))
             }
         }

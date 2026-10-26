@@ -43,14 +43,33 @@ export type Wall = {
 }
 
 /**
- * Intensitate LOGARITMICĂ. Vezi nota 2 de sus: pe o scară liniară, un nivel la
- * 1/400 din maxim ar fi invizibil, iar exact aşa arată majoritatea cărţii.
+ * Intensitate LOGARITMICĂ, între o referinţă de JOS şi maxim.
+ *
+ * ⚠️ DE CE NU DOAR „faţă de maxim", şi cum am aflat: măsurasem raportul
+ * max/median **PE NIVEL** — 745× — şi potrivisem scara pentru el. Dar o celulă
+ * de grilă adună ~19 niveluri, deci pe CELULĂ raportul real e **3,0×** (26 de
+ * rânduri) sau 6,2× (48). Cu scara pentru 745×, toate celulele ieşeau între
+ * 0,79 şi 1,00: hartă uniform aprinsă, care nu arată nimic.
+ *
+ * Am văzut-o RANDÂND harta în ASCII cu date reale. Nicio aritmetică n-ar fi
+ * prins-o, fiindcă cifra pe care o calculasem era corectă — doar despre alt
+ * obiect. Serverul trimite acum `loUsd` (percentila 5 a celulelor nenule), iar
+ * intensitatea se normalizează între ea şi maxim.
+ *
+ * Fără `lo` se păstrează comportamentul vechi, ca un răspuns mai vechi de la
+ * server să nu lase harta neagră.
  */
-export function bookIntensity(usd: number, maxUsd: number): number {
+export function bookIntensity(usd: number, maxUsd: number, loUsd?: number): number {
     const u = Number(usd)
     const m = Number(maxUsd)
     if (!Number.isFinite(u) || u <= 0) return 0
     if (!Number.isFinite(m) || m <= 0) return 0
+    const lo = Number(loUsd)
+    if (Number.isFinite(lo) && lo > 0 && m > lo) {
+        if (u <= lo) return 0
+        const v = Math.log(u / lo) / Math.log(m / lo)
+        return Math.max(0, Math.min(1, v))
+    }
     const r = Math.min(1, u / m)
     // Scara ALEASĂ PE DATE, nu din gust. Nivelul MEDIAN e la ~1/427 din maxim
     // (427× măsurat pe cartea reală), deci el decide dacă harta se vede:
