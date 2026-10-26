@@ -108,7 +108,7 @@ export function LiqMapPanel() {
             <div className="zlq-body">
                 {view === 'map' && <MapView map={map} price={price} />}
                 {view === 'heat' && <HeatView heat={heat} price={price} />}
-                {view === 'live' && <LiveView tape={tape} />}
+                {view === 'live' && <LiveView tape={tape} mine={symbol} />}
             </div>
         </div>
     )
@@ -266,19 +266,32 @@ function HeatView({ heat, price }: { heat: any; price: number }) {
 }
 
 // ── Vederea LIVE: fiecare lichidare, pe măsură ce se întâmplă ─────
-function LiveView({ tape }: { tape: LiqEvent[] }) {
+function LiveView({ tape, mine }: { tape: LiqEvent[]; mine: string }) {
     if (!tape.length) {
+        // Şi starea goală spune CE aşteaptă. Prima variantă tăcea, deci
+        // „ALL MARKETS" apărea abia după primul eveniment — adică exact când nu
+        // mai era nevoie de el.
         return (
             <div className="zlq-empty">
-                <b>waiting for a liquidation</b>
+                <b>waiting for a liquidation · ALL MARKETS</b>
                 <span>every row here will be a position force-closed, the moment it happens</span>
             </div>
         )
     }
+    // Antetul panoului spune un simbol, dar tape-ul e TOTĂ piaţa — şi aşa e
+    // bine: pe BTC singur ar fi un rând pe minut, adică mort. Dar atunci
+    // trebuie SPUS, altfel cine se uită crede că tot panoul e un simbol.
+    // Şi rândurile simbolului urmărit se scot în evidenţă, ca să se vadă în flux.
+    const n = tape.filter((e) => e.symbol === mine).length
     return (
         <div className="zlq-tape">
+            <div className="zlq-tape-hd">
+                <span>ALL MARKETS</span>
+                <span className="zlq-dim">{n > 0 ? `${n} on ${mine}` : `none on ${mine} yet`}</span>
+            </div>
             {tape.map((e, i) => (
-                <div key={e.time + '-' + i} className={'zlq-tp' + (i === 0 ? ' fresh' : '')}>
+                <div key={e.time + '-' + i}
+                    className={'zlq-tp' + (i === 0 ? ' fresh' : '') + (e.symbol === mine ? ' mine' : '')}>
                     <span className="zlq-tp-dot" style={{ background: barColor(!!e.isLong) }} />
                     <span className="zlq-tp-side" style={{ color: barColor(!!e.isLong) }}>
                         {e.isLong ? 'LONG' : 'SHORT'}

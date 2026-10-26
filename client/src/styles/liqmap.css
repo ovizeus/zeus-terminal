@@ -280,3 +280,24 @@
 .zlq-row.void { opacity: .34; }
 .zlq-row.void .zlq-px { color: #4c5f70; }
 .zlq-row.void .zlq-bar { background: #0a1016; }
+
+/* Tape-ul e TOATĂ piaţa, nu simbolul din antet — pe BTC singur ar fi un rând
+   pe minut, adică mort. Dar asta trebuie SPUS, altfel cine se uită crede că
+   tot panoul e un simbol. */
+.zlq-tape-hd {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0 0 5px;
+    margin-bottom: 3px;
+    border-bottom: 1px solid var(--liq-line);
+    font-size: 9px;
+    letter-spacing: .14em;
+    color: var(--liq-dim);
+}
+.zlq-tape-hd .zlq-dim { letter-spacing: 0; font-size: 10px; }
+
+/* Rândurile simbolului urmărit, vizibile în fluxul general fără să ţipe. */
+.zlq-tp.mine { background: rgba(255, 140, 66, .055); }
+.zlq-tp.mine .zlq-tp-sym { color: #e8d5c2; }

@@ -25,3 +25,5 @@ pornit o căutare de o oră după un ban inexistent.
 
 *A patra oară în două zile când greşeala era în întrebarea mea, nu în cod — şi prima dată când era
 într-o unealtă pe care o folosesc la fiecare reload.*
+
+---

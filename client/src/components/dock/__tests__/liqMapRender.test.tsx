@@ -161,6 +161,31 @@ describe('e DINAMIC — reactioneaza', () => {
     expect(container.textContent).toMatch(/gate/)
   })
 
+  it('tape-ul SPUNE ca e toata piata — altfel pare ca e simbolul din antet', async () => {
+    // Antetul zice BTCUSDT, scara e BTCUSDT, dar pe tape curg GRVT, RLS, DOOD.
+    // Cine se uita presupune ca tot panoul e un singur simbol. Nu filtram —
+    // pe BTC ar fi un rand pe minut, moarta — dar spunem ce e.
+    const { container } = await open()
+    fireEvent.click(screen.getByRole('tab', { name: 'LIVE' }))
+    await waitFor(() => expect(container.textContent).toMatch(/ALL MARKETS/))
+  })
+
+  it('randurile simbolului ales se VAD in fluxul general', async () => {
+    const { container } = await open()
+    fireEvent.click(screen.getByRole('tab', { name: 'LIVE' }))
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('zeus:liq', {
+        detail: { exchange: 'gate', symbol: 'GRVTUSDT', side: 'BUY', p: 1.2, vol: 5000, time: Date.now() },
+      }))
+      window.dispatchEvent(new CustomEvent('zeus:liq', {
+        detail: { exchange: 'bybit', symbol: 'BTCUSDT', side: 'SELL', p: 80489, vol: 900000, time: Date.now() + 1 },
+      }))
+    })
+    await waitFor(() => expect(container.querySelectorAll('.zlq-tp').length).toBe(2))
+    // exact unul e marcat ca fiind simbolul urmarit
+    expect(container.querySelectorAll('.zlq-tp.mine').length).toBe(1)
+  })
+
   it('banda de simboluri exista si se poate schimba simbolul', async () => {
     const { container } = await open()
     const btns = [...container.querySelectorAll('.zlq-sym-b')] as HTMLElement[]
