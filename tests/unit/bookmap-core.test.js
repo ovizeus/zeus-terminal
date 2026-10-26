@@ -609,3 +609,69 @@ describe('⛔ PIEPTENELE — vazut in captura LUI, cu goluri negre intre benzi',
         expect(masurate.length).toBeGreaterThan(0);
     });
 });
+
+describe('⛔ DISTANTA se masoara de la pretul de ACUM, nu de la media ferestrei', () => {
+    // [2026-10-26] Gasit citindu-i captura ca sa i-o explic. Pretul cazuse 93 de
+    // dolari in 10 minute, banda e ±0,165% (±132 dolari), iar scara era ancorata
+    // pe media ferestrei (~79.954) in loc de pretul de acum (79.900).
+    //
+    // Rezultatul pe ecranul lui: un BID la 79.942 etichetat „-12" — dar fata de
+    // pretul de acum el e DEASUPRA, ceea ce e imposibil pentru un ordin de
+    // cumparare in asteptare. Eticheta se batea cap in cap cu ce vedea.
+    //
+    // Palierele RAMAN relative (fiecare cadru fata de mijlocul LUI, altfel
+    // lichiditatea n-ar fi comparabila in timp) — dar traducerea in preturi
+    // absolute trebuie facuta cu „acum", fiindca „acum" e ce vede el sus.
+    const scade = () => Array.from({ length: 10 }, (_, i) => B.normalize({
+        exchange: 'x', symbol: 'B', ts: T0 + i * 60000, mult: 1,
+        bids: [[String(79990 - i * 10 - 40), '5']],
+        asks: [[String(79990 - i * 10 + 40), '5']],
+    }));
+
+    test('mijlocul raportat e cel din ULTIMUL cadru, nu media', () => {
+        const frames = scade();
+        const agg = B.aggregate({ frames, bandPct: 0.3, rows: 40,
+            windowMs: 900000, now: T0 + 9 * 60000 });
+        const ultimul = frames[frames.length - 1].mid;
+        const media = frames.reduce((s, f) => s + f.mid, 0) / frames.length;
+        expect(agg.mid).toBeCloseTo(ultimul, 6);
+        expect(Math.abs(agg.mid - media)).toBeGreaterThan(10);
+    });
+
+    test('un BID nu poate iesi DEASUPRA pretului de acum', () => {
+        const agg = B.aggregate({ frames: scade(), bandPct: 0.3, rows: 40,
+            windowMs: 900000, now: T0 + 9 * 60000 });
+        for (const c of agg.cells) {
+            if (c.bidUsd > 0) expect(c.price).toBeLessThanOrEqual(agg.mid + 1e-6);
+        }
+    });
+
+    test('un ASK nu poate iesi DEDESUBTUL pretului de acum', () => {
+        const agg = B.aggregate({ frames: scade(), bandPct: 0.3, rows: 40,
+            windowMs: 900000, now: T0 + 9 * 60000 });
+        for (const c of agg.cells) {
+            if (c.askUsd > 0) expect(c.price).toBeGreaterThanOrEqual(agg.mid - 1e-6);
+        }
+    });
+
+    test('semnul distantei se potriveste cu partea: BID negativ, ASK pozitiv', () => {
+        const agg = B.aggregate({ frames: scade(), bandPct: 0.3, rows: 40,
+            windowMs: 900000, now: T0 + 9 * 60000 });
+        const w = B.walls(agg, 10);
+        expect(w.length).toBeGreaterThan(1);
+        for (const x of w) {
+            if (x.side === 'BID') expect(x.distUsd).toBeLessThanOrEqual(0);
+            else expect(x.distUsd).toBeGreaterThanOrEqual(0);
+        }
+    });
+
+    test('pe o piaţa care NU se misca, nimic nu se schimba', () => {
+        const stabil = Array.from({ length: 10 }, (_, i) => B.normalize({
+            exchange: 'x', symbol: 'B', ts: T0 + i * 60000, mult: 1,
+            bids: [['79950', '5']], asks: [['80050', '5']],
+        }));
+        const agg = B.aggregate({ frames: stabil, bandPct: 0.3, rows: 40,
+            windowMs: 900000, now: T0 + 9 * 60000 });
+        expect(agg.mid).toBeCloseTo(80000, 6);
+    });
+});

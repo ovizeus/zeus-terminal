@@ -9440,3 +9440,19 @@ Regula există din **10 octombrie** şi a funcţionat exact cum trebuie — a c�
 | PREDICT | 16 instantanee, **14 rezolvate** |
 
 **8 teste noi, 5 mutaţii moarte. 68 pe Bookmap în total.**
+
+### 🔴 Distanţa se măsura faţă de MEDIA ferestrei, nu faţă de preţul de ACUM (b340)
+
+**Găsit citindu-i captura ca să i-o explic** — adică exact lucrul pe care mi l-a cerut: *„cum citesc asta?"*
+
+Pe ecranul lui: preţul **79 900**, iar în listă un **BID la 79 942 etichetat `−12`**. Dar 79 942 e **deasupra** lui 79 900 — imposibil pentru un ordin de cumpărare care aşteaptă. **Eticheta se bătea cap în cap cu ce vedea.**
+
+**Cauza:** preţul căzuse 93$ în 10 minute iar banda e ±132$, deci media ferestrei (~79 954) era cu 54$ peste preţul de acum. Scara traducea palierele în preţuri absolute folosind media aia.
+
+Când piaţa stă pe loc nu se vede nimic. **Se vede exact când preţul se mişcă — adică exact când te uiţi.**
+
+**Reparat:** palierele **rămân relative** (fiecare cadru faţă de mijlocul LUI, altfel lichiditatea n-ar fi comparabilă în timp), dar traducerea în preţuri **absolute** se face cu **ultimul cadru** — fiindcă ăla e preţul pe care îl vede sus.
+
+Trei teste noi apără proprietăţi care nu se pot încălca: **un BID nu poate ieşi deasupra preţului**, un ASK nu poate ieşi dedesubt, şi semnul distanţei se potriveşte cu partea.
+
+**2 mutaţii moarte** (bugul original + ancora pe primul cadru). **70 pe Bookmap în total.**

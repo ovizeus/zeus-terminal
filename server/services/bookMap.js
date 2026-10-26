@@ -121,7 +121,18 @@ function aggregate({ frames, bandPct, rows, windowMs, now }) {
 
     const band = _band(used, bandPct);
     const rowPct = (2 * band) / R;
-    const mid = used.reduce((s, f) => s + f.mid, 0) / used.length;
+    // ⚠️ ANCORA E PRETUL DE ACUM, nu media ferestrei.
+    //
+    // [2026-10-26] Gasit citindu-i captura ca sa i-o explic. Pretul cazuse 93 de
+    // dolari in 10 minute iar banda e ±132; cu ancora pe medie (~79.954 in loc
+    // de 79.900), lista arata un BID la 79.942 etichetat „-12" — adica DEASUPRA
+    // pretului de acum, ceea ce e imposibil pentru un ordin de cumparare.
+    // Eticheta se batea cap in cap cu ce vedea pe ecran.
+    //
+    // Palierele RAMAN relative (fiecare cadru fata de mijlocul LUI, altfel
+    // lichiditatea n-ar fi comparabila in timp). Doar traducerea in preturi
+    // ABSOLUTE se face cu „acum", fiindca „acum" e ce vede el sus.
+    const mid = used[used.length - 1].mid;
 
     // index palier -> acumulator
     const acc = new Map();
