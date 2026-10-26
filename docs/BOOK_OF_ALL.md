@@ -9275,3 +9275,27 @@ Binance raporta **748 din 2400** greutate/minut cu Zeus în funcţiune (31%). `l
 **35 de mutaţii noi, toate moarte** — inclusiv multiplicator presupus 1, ce iese din bandă înghesuit la margine, maximul în loc de medie, spoof acceptat ca perete, WS amestecat în hartă, greutate declarată fals, zoom nemărginit şi chartul redevenit dreaptă.
 
 **Server 233 de teste** pe shardurile bookmap+lichidări, **client 161 fişiere / 1 459 teste**, `tsc` 0 erori, build ✓, verificat în bundle-ul servit.
+
+### 🔴 Adăugat după livrare: interogarea adâncă mergea CONTINUU degeaba (b333)
+
+Am măsurat greutatea raportată de Binance la fiecare 10 secunde, în aceeaşi fereastră de minut:
+
+| t | greutate |
+|---|---|
+| +10s | 268 |
+| +20s | 492 |
+| +30s | 804 |
+| +40s | 1031 |
+| +50s | 1255 |
+
+**~1 380/min, adică 57% din plafon** — de la 748 (31%) înainte de Bookmap. Estimasem 51%, deci estimarea mea era şi optimistă **şi incompletă**: interogarea adâncă mergea **continuu din boot**, chiar când nimeni nu avea rubrica deschisă. Taxă curată pe tot Zeus pentru un ecran la care nu se uită nimeni.
+
+**Reparat: ritmul e LA CERERE.** Rapid (5 s) cât timp cineva se uită — ruta anunţă fluxul la fiecare cerere — şi lent (30 s) în rest. Costul de bază scade de la **480/min la 80/min**, adică de la 20% la **3%**.
+
+**Lent nu e OPRIT, dinadins:** fără un istoric minim, prima deschidere ar arăta o hartă goală şi ar părea stricată — exact confuzia care a pornit toată discuţia despre lichidări. Un test cere ca ritmul lent să fie peste cel rapid **dar sub un minut**.
+
+**Ordinea contează: greutatea BATE cererea.** Peste 1700 raportat, ritmul trece la 20 s chiar dacă cineva se uită — mai bine o hartă cu coloane rare decât un ban pe tot Zeus.
+
+**Două teste ale mele au căzut pe schimbarea de structură, nu pe comportament** (unul căuta `DEEP_MS_SLOW` lângă `const next`, logica mutându-se în `_intervalFor`; altul citea doar primii 2200 de caractere din rută). Actualizate, cu motivul scris în ele.
+
+**5 mutaţii noi, toate moarte** — inclusiv bugul chiar măsurat. **40 pe Bookmap în total.**

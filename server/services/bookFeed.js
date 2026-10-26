@@ -45,6 +45,17 @@ const BINANCE_REST = 'https://fapi.binance.com';
 const DEEP_LIMIT = 1000;          // greutate 20, bandă ±0,155%
 const DEEP_MS = 5000;             // pe simbol
 const DEEP_MS_SLOW = 20000;       // când greutatea raportată urcă
+// ⚠️ RITM LA CERERE, impus de o masuratoare de dupa prima livrare: greutatea
+// raportata de Binance urcase de la 748/min (31%) la ~1.380/min (57%), si
+// interogarea adanca mergea CONTINUU din boot — chiar cand nimeni nu avea
+// rubrica deschisa. Asta e taxa curata pe tot Zeus pentru un ecran la care nu
+// se uita nimeni.
+//
+// Rapid cat timp cineva se uita; lent in rest. LENT nu e OPRIT, dinadins: fara
+// un istoric minim, prima deschidere ar arata o harta goala si ar parea
+// stricata. 30 s => 80/min (3%) in loc de 480/min (20%).
+const DEEP_MS_IDLE = 30000;
+const DEMAND_TTL_MS = 30000;
 const WEIGHT_SLOW_AT = 1700;      // din 2400
 const WS_SAMPLE_MS = 1000;        // 10 cadre/s → 1, restul se aruncă
 const RING_MS = 12 * 60000;
@@ -56,6 +67,7 @@ const _top = new Map();           // symbol -> [frame] (WS, doar banda de sus)
 const _lastWs = new Map();        // symbol -> ts ultimul cadru păstrat
 let _ws = null, _wsTimer = null, _deepTimer = null, _stopped = true;
 let _usedWeight = 0, _wsFrames = 0, _wsKept = 0, _deepOk = 0, _deepFail = 0;
+let _lastDemand = null;
 
 function _push(map, symbol, frame, maxN) {
     if (!frame) return;
@@ -135,13 +147,30 @@ async function _deepTick() {
         const f = await _fetchDeep(sym);
         if (f) _push(_deep, sym, f, RING_MAX);
     }
-    // Ritm adaptiv: dacă Binance spune că greutatea e sus, ne dăm la o parte.
-    // Mai bine o hartă cu coloane mai rare decât un ban pe tot Zeus.
-    const next = _usedWeight >= WEIGHT_SLOW_AT ? DEEP_MS_SLOW : DEEP_MS;
+    const next = _intervalFor(Date.now(), _lastDemand, _usedWeight);
     if (!_stopped) {
         _deepTimer = setTimeout(() => { _deepTick().catch(() => {}); }, next);
         if (_deepTimer.unref) _deepTimer.unref();
     }
+}
+
+/**
+ * Ritmul următoarei interogări adânci.
+ *
+ * Ordinea conteaza: greutatea BATE cererea. Mai bine o hartă cu coloane rare
+ * decât un ban de la Binance pe tot Zeus.
+ */
+function _intervalFor(now, lastDemand, usedWeight) {
+    if (Number(usedWeight) >= WEIGHT_SLOW_AT) return DEEP_MS_SLOW;
+    const d = Number(lastDemand);
+    if (!Number.isFinite(d) || now - d > DEMAND_TTL_MS) return DEEP_MS_IDLE;
+    return DEEP_MS;
+}
+
+/** Cineva se uită chiar acum. Chemat de rută la fiecare cerere. */
+function noteDemand(now) {
+    const t = Number(now);
+    _lastDemand = Number.isFinite(t) ? t : Date.now();
 }
 
 /** Cadrele ADÂNCI (REST) — singurele din care se desenează harta. */
@@ -158,7 +187,8 @@ function health() {
     return {
         running: !_stopped, usedWeight1m: _usedWeight || null,
         wsFrames: _wsFrames, wsKept: _wsKept, deepOk: _deepOk, deepFail: _deepFail,
-        deepIntervalMs: _usedWeight >= WEIGHT_SLOW_AT ? DEEP_MS_SLOW : DEEP_MS,
+        deepIntervalMs: _intervalFor(Date.now(), _lastDemand, _usedWeight),
+        watchedRecently: !!(_lastDemand && Date.now() - _lastDemand <= DEMAND_TTL_MS),
         symbols: per,
     };
 }
@@ -174,6 +204,7 @@ function start() {
 
 function stop() {
     _stopped = true;
+    _lastDemand = null;
     if (_wsTimer) { clearTimeout(_wsTimer); _wsTimer = null; }
     if (_deepTimer) { clearTimeout(_deepTimer); _deepTimer = null; }
     if (_ws) { try { _ws.close(); } catch (_) {} _ws = null; }
@@ -181,6 +212,7 @@ function stop() {
 }
 
 module.exports = {
-    start, stop, health, deepFrames, topFrames, SYMBOLS,
-    DEEP_LIMIT, DEEP_MS, DEEP_MS_SLOW, WEIGHT_SLOW_AT, WS_SAMPLE_MS, RING_MS, RING_MAX, TOP_MAX,
+    start, stop, health, deepFrames, topFrames, noteDemand, SYMBOLS, _intervalFor,
+    DEEP_LIMIT, DEEP_MS, DEEP_MS_SLOW, DEEP_MS_IDLE, DEMAND_TTL_MS,
+    WEIGHT_SLOW_AT, WS_SAMPLE_MS, RING_MS, RING_MAX, TOP_MAX,
 };

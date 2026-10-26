@@ -112,6 +112,11 @@ router.get('/bookmap', (req, res) => {
         const cols = Math.max(10, Math.min(240, Number(req.query.cols) || 90));
         const rows = Math.max(8, Math.min(BM.MAX_ROWS, Number(req.query.rows) || 48));
 
+        // Cineva se uita CHIAR ACUM: fluxul trece pe ritm rapid. Fara asta,
+        // interogarea adanca ar merge continuu din boot pentru un ecran la care
+        // nu se uita nimeni — masurat: 57% din plafonul Binance.
+        feed.noteDemand(Date.now());
+
         const deep = feed.deepFrames(sym);
         const now = Date.now();
         const heat = BM.heat({ frames: deep, cols, rows, bandPct: band, windowMs, now });

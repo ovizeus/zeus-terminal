@@ -100,10 +100,15 @@ describe('costul de rata e stapanit, nu sperat', () => {
     });
 
     test('ritmul se INCETINESTE cand greutatea raportata de Binance urca', () => {
+        // Logica a trecut in _intervalFor cand am adaugat ritmul la cerere;
+        // comportamentul e apărat de testele pe _intervalFor de mai jos.
         expect(FEED).toMatch(/x-mbx-used-weight-1m/);
         expect(FEED).toMatch(/WEIGHT_SLOW_AT/);
         const i = FEED.indexOf('const next =');
-        expect(FEED.slice(i, i + 160)).toMatch(/DEEP_MS_SLOW/);
+        expect(i).toBeGreaterThan(-1);
+        expect(FEED.slice(i, i + 160)).toMatch(/_intervalFor\(/);
+        const j = FEED.indexOf('function _intervalFor');
+        expect(FEED.slice(j, j + 400)).toMatch(/DEEP_MS_SLOW/);
     });
 
     test('cadrele WS sunt SUBESANTIONATE — 10 pe secunda n-au ce cauta in RAM', () => {
@@ -159,7 +164,7 @@ describe('ruta', () => {
 
     test('nu intoarce 500 pe eroare — un panou gol e onest', () => {
         const i = ROUTE.indexOf("'/bookmap'");
-        const body = ROUTE.slice(i, i + 2200);
+        const body = ROUTE.slice(i, i + 3000);
         expect(body).toMatch(/status\(200\)/);
         expect(body).not.toMatch(/status\(500\)/);
     });
@@ -170,12 +175,61 @@ describe('ruta', () => {
         // in timp ce cols/rows plecau nemarginite. O cerere cu rows=1e9 ajunge
         // in bucle si alocari, deci e o cale de a inghetat serverul.
         const i = ROUTE.indexOf("'/bookmap'");
-        const body = ROUTE.slice(i, i + 2200);
+        const body = ROUTE.slice(i, i + 3000);
         // Bucla de la prima incercare cauta `const window`, dar in cod e
         // `windowMs` — cadea pe o ruta CORECTA. A cincea data cand un test al
         // meu se inseala, nu codul. Rămân cele trei verificari precise.
         expect(body).toMatch(/const cols = Math\.max\([^)]*Math\.min\(/);
         expect(body).toMatch(/const rows = Math\.max\([^)]*Math\.min\(/);
         expect(body).toMatch(/const windowMs = Math\.max\([^)]*Math\.min\(/);
+    });
+});
+
+describe('⛔ CEREREA LA CERERE — masurat pe viu, mergea continuu degeaba', () => {
+    // [2026-10-26] Dupa reload am masurat greutatea raportata de Binance la
+    // fiecare 10 secunde: 268, 492, 804, 1031, 1255 — adica ~1.380 pe minut,
+    // 57% din plafon, de la 748 (31%) inainte. Si interogarea adanca mergea
+    // CONTINUU, din boot, chiar cand nimeni nu avea rubrica deschisa.
+    //
+    // Reparat: ritmul e la CERERE. Rapid cat timp cineva se uita, lent in rest,
+    // ca sa existe mereu un istoric minim. Costul de baza scade de la 480/min
+    // la 80/min.
+    test('exista o notiune de CERERE, si ruta o anunta', () => {
+        expect(FEED).toMatch(/_lastDemand/);
+        expect(FEED).toMatch(/function noteDemand/);
+        expect(ROUTE).toMatch(/noteDemand\(/);
+    });
+
+    test('noteDemand e exportat si se poate chema fara sa arunce', () => {
+        const m = require('../../server/services/bookFeed');
+        expect(typeof m.noteDemand).toBe('function');
+        expect(() => m.noteDemand()).not.toThrow();
+    });
+
+    test('ritmul ALEGE intre rapid si lent dupa cerere', () => {
+        const m = require('../../server/services/bookFeed');
+        const now = 1793000000000;
+        expect(m._intervalFor(now, now - 1000, 0)).toBe(m.DEEP_MS);
+        expect(m._intervalFor(now, now - 10 * 60000, 0)).toBe(m.DEEP_MS_IDLE);
+        expect(m._intervalFor(now, null, 0)).toBe(m.DEEP_MS_IDLE);
+    });
+
+    test('ritmul LENT nu e oprire — istoricul minim trebuie sa existe', () => {
+        const m = require('../../server/services/bookFeed');
+        expect(m.DEEP_MS_IDLE).toBeGreaterThan(m.DEEP_MS);
+        expect(m.DEEP_MS_IDLE).toBeLessThanOrEqual(60000);
+    });
+
+    test('greutatea mare BATE cererea — un ban pe tot Zeus e mai rau', () => {
+        const m = require('../../server/services/bookFeed');
+        const now = 1793000000000;
+        expect(m._intervalFor(now, now - 1000, m.WEIGHT_SLOW_AT + 10)).toBe(m.DEEP_MS_SLOW);
+    });
+
+    test('costul de baza scade sub un sfert din cel de dinainte', () => {
+        const m = require('../../server/services/bookFeed');
+        const perMin = (ms) => (60000 / ms) * 20 * m.SYMBOLS.length;
+        expect(perMin(m.DEEP_MS_IDLE)).toBeLessThan(perMin(m.DEEP_MS) / 4);
+        expect(perMin(m.DEEP_MS_IDLE)).toBeLessThan(150);
     });
 });
