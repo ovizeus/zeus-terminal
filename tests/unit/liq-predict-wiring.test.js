@@ -113,3 +113,60 @@ describe('serviciul leaga chiar piesele care trebuie', () => {
         expect(SVC).toMatch(/SYMBOLS = \['BTCUSDT', 'ETHUSDT'\]/);
     });
 });
+
+describe('⛔ modulele se INCARCA — nu doar arata bine in sursa', () => {
+    // [2026-10-26] Serviciul a picat la pornire cu „Cannot find module
+    // '../utils/logger'". Testele de mai sus citeau TEXTUL sursei si treceau
+    // toate; nimic nu dovedea ca require-urile se rezolva. L-am prins uitandu-ma
+    // in loguri dupa reload, adica prea tarziu — aceeasi clasa cu „fix livrat in
+    // cod mort" de la b285.
+    //
+    // Un test care incarca modulul chiar prinde asta. Pur: niciunul din cele
+    // trei nu porneste nimic la require.
+    test('liqPredict se incarca si expune ce trebuie', () => {
+        const m = require('../../server/services/liqPredict');
+        for (const fn of ['score', 'target', 'evaluate', 'buildBaseline', 'hitRate', 'lift', 'decayedUsd', 'weight']) {
+            expect(typeof m[fn]).toBe('function');
+        }
+    });
+
+    test('liqPredictContext se incarca', () => {
+        const m = require('../../server/services/liqPredictContext');
+        expect(typeof m.getContext).toBe('function');
+    });
+
+    test('liqPredictService se incarca si expune start/stop/tick', () => {
+        const m = require('../../server/services/liqPredictService');
+        for (const fn of ['start', 'stop', 'tick', 'computeFor', 'lastFor']) {
+            expect(typeof m[fn]).toBe('function');
+        }
+        expect(m.SYMBOLS).toEqual(['BTCUSDT', 'ETHUSDT']);
+    });
+
+    test('ruta de piaţa se incarca (require-urile ei se rezolva)', () => {
+        const r = require('../../server/routes/market');
+        expect(typeof r).toBe('function');
+    });
+});
+
+describe('ruta e CHIAR inregistrata in router, nu doar scrisa', () => {
+    // Sondarea cu curl da 401 si pentru /liq-predict si pentru o ruta
+    // inexistenta, fiindca autentificarea e inaintea rutarii. Deci 401 NU
+    // dovedeste ca ruta exista. Stiva routerului o dovedeste.
+    test('/liq-predict e in stiva, si e GET', () => {
+        const router = require('../../server/routes/market');
+        const paths = (router.stack || [])
+            .filter(l => l.route)
+            .map(l => ({ path: l.route.path, methods: Object.keys(l.route.methods) }));
+        const hit = paths.find(p => p.path === '/liq-predict');
+        expect(hit).toBeTruthy();
+        expect(hit.methods).toContain('get');
+    });
+
+    test('celelalte rute de lichidari sunt inca acolo (non-vacuitate)', () => {
+        const router = require('../../server/routes/market');
+        const paths = (router.stack || []).filter(l => l.route).map(l => l.route.path);
+        expect(paths).toContain('/liq-panel');
+        expect(paths).toContain('/liq-map');
+    });
+});

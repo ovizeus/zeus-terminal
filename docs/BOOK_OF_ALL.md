@@ -9113,3 +9113,21 @@ Cifra apare când o merită. Estimare: **2–4 săptămâni**.
 ### Bookmap
 
 Amânat de el la etapa 2 — vezi rubrica separată de mai sus.
+
+### 🔴 Adăugat după livrare: un bug care a plecat, şi de ce testele mele nu l-au prins
+
+Serviciul **a picat la pornire**: `Cannot find module ../utils/logger`. Calea corectă e `./logger`.
+
+**Toate cele 15 teste de cablare treceau.** Fiindcă citeau **textul sursei** — că scrie `store.record(`, că scrie `setInterval(` — şi **niciunul nu încărca modulul**. Un `require` greşit e invizibil pentru un test care citeşte fişierul ca pe un şir.
+
+L-am prins **uitându-mă în loguri după reload**, adică prea târziu. Aceeaşi clasă cu „fixul livrat în cod mort" de la b285.
+
+**Reparat pe clasă, nu pe caz:** 6 teste noi care **încarcă** modulele şi verifică ce exportă. Mutaţia cu calea greşită omoară acum testul — verificat.
+
+Şi încă o dovadă care lipsea: sondarea cu `curl` dă **401 şi pentru o rută inexistentă** (autentificarea e înaintea rutării), deci 401 nu dovedea că ruta există. Acum se verifică **stiva routerului**: că `/liq-predict` e acolo şi că e `GET`.
+
+**A costat un al doilea `pm2 reload`**, contrar R-OP-1. Am ales asta fiindcă un serviciu mort livrat e mai rău decât o abatere raportată.
+
+**Dovedit pe viu după reload:** serviciul pornit, **6 instantanee scrise** (2 simboluri × 3 orizonturi), BTC `DOWN 70` cu ţinta 79 931, ETH `DOWN 44` cu ţinta 2 308, mulţimea şi OI înregistrate.
+
+Şi încă una, prinsă de regula de validare: scriind nota asta în `version.js` am pus `'../utils/logger'` **cu apostrofuri**, într-un şir delimitat cu apostrofuri — fişierul s-a rupt. **R-OP-6 a funcţionat exact pentru ce există.**

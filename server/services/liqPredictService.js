@@ -17,7 +17,7 @@
 // însemne ceva, şi un procent calculat pe 3 cazuri ar fi exact „fake"-ul pe
 // care l-a interzis.
 
-const logger = require('../utils/logger');
+const logger = require('./logger');
 const liqStore = require('./liqStore');
 const store = require('./liqPredictStore');
 const ctx = require('./liqPredictContext');
