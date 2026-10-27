@@ -12,7 +12,7 @@ import { connectBNB } from '../data/marketDataWS'
 import { getMacdChart } from '../engine/indicators'
 import { connectWatchlist } from '../services/symbols'
 import { getChartH, getChartW } from '../data/marketDataChart'
-import { FS_CLASS, measureOccupiedHeight, resolveChartHeight } from '../data/chartFullscreen'
+import { FS_CLASS, measureOccupiedHeight, resolveChartHeight, measureHostHeight } from '../data/chartFullscreen'
 import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
 import { useBrainStore } from '../stores/brainStore'
@@ -300,6 +300,7 @@ if (!w._closeAllBtnInited) {
       viewportH: window.innerHeight,
       occupiedH: _sec ? measureOccupiedHeight(_sec, 'mc') : 0,
       normalH: getChartH(),
+      hostH: measureHostHeight(document.getElementById('mc')),
     })
     try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { const _mc = getMacdChart(); if (_mc) _mc.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
   }

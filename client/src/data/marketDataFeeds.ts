@@ -11,7 +11,7 @@ import { clearHeatmap, clearSR } from './marketDataOverlays'
 import { resetBackfill } from './chartBackfill'
 import { getChartH } from './marketDataChart'
 import {
-  FS_CLASS, measureOccupiedHeight, resolveChartHeight,
+  FS_CLASS, measureOccupiedHeight, resolveChartHeight, measureHostHeight,
   enterNativeFullscreen, exitNativeFullscreen, isNativeFullscreen,
 } from './chartFullscreen'
 import { updateMainMetrics, sendAlert } from './marketDataWS'
@@ -109,6 +109,9 @@ export function applyChartLayout(): void {
     viewportH: window.innerHeight,
     occupiedH: measureOccupiedHeight(sec as HTMLElement, 'mc'),
     normalH: getChartH(),
+    // Cutia bate socoteala: `#mc` e `flex: 1` in fullscreen, deci browserul
+    // i-a calculat deja inaltimea tinand cont de fiecare panou aprins.
+    hostH: measureHostHeight(el('mc') as HTMLElement),
   })
   try { if (w.mainChart) w.mainChart.applyOptions({ height: h }) } catch (_) { /* */ }
   try { if (w.cvdChart) w.cvdChart.applyOptions({ height: 60 }) } catch (_) { /* */ }
@@ -125,6 +128,58 @@ export function applyChartLayout(): void {
   try {
     window.dispatchEvent(new CustomEvent('zeusChartFullscreen', { detail: { fullscreen } }))
   } catch (_) { /* CustomEvent lipsa in medii foarte vechi */ }
+}
+
+/**
+ * ⚠️ REPARATIA PE CLASA pentru „se strange sus cand pun un indicator".
+ *
+ * [2026-10-27] Operatorul, cu patru capturi de pe telefon SI de pe PC. Panza
+ * ramanea la 340/400px (valoarea de NEfullscreen) in timp ce `#mc` sta intins
+ * pe tot ecranul — de aici golul negru. Si „nu la toti", deci declansatorul nu
+ * e un indicator anume.
+ *
+ * CAUZA: chartul are DOI stapani pe inaltime — observatorul din
+ * `TradingChart.tsx`, care-l potriveste dupa cutie, si `applyChartLayout` /
+ * `_resizeCharts`, care IMPUN 340/400. Cand al doilea scrie peste, observatorul
+ * nu se trezeste (s-a schimbat panza, nu cutia) si chartul rameane strans.
+ *
+ * De aici si „dar nu la toti": un indicator cu PANOU schimba cutia, deci
+ * observatorul repara singur; unul care e doar OVERLAY (DAIMON e un sprite
+ * absolut in `#mc`) nu o schimba, deci raul rameane. Si T&S repara fiindca
+ * schimba cutia.
+ *
+ * Reparatia principala e ca ambii stapani spun acum ACELASI lucru (inaltimea
+ * vine din cutie). Observatorul de aici e plasa de siguranta: daca totusi
+ * rameane o cale care impune altceva, urmatoarea schimbare de cutie o corecteaza.
+ *
+ * Asezarea se face pe `requestAnimationFrame`, ca sa prinda DOM-ul DUPA ce
+ * browserul a terminat layout-ul — exact ce facea el manual apasand T&S.
+ */
+let _hostRo: any = null
+let _hostRaf: any = null
+export function watchChartHost(): void {
+  if (_hostRo) return
+  const host = el('mc')
+  if (!host || typeof (window as any).ResizeObserver !== 'function') return
+  _hostRo = new (window as any).ResizeObserver(function () {
+    if (_hostRaf) return
+    _hostRaf = requestAnimationFrame(function () {
+      _hostRaf = null
+      // Garda de GRANITA, fara test si o spun: azi `applyChartLayout` isi
+      // prinde singur fiecare aruncare, deci n-o pot declansa dintr-un test.
+      // O pastrez fiindca o aruncare INTR-UN callback de ResizeObserver opreste
+      // in liniste toate notificarile urmatoare — adica exact bugul ar reveni,
+      // fara niciun semn.
+      try { applyChartLayout() } catch (_) { /* observatorul trebuie sa traiasca */ }
+    })
+  })
+  try { _hostRo.observe(host) } catch (_) { _hostRo = null }
+}
+
+/** Opreste observatorul — folosit de teste si la demontare. */
+export function unwatchChartHost(): void {
+  if (_hostRaf) { cancelAnimationFrame(_hostRaf); _hostRaf = null }
+  if (_hostRo) { try { _hostRo.disconnect() } catch (_) { /* */ } _hostRo = null }
 }
 
 export function toggleFS(): void {

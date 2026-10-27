@@ -23,6 +23,7 @@ import {
   computeFullscreenChartHeight,
   measureOccupiedHeight,
   resolveChartHeight,
+  measureHostHeight,
   enterNativeFullscreen,
   exitNativeFullscreen,
   isNativeFullscreen,
@@ -164,5 +165,71 @@ describe('API-ul nativ de fullscreen', () => {
     expect(isNativeFullscreen()).toBe(false)
     ;(document as any).fullscreenElement = el
     expect(isNativeFullscreen()).toBe(true)
+  })
+})
+
+describe('⛔ chartul mai MIC decat cutia lui — bugul din capturile operatorului', () => {
+  // [2026-10-27] El: „cand il maresc pe tot ecranul e ok dar cateodata se
+  // strange sus… pun un indicator si cateodata se strange deasupra… daimon de
+  // ex il activez si se duce in sus dar nu la toti".
+  //
+  // Masurat pe capturile lui: panza ramane la 340px (telefon) / 400px (PC) —
+  // adica exact `getChartH()`, valoarea de NEfullscreen — in timp ce `#mc`
+  // ramane intins pe tot ecranul. De aici golul negru urias sub chart.
+  //
+  // Am urmarit lantul si NU exista un singur vinovat curat: `applyChartLayout`
+  // nu e chemat deloc la aprinderea unui indicator, iar calea veche foloseste
+  // deja `resolveChartHeight`. Ceva, pe un drum pe care nu-l pot reproduce aici,
+  // lasa panza cu inaltimea de nefullscreen.
+  //
+  // DECI REPAR PE CLASA, nu pe declansator: in fullscreen inaltimea se ia din
+  // CUTIA MASURATA (`#mc` e `flex: 1 1 auto`, deci browserul a calculat-o deja
+  // corect). Oricine ar strica-o, urmatoarea asezare o pune la loc.
+
+  function host(h: number): HTMLElement {
+    const e = document.createElement('div')
+    Object.defineProperty(e, 'clientHeight', { value: h, configurable: true })
+    e.getBoundingClientRect = () => ({ height: h, width: 800, top: 0, left: 0,
+      right: 800, bottom: h, x: 0, y: 0, toJSON() {} }) as any
+    return e
+  }
+
+  it('in fullscreen, inaltimea vine din CUTIE, nu din calculul pe viewport', () => {
+    const h = resolveChartHeight({
+      fullscreen: true, viewportH: 979, occupiedH: 820, normalH: 340,
+      hostH: 900,
+    } as any)
+    expect(h).toBe(900)
+  })
+
+  it('cutia lipsa sau absurda NU rupe nimic — se cade pe calculul vechi', () => {
+    for (const bad of [0, -5, NaN, undefined, null]) {
+      const h = resolveChartHeight({
+        fullscreen: true, viewportH: 1080, occupiedH: 70, normalH: 400,
+        hostH: bad,
+      } as any)
+      expect(h).toBe(1010)
+    }
+  })
+
+  it('o cutie absurd de MICA nu e crezuta — altfel chartul ar disparea', () => {
+    const h = resolveChartHeight({
+      fullscreen: true, viewportH: 1080, occupiedH: 70, normalH: 400,
+      hostH: 12,
+    } as any)
+    expect(h).toBe(1010)
+  })
+
+  it('in afara fullscreen-ului cutia se IGNORA — acolo decide normalH', () => {
+    const h = resolveChartHeight({
+      fullscreen: false, viewportH: 1080, occupiedH: 70, normalH: 400,
+      hostH: 900,
+    } as any)
+    expect(h).toBe(400)
+  })
+
+  it('masoara cutia din element, cu rezerva pe clientHeight', () => {
+    expect(measureHostHeight(host(742))).toBe(742)
+    expect(measureHostHeight(null as any)).toBe(0)
   })
 })

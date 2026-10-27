@@ -35,7 +35,7 @@ import { runBacktest, scanLiquidityMagnets } from '../ui/panels'
 import { savePerfToStorage, loadPerfFromStorage } from '../engine/perfStore'
 import { startFRCountdown, renderTradeJournal, trackOIDelta, loadJournalFromStorage } from '../services/storage'
 import { fetchSymbolKlines, runMultiSymbolScan } from '../data/klines'
-import { fetchAllRSI, fetchATR as fetchATRRaw, fetchFG, fetchOI, fetchLS, fetch24h } from '../data/marketDataFeeds'
+import { fetchAllRSI, fetchATR as fetchATRRaw, fetchFG, fetchOI, fetchLS, fetch24h, watchChartHost } from '../data/marketDataFeeds'
 import { _devEnsureVisible , safeAsync , devLog } from '../utils/dev'
 import { connectWatchlist } from '../services/symbols'
 import { startPositionPriceFeed } from '../data/positionPriceFeed'
@@ -130,6 +130,10 @@ export async function startApp(): Promise<void> {
 
   // ═══ PHASE 1 — CORE ═══
   initCharts()
+  // [CHART-FS 2026-10-27] Observatorul pe cutia chartului. Fara el, panza putea
+  // rameane la 340/400px cand un indicator aprins schimba layout-ul — exact
+  // golul negru din capturile operatorului.
+  try { watchChartHost() } catch (_) { /* nu rupem boot-ul */ }
   try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
   initZeusGroups()
   initAdaptiveStrip(); w.initMTFStrip()
