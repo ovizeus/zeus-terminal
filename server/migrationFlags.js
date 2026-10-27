@@ -340,6 +340,57 @@ function _validateMutex(f) {
     return { ok: violations.length === 0, violations };
 }
 
+/**
+ * ⚠️ EXECUTIE DUBLA PE DEMO — detectata, NU ascunsa, si NU fatala.
+ *
+ * [2026-10-27] Operatorul: „vezi de ce am 27 de pozitii pe demo deschise care
+ * tot dispar si apar, ca nu e in regula asta".
+ *
+ * Pe demo rulau DOUA motoare in acelasi timp:
+ *   CLIENT_AT = true       -> motorul din browser deschide pozitii demo
+ *   SERVER_AT_DEMO = true  -> si motorul de pe server deschide pozitii demo
+ *
+ * Fisierul asta isi declara singur invariantul, la linia 8: „CLIENT_AT and
+ * SERVER_AT must NEVER both be true simultaneously". Dar `_validateMutex`
+ * verifica DOAR perechea de productie, nu si variantele de demo — deci executia
+ * dubla pe demo trecea complet neobservata.
+ *
+ * Si pentru ca SERVER_AUTHORITATIVE_POSITIONS + POSITIONS_WS sunt pornite,
+ * serverul trimite instantanee cu pozitiile LUI (citite din `at_positions`).
+ * Cand ale lui sunt zero — iar azi la 21:45 chiar erau zero, ultima inchidere
+ * fiind la 14:01 — instantaneul le STERGE pe cele ale clientului. De aici
+ * „dispar"; motorul din browser deschide altele si ele „apar".
+ *
+ * ⚠️ DE CE NU INTRA IN GARDA STRICTA: `_enforceMutexStrict` ARUNCA la
+ * incarcarea modulului. Daca as pune perechea de demo acolo, serverul ar
+ * REFUZA SA PORNEASCA cu steagurile de azi. Care motor se stinge e decizia
+ * operatorului, nu a mea — deci aici doar se STRIGA.
+ */
+function detectDemoDualExecution(f) {
+    const v = [];
+    if (!f) return v;
+    if (f.CLIENT_AT && f.SERVER_AT_DEMO) {
+        v.push('CLIENT_AT && SERVER_AT_DEMO both true — two engines open demo positions at once');
+    }
+    if (f.CLIENT_BRAIN && f.SERVER_BRAIN_DEMO) {
+        v.push('CLIENT_BRAIN && SERVER_BRAIN_DEMO both true — two engines decide on demo at once');
+    }
+    return v;
+}
+
+function _warnDemoDualExecution() {
+    const v = detectDemoDualExecution(flags);
+    if (!v.length) return;
+    try {
+        console.error('[MF] DEMO DUAL EXECUTION — two engines are running on demo:\n'
+            + v.map((m) => '  • ' + m).join('\n')
+            + '\n  Effect: the server broadcasts its own positions snapshot, which WIPES the'
+            + '\n  client-side demo positions; the client engine then opens new ones.'
+            + '\n  That is the "positions keep disappearing and reappearing" report.'
+            + '\n  Fix: turn OFF exactly one side in data/migration_flags.json (operator decision).');
+    } catch (_) { /* nu rupem boot-ul pentru un mesaj */ }
+}
+
 function _enforceMutexStrict() {
     const v = _validateMutex(flags);
     if (v.ok) return;
@@ -353,6 +404,7 @@ function _enforceMutexStrict() {
     throw err;
 }
 _enforceMutexStrict();
+_warnDemoDualExecution();
 
 // ── Persist to disk ──
 function save() {
@@ -501,4 +553,10 @@ module.exports = {
     _s6b0TestHooks: Object.freeze({
         validateMutex: _validateMutex,
     }),
+
+    // [2026-10-27] Detectorul de executie dubla pe DEMO. Exportat ca sa poata fi
+    // citit si de diagnostic, nu doar strigat la boot. NU arunca: vezi nota de
+    // la definitie pentru ce ar insemna sa intre in garda stricta.
+    detectDemoDualExecution,
+    _validateMutex,
 };
