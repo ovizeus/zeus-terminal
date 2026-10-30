@@ -9642,3 +9642,25 @@ Acum, pe ramura care sare restaurarea, se cere o salvare locală **imediat după
 **Un test al meu a căzut pe cod corect:** citea doar primele 500 de caractere din gardă, iar salvarea adăugată împinsese `return`-ul dincolo. Fereastră lărgită, cu motivul scris în test. **A şaptea oară** când un test al meu se înşală, nu codul.
 
 **3 teste noi, 2 mutaţii moarte.**
+
+### 🎚️ Ce ar însemna CHIAR flipul `CLIENT_AT=false` — analiza, ca să nu fie refăcută
+
+Întrebarea rămasă din b342–b346: să stingem motorul din browser? **Măsurat, nu presupus.**
+
+**Pentru contul lui (user 1), `CLIENT_AT` e deja INERT în toate modurile:**
+
+| mod | cine deţine execuţia |
+|---|---|
+| `demo` | **serverul** (`SERVER_AT_DEMO`), iar clientul e blocat de garda S6-B5 |
+| `live` + testnet | **serverul** (e user de cutover, `SERVER_AT_TESTNET_EXEC` on) |
+| `live` + real | **serverul** (`_SRV_POS_REAL_ENABLED` on) |
+
+**Dar steagul e GLOBAL.** Starea tuturor conturilor:
+
+- toţi cei 8 useri cu stare de motor sunt pe **`demo`** ⇒ garda S6-B5 îi blochează pe toţi ⇒ **flipul nu schimbă nimic azi, pentru nimeni**
+- activi în 30 de zile: doar **user 1** (196 tranzacţii) şi user 2 (una)
+- **cutover: doar 1 şi 2.** Users 5, 11–15 **NU** sunt
+
+⚠️ **Capcana, singura:** dacă un user NEcutover (5, 11–15) ar trece vreodată pe `live`, cu `CLIENT_AT=false` **n-ar mai avea niciun motor** — nici clientul, nici serverul (`SERVER_AT` e false, iar full-ownership cere cutover). **Eşec tăcut**, nu eroare.
+
+**Concluzie:** flipul e **sigur azi pentru toţi**, cu o capcană viitoare pentru conturile necutover care ar trece pe live. Decizia rămâne a lui, acum pe cifre. Alternativa curată: flip **plus** adăugarea celorlalţi la cutover, sau o gardă care refuză trecerea pe live fără motor.
