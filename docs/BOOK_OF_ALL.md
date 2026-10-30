@@ -9585,3 +9585,26 @@ Lărgit scanarea → **şapte chei nescopate**, toate preexistente, dintre care 
 `zeus_tab_leader` mutată la *device-wide* — alegerea tabului lider chiar e despre dispozitiv, nu despre cont.
 
 **15 teste noi, 8 mutaţii moarte** — inclusiv garda scoasă (adică exact bugul lui), boot cu `false` orb şi cheia nescopată.
+
+### ✅ Lanţul dovedit cap-coadă şi încuiat cu teste de ordine (b344)
+
+După ce am rupt bucla la b343, am verificat că reparaţia chiar ţine — **şi am găsit că era mai curată decât credeam.**
+
+**O corecţie la mine:** crezusem că flagul de autoritate pe demo ajunge *prea târziu* şi de aceea se restaurau fantomele. **Greşit.** `_applyPreboot` **ESTE** `_applyServerATState` — exact funcţia care oglindeşte `serverATDemoEnabled` — şi rulează la **linia 93**, înainte de restaurarea de la **189**.
+
+**Flagul era corect tot timpul. Restaurarea pur şi simplu nu-l întreba.** Cache-ul adăugat la b343 rămâne ca plasă (dacă `/api/at/state` pică), dar **nu el era leacul.**
+
+**Lanţul verificat pe date vii:** `SERVER_AT_DEMO` = true, `engine:1` are `mode: 'demo'` ⇒ serverul chiar trimite `serverATDemoEnabled: true`. **Măsurat, nu presupus.**
+
+**Încuiat cu teste de ordine**, fiindcă tot fixul depinde de ea:
+
+| ce se verifică | linia |
+|---|---|
+| aplicarea preboot | **93** |
+| blocul de restaurare | 189 |
+| **garda** | **203** |
+| bucla care restaurează | 213 |
+
+Plus: preboot-ul chiar oglindeşte flagul, şi cererea de stare chiar e **aşteptată cu `await`** — altfel ordinea din fişier n-ar însemna nimic. Două mutaţii le omoară: garda mutată după buclă, preboot-ul redenumit.
+
+**Şi încă o greşeală a mea:** prima măsurătoare de ordine mi-a ieşit **falsă** — comparasem linia gărzii cu linia *blocului*, nu cu a *buclei*. Recalculat corect.

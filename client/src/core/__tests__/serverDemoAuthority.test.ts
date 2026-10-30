@@ -117,3 +117,43 @@ describe('flagul e SEMANAT din cache la boot, nu cu false orb', () => {
     expect(ST.slice(i, i + 300)).toMatch(/_writeServerATDemoCache\(/)
   })
 })
+
+describe('⛔ ORDINEA la boot — de ea depinde tot fixul', () => {
+  // Preboot-ul (`/api/at/state` -> `_applyPreboot` -> `_applyServerATState`)
+  // seteaza `w._serverATDemoEnabled` INAINTE ca late-restore sa ruleze. Daca
+  // cineva muta vreodata unul din ele, garda ar citi un flag inca nesetat si
+  // fantomele s-ar restaura din nou — adica exact bugul, revenit tacut.
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+  const SRC = fs.readFileSync(path.join(__dirname, '..', 'bootstrapStartApp.ts'), 'utf8')
+  const at = (needle: string) => {
+    const i = SRC.indexOf(needle)
+    expect(i).toBeGreaterThan(-1)
+    return i
+  }
+
+  it('starea serverului se APLICA inainte de blocul de restaurare', () => {
+    expect(at('_applyPreboot(_prebootData)'))
+      .toBeLessThan(at('w.ZState._pendingPositions && Array.isArray'))
+  })
+
+  it('garda e inaintea buclei care restaureaza', () => {
+    expect(at('w._serverATDemoEnabled === true')).toBeLessThan(at('_pend.forEach'))
+  })
+
+  it('preboot-ul chiar oglindeste flagul de demo (prin _applyServerATState)', () => {
+    const ST = fs.readFileSync(path.join(__dirname, '..', 'state.ts'), 'utf8')
+    // `_applyPreboot` e un alias pentru `_applyServerATState`
+    expect(ST).toMatch(/_applyPreboot:\s*_applyServerATState/)
+    const i = ST.indexOf("'serverATDemoEnabled' in state")
+    expect(i).toBeGreaterThan(-1)
+    expect(ST.slice(i, i + 200)).toMatch(/w\._serverATDemoEnabled = !!state\.serverATDemoEnabled/)
+  })
+
+  it('cererea de stare a serverului e asteptata, nu lansata si uitata', () => {
+    // Daca n-ar fi `await`-uita inainte de restaurare, ordinea din fisier n-ar
+    // insemna nimic.
+    const i = at("fetch('/api/at/state'")
+    expect(SRC.slice(Math.max(0, i - 200), i)).toMatch(/await Promise\.all/)
+  })
+})
