@@ -62,3 +62,40 @@ export function writeCached(value: boolean): void {
 export function _testReset(): void {
     /* no module-level state to reset; reserved for future caching layer */
 }
+
+// ── [2026-10-27] Aceeaşi cursă, pentru autoritatea pe DEMO ──
+//
+// Operatorul: „am 27 de poziţii pe demo deschise care tot dispar şi apar".
+//
+// Bucla, găsită cap-coadă: la fiecare pornire clientul îşi RESTAUREAZĂ
+// poziţiile demo din starea salvată local (bootstrapStartApp), fiindcă în acel
+// moment `w._serverATDemoEnabled` e încă `false` — răspunsul serverului n-a
+// ajuns. Apoi vine instantaneul autoritar al serverului, care are ZERO poziţii
+// demo, şi le şterge. La următorul refresh se restaurează din nou.
+//
+// Deci nu e nevoie de niciun flip de steag: e exact cursa pentru care a fost
+// scris modulul ăsta, doar că flagul de demo n-avea memorie între sesiuni.
+
+const DEMO_KEY = 'zeus._serverATDemoEnabled.v1';
+
+/** Ultima valoare ştiută a autorităţii serverului pe demo. Implicit false. */
+export function readCachedDemo(): boolean {
+    const s = _storage();
+    if (!s) return false;
+    try {
+        return s.getItem(DEMO_KEY) === 'true';
+    } catch (_) {
+        return false;
+    }
+}
+
+/** O ţine minte pentru următoarea pornire. Best-effort, ca sora ei. */
+export function writeCachedDemo(value: boolean): void {
+    const s = _storage();
+    if (!s) return;
+    try {
+        s.setItem(DEMO_KEY, String(!!value));
+    } catch (_) {
+        /* best-effort */
+    }
+}

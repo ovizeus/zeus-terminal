@@ -9542,3 +9542,46 @@ Un detector care **strigă la boot** şi e exportat pentru diagnostic. **NU intr
 Măsurat ce înseamnă fiecare variantă: serverul a închis **102 poziţii demo în 7 zile** şi lucrează cu telefonul închis; clientul e oricum partea care pierde azi, fiindcă instantaneele serverului îl şterg.
 
 **8 teste noi, 4 mutaţii moarte.** Confirmat pe steagurile vii: **2 încălcări**.
+
+---
+
+## 🔁 2026-10-27 — Bucla poziţiilor demo care dispar şi apar: RUPTĂ (b343)
+
+Urmărită cap-coadă — şi **n-a fost nevoie de niciun flip de steag pe calea banilor.**
+
+### Bucla
+
+1. La fiecare pornire, clientul îşi **restaurează poziţiile demo din starea salvată pe telefon** (`bootstrapStartApp`, late-restore) — fiindcă în acel moment `window._serverATDemoEnabled` e încă **`false`**: răspunsul serverului n-a ajuns.
+2. Apoi vine **instantaneul autoritar** al serverului, care are **zero** poziţii demo (le închisese pe toate la 14:01), şi le şterge → **dispar**.
+3. La următorul refresh se restaurează din nou → **apar**.
+
+**Nici măcar nu era nevoie ca motorul din browser să deschidă ceva nou.**
+
+### Garda exista deja — şi era corectă
+
+`placeAutoTrade` refuză din **S6-B5** să deschidă demo când serverul deţine demo-ul. **Problema nu era deschiderea, era restaurarea.**
+
+### Leacul era deja scris în casă, pentru exact cursa asta
+
+`serverATCache` (**S8-P0-3**) ţine minte între sesiuni autoritatea serverului, tocmai ca să nu existe fereastra dintre boot şi primul răspuns. **Doar că flagul de DEMO n-avea memorie.**
+
+Extins cu `readCachedDemo` / `writeCachedDemo`, semănat la boot în loc de `false` orb, scris la fiecare răspuns al serverului. Şi restaurarea se opreşte când serverul deţine demo-ul: **goleşte lista locală şi SPUNE în consolă** câte a sărit, ca poziţiile să nu dispară fără explicaţie. Garda e strictă pe `=== true`, deci cine rulează chiar pe client nu e atins.
+
+### 🔒 O gaură în testul de scopare, găsită punând cheia nouă
+
+`lsUserScoping` scana **doar chei scrise literal** în apelul `getItem`. Cheile ţinute într-o **constantă de modul** erau invizibile.
+
+Lărgit scanarea → **şapte chei nescopate**, toate preexistente, dintre care **două de securitate**:
+
+| cheie | de ce contează |
+|---|---|
+| **`zeus_pin_unlocked`** | pe un dispozitiv comun, un cont deblocat cu PIN poate lăsa deblocat şi celălalt |
+| **`zeus_biometric_enabled`** | preferinţa de biometrie e per CONT |
+| `zeus._serverATEnabled.v1` | gardă de autoritate AT; scoparea ei pierde cache-ul o dată |
+| `zeus_security_nudge_snooze_ts`, `zeus_doctor_audio_ping`, `zt:qmLiq:v1` | date per user |
+
+**NU le-am schimbat în treacăt în mijlocul altei lucrări.** Sunt încuiate ca **datorie cunoscută care poate doar să scadă**: un test cade dacă apare o cheie nouă nescopată, altul cade dacă lista devine un cimitir. **Raportate.**
+
+`zeus_tab_leader` mutată la *device-wide* — alegerea tabului lider chiar e despre dispozitiv, nu despre cont.
+
+**15 teste noi, 8 mutaţii moarte** — inclusiv garda scoasă (adică exact bugul lui), boot cu `false` orb şi cheia nescopată.

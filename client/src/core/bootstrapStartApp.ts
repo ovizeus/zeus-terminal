@@ -188,6 +188,26 @@ export async function startApp(): Promise<void> {
   try {
     if (w.ZState._pendingPositions && Array.isArray(w.ZState._pendingPositions) && w.ZState._pendingPositions.length) {
       const _pend = w.ZState._pendingPositions; delete w.ZState._pendingPositions
+      // ⚠️ [2026-10-27] CAND SERVERUL DETINE DEMO-UL, NU ne restauram propriile
+      // pozitii demo din memoria telefonului.
+      //
+      // Operatorul: „am 27 de pozitii pe demo deschise care tot dispar si apar".
+      // Bucla era exact aici: restauram local, apoi instantaneul AUTORITAR al
+      // serverului (care are zero pozitii demo) le stergea, iar la urmatorul
+      // refresh se restaurau iar. Nici macar nu era nevoie ca motorul din
+      // browser sa deschida ceva nou.
+      //
+      // Flagul vine acum din cache la boot (serverATCache), deci stie din prima
+      // repornire — inainte, era `false` pana sosea raspunsul serverului, adica
+      // fix in fereastra in care rula restaurarea asta.
+      if (w._serverATDemoEnabled === true) {
+        console.log('[ZState] Late-restore SKIPPED:', _pend.length,
+          'local demo positions — server owns demo positions for this user')
+        TP.demoPositions = []
+        setTimeout(renderDemoPositions, 300)
+        setTimeout(renderATPositions, 300)
+        return
+      }
       const _existing2 = new Set((TP.demoPositions || []).map((p: any) => String(p.id)))
       const _closed2 = new Set((TP.journal || []).map((j: any) => j.id).filter(Boolean).map(String))
       _pend.forEach((p: any) => { if (p.closed || _closed2.has(String(p.id))) return; if (!_existing2.has(String(p.id))) { TP.demoPositions = TP.demoPositions || []; const _rp = { ...p, _restored: true }; TP.demoPositions.push(_rp); if (typeof onPositionOpened === 'function') onPositionOpened(_rp, 'restore') } })

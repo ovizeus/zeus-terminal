@@ -19,7 +19,7 @@ import { onPositionOpened } from '../trading/positions'
 import { renderLivePositions , renderDemoPositions } from '../data/marketDataPositions'
 import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
-import { readCached as _readServerATCache, writeCached as _writeServerATCache } from './serverATCache'
+import { readCached as _readServerATCache, writeCached as _writeServerATCache, readCachedDemo as _readServerATDemoCache, writeCachedDemo as _writeServerATDemoCache } from './serverATCache'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
 import { useBrainStore } from '../stores/brainStore'
 import { acquirePositionWrite, releasePositionWrite, getDropCount, getLockHeld } from '../utils/positionMutex'
@@ -61,6 +61,10 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     // nescopata, doi useri pe acelasi telefon si-ar inchide-o unul altuia.
     // Testul lsUserScoping m-a prins cand am uitat-o.
     'zbk.help': 1,
+    // [2026-10-27] Memoria autoritatii serverului pe DEMO. Decide daca la boot
+    // ne restauram pozitiile demo locale, iar raspunsul depinde de USER (vine
+    // din `us.engineMode === 'demo'`), deci nu poate fi comuna pe dispozitiv.
+    'zeus._serverATDemoEnabled.v1': 1,
     'zeus_pt_strip_open': 1, 'zeus_mtf_open': 1,
     'zeus_dsl_mode': 1, 'zeus_adaptive_strip_open': 1,
     'zeus_theme': 1, 'zeus_llv_settings': 1, 'zeus_ui_scale': 1,
@@ -872,7 +876,11 @@ export const ZState = (() => {
   // [Phase 2 S6-B4] Demo-authority window mirrors. Default false at boot;
   // overwritten on first at_update / pullState response if present.
   // S6-B5 will wire the client AT engine gate against these flags.
-  w._serverATDemoEnabled = false
+  // [2026-10-27] Seed din cache, nu `false` orb: intre boot si primul raspuns
+  // al serverului, un `false` facea clientul sa-si restaureze poziţiile demo
+  // locale — care apoi erau sterse de instantaneul autoritar. De aici „dispar
+  // si apar". Aceeasi cursa, si acelasi leac, ca la `_serverATEnabled`.
+  w._serverATDemoEnabled = _readServerATDemoCache()
   w._serverBrainDemoEnabled = false
   w._srvPosFlags = { master: false, testnet: false, real: false }
   let _atPollTimer: any = null
@@ -1201,6 +1209,8 @@ export const ZState = (() => {
     // do not silently flip the window flags.
     if ('serverATDemoEnabled' in state) {
       w._serverATDemoEnabled = !!state.serverATDemoEnabled
+      // Il tinem minte, ca urmatoarea pornire sa stie din prima.
+      _writeServerATDemoCache(!!state.serverATDemoEnabled)
     }
     if ('serverBrainDemoEnabled' in state) {
       w._serverBrainDemoEnabled = !!state.serverBrainDemoEnabled
