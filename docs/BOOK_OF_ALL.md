@@ -9608,3 +9608,23 @@ După ce am rupt bucla la b343, am verificat că reparaţia chiar ţine — **ş
 Plus: preboot-ul chiar oglindeşte flagul, şi cererea de stare chiar e **aşteptată cu `await`** — altfel ordinea din fişier n-ar însemna nimic. Două mutaţii le omoară: garda mutată după buclă, preboot-ul redenumit.
 
 **Şi încă o greşeală a mea:** prima măsurătoare de ordine mi-a ieşit **falsă** — comparasem linia gărzii cu linia *blocului*, nu cu a *buclei*. Recalculat corect.
+
+### 🔧 CORECŢIE LA MINE: mesajul de execuţie dublă spunea mai mult decât era adevărat (b345)
+
+La **b342** scrisesem că pe demo *„rulează două motoare care deschid poziţii în acelaşi timp"*. Verificat în cod şi pe date vii: **nu e adevărat azi.**
+
+| verificare | rezultat |
+|---|---|
+| `computeFullOwnership` cere `engineMode === 'live'`; al lui e `demo` | ⇒ blocarea **generală** a clientului **nu** se aplică |
+| garda de **DEMO** (S6-B5): `serverATDemoEnabled && mode==='demo'` | **true && true** ⇒ `placeAutoTrade` **refuză** să deschidă demo din browser |
+
+**Deci pâlpâirea e structural imposibilă acum, fără niciun flip de steag:**
+- serverul deschide demo;
+- clientul **nu poate** (S6-B5);
+- şi de la b343 **nici nu mai restaurează** fantomele din memoria telefonului.
+
+**Ambele căi pe care puteau apărea poziţii în browser sunt închise.**
+
+**Riscul real**, pe care mesajul îl spune acum corect: garda S6-B5 e **singurul** lucru care opreşte al doilea motor. Dacă devine vreodată inertă, ambele părţi deschid demo deodată. De aceea steagurile **tot** ar trebui curăţate — dar e **igienă, nu urgenţă**, şi rămâne decizia lui.
+
+Un test cade dacă garda dispare din `placeAutoTrade`; altul dacă mesajul redevine prea tare.

@@ -77,3 +77,38 @@ describe('executia dubla pe DEMO — detectata, nu ascunsa', () => {
         expect(Array.isArray(viu)).toBe(true);
     });
 });
+
+describe('CORECTIE 2026-10-27 — mesajul meu spunea mai mult decat era adevarat', () => {
+    // Prima varianta afirma „two engines open demo positions at once". Verificat
+    // in cod: NU e adevarat azi. Clientul REFUZA sa deschida demo cat timp
+    // serverul detine autoritatea — garda S6-B5 din placeAutoTrade, hranita de
+    // flagul serverATDemoEnabled pe care chiar procesul asta il trimite.
+    //
+    // Deci riscul real nu e „se intampla acum", ci „garda aia e SINGURUL lucru
+    // care opreste al doilea motor". Mesajul trebuie sa spuna exact asta.
+    const fs = require('fs');
+    const path = require('path');
+    const SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'migrationFlags.js'), 'utf8');
+
+    test('mesajul NU mai afirma ca ambele motoare deschid acum', () => {
+        expect(SRC).not.toMatch(/two engines open demo positions at once/);
+    });
+
+    test('mesajul numeste garda care chiar opreste al doilea motor', () => {
+        expect(SRC).toMatch(/S6-B5/);
+        expect(SRC).toMatch(/serverATDemoEnabled/);
+    });
+
+    test('si spune care e riscul REAL: garda ramasa singura', () => {
+        expect(SRC).toMatch(/if it ever goes inert/i);
+    });
+
+    test('garda din client exista inca — daca dispare, mesajul devine fals', () => {
+        const C = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'src',
+            'trading', 'autotrade.ts'), 'utf8');
+        expect(C).toMatch(/_isServerDemoATActive\(\)/);
+        const i = C.indexOf('export function placeAutoTrade');
+        expect(i).toBeGreaterThan(-1);
+        expect(C.slice(i, i + 600)).toMatch(/_isServerDemoATActive\(\)/);
+    });
+});

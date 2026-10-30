@@ -346,9 +346,16 @@ function _validateMutex(f) {
  * [2026-10-27] Operatorul: „vezi de ce am 27 de pozitii pe demo deschise care
  * tot dispar si apar, ca nu e in regula asta".
  *
- * Pe demo rulau DOUA motoare in acelasi timp:
- *   CLIENT_AT = true       -> motorul din browser deschide pozitii demo
- *   SERVER_AT_DEMO = true  -> si motorul de pe server deschide pozitii demo
+ * Pe demo sunt APRINSE amandoua partile:
+ *   CLIENT_AT = true       -> motorul din browser ar putea deschide pozitii demo
+ *   SERVER_AT_DEMO = true  -> si cel de pe server le deschide
+ *
+ * ⚠️ CORECTIE 2026-10-27, la mine: prima varianta a mesajului afirma ca AMBELE
+ * deschid ACUM. Nu e adevarat. Clientul REFUZA sa deschida demo cat timp
+ * serverul detine autoritatea — garda S6-B5 din placeAutoTrade, hranita chiar
+ * de flagul `serverATDemoEnabled` pe care procesul asta il trimite per user.
+ * Riscul real nu e „se intampla acum", ci ca garda aia e SINGURUL lucru care
+ * opreste al doilea motor.
  *
  * Fisierul asta isi declara singur invariantul, la linia 8: „CLIENT_AT and
  * SERVER_AT must NEVER both be true simultaneously". Dar `_validateMutex`
@@ -370,10 +377,10 @@ function detectDemoDualExecution(f) {
     const v = [];
     if (!f) return v;
     if (f.CLIENT_AT && f.SERVER_AT_DEMO) {
-        v.push('CLIENT_AT && SERVER_AT_DEMO both true — two engines open demo positions at once');
+        v.push('CLIENT_AT && SERVER_AT_DEMO both true — only the S6-B5 client gate keeps one engine');
     }
     if (f.CLIENT_BRAIN && f.SERVER_BRAIN_DEMO) {
-        v.push('CLIENT_BRAIN && SERVER_BRAIN_DEMO both true — two engines decide on demo at once');
+        v.push('CLIENT_BRAIN && SERVER_BRAIN_DEMO both true — same, for decisioning');
     }
     return v;
 }
@@ -382,12 +389,14 @@ function _warnDemoDualExecution() {
     const v = detectDemoDualExecution(flags);
     if (!v.length) return;
     try {
-        console.error('[MF] DEMO DUAL EXECUTION — two engines are running on demo:\n'
+        console.error('[MF] DEMO: both sides are flagged ON —\n'
             + v.map((m) => '  • ' + m).join('\n')
-            + '\n  Effect: the server broadcasts its own positions snapshot, which WIPES the'
-            + '\n  client-side demo positions; the client engine then opens new ones.'
-            + '\n  That is the "positions keep disappearing and reappearing" report.'
-            + '\n  Fix: turn OFF exactly one side in data/migration_flags.json (operator decision).');
+            + '\n  NOT dual execution today: the client refuses demo opens while the server'
+            + '\n  holds demo authority (S6-B5 gate in placeAutoTrade, driven by the'
+            + '\n  serverATDemoEnabled flag this process sends per user).'
+            + '\n  The risk is that the gate is the ONLY thing stopping a second engine —'
+            + '\n  if it ever goes inert, both sides open demo positions at once.'
+            + '\n  Cleanest state: turn OFF exactly one side in data/migration_flags.json.');
     } catch (_) { /* nu rupem boot-ul pentru un mesaj */ }
 }
 
