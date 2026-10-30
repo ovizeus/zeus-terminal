@@ -83,7 +83,9 @@ describe('restaurarea locala se opreste cand serverul detine demo-ul', () => {
 
   it('goleste lista locala, nu doar sare peste restaurare', () => {
     const g = SRC.indexOf('w._serverATDemoEnabled === true')
-    const body = SRC.slice(g, g + 500)
+    // fereastra largita dupa ce am adaugat salvarea imediata: `return` ajunsese
+    // dincolo de primele 500 de caractere si testul cadea pe un cod CORECT.
+    const body = SRC.slice(g, g + 900)
     expect(body).toMatch(/TP\.demoPositions = \[\]/)
     expect(body).toMatch(/return/)
   })
@@ -155,5 +157,37 @@ describe('⛔ ORDINEA la boot — de ea depinde tot fixul', () => {
     // insemna nimic.
     const i = at("fetch('/api/at/state'")
     expect(SRC.slice(Math.max(0, i - 200), i)).toMatch(/await Promise\.all/)
+  })
+})
+
+describe('fantomele se sterg de pe telefon IMEDIAT, nu „la urmatoarea salvare"', () => {
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+  const SRC = fs.readFileSync(path.join(__dirname, '..', 'bootstrapStartApp.ts'), 'utf8')
+
+  it('dupa golirea listei se cere o salvare locala', () => {
+    const g = SRC.indexOf('w._serverATDemoEnabled === true')
+    const body = SRC.slice(g, g + 700)
+    expect(body).toMatch(/TP\.demoPositions = \[\]/)
+    expect(body).toMatch(/ZState\.saveLocal\(\)/)
+    // salvarea vine DUPA golire, altfel ar scrie tot vechiul continut
+    expect(body.indexOf('TP.demoPositions = []')).toBeLessThan(body.indexOf('saveLocal()'))
+  })
+
+  it('o salvare care arunca nu rupe boot-ul', () => {
+    const g = SRC.indexOf('w._serverATDemoEnabled === true')
+    const body = SRC.slice(g, g + 700)
+    const i = body.indexOf('saveLocal()')
+    expect(body.slice(Math.max(0, i - 160), i)).toMatch(/try \{/)
+  })
+
+  it('salvarea e ceruta DOAR pe ramura care sare restaurarea', () => {
+    // Daca ar fi in afara garzii, am scrie peste starea buna a cuiva care
+    // chiar ruleaza pe client.
+    const g = SRC.indexOf('w._serverATDemoEnabled === true')
+    const loop = SRC.indexOf('_pend.forEach')
+    const save = SRC.indexOf('ZState.saveLocal()', g)
+    expect(save).toBeGreaterThan(g)
+    expect(save).toBeLessThan(loop)
   })
 })

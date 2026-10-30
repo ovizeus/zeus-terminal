@@ -204,6 +204,10 @@ export async function startApp(): Promise<void> {
         console.log('[ZState] Late-restore SKIPPED:', _pend.length,
           'local demo positions — server owns demo positions for this user')
         TP.demoPositions = []
+        // Si le STERGEM de pe telefon imediat, nu „la urmatoarea salvare".
+        // Altfel cele 27 rameaneau pe disc, iar curatenia depindea de cand
+        // apuca sa ruleze salvarea periodica — adica de noroc.
+        try { if (w.ZState && typeof w.ZState.saveLocal === 'function') w.ZState.saveLocal() } catch (_) { /* best-effort */ }
         setTimeout(renderDemoPositions, 300)
         setTimeout(renderATPositions, 300)
         return

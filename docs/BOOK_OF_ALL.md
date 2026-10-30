@@ -9628,3 +9628,17 @@ La **b342** scrisesem că pe demo *„rulează două motoare care deschid poziţ
 **Riscul real**, pe care mesajul îl spune acum corect: garda S6-B5 e **singurul** lucru care opreşte al doilea motor. Dacă devine vreodată inertă, ambele părţi deschid demo deodată. De aceea steagurile **tot** ar trebui curăţate — dar e **igienă, nu urgenţă**, şi rămâne decizia lui.
 
 Un test cade dacă garda dispare din `placeAutoTrade`; altul dacă mesajul redevine prea tare.
+
+### 🧹 Fantomele se şterg de pe telefon IMEDIAT (b346)
+
+Ultimul fir rămas nelegat din b343: garda golea lista **în memorie**, dar cele 27 rămâneau **pe disc** până când apuca să ruleze salvarea periodică — adică **curăţenia depindea de noroc**.
+
+Acum, pe ramura care sare restaurarea, se cere o salvare locală **imediat după golire**. Trei lucruri păzite de teste:
+
+1. **Ordinea** — dacă salvarea ar veni înainte de golire, ar scrie exact conţinutul vechi înapoi.
+2. **Doar pe ramura aia** — în afara gărzii, am scrie peste starea bună a cuiva care chiar rulează pe client.
+3. **Într-un `try`** — o salvare care aruncă nu are voie să rupă boot-ul.
+
+**Un test al meu a căzut pe cod corect:** citea doar primele 500 de caractere din gardă, iar salvarea adăugată împinsese `return`-ul dincolo. Fereastră lărgită, cu motivul scris în test. **A şaptea oară** când un test al meu se înşală, nu codul.
+
+**3 teste noi, 2 mutaţii moarte.**
