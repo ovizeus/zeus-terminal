@@ -736,3 +736,19 @@
 .zlq-now { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .zlq-now-v { display: inline-flex; align-items: center; gap: 4px; font-family: ui-monospace, monospace; font-size: 10px; }
 .zlq-now-v i { display: inline-block; width: 14px; height: 6px; border-radius: 1px; }
+
+/* Iesirea din zoom, un pas o data (2026-10-31). Apar DOAR cand e zoom. */
+.zlq-out, .zbk-out {
+    padding: 1px 6px;
+    margin-right: 4px;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    color: #e8c547;
+    background: rgba(10, 14, 20, .7);
+    border: 1px solid rgba(232, 197, 71, .45);
+    border-radius: 3px;
+    cursor: zoom-out;
+}
+.zbk-out { position: absolute; top: 4px; left: 62px; z-index: 2; }
+.zlq-out:hover, .zbk-out:hover { color: #fff; }

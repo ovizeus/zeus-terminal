@@ -44,7 +44,27 @@ const PANEL = {
 
 beforeEach(() => {
   w.S = { symbol: 'BTCUSDT', price: 80000 }
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => PANEL })))
+  // Mock-ul se purta ca o conserva: intorcea mereu aceeasi forma, oricare ar fi
+  // fost cererea. Dar eticheta si butonul de ieşire sunt conduse de datele
+  // SERVERULUI (dinadins), deci un mock care nu raspunde la `span` nu putea
+  // dovedi nimic despre ele. Acum ecoul exista, ca la server.
+  vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+    const u = String(url)
+    if (u.includes('liq-predict')) return { ok: true, json: async () => ({ symbols: [], at: 0 }) } as any
+    const sp = Number(new URL('http://x' + u.replace(/^[^?]*/, '')).searchParams.get('span'))
+    const spanPct = sp > 0 ? Math.min(35, sp) : null
+    // ⚠️ Acoperirea se TAIE la fereastra cerută, exact ca pe server (se
+    // calculeaza din randurile pastrate). Fara asta, harnasamentul ascundea un
+    // bug real: reperul de iesire recalculat din acoperire ar fi parut stabil,
+    // fiindca acoperirea nu se micsora niciodata.
+    const cov = spanPct === null ? PANEL.map.coverage : {
+      upPct: Math.min(PANEL.map.coverage.upPct, spanPct),
+      downPct: Math.max(PANEL.map.coverage.downPct, -spanPct),
+    }
+    return { ok: true, json: async () => ({
+      ...PANEL, map: { ...PANEL.map, spanPct, coverage: cov },
+    }) } as any
+  }))
   // canvas nu exista in jsdom — panoul nu are voie sa cada din cauza asta
   ;(HTMLCanvasElement.prototype as any).getContext = () => ({
     setTransform() {}, clearRect() {}, fillRect() {}, beginPath() {}, moveTo() {},
@@ -410,5 +430,45 @@ describe('scara deseneaza rezolutia pe care o trimite serverul', () => {
     const { container } = render(<LiqMapPanel />)
     await waitFor(() => expect(container.querySelectorAll('.zlq-row').length).toBeGreaterThan(0))
     expect(container.querySelectorAll('.zlq-row').length).toBeGreaterThan(4)
+  })
+})
+
+// [IESIRE DIN ZOOM 2026-10-31] „zoom pot da mare da mic cum il fac inapoi" —
+// se putea doar INTRA; ieşirea era numai „tot inapoi", uşor de ratat.
+describe('iesirea din zoom, un pas o data', () => {
+  const span = (u: string) => new URL('http://x' + u.replace(/^[^?]*/, '')).searchParams.get('span')
+  const lastPanel = () => (globalThis.fetch as any).mock.calls
+    .map((c: any[]) => String(c[0])).filter((u: string) => u.includes('liq-panel')).pop() || ''
+
+  it('butonul de ieşire apare DOAR cand e zoom', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    expect(container.querySelector('.zlq-out')).toBeNull()
+    fireEvent.click(container.querySelector('.zlq-row') as HTMLElement)
+    await waitFor(() => expect(span(lastPanel())).toBeTruthy())
+    expect(container.querySelector('.zlq-out')).toBeTruthy()
+  })
+
+  it('⛔ doua tapuri inauntru, un pas afara: se intoarce la fereastra de dinainte', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    const row = () => container.querySelector('.zlq-row') as HTMLElement
+    fireEvent.click(row())
+    await waitFor(() => expect(span(lastPanel())).toBeTruthy())
+    const s1 = Number(span(lastPanel()))
+    fireEvent.click(row())
+    await waitFor(() => expect(Number(span(lastPanel()))).toBeLessThan(s1))
+    fireEvent.click(container.querySelector('.zlq-out') as HTMLElement)
+    await waitFor(() => expect(Number(span(lastPanel()))).toBeCloseTo(s1, 6))
+  })
+
+  it('un pas afara de la primul nivel duce la FULL si butonul dispare', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    fireEvent.click(container.querySelector('.zlq-row') as HTMLElement)
+    await waitFor(() => expect(container.querySelector('.zlq-out')).toBeTruthy())
+    fireEvent.click(container.querySelector('.zlq-out') as HTMLElement)
+    await waitFor(() => expect(span(lastPanel())).toBeNull())
+    expect(container.querySelector('.zlq-out')).toBeNull()
   })
 })

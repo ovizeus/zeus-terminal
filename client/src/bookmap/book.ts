@@ -345,3 +345,23 @@ export function zoomLabel(pct: number | null | undefined): string {
     // una la ±0%, adica o eticheta care minte exact la cel mai adanc zoom.
     return '±' + p.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '%'
 }
+
+/**
+ * Un pas ÎNAPOI pe carte. `null` înseamnă FIT.
+ *
+ * ⚠️ Reperul (`home`) e banda de dinainte de primul tap. Nu poate fi banda
+ * raportată acum, fiindcă atunci când harta e focalizată banda raportată ESTE
+ * fereastra curentă — deci reperul ar fi mereu egal cu punctul de plecare şi
+ * primul pas înapoi ar sări direct la FIT.
+ */
+export function zoomStepOut(
+    cur: number | null | undefined,
+    home: number | null | undefined,
+): number | null {
+    const c = Number(cur)
+    if (!Number.isFinite(c) || c <= 0) return null
+    const h = Number(home)
+    const lim = Number.isFinite(h) && h > 0 ? h : ZOOM_START_PCT
+    const next = c * ZOOM_FACTOR
+    return next >= lim ? null : next
+}

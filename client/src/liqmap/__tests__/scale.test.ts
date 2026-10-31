@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fmtUsd, fmtPct, intensity, cellColor, barColor, LIQ,
-    spanStep, spanLabel, SPAN_MIN_PCT,
+    spanStep, spanLabel, SPAN_MIN_PCT, spanStepOut,
 } from '../scale'
 
 // [LIQ-PANEL 2026-10-25] Partea pura a panoului: cum se transforma dolari in
@@ -299,5 +299,52 @@ describe('buildLadder respecta treapta serverului', () => {
             const r = buildLadder(b, 80000, bad)
             expect(r.length).toBeGreaterThan(0)
         }
+    })
+})
+
+// ── IESIREA DIN ZOOM 2026-10-31 ─────────────────────────────────────────────
+// „zoom pot da mare da mic cum il fac inapoi" — se putea doar INTRA, iar
+// ieşirea era numai „tot inapoi" (butonul FULL), uşor de ratat.
+//
+// Pasul de ieşire are nevoie de un REPER: unde era fereastra inainte de primul
+// tap. Nu poate folosi acoperirea raportata, fiindca aceea e TAIATA la
+// fereastra curenta — deci ar scadea odata cu zoom-ul si n-ai mai ieşi
+// niciodata. Reperul se tine in stare.
+describe('spanStepOut: un pas inapoi, pana la fereastra plina', () => {
+    it('un pas inapoi largeste fereastra', () => {
+        expect(spanStepOut(0.2, 5)).toBeCloseTo(0.5, 6)
+    })
+
+    it('cand ajunge la reper, intoarce null — adica FULL', () => {
+        expect(spanStepOut(2.5, 5)).toBeNull()
+        expect(spanStepOut(3, 5)).toBeNull()
+    })
+
+    it('⛔ iesirea e INVERSUL intrarii: in si apoi afara da aceeasi fereastra', () => {
+        const home = 4
+        const inn = spanStep(null, { upPct: home, downPct: -1 })
+        expect(spanStepOut(inn, home)).toBeNull()      // un singur pas inauntru
+        const inn2 = spanStep(inn, null)
+        expect(spanStepOut(inn2, home)).toBeCloseTo(inn, 6)
+    })
+
+    it('fara reper valid foloseste fereastra implicita', () => {
+        for (const bad of [0, -1, NaN, null, undefined] as any[]) {
+            expect(spanStepOut(0.2, bad)).toBeCloseTo(0.5, 6)
+        }
+    })
+
+    it('fara fereastra curenta nu are de unde sa iasa', () => {
+        for (const bad of [0, -1, NaN, null, undefined] as any[]) {
+            expect(spanStepOut(bad, 5)).toBeNull()
+        }
+    })
+
+    it('nu se blocheaza: de la fereastra minima tot iese', () => {
+        let s: number | null = SPAN_MIN_PCT
+        let pasi = 0
+        while (s !== null && pasi < 50) { s = spanStepOut(s, 5); pasi++ }
+        expect(s).toBeNull()
+        expect(pasi).toBeLessThan(20)
     })
 })

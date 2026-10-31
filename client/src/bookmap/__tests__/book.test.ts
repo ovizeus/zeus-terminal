@@ -3,7 +3,7 @@ import {
     bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
-    yToPrice, zoomStep, zoomLabel, FOCUS_MIN_PCT,
+    yToPrice, zoomStep, zoomLabel, FOCUS_MIN_PCT, zoomStepOut,
 } from '../book'
 
 describe('intensitatea e LOGARITMICA — raportul max/median masurat e 427x', () => {
@@ -397,5 +397,44 @@ describe('zoomLabel: spune adâncimea, şi spune şi când nu e zoom', () => {
 
     it('la adâncimi mici nu se rotunjeşte la zero', () => {
         expect(zoomLabel(FOCUS_MIN_PCT)).not.toMatch(/±0%/)
+    })
+})
+
+describe('zoomStepOut: un pas inapoi pe carte', () => {
+    it('un pas inapoi adanceste mai putin', () => {
+        expect(zoomStepOut(0.02, 0.2)).toBeCloseTo(0.05, 6)
+    })
+
+    it('cand ajunge la reper, intoarce null — adica FIT', () => {
+        expect(zoomStepOut(0.1, 0.2)).toBeNull()
+        expect(zoomStepOut(0.3, 0.2)).toBeNull()
+    })
+
+    it('⛔ e inversul intrarii', () => {
+        const home = 0.2
+        const a = zoomStep(home)            // 0,08
+        const b = zoomStep(a)               // 0,032
+        expect(zoomStepOut(b, home)).toBeCloseTo(a, 9)
+        expect(zoomStepOut(a, home)).toBeNull()
+    })
+
+    it('fara adancime curenta nu are de unde sa iasa', () => {
+        for (const bad of [0, -1, NaN, null, undefined] as any[]) {
+            expect(zoomStepOut(bad, 0.2)).toBeNull()
+        }
+    })
+
+    it('fara reper valid foloseste banda implicita', () => {
+        for (const bad of [0, -1, NaN, null, undefined] as any[]) {
+            expect(zoomStepOut(0.02, bad)).toBeCloseTo(0.05, 6)
+        }
+    })
+
+    it('nu se blocheaza: de la pragul minim tot iese', () => {
+        let p: number | null = FOCUS_MIN_PCT
+        let pasi = 0
+        while (p !== null && pasi < 50) { p = zoomStepOut(p, 0.2); pasi++ }
+        expect(p).toBeNull()
+        expect(pasi).toBeLessThan(15)
     })
 })

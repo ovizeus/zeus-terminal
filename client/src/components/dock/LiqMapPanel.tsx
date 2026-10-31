@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
 import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, fmtSpan, LIQ } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
-import { spanStep, spanLabel } from '../../liqmap/scale'
+import { spanStep, spanStepOut, spanLabel, SPAN_FACTOR } from '../../liqmap/scale'
 import {
     fetchPredict, sideLabel, hitLabel, horizonLabel, strengthBar, targetLabel,
     historyLabel, crowdLabel, oiLabel, liftLabel, type PredictSymbol,
@@ -10,7 +10,7 @@ import {
 import {
     fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
-    yToPrice, zoomStep, zoomLabel,
+    yToPrice, zoomStep, zoomStepOut, zoomLabel,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
     type Trade, type Liq,
 } from '../../bookmap/book'
@@ -79,16 +79,22 @@ export function LiqMapPanel() {
     const [bookWin, setBookWin] = useState(600)
     // ZOOM pe carte: tap pe harta cere o fereastra de pret. Sta AICI, nu in
     // BookView, fiindca aducerea se face aici si trebuie sa reporneasca.
-    const [bookZoom, setBookZoom] = useState<{ price: number; pct: number } | null>(null)
+    // `home` = banda de DINAINTE de primul tap, ca sa se poata ieşi un pas.
+    // Nu poate fi banda raportata acum: cand harta e focalizata, banda
+    // raportata ESTE fereastra curenta, deci primul pas inapoi ar sari la FIT.
+    const [bookZoom, setBookZoom] = useState<{ price: number; pct: number; home: number } | null>(null)
     // ZOOM pe axa de PRET a hartii de lichidari. Simetric fata de pret: un tap
     // alege o ADANCIME, nu un centru (vezi nota din liqmap/scale.ts).
-    const [liqSpan, setLiqSpan] = useState<number | null>(null)
+    // `home` = fereastra de DINAINTE de primul tap. Fara ea nu se poate iesi un
+    // pas: acoperirea raportata e TAIATA la fereastra curenta, deci ar scadea
+    // odata cu zoom-ul si n-ai mai ieşi niciodata.
+    const [liqSpan, setLiqSpan] = useState<{ span: number; home: number } | null>(null)
     const alive = useRef(true)
 
     const load = useCallback(async () => {
         const p = currentPrice()
         if (p > 0) setPrice(p)
-        const d = await fetchPanel(symbol, p, days, HEAT_COLS, liqSpan)
+        const d = await fetchPanel(symbol, p, days, HEAT_COLS, liqSpan?.span ?? null)
         if (alive.current) { setData(d); setLoading(false) }
     }, [days, symbol, liqSpan])
 
@@ -153,8 +159,22 @@ export function LiqMapPanel() {
     // vederi ale aceloraşi date, deci o fereastra pe una singura le-ar face sa
     // arate doua lucruri diferite in acelasi panou.
     const onLiqTap = useCallback(() => {
-        setLiqSpan((cur) => spanStep(cur, data?.map?.coverage))
+        setLiqSpan((cur) => {
+            const cov = data?.map?.coverage
+            const next = spanStep(cur?.span ?? null, cov)
+            // Reperul se fixeaza O SINGURA DATA, la primul tap.
+            const home = cur?.home ?? spanStep(null, cov) * SPAN_FACTOR
+            return { span: next, home }
+        })
     }, [data])
+
+    const onLiqOut = useCallback(() => {
+        setLiqSpan((cur) => {
+            if (!cur) return null
+            const next = spanStepOut(cur.span, cur.home)
+            return next === null ? null : { span: next, home: cur.home }
+        })
+    }, [])
 
     const stats = data.stats
     const map = data.map
@@ -171,7 +191,7 @@ export function LiqMapPanel() {
             </div>
 
             <Honesty stats={stats} map={map} days={days} setDays={setDays}
-                loading={loading} setSpan={setLiqSpan} />
+                loading={loading} setSpan={setLiqSpan} onOut={onLiqOut} />
 
             <SymbolStrip top={data.top} symbol={symbol} setSymbol={setSymbol} />
 
@@ -202,7 +222,7 @@ export function LiqMapPanel() {
 // Spune ce ştim, de când, şi de la cine. Binance lipseşte din listă fiindcă
 // Binance chiar nu livrează nimic către serverul ăsta — şi e mai bine să se
 // vadă decât să fie ghicit.
-function Honesty({ stats, map, days, setDays, loading, setSpan }: any) {
+function Honesty({ stats, map, days, setDays, loading, setSpan, onOut }: any) {
     const since = stats?.since ? new Date(stats.since) : null
     const cov = map?.coverage
     return (
@@ -233,6 +253,10 @@ function Honesty({ stats, map, days, setDays, loading, setSpan }: any) {
                     sunt axele aceleiaşi harti. Eticheta vine din `map.spanPct`,
                     adica de la SERVER — el o margineste la 35%, deci tap-ul
                     poate sa nu fie fereastra pe care s-au numarat randurile. */}
+                {map?.spanPct ? (
+                    <button className="zlq-out" title="Zoom out one step"
+                        onClick={onOut}>&minus;</button>
+                ) : null}
                 <button className={'zlq-span' + (map?.spanPct ? ' act' : '')}
                     title="Fit the whole price range"
                     onClick={() => setSpan(null)}>{spanLabel(map?.spanPct ?? null)}</button>
@@ -559,8 +583,16 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
         const h = data?.heat
         const p = yToPrice(ev.clientY - r.top, r.height, h?.priceLo, h?.priceHi)
         if (p === null) return            // in afara panzei: nu mutam nimic
-        setZoom({ price: p, pct: zoomStep(zoom?.pct ?? h?.bandPct) })
+        // Reperul se fixeaza O SINGURA DATA, la primul tap.
+        const home = zoom?.home ?? (Number(h?.bandPct) > 0 ? Number(h.bandPct) : undefined)
+        setZoom({ price: p, pct: zoomStep(zoom?.pct ?? h?.bandPct), home: home as number })
     }, [data, zoom, setZoom])
+
+    const onZoomOut = useCallback(() => {
+        if (!zoom) return
+        const next = zoomStepOut(zoom.pct, zoom.home)
+        setZoom(next === null ? null : { ...zoom, pct: next })
+    }, [zoom, setZoom])
 
     const toggleHelp = useCallback(() => {
         setHelp((v) => {
@@ -761,6 +793,10 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
 
             <div className="zbk-canvas">
                 <canvas ref={cv} onClick={onMapTap} className="zbk-tap" />
+                {heat.focused ? (
+                    <button className="zbk-out" title="Zoom out one step"
+                        onClick={onZoomOut}>&minus;</button>
+                ) : null}
                 <button className={'zbk-fit' + (zoom ? ' act' : '')}
                     title="Fit the whole book"
                     onClick={() => setZoom(null)}>

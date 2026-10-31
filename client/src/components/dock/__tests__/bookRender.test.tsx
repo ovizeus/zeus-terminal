@@ -69,7 +69,21 @@ const drawn: any[] = []
 function mockFetch(bookPayload: any) {
   vi.stubGlobal('fetch', vi.fn(async (url: any) => {
     const u = String(url)
-    if (u.includes('bookmap')) { lastBookUrl = u; return { ok: true, json: async () => bookPayload } as any }
+    if (u.includes('bookmap')) {
+      lastBookUrl = u
+      // Mock-ul se purta ca o conserva. Eticheta si butonul de ieşire sunt
+      // conduse de ce a DESENAT serverul (`heat.focused`), deci un mock care nu
+      // raspunde la `focusPct` nu putea dovedi nimic despre ele.
+      // Daca forma cerută spune EA `focused`, ecoul nu o calca: exact asa se
+      // apara faptul ca eticheta urmeaza serverul chiar fara niciun tap.
+      const fp = Number(new URL('http://x' + u.replace(/^[^?]*/, '')).searchParams.get('focusPct'))
+      const h = bookPayload.heat?.focused
+        ? bookPayload.heat
+        : (fp > 0
+            ? { ...bookPayload.heat, focused: true, bandPct: Math.min(1, fp) }
+            : { ...bookPayload.heat, focused: false })
+      return { ok: true, json: async () => ({ ...bookPayload, heat: h }) } as any
+    }
     if (u.includes('liq-predict')) return { ok: true, json: async () => ({ symbols: [], at: NOW }) } as any
     return { ok: true, json: async () => PANEL } as any
   }))
@@ -705,5 +719,44 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
     await waitFor(() => expect(drawn.flatMap((d: any) => d.pts || []).length).toBeGreaterThan(2))
     const xs = drawn.flatMap((d: any) => d.pts || []).map((p: any) => p[0])
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(5)
+  })
+})
+
+describe('NEREUS: iesirea din zoom', () => {
+  function tap(container: HTMLElement) {
+    const cv = container.querySelector('.zbk-canvas canvas') as HTMLCanvasElement
+    cv.getBoundingClientRect = () => ({ top: 0, left: 0, width: 320, height: 200,
+      right: 320, bottom: 200, x: 0, y: 0, toJSON: () => ({}) } as any)
+    fireEvent.click(cv, { clientX: 100, clientY: 100 })
+  }
+  const pct = () => Number(new URL('http://x' + lastBookUrl.replace(/^[^?]*/, ''))
+    .searchParams.get('focusPct'))
+
+  it('butonul de ieşire apare doar cand e zoom', async () => {
+    const { container } = await openBook()
+    expect(container.querySelector('.zbk-out')).toBeNull()
+    tap(container)
+    await waitFor(() => expect(lastBookUrl).toMatch(/focusPct=/))
+    expect(container.querySelector('.zbk-out')).toBeTruthy()
+  })
+
+  it('⛔ doua tapuri inauntru, un pas afara: se intoarce la adancimea de dinainte', async () => {
+    const { container } = await openBook()
+    tap(container)
+    await waitFor(() => expect(lastBookUrl).toMatch(/focusPct=/))
+    const p1 = pct()
+    tap(container)
+    await waitFor(() => expect(pct()).toBeLessThan(p1))
+    fireEvent.click(container.querySelector('.zbk-out') as HTMLElement)
+    await waitFor(() => expect(pct()).toBeCloseTo(p1, 9))
+  })
+
+  it('un pas afara de la primul nivel duce la FIT', async () => {
+    const { container } = await openBook()
+    tap(container)
+    await waitFor(() => expect(container.querySelector('.zbk-out')).toBeTruthy())
+    fireEvent.click(container.querySelector('.zbk-out') as HTMLElement)
+    await waitFor(() => expect(lastBookUrl).not.toMatch(/focus=/))
+    expect(container.querySelector('.zbk-out')).toBeNull()
   })
 })

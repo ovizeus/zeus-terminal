@@ -230,3 +230,22 @@ export function spanLabel(span: number | null | undefined): string {
     if (!Number.isFinite(s) || s <= 0) return 'FULL'
     return '±' + s.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '%'
 }
+
+/**
+ * Un pas ÎNAPOI. `null` înseamnă fereastră plină.
+ *
+ * ⚠️ Are nevoie de un REPER (`home`): unde era fereastra înainte de primul tap.
+ * Nu poate folosi acoperirea raportată, fiindcă aceea e **tăiată** la fereastra
+ * curentă — deci ar scădea odată cu zoom-ul şi n-ai mai ieşi niciodată.
+ */
+export function spanStepOut(
+    cur: number | null | undefined,
+    home: number | null | undefined,
+): number | null {
+    const c = Number(cur)
+    if (!Number.isFinite(c) || c <= 0) return null
+    const h = Number(home)
+    const lim = Number.isFinite(h) && h > 0 ? h : SPAN_START_PCT
+    const next = c * SPAN_FACTOR
+    return next >= lim ? null : next
+}
