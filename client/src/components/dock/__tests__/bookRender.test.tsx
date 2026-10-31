@@ -583,6 +583,80 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
     })
   })
 
+  it('ZOOM: tap pe harta cere o fereastra de pret de la server', async () => {
+    const { container } = await openBook()
+    const cv = container.querySelector('.zbk-canvas canvas') as HTMLCanvasElement
+    expect(cv).toBeTruthy()
+    // jsdom nu are layout, deci dreptunghiul se pune de mana: 200px inaltime.
+    cv.getBoundingClientRect = () => ({ top: 0, left: 0, width: 320, height: 200,
+      right: 320, bottom: 200, x: 0, y: 0, toJSON: () => ({}) } as any)
+    fireEvent.click(cv, { clientX: 100, clientY: 100 })
+    // mkBook: priceLo 79900, priceHi 80200 => mijlocul panzei e 80050
+    await waitFor(() => expect(lastBookUrl).toMatch(/focus=80050/))
+    await waitFor(() => expect(lastBookUrl).toMatch(/focusPct=/))
+  })
+
+  it('ZOOM: fiecare tap intra MAI ADANC, nu mai departe', async () => {
+    const { container } = await openBook()
+    const cv = container.querySelector('.zbk-canvas canvas') as HTMLCanvasElement
+    cv.getBoundingClientRect = () => ({ top: 0, left: 0, width: 320, height: 200,
+      right: 320, bottom: 200, x: 0, y: 0, toJSON: () => ({}) } as any)
+    fireEvent.click(cv, { clientX: 100, clientY: 100 })
+    await waitFor(() => expect(lastBookUrl).toMatch(/focusPct=/))
+    const p1 = Number(new URL('http://x' + lastBookUrl.replace(/^[^?]*/, '')).searchParams.get('focusPct'))
+    fireEvent.click(cv, { clientX: 100, clientY: 100 })
+    await waitFor(() => {
+      const p2 = Number(new URL('http://x' + lastBookUrl.replace(/^[^?]*/, '')).searchParams.get('focusPct'))
+      expect(p2).toBeLessThan(p1)
+    })
+  })
+
+  it('ZOOM: butonul de FIT scoate fereastra din cerere', async () => {
+    const { container } = await openBook()
+    const cv = container.querySelector('.zbk-canvas canvas') as HTMLCanvasElement
+    cv.getBoundingClientRect = () => ({ top: 0, left: 0, width: 320, height: 200,
+      right: 320, bottom: 200, x: 0, y: 0, toJSON: () => ({}) } as any)
+    fireEvent.click(cv, { clientX: 100, clientY: 100 })
+    await waitFor(() => expect(lastBookUrl).toMatch(/focus=/))
+    fireEvent.click(screen.getByTitle('Fit the whole book'))
+    await waitFor(() => expect(lastBookUrl).not.toMatch(/focus=/))
+  })
+
+  it('⛔ ZOOM: un tap IN AFARA panzei nu mută harta', async () => {
+    const { container } = await openBook()
+    const cv = container.querySelector('.zbk-canvas canvas') as HTMLCanvasElement
+    cv.getBoundingClientRect = () => ({ top: 0, left: 0, width: 320, height: 200,
+      right: 320, bottom: 200, x: 0, y: 0, toJSON: () => ({}) } as any)
+    const inainte = lastBookUrl
+    fireEvent.click(cv, { clientX: 100, clientY: 500 })
+    await new Promise((r) => setTimeout(r, 60))
+    expect(lastBookUrl).toBe(inainte)
+  })
+
+  it('⛔ ZOOM: eticheta spune ce a DESENAT serverul, nu ce a cerut tap-ul', async () => {
+    // Gasit randand: harta sosea focalizata (`focused: true`, banda ±0,05%) si
+    // eticheta scria FIT, fiindca citea starea clientului. Serverul margineste
+    // adancimea cerută, deci cele doua pot sa nu coincida — si atunci eticheta
+    // ar fi o cifra care arata credibil fara sa fie desenata.
+    const b = mkBook()
+    b.heat.focused = true
+    b.heat.bandPct = 0.05
+    mockFetch(b)
+    const { container } = await openBook()
+    await waitFor(() =>
+      expect(container.querySelector('.zbk-fit')?.textContent?.trim()).toBe('±0.05%'))
+  })
+
+  it('ZOOM: harta nefocalizata spune FIT, chiar daca banda masurata e mica', async () => {
+    const b = mkBook()
+    b.heat.focused = false
+    b.heat.bandPct = 0.05
+    mockFetch(b)
+    const { container } = await openBook()
+    await waitFor(() =>
+      expect(container.querySelector('.zbk-fit')?.textContent?.trim()).toBe('FIT'))
+  })
+
   it('fara tranzactii si fara lichidari, harta tot se deseneaza', async () => {
     mockFetch(mkBook({ trades: [], liqs: [] }))
     const { container } = await openBook()

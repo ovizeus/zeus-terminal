@@ -3,6 +3,7 @@ import {
     bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
+    yToPrice, zoomStep, zoomLabel, FOCUS_MIN_PCT,
 } from '../book'
 
 describe('intensitatea e LOGARITMICA — raportul max/median masurat e 427x', () => {
@@ -329,5 +330,72 @@ describe('COB — carnetul de ACUM, pe aceleasi randuri ca harta', () => {
     it('fara celule da lista goala', () => {
         expect(cobRows([], 5)).toEqual([])
         expect(cobRows(null as any, 5)).toEqual([])
+    })
+})
+
+// ── ZOOM 2026-10-31 ──────────────────────────────────────────────────────────
+// „poti face zoom sa dau pe acea harta". Tap pe hartă = intri mai adânc în
+// zona atinsă. Ajutoarele pure stau aici; desenul şi tap-ul, în bookRender.
+describe('yToPrice: de la pixelul atins la preţul real', () => {
+    const G = { priceLo: 77000, priceHi: 77100 }
+
+    it('sus pe pânză e preţul de SUS, nu invers', () => {
+        expect(yToPrice(0, 200, G.priceLo, G.priceHi)).toBeCloseTo(77100, 6)
+    })
+
+    it('jos pe pânză e preţul de JOS', () => {
+        expect(yToPrice(200, 200, G.priceLo, G.priceHi)).toBeCloseTo(77000, 6)
+    })
+
+    it('la mijloc e mijlocul', () => {
+        expect(yToPrice(100, 200, G.priceLo, G.priceHi)).toBeCloseTo(77050, 6)
+    })
+
+    it('în afara pânzei nu întoarce un preţ inventat', () => {
+        expect(yToPrice(-5, 200, G.priceLo, G.priceHi)).toBeNull()
+        expect(yToPrice(260, 200, G.priceLo, G.priceHi)).toBeNull()
+    })
+
+    it('fără grilă validă întoarce null, nu NaN', () => {
+        expect(yToPrice(50, 200, null as any, 77100)).toBeNull()
+        expect(yToPrice(50, 200, 77100, 77000)).toBeNull()   // inversate
+        expect(yToPrice(50, 0, 77000, 77100)).toBeNull()     // pânză de 0
+    })
+})
+
+describe('zoomStep: fiecare tap intră mai adânc, dar nu la infinit', () => {
+    it('un tap taie adâncimea, nu o lăţeşte', () => {
+        expect(zoomStep(0.2)).toBeLessThan(0.2)
+    })
+
+    it('se opreşte la pragul de jos — sub el randul e mai fin decât tick-ul', () => {
+        let p = 0.2
+        for (let i = 0; i < 20; i++) p = zoomStep(p)
+        expect(p).toBe(FOCUS_MIN_PCT)
+    })
+
+    it('de la o adâncime deja minimă nu coboară mai mult', () => {
+        expect(zoomStep(FOCUS_MIN_PCT)).toBe(FOCUS_MIN_PCT)
+    })
+
+    it('o adâncime invalidă porneşte de la banda implicită, nu de la NaN', () => {
+        for (const bad of [0, -1, NaN, null, undefined] as any[]) {
+            expect(Number.isFinite(zoomStep(bad))).toBe(true)
+            expect(zoomStep(bad)).toBeGreaterThan(0)
+        }
+    })
+})
+
+describe('zoomLabel: spune adâncimea, şi spune şi când nu e zoom', () => {
+    it('fără zoom o spune pe litere, nu cu o cifră goală', () => {
+        expect(zoomLabel(null)).toBe('FIT')
+    })
+
+    it('cu zoom arată adâncimea cerută', () => {
+        expect(zoomLabel(0.05)).toBe('±0.05%')
+    })
+
+    it('la adâncimi mici nu se rotunjeşte la zero', () => {
+        expect(zoomLabel(FOCUS_MIN_PCT)).not.toMatch(/±0%/)
     })
 })

@@ -527,6 +527,26 @@
 
 .zbk-canvas { position: relative; }
 .zbk-canvas canvas { width: 100%; height: 240px; display: block; border-radius: 4px; }
+/* ZOOM 2026-10-31: tap pe harta. Cursorul spune ca se poate apasa, iar pe
+   telefon `touch-action: manipulation` taie intarzierea de 300ms a dublului tap. */
+.zbk-canvas canvas.zbk-tap { cursor: zoom-in; touch-action: manipulation; }
+.zbk-fit {
+    position: absolute;
+    top: 4px; left: 4px;
+    z-index: 2;
+    padding: 2px 6px;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: .02em;
+    color: #8b97a8;
+    background: rgba(10, 14, 20, .78);
+    border: 1px solid rgba(139, 151, 168, .28);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.zbk-fit.act { color: #e8c547; border-color: rgba(232, 197, 71, .5); }
+.zbk-fit:hover { color: #d6dde8; }
 .zbk-axis {
     position: absolute;
     top: 2px; right: 4px; bottom: 2px;

@@ -8,6 +8,7 @@ import {
 import {
     fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
+    yToPrice, zoomStep, zoomLabel,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
     type Trade, type Liq,
 } from '../../bookmap/book'
@@ -74,6 +75,9 @@ export function LiqMapPanel() {
     const [book, setBook] = useState<any>(null)
     const [bookBand, setBookBand] = useState<number | 'auto'>('auto')
     const [bookWin, setBookWin] = useState(600)
+    // ZOOM pe carte: tap pe harta cere o fereastra de pret. Sta AICI, nu in
+    // BookView, fiindca aducerea se face aici si trebuie sa reporneasca.
+    const [bookZoom, setBookZoom] = useState<{ price: number; pct: number } | null>(null)
     const alive = useRef(true)
 
     const load = useCallback(async () => {
@@ -86,6 +90,10 @@ export function LiqMapPanel() {
     // Cartea de ordine se aduce NUMAI cu rubrica deschisă: serverul o
     // reîmprospătează oricum la 5 s, iar o cerere pe secundă pentru un ecran
     // la care nu se uită nimeni e taxă curată.
+    // Un pret de pe BTC nu are ce cauta pe grila ETH — la schimbarea simbolului
+    // zoom-ul cade. Clasa b336: cartea unui simbol cu eticheta altuia.
+    useEffect(() => { setBookZoom(null) }, [symbol])
+
     useEffect(() => {
         if (view !== 'book') return
         let on = true
@@ -93,13 +101,14 @@ export function LiqMapPanel() {
         const go = async () => {
             const d = await fetchBook(symbol, {
                 band: bookBand, windowSec: bookWin, cols: 110, rows: 56,
+                focusPrice: bookZoom?.price ?? null, focusPct: bookZoom?.pct ?? null,
             }, ac.signal)
             if (on && d) setBook(d)
         }
         go()
         const iv = setInterval(go, BOOK_REFRESH_MS)
         return () => { on = false; ac.abort(); clearInterval(iv) }
-    }, [view, symbol, bookBand, bookWin])
+    }, [view, symbol, bookBand, bookWin, bookZoom])
 
     useEffect(() => {
         if (view !== 'pred') return
@@ -168,7 +177,8 @@ export function LiqMapPanel() {
                 {view === 'pred' && <PredictView rows={pred} />}
                 {view === 'book' && (
                     <BookView data={book} band={bookBand} setBand={setBookBand}
-                        win={bookWin} setWin={setBookWin} symbol={symbol} />
+                        win={bookWin} setWin={setBookWin} symbol={symbol}
+                        zoom={bookZoom} setZoom={setBookZoom} />
                 )}
             </div>
         </div>
@@ -473,7 +483,7 @@ function PredictCard({ r }: { r: PredictSymbol }) {
 // cartea care EXISTĂ e lată de 253 de dolari pe BTC (−0,155% … +0,160%).
 // Nu există pereţi la 1% distanţă. Deci „zoom" nu te depărtează — te duce mai
 // adânc în bandă şi mai departe pe timp.
-function BookView({ data, band, setBand, win, setWin, symbol }: any) {
+function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: any) {
     const cv = useRef<HTMLCanvasElement | null>(null)
     // „e bine dar nu stiu sa-l citesc" — un panou care are nevoie de mine
     // alaturi nu si-a facut treaba. Explicatia sta DESCHISA pana cand o inchide
@@ -486,6 +496,18 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
     const [help, setHelp] = useState<boolean>(() => {
         try { return localStorage.getItem('zbk.help') !== '0' } catch { return true }
     })
+    // TAP PE HARTA = intri mai adanc in zona atinsa. Pretul se ia din GRILA
+    // TRIMISA de server (priceLo/priceHi), nu din pretul curent: altfel ai
+    // zoom pe altceva decat ai atins.
+    const onMapTap = useCallback((ev: React.MouseEvent<HTMLCanvasElement>) => {
+        const el = ev.currentTarget
+        const r = el.getBoundingClientRect()
+        const h = data?.heat
+        const p = yToPrice(ev.clientY - r.top, r.height, h?.priceLo, h?.priceHi)
+        if (p === null) return            // in afara panzei: nu mutam nimic
+        setZoom({ price: p, pct: zoomStep(zoom?.pct ?? h?.bandPct) })
+    }, [data, zoom, setZoom])
+
     const toggleHelp = useCallback(() => {
         setHelp((v) => {
             const n = !v
@@ -684,7 +706,17 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
             </div>
 
             <div className="zbk-canvas">
-                <canvas ref={cv} />
+                <canvas ref={cv} onClick={onMapTap} className="zbk-tap" />
+                <button className={'zbk-fit' + (zoom ? ' act' : '')}
+                    title="Fit the whole book"
+                    onClick={() => setZoom(null)}>
+                    {/* Eticheta vine din ce s-a DESENAT (`heat.focused` +
+                        banda masurata), nu din ce s-a cerut la tap: serverul
+                        margineste adancimea, deci starea clientului poate
+                        spune altceva decat harta de pe ecran. Aceeasi regula
+                        ca la „9 of 1000 trades drawn". */}
+                    {zoomLabel(heat.focused ? heat.bandPct : null)}
+                </button>
                 <div className="zbk-axis">
                     <span>{heat.priceHi ? Math.round(heat.priceHi).toLocaleString('en-US') : ''}</span>
                     <span className="zbk-axis-mid">COB →</span>

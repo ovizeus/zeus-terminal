@@ -122,7 +122,14 @@ router.get('/bookmap', (req, res) => {
         const now = Date.now();
         // Grila pe PRET ABSOLUT: bulele si lichidarile au preturi reale, deci
         // au nevoie de o axa de pret adevarata. Vezi nota din bookMap.heatAbs.
-        const heat = BM.heatAbs({ frames: deep, cols, rows, windowMs, now });
+        // ZOOM: tap pe harta trimite pretul atins si adancimea dorita. Se
+        // margineste aici, nu doar in bookMap: o cerere cu `focus=0` nu e zoom.
+        const focusPrice = Number(req.query.focus) > 0 ? Number(req.query.focus) : null;
+        const focusPct = Number(req.query.focusPct) > 0
+            ? Math.min(1, Math.max(0.005, Number(req.query.focusPct)))
+            : null;
+        const heat = BM.heatAbs({ frames: deep, cols, rows, windowMs, now,
+            focusPrice, focusPct });
         const ladder = BM.aggregate({ frames: deep, bandPct: band, rows, windowMs, now });
 
         // Banda de sus vine din cadrele RAPIDE (WS) si NU din medii — vezi nota
@@ -173,7 +180,7 @@ router.get('/bookmap', (req, res) => {
                 deepFrames: deep.length, topFrames: top.length,
                 health: feed.health(),
             },
-            asked: { band: bandRaw, windowMs, cols, rows },
+            asked: { band: bandRaw, windowMs, cols, rows, focusPrice, focusPct },
             at: now,
         });
     } catch (err) {

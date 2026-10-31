@@ -41,6 +41,8 @@ const DEFAULT_WINDOW_MS = 10 * 60000;
 const MAX_ROWS = 200;
 // Un nivel care apare în mai puţin de atât din cadre nu e perete, e licărire.
 const WALL_MIN_FIRMNESS = 0.25;
+const FOCUS_MIN_PCT = 0.005;   // cel mai adanc zoom cerut; sub asta randul
+                               // ar fi mai fin decat tick-ul si harta ar fi goala
 const GRID_MAX_PCT = 1;   // cat de departe de pret mai intinde carnetul grila absoluta;
                           // cartea reala tine ±0,16% pe BTC, deci 1% e larg si tot taie
                           // ordinele ratacite care ar strivi activitatea intr-un rand
@@ -414,7 +416,15 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
  *   • referinţa DE JOS pentru intensitate  (b335)
  *   • media pe coloană, nu suma            (b332)
  */
-function heatAbs({ frames, cols, rows, windowMs, now, padPct }) {
+// ZOOM (`focusPrice` + `focusPct`): fereastra se CERE, nu se deduce. Tap pe
+// harta trimite preţul atins şi adâncimea dorită, iar grila devine exact
+// `focusPrice ± focusPct%` — fără marginea adăugată, fiindcă marginea e acolo
+// ca nimic să nu stea lipit de bordură când intervalul vine din date; când
+// intervalul e CERUT, o margine l-ar face altul decât cel cerut.
+//
+// ⚠️ Zoom aici înseamnă MAI ADÂNC, nu mai departe: cartea care există e lată
+// de 253$ pe BTC (±0,16%), deci nu e nimic de văzut mai încolo.
+function heatAbs({ frames, cols, rows, windowMs, now, padPct, focusPrice, focusPct }) {
     const asked = Math.max(2, Math.min(600, Number(cols) || 90));
     const R = Math.max(4, Math.min(MAX_ROWS, Number(rows) || DEFAULT_ROWS));
     const all = Array.isArray(frames) ? frames.filter(Boolean) : [];
@@ -427,7 +437,7 @@ function heatAbs({ frames, cols, rows, windowMs, now, padPct }) {
         cells: [], mids: new Array(asked).fill(null), cols: asked, colsAsked: asked, rows: R,
         priceLo: null, priceHi: null, rowUsd: 0, tMin: null, tMax: null,
         maxUsd: 0, loUsd: 0, heldCols: 0, frames: 0, exchanges: [], spread: null,
-        bandPct: null,
+        bandPct: null, focused: false,
     };
     if (!used.length) return empty;
 
@@ -445,17 +455,26 @@ function heatAbs({ frames, cols, rows, windowMs, now, padPct }) {
     //
     // Deci: intervalul e dat de mijloacele din fereastră, lărgit cu adâncimea
     // carnetului care chiar stă lângă preţ (sub GRID_MAX_PCT de mijlocul ei).
-    let lo = Infinity, hi = -Infinity;
-    for (const f of used) {
-        if (f.mid < lo) lo = f.mid;
-        if (f.mid > hi) hi = f.mid;
-        const near = (p) => Math.abs(p - f.mid) / f.mid <= GRID_MAX_PCT / 100;
-        for (const [p] of f.bids) { if (near(p) && p < lo) lo = p; }
-        for (const [p] of f.asks) { if (near(p) && p > hi) hi = p; }
+    const fp = Number(focusPrice), fw = Number(focusPct);
+    const focused = Number.isFinite(fp) && fp > 0
+        && Number.isFinite(fw) && fw > 0;
+    let lo, hi;
+    if (focused) {
+        const half = Math.min(GRID_MAX_PCT, Math.max(FOCUS_MIN_PCT, fw)) / 100;
+        lo = fp * (1 - half); hi = fp * (1 + half);
+    } else {
+        lo = Infinity; hi = -Infinity;
+        for (const f of used) {
+            if (f.mid < lo) lo = f.mid;
+            if (f.mid > hi) hi = f.mid;
+            const near = (p) => Math.abs(p - f.mid) / f.mid <= GRID_MAX_PCT / 100;
+            for (const [p] of f.bids) { if (near(p) && p < lo) lo = p; }
+            for (const [p] of f.asks) { if (near(p) && p > hi) hi = p; }
+        }
+        if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return empty;
+        const pad = Math.max((hi - lo) * (Number(padPct) || 0.08), (hi + lo) / 2 * 0.0002);
+        lo -= pad; hi += pad;
     }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return empty;
-    const pad = Math.max((hi - lo) * (Number(padPct) || 0.08), (hi + lo) / 2 * 0.0002);
-    lo -= pad; hi += pad;
     const rowUsd = (hi - lo) / R;
 
     const byCol = new Map();
@@ -528,6 +547,7 @@ function heatAbs({ frames, cols, rows, windowMs, now, padPct }) {
         // banda ceruta nu o mai decide. Eticheta trebuie sa spuna ce s-a
         // desenat, altfel minte cu o cifra care arata credibil.
         bandPct: (hi + lo) > 0 ? ((hi - lo) / (hi + lo)) * 100 : null,
+        focused,
     };
 }
 

@@ -182,7 +182,8 @@ export function sourceLabel(src: { deepLevels: number | null; deepFrames: number
 
 export async function fetchBook(
     symbol: string,
-    opts: { band: number | 'auto'; windowSec: number; cols: number; rows: number },
+    opts: { band: number | 'auto'; windowSec: number; cols: number; rows: number;
+        focusPrice?: number | null; focusPct?: number | null },
     signal?: AbortSignal,
 ): Promise<any | null> {
     try {
@@ -193,6 +194,12 @@ export async function fetchBook(
             cols: String(opts.cols),
             rows: String(opts.rows),
         })
+        // Fereastra de zoom se adauga numai daca EXISTA. Un `focus=null` in
+        // adresa ar fi `Number('null')` pe server, adica NaN, adica zoom mut.
+        if (Number(opts.focusPrice) > 0 && Number(opts.focusPct) > 0) {
+            q.set('focus', String(opts.focusPrice))
+            q.set('focusPct', String(opts.focusPct))
+        }
         const r = await fetch('/api/market/bookmap?' + q.toString(), {
             credentials: 'same-origin', signal,
         })
@@ -287,4 +294,54 @@ export function cobRows(cells: any[], cols: number): { row: number; bidUsd: numb
         byRow.set(c.row, r)
     }
     return [...byRow.values()].sort((a, b) => a.row - b.row)
+}
+
+// ── ZOOM 2026-10-31 ──────────────────────────────────────────────────────────
+// „poti face zoom sa dau pe acea harta". Tap pe hartă = intri mai adânc în
+// zona atinsă.
+//
+// ⚠️ Zoom înseamnă MAI ADÂNC, nu mai departe. Cartea care există e lată de 253$
+// pe BTC (±0,16%), măsurat — deci nu e nimic de văzut mai încolo. Fiecare tap
+// taie adâncimea, nu o lăţeşte.
+
+/** Cel mai adânc zoom; sub el rândul ar fi mai fin decât tick-ul. Oglindeşte `FOCUS_MIN_PCT` din bookMap.js. */
+export const FOCUS_MIN_PCT = 0.005
+/** Cât taie un tap din adâncimea curentă. */
+export const ZOOM_FACTOR = 2.5
+/** De unde porneşte zoom-ul când nu ştim adâncimea curentă. */
+export const ZOOM_START_PCT = 0.2
+
+/**
+ * Preţul de sub pixelul atins. Sus pe pânză e preţul de SUS.
+ * Întoarce `null` în afara pânzei sau pe o grilă fără sens — nu un preţ inventat,
+ * fiindcă un zoom pe un preţ greşit mută harta unde nu s-a atins.
+ */
+export function yToPrice(y: number, height: number, priceLo: number, priceHi: number): number | null {
+    const h = Number(height)
+    const lo = Number(priceLo)
+    const hi = Number(priceHi)
+    if (!Number.isFinite(h) || h <= 0) return null
+    // `lo > 0` nu e un moft: Number(null) e 0 si trece de isFinite, deci o
+    // grila lipsa devenea [0, priceHi] si tap-ul intorcea un pret plauzibil
+    // dintr-o harta care nu exista. A cincea oara in sesiunea asta.
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo <= 0 || hi <= lo) return null
+    const yy = Number(y)
+    if (!Number.isFinite(yy) || yy < 0 || yy > h) return null
+    return hi - (yy / h) * (hi - lo)
+}
+
+/** Adâncimea după un tap, mărginită la prag. */
+export function zoomStep(curPct: number | null | undefined): number {
+    const c = Number(curPct)
+    const from = Number.isFinite(c) && c > 0 ? c : ZOOM_START_PCT
+    return Math.max(FOCUS_MIN_PCT, from / ZOOM_FACTOR)
+}
+
+/** Eticheta de zoom. Fără zoom o spune pe litere, nu cu o cifră goală. */
+export function zoomLabel(pct: number | null | undefined): string {
+    const p = Number(pct)
+    if (!Number.isFinite(p) || p <= 0) return 'FIT'
+    // 3 zecimale, fiindcă pragul e 0,005% — cu 2 s-ar rotunji la ±0.01% si cu
+    // una la ±0%, adica o eticheta care minte exact la cel mai adanc zoom.
+    return '±' + p.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '%'
 }
