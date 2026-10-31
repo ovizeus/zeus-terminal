@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
     bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK,
+    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
 } from '../book'
 
 describe('intensitatea e LOGARITMICA — raportul max/median masurat e 427x', () => {
@@ -223,5 +224,110 @@ describe('⛔ REFERINTA DE JOS — harta era uniform aprinsa, vazuta RANDAND', (
             expect(v).toBeGreaterThanOrEqual(0)
             expect(v).toBeLessThanOrEqual(1)
         }
+    })
+})
+
+describe('BULELE — tranzactii executate, raza LOGARITMICA', () => {
+    // Masurat pe 1000 de tranzactii reale: marimile merg de la 0,001 la 7,25
+    // BTC, raport peste 7000x. Liniar, tot ce e normal ar fi invizibil langa
+    // una singura uriasa.
+    it('zero sau negativ nu deseneaza nimic', () => {
+        expect(bubbleRadius(0, 1e6)).toBe(0)
+        expect(bubbleRadius(-5, 1e6)).toBe(0)
+        expect(bubbleRadius(100, 0)).toBe(0)
+    })
+
+    it('cea mai mare din fereastra ia raza maxima', () => {
+        expect(bubbleRadius(1e6, 1e6, 14, 1.5)).toBeCloseTo(14, 2)
+    })
+
+    it('o tranzactie de 1/1000 din maxim rameane VIZIBILA', () => {
+        const r = bubbleRadius(1000, 1e6, 14, 1.5)
+        expect(r).toBeGreaterThan(2.5)
+        expect(r).toBeLessThan(10)
+    })
+
+    it('raza creste monoton cu dolarii', () => {
+        let prev = -1
+        for (const u of [10, 1e3, 1e4, 1e5, 1e6]) {
+            const r = bubbleRadius(u, 1e6)
+            expect(r).toBeGreaterThanOrEqual(prev)
+            prev = r
+        }
+    })
+
+    it('culoarea spune cine a LOVIT, nu cine statea in carte', () => {
+        expect(bubbleColor(true)).toContain(BOOK.ask)
+        expect(bubbleColor(false)).toContain(BOOK.bid)
+        expect(bubbleColor(true)).not.toBe(bubbleColor(false))
+    })
+
+    it('pragul taie praful, dar se adapteaza la piata', () => {
+        expect(bubbleCutoff(1e6, 0.02)).toBe(20000)
+        expect(bubbleCutoff(1e4, 0.02)).toBe(200)
+        expect(bubbleCutoff(0)).toBe(Infinity)
+    })
+})
+
+describe('LICHIDARILE — altfel decat tranzactiile, dinadins', () => {
+    it('sunt INEL, nu disc — ca sa nu se piarda printre bule', () => {
+        const r = liqRing(true)
+        expect(r.width).toBeGreaterThan(0)
+        expect(r.stroke).toContain(BOOK.ask)
+        expect(liqRing(false).stroke).toContain(BOOK.bid)
+    })
+
+    it('panoul SPUNE de pe ce burse vin — carnetul e Binance, ele nu', () => {
+        const t = liqSourceNote(12)
+        expect(t).toMatch(/12 liquidations/)
+        expect(t).toMatch(/Bybit/)
+        expect(t).toMatch(/OKX/)
+        expect(t).toMatch(/Binance does not deliver/)
+    })
+
+    it('fara lichidari spune ca nu-s, nu tace', () => {
+        expect(liqSourceNote(0)).toMatch(/no liquidations/)
+        expect(liqSourceNote(NaN)).toMatch(/no liquidations/)
+    })
+
+    it('singular corect la una singura', () => {
+        expect(liqSourceNote(1)).toMatch(/1 liquidation —/)
+    })
+})
+
+describe('COB — carnetul de ACUM, pe aceleasi randuri ca harta', () => {
+    const cells = [
+        { col: 0, row: 3, bidUsd: 100, askUsd: 0 },
+        { col: 1, row: 3, bidUsd: 500, askUsd: 0 },
+        { col: 1, row: 7, bidUsd: 0, askUsd: 900 },
+        { col: 1, row: 7, bidUsd: 0, askUsd: 100 },
+    ]
+
+    it('ia DOAR ultima coloana — aia e „acum"', () => {
+        const r = cobRows(cells, 2)
+        expect(r.map((x) => x.row)).toEqual([3, 7])
+        expect(r[0].bidUsd).toBe(500)
+    })
+
+    it('aduna celulele care cad pe acelasi rand', () => {
+        expect(cobRows(cells, 2).find((x) => x.row === 7)!.askUsd).toBe(1000)
+    })
+
+    it('randurile vin in ordine, chiar cand sosesc AMESTECATE', () => {
+        // Prima versiune folosea celule deja in ordine, deci mutatia care
+        // scotea sortarea trecea: Map pastreaza ordinea de inserare.
+        const amestecat = [
+            { col: 1, row: 9, bidUsd: 0, askUsd: 10 },
+            { col: 1, row: 2, bidUsd: 10, askUsd: 0 },
+            { col: 1, row: 5, bidUsd: 5, askUsd: 0 },
+            { col: 1, row: 1, bidUsd: 7, askUsd: 0 },
+        ]
+        const r = cobRows(amestecat, 2)
+        expect(r.map((x) => x.row)).toEqual([1, 2, 5, 9])
+    })
+
+    it('fara celule da lista goala', () => {
+        expect(cobRows([], 5)).toEqual([])
+        expect(cobRows(null as any, 5)).toEqual([])
     })
 })

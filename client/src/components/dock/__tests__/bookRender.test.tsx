@@ -40,8 +40,14 @@ function mkBook(over: any = {}) {
     symbol: 'BTCUSDT',
     heat: { cells, cols, rows, bandPct: 0.1, rowPct: 0.004,
       mids: Array.from({ length: cols }, (_, i) => 80000 + i * 12),
-      tMin: NOW - 600_000, tMax: NOW, maxUsd: 1.2e6, frames: 120,
-      exchanges: ['binance'], spread: 0.1 },
+      priceLo: 79900, priceHi: 80200, rowUsd: (80200 - 79900) / rows,
+      tMin: NOW - 600_000, tMax: NOW, maxUsd: 1.2e6, loUsd: 2e5, frames: 120,
+      heldCols: 0, colsAsked: 110, exchanges: ['binance'], spread: 0.1 },
+    trades: [
+      { id: 1, ts: NOW - 500_000, price: 79980, qty: 2, usd: 159960, sell: false },
+      { id: 2, ts: NOW - 200_000, price: 80080, qty: 5, usd: 400400, sell: true },
+    ],
+    liqs: [{ ts: NOW - 300_000, price: 80020, usd: 250000, sell: true }],
     ladder: { cells, mid: 80050, bandPct: 0.1, rowPct: 0.004, maxUsd: 1.2e6,
       frames: 120, excludedLevels: 4231 },
     walls: [
@@ -79,15 +85,21 @@ beforeEach(() => {
   // fiecarei coloane). Deci testul se uita la ce s-a desenat.
   drawn.length = 0
   ;(HTMLCanvasElement.prototype as any).getContext = function () {
-    const rec: any = { ops: [], pts: [], fills: 0, strokes: 0, alphas: [] }
+    const rec: any = { ops: [], pts: [], fills: 0, strokes: 0, alphas: [], arcs: [], rects: [] }
     drawn.push(rec)
     return {
       setTransform() {}, clearRect() {}, setLineDash() {},
-      fillRect() { rec.fills++ },
+      fillRect(x: number, y: number, w: number, h: number) { rec.fills++; rec.rects.push([x, y, w, h]) },
       beginPath() { rec.ops.push('begin') },
       moveTo(x: number, y: number) { rec.pts.push([x, y]) },
       lineTo(x: number, y: number) { rec.pts.push([x, y]) },
       stroke() { rec.strokes++ },
+      // [2026-10-31] Lipseau `arc` si `fill`, iar bulele si inelele de
+      // lichidare sunt cercuri — deci componenta arunca si TOATE testele de
+      // randare cadeau. Nu codul era stricat, ci mock-ul meu.
+      arc(x: number, y: number, r: number) { rec.arcs.push([x, y, r]) },
+      fill() { rec.fills++ },
+      closePath() {},
       set fillStyle(v: any) {
         const m = String(v).match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/)
         if (m) rec.alphas.push(parseFloat(m[1]))
@@ -114,24 +126,24 @@ describe('rubrica exista si se deschide', () => {
     expect(tabs).toEqual(['MAP', 'HEATMAP', 'LIVE', 'PREDICT', 'BOOK'])
   })
 
-  it('deseneaza DOUA canvas-uri: harta SI chartul pretului', async () => {
-    // Separate dinadins: harta e relativa la mijlocul fiecarei coloane, deci
-    // pretul ar ieşi o linie dreapta in ea. Masurat: pe 10 minute pretul
-    // depaseste chiar si banda de ±0,16% in 21% din cazuri pe BTC.
+  it('UN SINGUR canvas: linia pretului s-a mutat INAPOI in harta', async () => {
+    // [2026-10-30] Contract schimbat dinadins, la cererea lui („exact asa, ca
+    // la Bookmap"). Banda separata exista fiindca grila era RELATIVA la
+    // mijlocul fiecarei coloane, deci pretul ieşea o linie dreapta in ea.
+    // Acum grila e pe PRET ABSOLUT — linia urmeaza pretul chiar in harta, iar
+    // banda de deasupra n-ar mai arata nimic in plus.
     const { container } = await openBook()
     expect(container.querySelector('.zbk-canvas canvas')).toBeTruthy()
-    const pc = container.querySelector('.zbk-price') as HTMLElement
-    expect(pc).toBeTruthy()
-    expect(pc.hasAttribute('hidden')).toBe(false)
-    expect(container.querySelector('.zbk-price canvas')).toBeTruthy()
+    expect(container.querySelector('.zbk-price')).toBeNull()
   })
 
-  it('⛔ chartul pretului NU e o linie dreapta — are puncte la inaltimi DIFERITE', async () => {
-    // Mutatia care mi-a supravietuit prima data: ascunsesem canvas-ul si
-    // testul tot il gasea in DOM. Riscul adevarat e insa linia dreapta, deci
-    // testul se uita la PUNCTELE desenate.
+  it('⛔ linia pretului NU e dreapta — are puncte la inaltimi DIFERITE', async () => {
+    // Riscul a rams acelasi dupa mutarea in harta: o linie dreapta inseamna ca
+    // axa nu e pe pret adevarat.
     await openBook()
-    await waitFor(() => expect(drawn.length).toBeGreaterThanOrEqual(2))
+    // Un singur canvas de acum: banda separata de pret a fost scoasa cand
+    // grila a trecut pe pret absolut.
+    await waitFor(() => expect(drawn.length).toBeGreaterThanOrEqual(1))
     const cuLinie = drawn.filter((d: any) => d.pts.length >= 2)
     expect(cuLinie.length).toBeGreaterThan(0)
     const varianta = cuLinie.some((d: any) => {
@@ -146,23 +158,34 @@ describe('rubrica exista si se deschide', () => {
     await waitFor(() => expect(drawn.some((d: any) => d.fills > 5)).toBe(true))
   })
 
-  it('axa hartii e in PROCENTE, nu in dolari — banda e relativa', async () => {
+  it('axa hartii e in DOLARI — grila e pe pret absolut', async () => {
+    // Era in procente cand grila era relativa. Acum randurile SUNT preturi,
+    // deci axa trebuie sa spuna preturi — altfel bulele n-ar avea reper.
     const { container } = await openBook()
     const ax = container.querySelector('.zbk-axis')!.textContent || ''
-    expect(ax).toMatch(/\+0\.100%/)
-    expect(ax).toMatch(/-0\.100%/)
+    expect(ax).toMatch(/80,200/)
+    expect(ax).toMatch(/79,900/)
+    expect(ax).not.toMatch(/%/)
   })
 
-  it('axa chartului arata intervalul REAL de pret din fereastra', async () => {
+  it('BULELE si LICHIDARILE sunt in legenda, ca sa se recunoasca', async () => {
     const { container } = await openBook()
-    const ax = container.querySelector('.zbk-price-ax')!.textContent || ''
-    expect(ax).toMatch(/80,084/)   // 80000 + 7*12
-    expect(ax).toMatch(/80,000/)
+    const t = container.querySelector('.zbk-legend')!.textContent || ''
+    expect(t).toMatch(/trades/)
+    expect(t).toMatch(/liquidations/)
+    expect(container.querySelector('.zbk-legend i.zbk-dot')).toBeTruthy()
+    expect(container.querySelector('.zbk-legend i.zbk-ring')).toBeTruthy()
+  })
+
+  it('SPUNE de pe ce burse vin lichidarile — carnetul e Binance, ele nu', async () => {
+    await openBook()
+    expect(screen.getByText(/Bybit \+ OKX \+ Gate/)).toBeTruthy()
   })
 
   it('spune raspicat ca e lichiditate care STA, nu o prezicere', async () => {
     await openBook()
     expect(screen.getByText(/RESTING LIQUIDITY/)).toBeTruthy()
+    expect(screen.getByText('NEREUS')).toBeTruthy()
     expect(screen.getByText(/NOT A FORECAST/)).toBeTruthy()
   })
 })
@@ -225,7 +248,8 @@ describe('pereţii — fermitatea e pe ecran', () => {
 describe('onestitatea despre ce se vede', () => {
   it('spune CAT DE ADANC vede si cata greutate Binance s-a folosit', async () => {
     const { container } = await openBook()
-    const t = container.querySelector('.zbk-src')!.textContent || ''
+    const srcs = container.querySelectorAll('.zbk-src')
+    const t = srcs[srcs.length - 1].textContent || ''
     expect(t).toMatch(/2,000 levels/)
     expect(t).toMatch(/120 snapshots/)
     expect(t).toMatch(/980\/2400/)
@@ -233,7 +257,8 @@ describe('onestitatea despre ce se vede', () => {
 
   it('spune cate niveluri au rams IN AFARA benzii — altfel pare ca le vezi pe toate', async () => {
     const { container } = await openBook()
-    expect(container.querySelector('.zbk-src')!.textContent).toMatch(/4,231 levels outside band/)
+    const srcs2 = container.querySelectorAll('.zbk-src')
+    expect(srcs2[srcs2.length - 1].textContent).toMatch(/4,231 levels outside band/)
   })
 
   it('explica de ce zoom-ul nu te DEPARTEAZA de pret', async () => {
@@ -472,4 +497,139 @@ describe('⛔ „nu stiu sa-l citesc" — panoul trebuie sa se explice SINGUR', 
         for (const r of ['cumpar', 'vanzare', 'pretul', 'banda', 'timp', 'fermitate'])
             expect(t).not.toContain(r)
     })
+})
+
+describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
+  // Fara testele astea, tot ce a cerut el („cu bule, lichidari, nu sari nimic")
+  // ar putea lipsi din desen fara ca nimic sa cada. Contextul fals inregistreaza
+  // fiecare `arc`, deci se poate verifica numarul si pozitia lor.
+  it('se deseneaza cercuri — bule si inele', async () => {
+    await openBook()
+    await waitFor(() => expect(drawn.some((d: any) => (d.arcs || []).length > 0)).toBe(true))
+    const arcs = drawn.flatMap((d: any) => d.arcs || [])
+    // 2 tranzactii + 1 lichidare din fixtura
+    expect(arcs.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('bulele au RAZE DIFERITE — altfel marimea nu spune nimic', async () => {
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.arcs || []).length).toBeGreaterThan(1))
+    const raze = drawn.flatMap((d: any) => d.arcs || []).map((a: any) => a[2])
+    expect(new Set(raze.map((r: number) => r.toFixed(2))).size).toBeGreaterThan(1)
+  })
+
+  it('cercurile stau la INALTIMI diferite — pretul lor conteaza', async () => {
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.arcs || []).length).toBeGreaterThan(1))
+    const ys = drawn.flatMap((d: any) => d.arcs || []).map((a: any) => a[1])
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(1)
+  })
+
+  it('si la momente diferite pe orizontala — timpul lor conteaza', async () => {
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.arcs || []).length).toBeGreaterThan(1))
+    const xs = drawn.flatMap((d: any) => d.arcs || []).map((a: any) => a[0])
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(1)
+  })
+
+  it('o tranzactie IN AFARA grilei de pret NU se deseneaza', async () => {
+    // Agatata la margine, ar arata ca o bula uriasa la un pret unde n-a fost
+    // nimic — exact clasa de minciuna pe care am inchis-o si la harta.
+    const b = mkBook()
+    mockFetch(mkBook({ trades: [{ id: 9, ts: NOW - 100_000, price: 40000, qty: 10, usd: 400000, sell: false }], liqs: [] }))
+    void b
+    await openBook()
+    const arcs = drawn.flatMap((d: any) => d.arcs || [])
+    expect(arcs.length).toBe(0)
+  })
+
+  it('⛔ o tranzactie IN AFARA ferestrei de TIMP nu se agata de margine', async () => {
+    // [2026-10-31] Gasit RANDAND cu date vii: `xOf` prindea la margine
+    // (`Math.max(0, Math.min(1, f))`), deci toate tranzactiile mai vechi decat
+    // harta se stiveau pe marginea stanga — o coloana de bule la cel mai vechi
+    // moment, unde in realitate nu era nimic. In productie inelul tine 20 min
+    // si fereastra implicita a hartii e 10, deci ar fi fost JUMATATE din bule.
+    // Pe axa de PRET aceeasi minciuna era deja inchisa; pe axa de TIMP nu.
+    mockFetch(mkBook({
+      trades: [
+        { id: 1, ts: NOW - 5_000_000, price: 80000, qty: 9, usd: 720000, sell: false },
+        { id: 2, ts: NOW - 4_000_000, price: 80010, qty: 9, usd: 720000, sell: true },
+        { id: 3, ts: NOW - 100_000, price: 80020, qty: 9, usd: 720000, sell: false },
+      ],
+      liqs: [{ ts: NOW - 6_000_000, price: 80030, usd: 500000, sell: true }],
+    }))
+    await openBook()
+    const arcs = drawn.flatMap((d: any) => d.arcs || [])
+    expect(arcs.length).toBe(1)                       // doar cea din fereastra
+    expect(arcs.every((a: any) => a[0] > 1)).toBe(true)
+  })
+
+  it('⛔ eticheta spune cate bule s-au DESENAT, nu cate au venit', async () => {
+    // Spunea lungimea listei. Cu prag pe marime si fereastra de timp, desenul
+    // arunca o parte — deci anunta o cifra pe care nu o desena. Aceeasi clasa
+    // ca fermitatea de 2450%: un numar care arata credibil si nu e masurat.
+    mockFetch(mkBook({
+      trades: [
+        { id: 1, ts: NOW - 5_000_000, price: 80000, qty: 9, usd: 720000, sell: false },
+        { id: 2, ts: NOW - 4_000_000, price: 80010, qty: 9, usd: 720000, sell: true },
+        { id: 3, ts: NOW - 100_000, price: 80020, qty: 9, usd: 720000, sell: false },
+      ],
+      liqs: [],
+    }))
+    const { container } = await openBook()
+    await waitFor(() => {
+      const t = container.querySelector('.zbk-src')?.textContent || ''
+      expect(t).toMatch(/1 of 3 trades drawn/)
+    })
+  })
+
+  it('fara tranzactii si fara lichidari, harta tot se deseneaza', async () => {
+    mockFetch(mkBook({ trades: [], liqs: [] }))
+    const { container } = await openBook()
+    expect(container.querySelector('.zbk-canvas canvas')).toBeTruthy()
+    expect(drawn.some((d: any) => d.fills > 5)).toBe(true)
+  })
+
+  it('COB-ul deseneaza bare IN DREAPTA hartii', async () => {
+    // Prima versiune verifica doar ca exista umpleri — si harta singura le
+    // producea, deci mutatia care scotea COB-ul trecea nepedepsita.
+    // Acum se uita UNDE: COB-ul sta dincolo de latimea hartii.
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.rects || []).length).toBeGreaterThan(5))
+    const rects = drawn.flatMap((d: any) => d.rects || [])
+    // Geometria, calculata nu ghicita: in jsdom clientWidth e 0, deci latimea
+    // cade pe 320. cobW = max(26, min(64, 320*0.13)) = 42, deci harta se
+    // opreste la 276 si COB-ul incepe la 278. Orice dreptunghi dincolo de 277
+    // e al COB-ului — celulele hartii nu pot ajunge acolo.
+    const W = 320, cobW = Math.max(26, Math.min(64, Math.round(W * 0.13)))
+    const mapW = Math.max(40, W - cobW - 2)
+    const inCob = rects.filter((r: any) => r[0] >= mapW + 1)
+    expect(inCob.length).toBeGreaterThan(0)
+  })
+
+  it('bulele de TRANZACTII au raze diferite intre ele, nu doar fata de inele', async () => {
+    // Fixtura fara lichidari, cu doua tranzactii foarte diferite ca marime.
+    mockFetch(mkBook({
+      liqs: [],
+      trades: [
+        // peste pragul de 2% din cea mai mare (16.016), ca testul sa masoare
+        // RAZA, nu filtrul — prima incercare punea 4.000 si era taiata, corect
+        { id: 1, ts: NOW - 500_000, price: 79980, qty: 0.5, usd: 40000, sell: false },
+        { id: 2, ts: NOW - 200_000, price: 80080, qty: 10, usd: 800800, sell: true },
+      ],
+    }))
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.arcs || []).length).toBeGreaterThan(1))
+    const raze = drawn.flatMap((d: any) => d.arcs || []).map((a: any) => a[2])
+    expect(Math.max(...raze) - Math.min(...raze)).toBeGreaterThan(1)
+  })
+
+  it('LINIA pretului merge pe ORIZONTALA, nu sta pe loc', async () => {
+    // Mutatia care fixa x-ul liniei trecea, fiindca testele se uitau doar la
+    // x-ul BULELOR. Aici se verifica chiar punctele liniei.
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.pts || []).length).toBeGreaterThan(2))
+    const xs = drawn.flatMap((d: any) => d.pts || []).map((p: any) => p[0])
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(5)
+  })
 })

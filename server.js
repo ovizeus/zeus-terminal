@@ -1801,6 +1801,15 @@ try {
   logger.warn('BOOKMAP', 'start failed: ' + (e && e.message));
 }
 
+// [BOOKMAP-BULE 2026-10-30] Tranzactiile executate care calaresc harta. WS-ul
+// de tranzactii al Binance futures e MUT catre acest VPS (0 mesaje in 20 s),
+// dar REST-ul merge si 1000 de tranzactii acopera 25 de secunde.
+try {
+  require('./server/services/tradeFeed').start();
+} catch (e) {
+  logger.warn('BOOKMAP', 'trade feed start failed: ' + (e && e.message));
+}
+
 // Retentia instantaneelor de predictie. Aceeasi lectie ca la G-5: lotizata,
 // fiindca better-sqlite3 e SINCRON si un DELETE nelimitat ingheata bucla.
 const _runLiqPredictPrune = () => {

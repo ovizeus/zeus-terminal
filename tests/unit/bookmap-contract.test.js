@@ -18,6 +18,18 @@ const BM = require('../../server/services/bookMap');
 
 const T0 = 1793000000000;
 
+// Corpul EXACT al unei rute, pana la urmatoarea. Feliile pe numar de caractere
+// s-au dovedit fragile: cand am adaugat `trades` si `liqs`, 5200 de caractere
+// ajungeau in ruta urmatoare, iar `} catch` nimerea INTR-UNA din functiile
+// adaugate, nu in prinderea exterioara a rutei.
+function routeBody(src, path) {
+    const i = src.indexOf("'" + path + "'");
+    if (i < 0) return '';
+    const next = src.indexOf('\nrouter.', i);
+    return src.slice(i, next > 0 ? next : src.length);
+}
+
+
 const PANEL_SRC = fs.readFileSync(
     path.join(__dirname, '..', '..', 'client', 'src', 'components', 'dock', 'LiqMapPanel.tsx'), 'utf8');
 const ROUTE_SRC = fs.readFileSync(
@@ -31,8 +43,20 @@ function frames(n) {
     }));
 }
 
-describe('forma lui heat() acopera tot ce citeste panoul', () => {
-    const h = BM.heat({ frames: frames(8), cols: 20, rows: 24, bandPct: 'auto',
+// Numele functiei de harta se CITESTE din ruta, nu se scrie aici. Versiunea
+// anterioara a testului verifica `heat()` dupa ce ruta trecuse pe `heatAbs()`:
+// aparase o forma pe care nimeni nu o mai trimitea, si a scapat un camp
+// (`bandPct`) pe care panoul il citea si ruta nu-l mai trimitea. Asa nu mai
+// poate ramane in urma — daca ruta trece pe alta functie, testul o urmeaza.
+const HEAT_FN = (ROUTE_SRC.match(/const heat = BM\.([a-zA-Z]+)\(/) || [])[1];
+
+describe('forma hartii trimise de ruta acopera tot ce citeste panoul', () => {
+    test('ruta chiar cheama o functie de harta din bookMap', () => {
+        expect(HEAT_FN).toBeTruthy();
+        expect(typeof BM[HEAT_FN]).toBe('function');
+    });
+
+    const h = BM[HEAT_FN]({ frames: frames(8), cols: 20, rows: 24, bandPct: 'auto',
         windowMs: 600000, now: T0 + 35000 });
 
     test('campurile heat.* accesate in panou exista TOATE in raspuns', () => {
@@ -46,7 +70,7 @@ describe('forma lui heat() acopera tot ce citeste panoul', () => {
     });
 
     test('si pe forma GOALA, ca panoul sa nu crape pe o harta fara date', () => {
-        const gol = BM.heat({ frames: [], cols: 20, rows: 24, bandPct: 0.1 });
+        const gol = BM[HEAT_FN]({ frames: [], cols: 20, rows: 24, bandPct: 0.1 });
         const citite = [...new Set(
             (PANEL_SRC.match(/\bheat\.([a-zA-Z]+)/g) || []).map(x => x.split('.')[1]),
         )];
@@ -62,7 +86,7 @@ describe('forma lui heat() acopera tot ce citeste panoul', () => {
 
     test('mids are exact atatea intrari cate coloane raporteaza', () => {
         expect(h.mids).toHaveLength(h.cols);
-        const gol = BM.heat({ frames: [], cols: 20, rows: 24, bandPct: 0.1 });
+        const gol = BM[HEAT_FN]({ frames: [], cols: 20, rows: 24, bandPct: 0.1 });
         expect(gol.mids).toHaveLength(gol.cols);
     });
 });
@@ -73,23 +97,21 @@ describe('ruta trimite cheile de prim nivel pe care panoul le citeste', () => {
         // o redenumeam pe calea de succes, fiindca o gasea in ramura de EROARE
         // (`walls: []`). Deci nu dovedea nimic. Acum cele doua ramuri se
         // verifica SEPARAT.
-        const i = ROUTE_SRC.indexOf("'/bookmap'");
-        const corp = ROUTE_SRC.slice(i, i + 3200);
-        const j = corp.indexOf('} catch');
+        const corp = routeBody(ROUTE_SRC, '/bookmap');
+        const j = corp.indexOf('} catch (err)');
         expect(j).toBeGreaterThan(-1);
         const succes = corp.slice(0, j);
-        for (const k of ['symbol', 'heat', 'ladder', 'walls', 'top', 'source']) {
+        for (const k of ['symbol', 'heat', 'ladder', 'walls', 'top', 'source', 'trades', 'liqs']) {
             expect(succes).toMatch(new RegExp('(^|[^a-zA-Z])' + k + '\\s*[:,]', 'm'));
         }
     });
 
     test('ramura de EROARE trimite aceleasi chei — altfel panoul citeste undefined', () => {
-        const i = ROUTE_SRC.indexOf("'/bookmap'");
-        const corp = ROUTE_SRC.slice(i, i + 3200);
-        const j = corp.indexOf('catch');
+        const corp = routeBody(ROUTE_SRC, '/bookmap');
+        const j = corp.indexOf('} catch (err)');
         expect(j).toBeGreaterThan(-1);
-        const prins = corp.slice(j, j + 500);
-        for (const k of ['symbol', 'heat', 'ladder', 'walls', 'top']) {
+        const prins = corp.slice(j);
+        for (const k of ['symbol', 'heat', 'ladder', 'walls', 'top', 'trades', 'liqs']) {
             expect(prins).toMatch(new RegExp(k + '\\s*:'));
         }
     });

@@ -8,6 +8,8 @@ import {
 import {
     fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
+    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
+    type Trade, type Liq,
 } from '../../bookmap/book'
 
 // ══════════════════════════════════════════════════════════════════
@@ -476,6 +478,11 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
     // „e bine dar nu stiu sa-l citesc" — un panou care are nevoie de mine
     // alaturi nu si-a facut treaba. Explicatia sta DESCHISA pana cand o inchide
     // el; alegerea se tine minte pe telefonul lui.
+    // Cate bule au ajuns CHIAR pe harta. Eticheta spunea lungimea listei, dar
+    // desenul arunca si tranzactiile prea mici (pragul) si pe cele din afara
+    // ferestrei — deci anunta o cifra pe care n-o desena. Se numara la desen,
+    // nu se recalculeaza aici: altfel cele doua reguli pleaca una de la alta.
+    const [drawnBubbles, setDrawnBubbles] = useState(0)
     const [help, setHelp] = useState<boolean>(() => {
         try { return localStorage.getItem('zbk.help') !== '0' } catch { return true }
     })
@@ -506,26 +513,25 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
         if (!ctx) return
         const dpr = Math.min(2, (window as any).devicePixelRatio || 1)
         const w = c.clientWidth || 320
-        const h = 240
+        const h = 300
         c.width = Math.round(w * dpr)
         c.height = Math.round(h * dpr)
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
         ctx.clearRect(0, 0, w, h)
-
-        // Fundalul: aceeaşi tăcere ca în restul panoului.
         ctx.fillStyle = '#070a0e'
         ctx.fillRect(0, 0, w, h)
 
         const { cols, rows, cells, maxUsd, loUsd, mids } = heat
-        const cw = w / cols
+        // Coloana COB stă în dreapta, ca la Bookmap. Harta se opreşte înainte.
+        const cobW = Math.max(26, Math.min(64, Math.round(w * 0.13)))
+        const mapW = Math.max(40, w - cobW - 2)
+        const cw = mapW / cols
         const ch = h / rows
 
+        // ── 1. harta de lichiditate ──
         for (const cell of cells) {
-            const x = colToX(cell.col, cols, w)
+            const x = colToX(cell.col, cols, mapW)
             const y = rowToY(cell.row, rows, h)
-            // O celulă ŢINUTĂ între instantanee se desenează mai stins decât
-            // una măsurată. Cartea chiar a persistat acolo — dar n-am privit-o,
-            // şi diferenţa asta trebuie să se vadă, nu doar să fie scrisă.
             const k = cell.held ? 0.72 : 1
             if (cell.bidUsd > 0) {
                 ctx.fillStyle = bookColor('bid', bookIntensity(cell.bidUsd, maxUsd, loUsd) * k)
@@ -537,76 +543,95 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
             }
         }
 
-        // ⚠️ DE CE PREŢUL NU SE DESENEAZĂ ÎN HARTĂ, cu măsurătoarea care a
-        // decis-o: rândurile sunt ancorate pe mijlocul FIECĂREI coloane, deci
-        // preţul stă prin construcţie exact la mijloc şi linia ar ieşi dreaptă
-        // — adică n-ar fi un chart, ar fi o decoraţie.
-        //
-        // Şi nu pot ancora pe preţ ABSOLUT: măsurat pe 1000 de bare de 1 minut,
-        // într-o fereastră de 10 minute preţul depăşeşte chiar şi cea mai largă
-        // bandă (±0,16%) în 21% din cazuri pe BTC şi 46% pe ETH; la ±0,05% în
-        // 90–100%. Cu ancoră absolută, lichiditatea ar ieşi din cadru şi harta
-        // s-ar goli exact când se mişcă ceva.
-        //
-        // Deci: harta rămâne RELATIVĂ (aşa lichiditatea e comparabilă în timp),
-        // iar preţul are banda lui, cu scara lui — deasupra. Aici marchez doar
-        // linia de zero, ca să se vadă unde e preţul în bandă.
-        ctx.strokeStyle = 'rgba(216, 178, 94, .45)'
-        ctx.lineWidth = 1
-        ctx.setLineDash([3, 3])
-        ctx.beginPath()
-        ctx.moveTo(0, h / 2)
-        ctx.lineTo(w, h / 2)
-        ctx.stroke()
-        ctx.setLineDash([])
-        void mids
-    }, [heat])
-
-    // ── CHARTUL preţului: bandă proprie, scară proprie ──
-    const pcv = useRef<HTMLCanvasElement | null>(null)
-    useEffect(() => {
-        const c = pcv.current
-        if (!c || !heat) return
-        const ctx = c.getContext('2d')
-        if (!ctx) return
-        const dpr = Math.min(2, (window as any).devicePixelRatio || 1)
-        const w = c.clientWidth || 320
-        const h = 54
-        c.width = Math.round(w * dpr)
-        c.height = Math.round(h * dpr)
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-        ctx.clearRect(0, 0, w, h)
-        ctx.fillStyle = '#070a0e'
-        ctx.fillRect(0, 0, w, h)
-
-        const ms: (number | null)[] = heat.mids || []
-        const real = ms.filter((m): m is number => m !== null && m !== undefined)
-        if (real.length < 2) return
-        let lo = Math.min(...real), hi = Math.max(...real)
-        if (hi - lo <= 0) { hi = lo * 1.0001; lo = lo * 0.9999 }
-        const pad = (hi - lo) * 0.12
-        lo -= pad; hi += pad
-        const cwp = w / Math.max(1, ms.length)
-
-        ctx.strokeStyle = `rgba(${BOOK.line}, .95)`
-        ctx.lineWidth = 1.6
+        // ── 2. linia preţului, ACUM pe axă adevărată ──
+        // Pe grila relativă de dinainte ieşea dreaptă la mijloc; aici urmează
+        // preţul, exact ca în capturile lui, şi bulele călăresc pe ea.
+        const yOf = (price: number) => {
+            if (!heat.rowUsd || heat.priceLo === null) return null
+            const r = (price - heat.priceLo) / heat.rowUsd
+            if (r < 0 || r >= rows) return null
+            return h - (r / rows) * h
+        }
+        ctx.strokeStyle = `rgba(${BOOK.line}, .9)`
+        ctx.lineWidth = 1.4
         ctx.beginPath()
         let open = false
-        for (let i = 0; i < ms.length; i++) {
-            const m = ms[i]
-            // O coloană fără cadre se ÎNTRERUPE. Nu interpolez: ar inventa un
-            // preţ care n-a existat.
+        for (let i = 0; i < cols; i++) {
+            const m = mids[i]
             if (m === null || m === undefined) { open = false; continue }
-            const y = h - ((m - lo) / (hi - lo)) * h
-            const x = i * cwp + cwp / 2
+            const y = yOf(m)
+            if (y === null) { open = false; continue }
+            const x = colToX(i, cols, mapW) + cw / 2
             if (!open) { ctx.moveTo(x, y); open = true } else ctx.lineTo(x, y)
         }
         ctx.stroke()
-    }, [heat])
 
-    const realMids: number[] = (heat?.mids || []).filter((m: any) => m !== null && m !== undefined)
-    const priceLo = realMids.length ? Math.min(...realMids) : null
-    const priceHi = realMids.length ? Math.max(...realMids) : null
+        // ── 3. BULELE: tranzacţii executate ──
+        const tList: Trade[] = data?.trades || []
+        const tMax = tList.reduce((m, t) => Math.max(m, t.usd), 0)
+        const cut = bubbleCutoff(tMax)
+        // In afara ferestrei: ARUNCA, nu agata de margine. Prinderea la margine
+        // stivuia tot ce era mai vechi decat harta pe coloana zero — un bloc de
+        // bule la cel mai vechi moment, unde nu fusese nimic. Acelasi contract
+        // ca `yOf` pe axa de pret: null inseamna „nu se deseneaza".
+        const xOf = (ts: number): number | null => {
+            const span = Math.max(1, (heat.tMax || 0) - (heat.tMin || 0))
+            const f = (ts - (heat.tMin || 0)) / span
+            if (!Number.isFinite(f) || f < 0 || f > 1) return null
+            return f * mapW
+        }
+        let nDrawn = 0
+        for (const t of tList) {
+            if (t.usd < cut) continue
+            const y = yOf(t.price)
+            if (y === null) continue
+            const r = bubbleRadius(t.usd, tMax)
+            if (r <= 0) continue
+            const x = xOf(t.ts)
+            if (x === null) continue
+            ctx.fillStyle = bubbleColor(t.sell, 0.55)
+            ctx.beginPath()
+            ctx.arc(x, y, r, 0, Math.PI * 2)
+            ctx.fill()
+            nDrawn++
+        }
+        setDrawnBubbles((v) => (v === nDrawn ? v : nDrawn))
+
+        // ── 4. LICHIDĂRILE: inel, nu disc ──
+        const lList: Liq[] = data?.liqs || []
+        const lMax = lList.reduce((m, l) => Math.max(m, l.usd), 0)
+        for (const l of lList) {
+            const y = yOf(l.price)
+            if (y === null) continue
+            const x = xOf(l.ts)
+            if (x === null) continue
+            const r = Math.max(3, bubbleRadius(l.usd, lMax, 12, 3))
+            const ring = liqRing(l.sell)
+            ctx.strokeStyle = ring.stroke
+            ctx.lineWidth = ring.width
+            ctx.beginPath()
+            ctx.arc(x, y, r, 0, Math.PI * 2)
+            ctx.stroke()
+        }
+
+        // ── 5. COB: carnetul de ACUM, lângă hartă ──
+        const cob = cobRows(cells, cols)
+        const cobMax = cob.reduce((m, r) => Math.max(m, r.bidUsd, r.askUsd), 0) || 1
+        const cx = mapW + 2
+        for (const r of cob) {
+            const y = rowToY(r.row, rows, h)
+            const bw = (r.bidUsd / cobMax) * cobW
+            const aw = (r.askUsd / cobMax) * cobW
+            if (bw > 0) {
+                ctx.fillStyle = bookColor('bid', 0.85)
+                ctx.fillRect(cx, y, Math.max(1, bw), Math.max(1, ch))
+            }
+            if (aw > 0) {
+                ctx.fillStyle = bookColor('ask', 0.85)
+                ctx.fillRect(cx, y, Math.max(1, aw), Math.max(1, ch))
+            }
+        }
+    }, [heat, data])
 
     if (!data) return <Empty what="The order book" />
     if (!heat || !heat.frames) {
@@ -633,7 +658,7 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                     {top ? Math.round(top.bestAsk).toLocaleString('en-US') : '—'}
                 </span>
                 <span className="zbk-sym">{bookSym}</span>
-                <span className="zbk-real">RESTING LIQUIDITY · NOT A FORECAST</span>
+                <span className="zbk-real"><b>NEREUS</b> · RESTING LIQUIDITY, NOT A FORECAST</span>
             </div>
 
             {mismatch && (
@@ -658,30 +683,21 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                 ))}
             </div>
 
-            {/* CHARTUL: preţul pe fereastra desenată, cu scara LUI. Separat de
-                hartă fiindcă harta e relativă la mijloc — vezi nota din canvas. */}
-            <div className="zbk-price">
-                <canvas ref={pcv} />
-                <div className="zbk-price-ax">
-                    <span>{priceHi !== null ? Math.round(priceHi).toLocaleString('en-US') : ''}</span>
-                    <span>{priceLo !== null ? Math.round(priceLo).toLocaleString('en-US') : ''}</span>
-                </div>
-                <span className="zbk-price-tag">PRICE</span>
-            </div>
-
             <div className="zbk-canvas">
                 <canvas ref={cv} />
                 <div className="zbk-axis">
-                    <span>+{heat.bandPct.toFixed(3)}%</span>
-                    <span className="zbk-axis-mid">PRICE</span>
-                    <span>-{heat.bandPct.toFixed(3)}%</span>
+                    <span>{heat.priceHi ? Math.round(heat.priceHi).toLocaleString('en-US') : ''}</span>
+                    <span className="zbk-axis-mid">COB →</span>
+                    <span>{heat.priceLo ? Math.round(heat.priceLo).toLocaleString('en-US') : ''}</span>
                 </div>
             </div>
 
             <div className="zbk-legend">
-                <span><i style={{ background: `rgb(${BOOK.bid})` }} />bids</span>
-                <span><i style={{ background: `rgb(${BOOK.ask})` }} />asks</span>
-                <span>{bandLabel(heat.bandPct === undefined ? band : Number(heat.bandPct.toFixed(3)))}</span>
+                <span><i style={{ background: `rgb(${BOOK.bid})` }} />bids / buys</span>
+                <span><i style={{ background: `rgb(${BOOK.ask})` }} />asks / sells</span>
+                <span><i className="zbk-dot" />trades</span>
+                <span><i className="zbk-ring" />liquidations</span>
+                <span>{bandLabel(Number.isFinite(heat.bandPct as number) ? Number(Number(heat.bandPct).toFixed(3)) : band)}</span>
                 <span>{windowLabel(win)} span · {fmtSpan(Math.max(0, (heat.tMax || 0) - (heat.tMin || 0)))} drawn</span>
                 {/* Grila e marginita la numarul de instantanee: altfel 20 de
                     cadre in 110 coloane ar desena un pieptene de dungi cu
@@ -743,6 +759,11 @@ function BookView({ data, band, setBand, win, setWin, symbol }: any) {
                 ))}
             </div>
 
+            <div className="zbk-src">
+                {liqSourceNote((data?.liqs || []).length)}{' · '}
+                {drawnBubbles.toLocaleString('en-US')} of{' '}
+                {(data?.trades || []).length.toLocaleString('en-US')} trades drawn{' · '}
+            </div>
             <div className="zbk-src">
                 {sourceLabel(data.source || null)}
                 {data.source?.health?.usedWeight1m

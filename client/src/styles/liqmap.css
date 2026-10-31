@@ -684,3 +684,14 @@
 .zbk-help-b i.b { background: #6d8396; }
 .zbk-help-b i.f { background: #d8b25e; }
 .zbk-help-b i.z { background: #35506a; }
+
+/* Bulele si inelele din legenda — ca sa se recunoasca pe harta. */
+.zbk-legend i.zbk-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: rgba(53, 224, 208, .55);
+}
+.zbk-legend i.zbk-ring {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: none; border: 2px solid rgba(255, 140, 66, .95);
+    box-sizing: border-box;
+}

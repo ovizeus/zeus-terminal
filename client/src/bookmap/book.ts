@@ -202,3 +202,89 @@ export async function fetchBook(
         return null
     }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// BULE, LICHIDĂRI, COB — ce a cerut operatorul cu capturile din Bookmap
+// ══════════════════════════════════════════════════════════════════
+//
+// [BOOKMAP-BULE 2026-10-30] „vreau şi eu indicatorul ăla cu date reale… exact
+// aşa, cu bule, culori, tot, lichidări, nu sări nimic". Culorile le-a lăsat pe
+// ale noastre, deci rămâne paleta Zeus: cyan = cumpărare, chihlimbar = vânzare.
+
+export type Trade = { id: number; ts: number; price: number; qty: number; usd: number; sell: boolean }
+export type Liq = { ts: number; price: number; usd: number; sell: boolean }
+
+/**
+ * Raza bulei. LOGARITMICĂ, şi nu din gust: măsurat pe 1000 de tranzacţii reale,
+ * mărimile merg de la 0,001 la 7,25 BTC — raport de peste 7000×. Liniar, toate
+ * tranzacţiile normale ar fi puncte invizibile lângă una singură uriaşă.
+ */
+export function bubbleRadius(usd: number, maxUsd: number, maxR = 14, minR = 1.5): number {
+    const u = Number(usd)
+    const m = Number(maxUsd)
+    if (!Number.isFinite(u) || u <= 0) return 0
+    if (!Number.isFinite(m) || m <= 0) return 0
+    const r = Math.min(1, u / m)
+    const v = Math.log1p(r * 999) / Math.log1p(999)
+    return minR + Math.max(0, Math.min(1, v)) * (maxR - minR)
+}
+
+/** Culoarea bulei: cine a LOVIT. Cyan = a cumpărat, chihlimbar = a vândut. */
+export function bubbleColor(sell: boolean, alpha = 0.8): string {
+    const rgb = sell ? BOOK.ask : BOOK.bid
+    const a = Math.max(0, Math.min(1, Number(alpha)))
+    return `rgba(${rgb}, ${a.toFixed(2)})`
+}
+
+/**
+ * Pragul de la care o bulă merită desenată.
+ *
+ * Fără el, 1000 de tranzacţii de 230$ (medianul măsurat) ar acoperi harta cu
+ * praf şi n-ai mai vedea lichiditatea de dedesubt. Se taie la o fracţiune din
+ * cea mai mare din fereastră, deci se adaptează singur la piaţă.
+ */
+export function bubbleCutoff(maxUsd: number, frac = 0.02): number {
+    const m = Number(maxUsd)
+    if (!Number.isFinite(m) || m <= 0) return Infinity
+    return m * Math.max(0, Math.min(1, frac))
+}
+
+/**
+ * Lichidările se desenează ALTFEL decât tranzacţiile, dinadins: un inel, nu un
+ * disc. O lichidare nu e o tranzacţie ca oricare — e cineva scos cu forţa — şi
+ * dacă ar arăta la fel, s-ar pierde exact evenimentul care contează.
+ *
+ * ⚠️ ŞI SUNT DIN ALTĂ PIAŢĂ: carnetul e Binance, iar lichidările le colectăm de
+ * pe Bybit + OKX + Gate (Binance nu livrează fluxul către acest server). Preţul
+ * e al aceleiaşi monede, deci cade corect pe axă — dar panoul trebuie s-o spună.
+ */
+export function liqRing(sell: boolean): { stroke: string; width: number } {
+    return { stroke: `rgba(${sell ? BOOK.ask : BOOK.bid}, .95)`, width: 2 }
+}
+
+/** Eticheta de onestitate pentru lichidări — de unde vin, scris pe ecran. */
+export function liqSourceNote(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return 'no liquidations in this window'
+    return `${n} liquidation${n === 1 ? '' : 's'} — Bybit + OKX + Gate (Binance does not deliver)`
+}
+
+/**
+ * COB — carnetul de ACUM, ca histogramă pe lângă hartă.
+ *
+ * Întoarce rânduri {row, bidUsd, askUsd} pe aceeaşi grilă ca harta, ca cele
+ * două să se citească pe acelaşi rând de preţ. Fără asta ar fi două desene
+ * alăturate care arată acelaşi lucru la înălţimi diferite.
+ */
+export function cobRows(cells: any[], cols: number): { row: number; bidUsd: number; askUsd: number }[] {
+    if (!Array.isArray(cells) || !cells.length) return []
+    const last = Math.max(0, (Number(cols) || 1) - 1)
+    const byRow = new Map<number, { row: number; bidUsd: number; askUsd: number }>()
+    for (const c of cells) {
+        if (c.col !== last) continue
+        const r = byRow.get(c.row) || { row: c.row, bidUsd: 0, askUsd: 0 }
+        r.bidUsd += Number(c.bidUsd) || 0
+        r.askUsd += Number(c.askUsd) || 0
+        byRow.set(c.row, r)
+    }
+    return [...byRow.values()].sort((a, b) => a.row - b.row)
+}

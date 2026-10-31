@@ -116,10 +116,13 @@ router.get('/bookmap', (req, res) => {
         // interogarea adanca ar merge continuu din boot pentru un ecran la care
         // nu se uita nimeni — masurat: 57% din plafonul Binance.
         feed.noteDemand(Date.now());
+        try { require('../services/tradeFeed').noteDemand(Date.now()); } catch (_) { /* */ }
 
         const deep = feed.deepFrames(sym);
         const now = Date.now();
-        const heat = BM.heat({ frames: deep, cols, rows, bandPct: band, windowMs, now });
+        // Grila pe PRET ABSOLUT: bulele si lichidarile au preturi reale, deci
+        // au nevoie de o axa de pret adevarata. Vezi nota din bookMap.heatAbs.
+        const heat = BM.heatAbs({ frames: deep, cols, rows, windowMs, now });
         const ladder = BM.aggregate({ frames: deep, bandPct: band, rows, windowMs, now });
 
         // Banda de sus vine din cadrele RAPIDE (WS) si NU din medii — vezi nota
@@ -134,6 +137,29 @@ router.get('/bookmap', (req, res) => {
                 rowPct: ladder.rowPct, maxUsd: ladder.maxUsd, frames: ladder.frames,
                 excludedLevels: ladder.excludedLevels },
             walls: BM.walls(ladder, 8),
+            // BULELE: tranzacţii executate, din ACEEAŞI piaţă ca harta.
+            // Numai cele din fereastra desenată — altfel clientul ar primi 20
+            // de minute de tranzacţii ca să deseneze 10.
+            trades: (() => {
+                try {
+                    const from = heat.tMin || (now - windowMs);
+                    const to = heat.tMax || now;
+                    return require('../services/tradeFeed').trades(sym)
+                        .filter((t) => t.ts >= from && t.ts <= to);
+                } catch (_) { return []; }
+            })(),
+            // LICHIDĂRILE, cerute explicit: „tot, lichidari, nu sari nimic".
+            // Vin din memoria care colectează de pe Bybit + OKX + Gate, deci
+            // sunt ale PIEŢEI, nu doar ale Binance — şi asta se spune în panou.
+            liqs: (() => {
+                try {
+                    const from = heat.tMin || (now - windowMs);
+                    return require('../services/liqStore').events(sym, from)
+                        .filter((e) => Number(e.ts) <= (heat.tMax || now))
+                        .map((e) => ({ ts: Number(e.ts), price: Number(e.price),
+                            usd: Number(e.usd), sell: e.side === 'SELL' }));
+                } catch (_) { return []; }
+            })(),
             top: last ? {
                 bestBid: last.bestBid, bestAsk: last.bestAsk, spread: last.spread,
                 mid: last.mid, ts: last.ts,
@@ -151,8 +177,12 @@ router.get('/bookmap', (req, res) => {
             at: now,
         });
     } catch (err) {
+        // Aceleasi chei ca pe calea de succes. Testul de contract a prins
+        // exact asta in clipa in care am adaugat `trades` si `liqs`: fara ele
+        // aici, panoul ar citi `undefined` exact cand serverul are o problema.
         res.status(200).json({ symbol: null, heat: null, ladder: null, walls: [],
-            top: null, error: 'unavailable', at: Date.now() });
+            trades: [], liqs: [], top: null, source: null,
+            error: 'unavailable', at: Date.now() });
     }
 });
 

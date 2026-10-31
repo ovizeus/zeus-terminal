@@ -41,6 +41,9 @@ const DEFAULT_WINDOW_MS = 10 * 60000;
 const MAX_ROWS = 200;
 // Un nivel care apare în mai puţin de atât din cadre nu e perete, e licărire.
 const WALL_MIN_FIRMNESS = 0.25;
+const GRID_MAX_PCT = 1;   // cat de departe de pret mai intinde carnetul grila absoluta;
+                          // cartea reala tine ±0,16% pe BTC, deci 1% e larg si tot taie
+                          // ordinele ratacite care ar strivi activitatea intr-un rand
 
 /**
  * Normalizează un cadru de carnet. Întoarce NULL dacă nu e de încredere.
@@ -388,7 +391,162 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
         spread: used[used.length - 1].spread };
 }
 
+
+/**
+ * Grila pe PREŢ ABSOLUT — forma pe care a cerut-o operatorul cu capturile din
+ * Bookmap: „exact aşa, cu bule, culori, tot, lichidări, nu sări nimic".
+ *
+ * ⚠️ DE CE ABSOLUT, când `heat()` era relativ cu un motiv bun:
+ *
+ * `heat()` ancorează rândurile pe mijlocul FIECĂREI coloane. Era corect cât
+ * timp harta era singură pe ecran — lichiditatea devenea comparabilă în timp.
+ * Dar BULELE (tranzacţii) şi LICHIDĂRILE au preţuri ABSOLUTE. Pe o grilă
+ * relativă banda stă dreaptă la mijloc oricât s-ar mişca preţul, iar evenimentele
+ * n-ar avea unde să cadă. În capturile lui banda urmează preţul pe diagonală şi
+ * bulele călăresc pe ea — asta cere o axă de preţ adevărată.
+ *
+ * Intervalul se întinde pe tot ce s-a întâmplat în fereastră (preţurile şi
+ * carnetul), plus o margine, ca nimic să nu fie lipit de marginea de sus/jos.
+ *
+ * Se păstrează, fiindcă au fost lecţii plătite scump:
+ *   • coloanele ≤ numărul de instantanee  (pieptenele, b334)
+ *   • ţinerea mărginită între instantanee  (b338)
+ *   • referinţa DE JOS pentru intensitate  (b335)
+ *   • media pe coloană, nu suma            (b332)
+ */
+function heatAbs({ frames, cols, rows, windowMs, now, padPct }) {
+    const asked = Math.max(2, Math.min(600, Number(cols) || 90));
+    const R = Math.max(4, Math.min(MAX_ROWS, Number(rows) || DEFAULT_ROWS));
+    const all = Array.isArray(frames) ? frames.filter(Boolean) : [];
+    const win = Number(windowMs);
+    const t = Number(now) || (all.length ? Math.max(...all.map((f) => f.ts)) : 0);
+    const used = (Number.isFinite(win) && win > 0 ? all.filter((f) => f.ts >= t - win) : all)
+        .slice().sort((a, b) => a.ts - b.ts);
+
+    const empty = {
+        cells: [], mids: new Array(asked).fill(null), cols: asked, colsAsked: asked, rows: R,
+        priceLo: null, priceHi: null, rowUsd: 0, tMin: null, tMax: null,
+        maxUsd: 0, loUsd: 0, heldCols: 0, frames: 0, exchanges: [], spread: null,
+        bandPct: null,
+    };
+    if (!used.length) return empty;
+
+    const C = Math.max(2, Math.min(asked, used.length));
+    const tMin = used[0].ts;
+    const tMax = used[used.length - 1].ts;
+    const span = Math.max(1, tMax - tMin);
+
+    // ⚠️ INTERVALUL îl dă DRUMUL PREŢULUI, nu orice nivel din carnet.
+    //
+    // Prima variantă lua minimul şi maximul tuturor nivelurilor. Un singur ordin
+    // rătăcit la 40.000 întindea grila de la 40k la 80k, iar toată activitatea
+    // reală se strivea într-un rând — hartă corectă şi complet inutilă. Prins de
+    // un test care punea exact un asemenea ordin.
+    //
+    // Deci: intervalul e dat de mijloacele din fereastră, lărgit cu adâncimea
+    // carnetului care chiar stă lângă preţ (sub GRID_MAX_PCT de mijlocul ei).
+    let lo = Infinity, hi = -Infinity;
+    for (const f of used) {
+        if (f.mid < lo) lo = f.mid;
+        if (f.mid > hi) hi = f.mid;
+        const near = (p) => Math.abs(p - f.mid) / f.mid <= GRID_MAX_PCT / 100;
+        for (const [p] of f.bids) { if (near(p) && p < lo) lo = p; }
+        for (const [p] of f.asks) { if (near(p) && p > hi) hi = p; }
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return empty;
+    const pad = Math.max((hi - lo) * (Number(padPct) || 0.08), (hi + lo) / 2 * 0.0002);
+    lo -= pad; hi += pad;
+    const rowUsd = (hi - lo) / R;
+
+    const byCol = new Map();
+    for (const f of used) {
+        let c = Math.floor(((f.ts - tMin) / span) * C);
+        if (c < 0) c = 0; if (c >= C) c = C - 1;
+        if (!byCol.has(c)) byCol.set(c, []);
+        byCol.get(c).push(f);
+    }
+
+    const mids = new Array(C).fill(null);
+    const cells = [];
+    const exch = new Set();
+    let maxUsd = 0;
+
+    for (const [col, list] of byCol) {
+        mids[col] = list.reduce((x, f) => x + f.mid, 0) / list.length;
+        const acc = new Map();
+        for (const f of list) {
+            exch.add(f.exchange);
+            const put = (side, p, q) => {
+                // Rândul vine din PREŢUL ABSOLUT. Ce cade în afara grilei se
+                // EXCLUDE — înghesuit la margine ar desena un perete inexistent.
+                let i = Math.floor((p - lo) / rowUsd);
+                if (i < 0 || i >= R) return;
+                let a = acc.get(i);
+                if (!a) { a = { b: 0, a: 0 }; acc.set(i, a); }
+                if (side === 'B') a.b += p * q; else a.a += p * q;
+            };
+            for (const [p, q] of f.bids) put('B', p, q);
+            for (const [p, q] of f.asks) put('A', p, q);
+        }
+        const n = list.length;
+        for (const [i, a] of acc) {
+            const bidUsd = a.b / n, askUsd = a.a / n;
+            if (bidUsd <= 0 && askUsd <= 0) continue;
+            maxUsd = Math.max(maxUsd, bidUsd, askUsd);
+            cells.push({ col, row: i, price: lo + (i + 0.5) * rowUsd, bidUsd, askUsd });
+        }
+    }
+
+    // Ţinerea între instantanee, mărginită — vezi nota din `heat()`.
+    const colMs = span / C;
+    const maxHold = Math.max(1, Math.ceil((2.5 * _medianGap(used)) / Math.max(1, colMs)));
+    let heldCols = 0, lastCol = -1;
+    const srcByCol = new Map();
+    for (const c of cells) {
+        if (!srcByCol.has(c.col)) srcByCol.set(c.col, []);
+        srcByCol.get(c.col).push(c);
+    }
+    const adaugate = [];
+    for (let i = 0; i < C; i++) {
+        if (byCol.has(i)) { lastCol = i; continue; }
+        if (lastCol < 0 || i - lastCol > maxHold) continue;
+        mids[i] = mids[lastCol];
+        for (const c of (srcByCol.get(lastCol) || [])) adaugate.push({ ...c, col: i, held: true });
+        heldCols++;
+    }
+    for (const c of adaugate) cells.push(c);
+
+    const vals = cells.map((c) => Math.max(c.bidUsd, c.askUsd)).filter((v) => v > 0).sort((a, b) => a - b);
+    const loUsd = vals.length ? vals[Math.floor(0.05 * (vals.length - 1))] : 0;
+
+    return {
+        cells, mids, cols: C, colsAsked: asked, rows: R,
+        priceLo: lo, priceHi: hi, rowUsd, tMin, tMax,
+        maxUsd, loUsd, heldCols, frames: used.length,
+        exchanges: [...exch].sort(), spread: used[used.length - 1].spread,
+        // Latimea MASURATA, nu cea ceruta: grila de aici e absoluta, deci
+        // banda ceruta nu o mai decide. Eticheta trebuie sa spuna ce s-a
+        // desenat, altfel minte cu o cifra care arata credibil.
+        bandPct: (hi + lo) > 0 ? ((hi - lo) / (hi + lo)) * 100 : null,
+    };
+}
+
+/** Preţ → rând pe grila absolută. NULL dacă e în afara ei: nu se agaţă de margine. */
+function priceToRow(price, grid) {
+    const p = Number(price);
+    if (!Number.isFinite(p) || !grid || !Number.isFinite(grid.priceLo) || !(grid.rowUsd > 0)) return null;
+    const i = Math.floor((p - grid.priceLo) / grid.rowUsd);
+    if (i < 0 || i >= grid.rows) return null;
+    return i;
+}
+
+/** Rând → preţul din mijlocul lui. */
+function rowToPrice(row, grid) {
+    if (!grid || !Number.isFinite(grid.priceLo) || !(grid.rowUsd > 0)) return null;
+    return grid.priceLo + (Number(row) + 0.5) * grid.rowUsd;
+}
+
 module.exports = {
-    normalize, aggregate, walls, heat,
+    normalize, aggregate, walls, heat, heatAbs, priceToRow, rowToPrice,
     DEFAULT_BAND_PCT, DEFAULT_ROWS, DEFAULT_WINDOW_MS, WALL_MIN_FIRMNESS, MAX_ROWS,
 };

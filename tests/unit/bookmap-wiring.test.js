@@ -19,6 +19,17 @@ const FEED = read('server', 'services', 'bookFeed.js');
 const SERVER = read('server.js');
 const ROUTE = read('server', 'routes', 'market.js');
 
+// Corpul EXACT al unei rute, pana la urmatoarea. Feliile pe numar de caractere
+// s-au dovedit fragile: cand am adaugat `trades` si `liqs`, o felie fixa
+// ajungea in ruta urmatoare (de unde un `status(500)` strain) si `} catch`
+// nimerea INTR-UNA din functiile adaugate, nu in prinderea rutei.
+function routeBody(src, routePath) {
+    const i = src.indexOf("'" + routePath + "'");
+    if (i < 0) return '';
+    const next = src.indexOf('\nrouter.', i);
+    return src.slice(i, next > 0 ? next : src.length);
+}
+
 describe('⛔ modulele se INCARCA (lectia de la serviciul PREDICT mort)', () => {
     test('bookMap se incarca si expune ce trebuie', () => {
         const m = require('../../server/services/bookMap');
@@ -163,8 +174,7 @@ describe('ruta', () => {
     });
 
     test('nu intoarce 500 pe eroare — un panou gol e onest', () => {
-        const i = ROUTE.indexOf("'/bookmap'");
-        const body = ROUTE.slice(i, i + 3000);
+        const body = routeBody(ROUTE, '/bookmap');
         expect(body).toMatch(/status\(200\)/);
         expect(body).not.toMatch(/status\(500\)/);
     });
@@ -174,8 +184,7 @@ describe('ruta', () => {
         // in ruta — si trecea, fiindca `band` si `window` il satisfaceau singuri
         // in timp ce cols/rows plecau nemarginite. O cerere cu rows=1e9 ajunge
         // in bucle si alocari, deci e o cale de a inghetat serverul.
-        const i = ROUTE.indexOf("'/bookmap'");
-        const body = ROUTE.slice(i, i + 3000);
+        const body = routeBody(ROUTE, '/bookmap');
         // Bucla de la prima incercare cauta `const window`, dar in cod e
         // `windowMs` — cadea pe o ruta CORECTA. A cincea data cand un test al
         // meu se inseala, nu codul. Rămân cele trei verificari precise.
