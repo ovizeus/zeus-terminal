@@ -35,13 +35,18 @@ router.get('/liq-panel', (req, res) => {
         const ref = Number(req.query.ref);
         const days = Number(req.query.days) || liqStore.DEFAULT_DAYS;
         const cols = Number(req.query.cols) || 90;
+        // ZOOM pe axa de PRET: tap pe chart trimite jumatatea de fereastra.
+        // Merge la AMBELE vederi (scara si harta de caldura) — sunt doua
+        // vederi ale aceloraşi date, iar o fereastra pe una singura le-ar face
+        // sa arate doua lucruri diferite in acelasi panou.
+        const spanPct = Number(req.query.span) > 0 ? Number(req.query.span) : null;
         res.json({
-            map: liqStore.map({ symbol, ref, days }),
-            heat: liqStore.heatmap({ symbol, ref, days, cols }),
+            map: liqStore.map({ symbol, ref, days, spanPct }),
+            heat: liqStore.heatmap({ symbol, ref, days, cols, spanPct }),
             stats: liqStore.stats({ symbol, days }),
             // Unde CHIAR sunt date — ca o scara goala sa nu para o defectiune.
             top: liqStore.symbols({ days, limit: 12 }),
-            symbol, ref, days,
+            symbol, ref, days, spanPct,
         });
     } catch (err) {
         // Un panou gol e onest; un 500 il lasa pe operator sa creada ca

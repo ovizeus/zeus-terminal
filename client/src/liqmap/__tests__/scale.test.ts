@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { fmtUsd, fmtPct, intensity, cellColor, barColor, LIQ } from '../scale'
+import { fmtUsd, fmtPct, intensity, cellColor, barColor, LIQ,
+    spanStep, spanLabel, SPAN_MIN_PCT,
+} from '../scale'
 
 // [LIQ-PANEL 2026-10-25] Partea pura a panoului: cum se transforma dolari in
 // culoare si in text citibil. E testabila, deci se testeaza — restul (canvas,
@@ -184,4 +186,118 @@ describe('intervalul desenat se spune, nu se presupune', () => {
       expect(fmtSpan(a, b)).toBe('')
     }
   })
+})
+
+// ── ZOOM pe axa de PRET 2026-10-31 ──────────────────────────────────────────
+// „si fa zoom daa poti pe chart stii ce zic". Fereastra e SIMETRICA fata de
+// pret, fiindca asta e intregul inteles al axei: cat de departe de pretul de
+// ACUM a ars fiecare gramada. Deci un tap nu alege un centru — alege o
+// ADANCIME. Centrul rămâne preţul.
+describe('spanStep: fiecare tap intra mai adanc', () => {
+    it('porneste din acoperirea MASURATA, nu dintr-o cifra inventata', () => {
+        // acoperire +6% / -2% => porneste de la 6, impartit
+        expect(spanStep(null, { upPct: 6, downPct: -2 })).toBeCloseTo(6 / 2.5, 6)
+    })
+
+    it('ia partea cea mai DEPARTE a acoperirii, nu media', () => {
+        expect(spanStep(null, { upPct: 1, downPct: -9 })).toBeCloseTo(9 / 2.5, 6)
+    })
+
+    it('un tap urmator taie din fereastra curenta', () => {
+        expect(spanStep(2, { upPct: 6, downPct: -2 })).toBeCloseTo(2 / 2.5, 6)
+    })
+
+    it('se opreste la prag, nu la zero', () => {
+        let s: number | null = 6
+        for (let i = 0; i < 30; i++) s = spanStep(s, { upPct: 6, downPct: -2 })
+        expect(s).toBe(SPAN_MIN_PCT)
+    })
+
+    it('fara acoperire valida porneste de la o fereastra implicita utila', () => {
+        for (const bad of [null, undefined, {}, { upPct: 0, downPct: 0 }] as any[]) {
+            const s = spanStep(null, bad)
+            expect(Number.isFinite(s)).toBe(true)
+            expect(s).toBeGreaterThan(0)
+        }
+    })
+
+    it('acoperirea lipsa cade pe fereastra implicita, nu pe cea minima', () => {
+        const s = spanStep(null, { upPct: null, downPct: null } as any)
+        expect(s).toBeGreaterThan(SPAN_MIN_PCT)
+    })
+
+    it('⛔ partea de JOS conteaza chiar daca sus nu s-a lichidat nimic', () => {
+        // `downPct` e MEREU negativ. Fara `Math.abs`, un `Math.max` l-ar
+        // arunca si fereastra ar porni din implicit, nu din ce exista.
+        expect(spanStep(null, { upPct: 0, downPct: -4 })).toBeCloseTo(4 / 2.5, 6)
+    })
+})
+
+describe('spanLabel: spune fereastra, si spune si cand nu e zoom', () => {
+    it('fara zoom o spune pe litere', () => {
+        expect(spanLabel(null)).toBe('FULL')
+    })
+
+    it('cu zoom arata fereastra', () => {
+        expect(spanLabel(0.5)).toBe('±0.5%')
+        expect(spanLabel(2.4)).toBe('±2.4%')
+    })
+
+    it('la fereastra minima nu se rotunjeste la zero', () => {
+        expect(spanLabel(SPAN_MIN_PCT)).not.toMatch(/±0%/)
+    })
+
+    it('o fereastra fara sens nu primeste eticheta inventata', () => {
+        for (const bad of [0, -1, NaN, 'x'] as any[]) expect(spanLabel(bad)).toBe('FULL')
+    })
+})
+
+// ── buildLadder la zoom 2026-10-31 ──────────────────────────────────────────
+// ⛔ GASIT RANDAND: serverul trimitea 44 de niveluri la un zoom de ±0,128% si
+// in DOM ajungeau 5. Scara avea pasul FIX la 0,25%, deci toate cele 44 cadeau
+// pe ~5 chei — si `byPct.set` le SUPRASCRIA, adica 39 de galeti dispareau in
+// liniste. Zoom-ul parea sa functioneze (butonul scria ±0,128%) si arunca exact
+// rezolutia pe care o castigase.
+describe('buildLadder respecta treapta serverului', () => {
+    function fine(stepPct: number, n: number) {
+        return Array.from({ length: n }, (_, i) => ({
+            pct: Number(((i - Math.floor(n / 2)) * stepPct).toFixed(6)),
+            price: 80000 * (1 + ((i - Math.floor(n / 2)) * stepPct) / 100),
+            longUsd: 1000 * (i + 1), shortUsd: 0, n: i + 1,
+        }))
+    }
+
+    it('cu treapta fina, fiecare nivel ajunge pe randul lui', () => {
+        const b = fine(0.005, 21)
+        const rungs = buildLadder(b, 80000, 0.005)
+        const cuDate = rungs.filter((r) => !r.empty)
+        expect(cuDate.length).toBe(b.filter((x) => x.longUsd + x.shortUsd > 0).length)
+    })
+
+    it('⛔ cu pasul vechi fix, aceleasi date se strang si se PIERD', () => {
+        const b = fine(0.005, 21)
+        const gresit = buildLadder(b, 80000, 0.25).filter((r) => !r.empty)
+        const bun = buildLadder(b, 80000, 0.005).filter((r) => !r.empty)
+        expect(gresit.length).toBeLessThan(bun.length)
+    })
+
+    it('⛔ daca doua galeti cad pe acelasi rand, dolarii se ADUNA, nu se pierd', () => {
+        // Doua galeti la 0,01% distanta, pe o scara cu pasul 0,25%: cad amandoua
+        // pe rindul 0. Suma trebuie sa fie 3.000, nu 1.000 sau 2.000.
+        const b = [
+            { pct: 0.00, price: 80000, longUsd: 1000, shortUsd: 0, n: 1 },
+            { pct: 0.01, price: 80008, longUsd: 2000, shortUsd: 0, n: 2 },
+        ]
+        const r = buildLadder(b, 80000, 0.25).find((x) => Math.abs(x.pct) < 1e-9)!
+        expect(r.longUsd).toBe(3000)
+        expect(r.n).toBe(3)
+    })
+
+    it('o treapta invalida cade pe cea implicita, nu imparte la zero', () => {
+        const b = fine(0.25, 5)
+        for (const bad of [0, -1, NaN, null, undefined] as any[]) {
+            const r = buildLadder(b, 80000, bad)
+            expect(r.length).toBeGreaterThan(0)
+        }
+    })
 })

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
 import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, fmtSpan, LIQ } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
+import { spanStep, spanLabel } from '../../liqmap/scale'
 import {
     fetchPredict, sideLabel, hitLabel, horizonLabel, strengthBar, targetLabel,
     historyLabel, crowdLabel, oiLabel, liftLabel, type PredictSymbol,
@@ -79,21 +80,24 @@ export function LiqMapPanel() {
     // ZOOM pe carte: tap pe harta cere o fereastra de pret. Sta AICI, nu in
     // BookView, fiindca aducerea se face aici si trebuie sa reporneasca.
     const [bookZoom, setBookZoom] = useState<{ price: number; pct: number } | null>(null)
+    // ZOOM pe axa de PRET a hartii de lichidari. Simetric fata de pret: un tap
+    // alege o ADANCIME, nu un centru (vezi nota din liqmap/scale.ts).
+    const [liqSpan, setLiqSpan] = useState<number | null>(null)
     const alive = useRef(true)
 
     const load = useCallback(async () => {
         const p = currentPrice()
         if (p > 0) setPrice(p)
-        const d = await fetchPanel(symbol, p, days, HEAT_COLS)
+        const d = await fetchPanel(symbol, p, days, HEAT_COLS, liqSpan)
         if (alive.current) { setData(d); setLoading(false) }
-    }, [days, symbol])
+    }, [days, symbol, liqSpan])
 
     // Cartea de ordine se aduce NUMAI cu rubrica deschisă: serverul o
     // reîmprospătează oricum la 5 s, iar o cerere pe secundă pentru un ecran
     // la care nu se uită nimeni e taxă curată.
     // Un pret de pe BTC nu are ce cauta pe grila ETH — la schimbarea simbolului
     // zoom-ul cade. Clasa b336: cartea unui simbol cu eticheta altuia.
-    useEffect(() => { setBookZoom(null) }, [symbol])
+    useEffect(() => { setBookZoom(null); setLiqSpan(null) }, [symbol])
 
     useEffect(() => {
         if (view !== 'book') return
@@ -145,6 +149,13 @@ export function LiqMapPanel() {
         }
     }, [load])
 
+    // Un singur tap pentru AMBELE vederi: scara si harta de caldura sunt doua
+    // vederi ale aceloraşi date, deci o fereastra pe una singura le-ar face sa
+    // arate doua lucruri diferite in acelasi panou.
+    const onLiqTap = useCallback(() => {
+        setLiqSpan((cur) => spanStep(cur, data?.map?.coverage))
+    }, [data])
+
     const stats = data.stats
     const map = data.map
     const heat = data.heat
@@ -159,7 +170,8 @@ export function LiqMapPanel() {
                 </span>
             </div>
 
-            <Honesty stats={stats} map={map} days={days} setDays={setDays} loading={loading} />
+            <Honesty stats={stats} map={map} days={days} setDays={setDays}
+                loading={loading} setSpan={setLiqSpan} />
 
             <SymbolStrip top={data.top} symbol={symbol} setSymbol={setSymbol} />
 
@@ -172,8 +184,8 @@ export function LiqMapPanel() {
             </div>
 
             <div className="zlq-body">
-                {view === 'map' && <MapView map={map} price={price} />}
-                {view === 'heat' && <HeatView heat={heat} price={price} />}
+                {view === 'map' && <MapView map={map} price={price} onTap={onLiqTap} />}
+                {view === 'heat' && <HeatView heat={heat} price={price} onTap={onLiqTap} />}
                 {view === 'live' && <LiveView tape={tape} mine={symbol} />}
                 {view === 'pred' && <PredictView rows={pred} />}
                 {view === 'book' && (
@@ -190,7 +202,7 @@ export function LiqMapPanel() {
 // Spune ce ştim, de când, şi de la cine. Binance lipseşte din listă fiindcă
 // Binance chiar nu livrează nimic către serverul ăsta — şi e mai bine să se
 // vadă decât să fie ghicit.
-function Honesty({ stats, map, days, setDays, loading }: any) {
+function Honesty({ stats, map, days, setDays, loading, setSpan }: any) {
     const since = stats?.since ? new Date(stats.since) : null
     const cov = map?.coverage
     return (
@@ -217,6 +229,13 @@ function Honesty({ stats, map, days, setDays, loading }: any) {
                     ))}
                     {!stats?.exchanges?.length && <i className="zlq-off">no source yet</i>}
                 </span>
+                {/* Fereastra de PRET sta langa ferestrele de TIMP: amandoua
+                    sunt axele aceleiaşi harti. Eticheta vine din `map.spanPct`,
+                    adica de la SERVER — el o margineste la 35%, deci tap-ul
+                    poate sa nu fie fereastra pe care s-au numarat randurile. */}
+                <button className={'zlq-span' + (map?.spanPct ? ' act' : '')}
+                    title="Fit the whole price range"
+                    onClick={() => setSpan(null)}>{spanLabel(map?.spanPct ?? null)}</button>
                 <span className="zlq-win">
                     {/* [RANGE 2026-10-31] 4H si 24H cerute („ca la coinglass").
                         Intervalul pleaca spre server ca ZILE zecimale; eticheta
@@ -256,23 +275,45 @@ function SymbolStrip({ top, symbol, setSymbol }: any) {
 }
 
 // ── Vederea MAP: scara pe niveluri de preţ ────────────────────────
-function MapView({ map, price }: { map: any; price: number }) {
+function MapView({ map, price, onTap }: { map: any; price: number; onTap?: () => void }) {
     if (!map || !map.buckets?.length) return <Empty what="The ladder" />
     // Scara CONTINUĂ, nu doar nivelurile care au date: altfel se citeşte ca o
     // listă de câteva rânduri şi se pierde exact ce face dintr-o scară o hartă
     // — cât de departe stă fiecare grămadă, şi cât gol e între ele.
-    const rungs = buildLadder(map.buckets, price)
+    // Treapta scarii vine din treapta SERVERULUI (`map.bucket` = diviziuni pe
+    // procent). Cu 0,25% fix, un zoom care rafineaza la 0,005% trimitea 44 de
+    // niveluri si se desenau 5. Gasit randand.
+    const rungs = buildLadder(map.buckets, price, Number(map.bucket) > 0 ? 1 / Number(map.bucket) : 0.25)
     if (!rungs.length) return <Empty what="The ladder" />
     const max = rungs.reduce((m, r) => Math.max(m, r.longUsd + r.shortUsd), 0) || 1
     return (
         <div className="zlq-map">
             {rungs.map((r) => {
-                if (r.isPrice) return <div key="now" className="zlq-now">PRICE {Math.round(price)}</div>
+                // ⛔ Marcajul de pret INGHITEA galeata de la 0%. La fereastra
+                // plina, aia era de 21,7 milioane cu 132 de lichidari in 24h —
+                // adica exact gramada de langa pret, cea mai interesanta,
+                // desenata ca o eticheta goala. Bug preexistent, gasit cand am
+                // numarat randurile din DOM la zoom. Acum marcajul isi arata si
+                // dolarii, cand are.
+                if (r.isPrice) {
+                    const tot0 = r.longUsd + r.shortUsd
+                    return (
+                        <div key="now" className="zlq-now" onClick={onTap}>
+                            <span>PRICE {Math.round(price)}</span>
+                            {tot0 > 0 && (
+                                <span className="zlq-now-v">
+                                    <i style={{ background: barColor(r.longUsd >= r.shortUsd) }} />
+                                    {fmtUsd(tot0)}
+                                </span>
+                            )}
+                        </div>
+                    )
+                }
                 const tot = r.longUsd + r.shortUsd
                 const isLong = r.longUsd >= r.shortUsd
                 const wpc = tot > 0 ? Math.max(2, (tot / max) * 100) : 0
                 return (
-                    <div key={r.pct}
+                    <div key={r.pct} onClick={onTap}
                         className={'zlq-row' + (r.pct >= 0 ? ' up' : ' dn') + (r.empty ? ' void' : '')}>
                         <span className="zlq-px">{Math.round(r.price)}</span>
                         <span className="zlq-pc">{fmtPct(r.pct)}</span>
@@ -290,7 +331,7 @@ function MapView({ map, price }: { map: any; price: number }) {
 // ── Vederea HEATMAP: timp × preţ ──────────────────────────────────
 // Canvas, nu DOM: 90 de coloane × zeci de niveluri ar însemna mii de noduri,
 // iar pe telefon asta se simte imediat.
-function HeatView({ heat, price }: { heat: any; price: number }) {
+function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: () => void }) {
     const ref = useRef<HTMLCanvasElement | null>(null)
     useEffect(() => {
         const cv = ref.current
@@ -337,7 +378,7 @@ function HeatView({ heat, price }: { heat: any; price: number }) {
     if (!heat || !heat.cells?.length) return <Empty what="The grid" />
     return (
         <div className="zlq-heat">
-            <canvas ref={ref} />
+            <canvas ref={ref} onClick={onTap} className="zlq-tap" />
             <div className="zlq-heat-legend">
                 <span><i style={{ background: LIQ.long }} /> longs liquidated</span>
                 <span><i style={{ background: LIQ.short }} /> shorts liquidated</span>

@@ -107,17 +107,31 @@ export type Rung = {
  * treaptă cu date (plus o margine), nu la un ±10% fix: altfel pe o piaţă
  * liniştită ar fi 80 de rânduri goale şi 5 pline, şi tot n-ai vedea nimic.
  */
-export function buildLadder(buckets: any[], price: number, step = 0.25, pad = 2): Rung[] {
+export function buildLadder(buckets: any[], price: number, stepArg: number = 0.25, pad = 2): Rung[] {
     const out: Rung[] = []
     const p = Number(price)
     if (!Array.isArray(buckets) || !buckets.length || !Number.isFinite(p) || p <= 0) return out
+    // O treapta invalida ar imparti la zero si ar da o scara de NaN.
+    const st = Number(stepArg)
+    const step = Number.isFinite(st) && st > 0 ? st : 0.25
 
-    const byPct = new Map<number, any>()
+    // ⛔ Se ADUNA, nu se suprascrie. Versiunea anterioara facea `byPct.set(...)`
+    // si, cand doua galeti cadeau pe acelasi rand, a doua o STERGEA pe prima —
+    // dolari dispariti in liniste. Nu se vedea cat timp treapta scarii era
+    // egala cu treapta serverului (ambele 0,25%); la zoom, serverul a trecut la
+    // 0,005% si 39 din 44 de galeti se pierdeau. Gasit RANDAND.
+    const byPct = new Map<number, { longUsd: number; shortUsd: number; n: number; price: number }>()
     let hi = -Infinity, lo = Infinity
     for (const b of buckets) {
         const pct = Number(b && b.pct)
         if (!Number.isFinite(pct)) continue
-        byPct.set(Math.round(pct / step) * step, b)
+        const key = Math.round(pct / step) * step
+        const acc = byPct.get(key) || { longUsd: 0, shortUsd: 0, n: 0, price: 0 }
+        acc.longUsd += Number(b.longUsd) || 0
+        acc.shortUsd += Number(b.shortUsd) || 0
+        acc.n += Number(b.n) || 0
+        if (!acc.price && Number(b.price) > 0) acc.price = Number(b.price)
+        byPct.set(key, acc)
         if (pct > hi) hi = pct
         if (pct < lo) lo = pct
     }
@@ -164,4 +178,55 @@ export function fmtSpan(tMin: number, tMax: number): string {
     const h = min / 60
     if (h < 48) return h.toFixed(h < 10 ? 1 : 0) + 'h'
     return Math.round(h / 24) + 'd'
+}
+
+// ── ZOOM pe axa de PREŢ (2026-10-31) ────────────────────────────────────────
+// Cererea lui: „si fa zoom daa poti pe chart stii ce zic". Timpul se alegea
+// deja cu butoanele 4H..90D; lipsea preţul.
+//
+// Fereastra e SIMETRICĂ faţă de preţ, fiindcă asta e întregul înţeles al axei:
+// cât de departe de preţul de ACUM a ars fiecare grămadă. Deci un tap nu alege
+// un centru — alege o ADÂNCIME. Centrul rămâne preţul.
+
+/** Cea mai strânsă fereastră; sub ea nu mai sunt date, doar tremurat de preţ. */
+export const SPAN_MIN_PCT = 0.05
+/** Cât taie un tap din fereastra curentă. */
+export const SPAN_FACTOR = 2.5
+/** De unde porneşte, când acoperirea măsurată nu spune nimic. */
+export const SPAN_START_PCT = 5
+
+/**
+ * Fereastra după un tap. Prima dată porneşte din acoperirea **măsurată** —
+ * partea cea mai depărtată, nu media, altfel primul tap ar tăia deja ce există.
+ */
+export function spanStep(
+    cur: number | null | undefined,
+    coverage: { upPct?: number | null; downPct?: number | null } | null | undefined,
+): number {
+    const c = Number(cur)
+    let from = Number.isFinite(c) && c > 0 ? c : NaN
+    if (!Number.isFinite(from)) {
+        // ⚠️ `Math.abs` e ce apara aici, si merita spus de ce: `downPct` e
+        // MEREU negativ (e cea mai de jos lichidare), deci fara abs un
+        // `Math.max` l-ar arunca si fereastra ar porni doar din partea de sus.
+        // Pe o acoperire 0% / -4% ar fi dat 5% in loc de 4%.
+        //
+        // Scrisesem aici o garda `Number.isFinite` cu un comentariu care spunea
+        // ca apara `Number(null) === 0`. O mutatie a dovedit ca NU apara nimic:
+        // `Number(null) || 0` se purta identic, fiindca si NaN si null cad pe 0.
+        // Deci comentariul meu era mai sigur decat codul. Scos.
+        const far = Math.max(
+            Math.abs(Number(coverage?.upPct) || 0),
+            Math.abs(Number(coverage?.downPct) || 0),
+        )
+        from = far > 0 ? far : SPAN_START_PCT
+    }
+    return Math.max(SPAN_MIN_PCT, from / SPAN_FACTOR)
+}
+
+/** Eticheta ferestrei. Fără zoom o spune pe litere, nu cu o cifră goală. */
+export function spanLabel(span: number | null | undefined): string {
+    const s = Number(span)
+    if (!Number.isFinite(s) || s <= 0) return 'FULL'
+    return '±' + s.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '%'
 }

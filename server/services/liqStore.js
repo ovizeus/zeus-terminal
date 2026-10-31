@@ -38,6 +38,37 @@ const MAX_PCT = 35;        // dincolo de asta e zgomot, ca în liqMap.ts
 const MIN_PCT = 0.05;      // sub asta e tremurat la preţ
 const BUCKET = 4;          // sfert de procent: Math.round(pct * 4) / 4
 
+// ── ZOOM pe axa de PRET (2026-10-31) ────────────────────────────────────────
+// Cererea lui: „si fa zoom daa poti pe chart". Timpul se alegea deja cu
+// butoanele 4H..90D; lipsea pretul — harta acoperea mereu tot pana la 35%.
+//
+// Zoom = fereastra se ingusteaza SI galeata se rafineaza. Fara a doua parte,
+// ai vedea aceleasi trepte de 0,25%, doar mai putine: bare mai inalte si zero
+// informatie in plus.
+//
+// Treptele sunt ROTUNDE dinadins: o treapta de 1/48 ar da chei ca 0,0208333 si
+// etichete pe care nu le poate citi nimeni.
+const BUCKET_LADDER = [4, 10, 20, 40, 100, 200, 400];  // 0,25% .. 0,0025%
+const ROWS_TARGET = 48;
+
+/**
+ * Fereastra de preţ şi treapta care merge cu ea.
+ * Fără `spanPct` valid, totul rămâne exact ca înainte.
+ */
+function _priceWindow(spanPct) {
+    const v = Number(spanPct);
+    if (!Number.isFinite(v) || v <= 0) {
+        return { spanPct: null, minPct: MIN_PCT, maxPct: MAX_PCT, bucket: BUCKET };
+    }
+    const span = Math.min(MAX_PCT, v);
+    const want = ROWS_TARGET / (2 * span);               // diviziuni pe procent
+    const bucket = BUCKET_LADDER.find((b) => b >= want) || BUCKET_LADDER[BUCKET_LADDER.length - 1];
+    // ⚠️ Pragul de jos COBOARA cu fereastra. MIN_PCT (0,05%) e acolo ca sa nu
+    // numere tremuratul de preţ, dar la un zoom de ±0,1% ar fi aruncat aproape
+    // tot — adica un zoom care goleste harta.
+    return { spanPct: span, minPct: Math.min(MIN_PCT, span / 10), maxPct: span, bucket };
+}
+
 let _stmts = null;
 function _s() {
     if (_stmts) return _stmts;
@@ -94,7 +125,7 @@ function record(liq) {
  * fără ea o scară goală în jos arată identic cu una care n-are date deloc, iar
  * aia e exact confuzia care a pornit toată discuţia.
  */
-function map({ symbol, ref, days } = {}) {
+function map({ symbol, ref, days, spanPct } = {}) {
     // `asOf` pleaca spre client ca sa NU se numere de doua ori aceleasi
     // lichidari: serverul are tot istoricul, clientul primeste aceleasi
     // evenimente si in direct. Clientul foloseste istoricul ca baza si adauga
@@ -105,6 +136,9 @@ function map({ symbol, ref, days } = {}) {
     // serverul trimitea asOf=acum cu zero randuri, clientul arunca TOT
     // istoricul lui de 24h ca „deja la server", si scara ramanea goala.
     const out = { buckets: [], events: 0, coverage: { upPct: 0, downPct: 0 }, days: DEFAULT_DAYS, asOf: Date.now(), since: 0 };
+    const win = _priceWindow(spanPct);
+    out.spanPct = win.spanPct;
+    out.bucket = win.bucket;
     try {
         const sym = typeof symbol === 'string' ? symbol.trim() : '';
         const p = Number(ref);
@@ -118,10 +152,10 @@ function map({ symbol, ref, days } = {}) {
         for (const r of rows) {
             const pct = ((r.price - p) / p) * 100;
             const a = Math.abs(pct);
-            if (a < MIN_PCT || a > MAX_PCT) continue;
+            if (a < win.minPct || a > win.maxPct) continue;
             if (pct > up) up = pct;
             if (pct < down) down = pct;
-            const key = Math.round(pct * BUCKET) / BUCKET;
+            const key = Math.round(pct * win.bucket) / win.bucket;
             let b = acc.get(key);
             if (!b) { b = { pct: key, price: r.price, longUsd: 0, shortUsd: 0, n: 0 }; acc.set(key, b); }
             // 'SELL' = long lichidat, aceeaşi convenţie ca în liqMap.ts
@@ -167,8 +201,11 @@ async function prune(now = Date.now(), days = DEFAULT_DAYS, batchLimit = 2000, m
  * la 10x/25x/50x/100x. Grila asta nu prezice nimic — fiecare celulă e suma
  * dolarilor lichidaţi **chiar acolo, chiar atunci**.
  */
-function heatmap({ symbol, ref, days, cols } = {}) {
+function heatmap({ symbol, ref, days, cols, spanPct } = {}) {
     const out = { cells: [], cols: 0, events: 0, maxUsd: 0, days: DEFAULT_DAYS, tMin: 0, tMax: 0 };
+    const win = _priceWindow(spanPct);
+    out.spanPct = win.spanPct;
+    out.bucket = win.bucket;
     try {
         const sym = typeof symbol === 'string' ? symbol.trim() : '';
         const p = Number(ref);
@@ -205,8 +242,8 @@ function heatmap({ symbol, ref, days, cols } = {}) {
         for (const r of rows) {
             const pct = ((r.price - p) / p) * 100;
             const a = Math.abs(pct);
-            if (a < MIN_PCT || a > MAX_PCT) continue;
-            const key = Math.round(pct * BUCKET) / BUCKET;
+            if (a < win.minPct || a > win.maxPct) continue;
+            const key = Math.round(pct * win.bucket) / win.bucket;
             let col = Math.floor(((r.ts - tMin) / span) * c);
             if (col < 0) col = 0; if (col >= c) col = c - 1;
             const k = col + '|' + key;

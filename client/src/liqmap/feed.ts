@@ -32,10 +32,13 @@ export type PanelData = {
 export const EMPTY: PanelData = { map: null, heat: null, stats: null, top: [] }
 
 /** O cerere, toate vederile. Niciodată nu aruncă — un panou gol e onest. */
-export async function fetchPanel(symbol: string, ref: number, days: number, cols: number): Promise<PanelData> {
+export async function fetchPanel(symbol: string, ref: number, days: number, cols: number, spanPct?: number | null): Promise<PanelData> {
     try {
         if (!symbol || !Number.isFinite(ref) || ref <= 0) return EMPTY
-        const r = await fetch(`/api/market/liq-panel?symbol=${encodeURIComponent(symbol)}&ref=${ref}&days=${days}&cols=${cols}`)
+        // Fereastra de pret se adauga numai daca EXISTA: un `span=null` in
+        // adresa ar fi `Number('null')` pe server, adica NaN, adica zoom mut.
+        const sp = Number(spanPct) > 0 ? `&span=${Number(spanPct)}` : ''
+        const r = await fetch(`/api/market/liq-panel?symbol=${encodeURIComponent(symbol)}&ref=${ref}&days=${days}&cols=${cols}${sp}`)
         if (!r || !r.ok) return EMPTY
         const j = await r.json()
         if (!j || typeof j !== 'object') return EMPTY

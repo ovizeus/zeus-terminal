@@ -715,3 +715,24 @@
     background: none; border: 2px solid rgba(255, 140, 66, .95);
     box-sizing: border-box;
 }
+
+/* ZOOM pe axa de PRET 2026-10-31: tap pe scara sau pe harta de caldura. */
+.zlq-row { cursor: zoom-in; }
+.zlq-heat canvas.zlq-tap { cursor: zoom-in; touch-action: manipulation; }
+.zlq-span {
+    padding: 1px 5px;
+    margin-right: 6px;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: #8b97a8;
+    background: rgba(10, 14, 20, .6);
+    border: 1px solid rgba(139, 151, 168, .28);
+    border-radius: 3px;
+    cursor: pointer;
+}
+.zlq-span.act { color: #e8c547; border-color: rgba(232, 197, 71, .5); }
+.zlq-span:hover { color: #d6dde8; }
+/* Marcajul de pret isi arata dolarii cand galeata de 0% are date. */
+.zlq-now { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.zlq-now-v { display: inline-flex; align-items: center; gap: 4px; font-family: ui-monospace, monospace; font-size: 10px; }
+.zlq-now-v i { display: inline-block; width: 14px; height: 6px; border-radius: 1px; }

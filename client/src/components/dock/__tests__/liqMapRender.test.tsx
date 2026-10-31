@@ -270,3 +270,145 @@ describe('intervalele de timp cerute', () => {
     expect(container.textContent).not.toMatch(/last 90D/)
   })
 })
+
+// [ZOOM LIQ 2026-10-31] „si fa zoom daa poti pe chart stii ce zic".
+describe('zoom pe axa de pret', () => {
+  const span = (u: string) => new URL('http://x' + u.replace(/^[^?]*/, '')).searchParams.get('span')
+  const lastPanel = () => (globalThis.fetch as any).mock.calls
+    .map((c: any[]) => String(c[0])).filter((u: string) => u.includes('liq-panel')).pop() || ''
+
+  it('butonul de fereastra exista si porneste pe FULL', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    const b = container.querySelector('.zlq-span')
+    expect(b).toBeTruthy()
+    expect(b?.textContent?.trim()).toBe('FULL')
+  })
+
+  it('⛔ tap pe un rand din SCARA cere o fereastra de pret', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    expect(span(lastPanel())).toBeNull()
+    const row = container.querySelector('.zlq-row') as HTMLElement
+    expect(row).toBeTruthy()
+    fireEvent.click(row)
+    // acoperire +1,5% / -1,75% => prima fereastra 1,75 / 2,5 = 0,7
+    await waitFor(() => expect(Number(span(lastPanel()))).toBeCloseTo(0.7, 6))
+  })
+
+  it('⛔ tap pe HARTA DE CALDURA cere aceeasi fereastra', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    fireEvent.click(screen.getByText('HEATMAP'))
+    const cv = container.querySelector('.zlq-heat canvas') as HTMLElement
+    expect(cv).toBeTruthy()
+    fireEvent.click(cv)
+    await waitFor(() => expect(Number(span(lastPanel()))).toBeCloseTo(0.7, 6))
+  })
+
+  it('fiecare tap intra mai adanc', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    const row = container.querySelector('.zlq-row') as HTMLElement
+    fireEvent.click(row)
+    await waitFor(() => expect(span(lastPanel())).toBeTruthy())
+    const s1 = Number(span(lastPanel()))
+    fireEvent.click(container.querySelector('.zlq-row') as HTMLElement)
+    await waitFor(() => expect(Number(span(lastPanel()))).toBeLessThan(s1))
+  })
+
+  it('butonul scoate fereastra din cerere', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    fireEvent.click(container.querySelector('.zlq-row') as HTMLElement)
+    await waitFor(() => expect(span(lastPanel())).toBeTruthy())
+    fireEvent.click(container.querySelector('.zlq-span') as HTMLElement)
+    await waitFor(() => expect(span(lastPanel())).toBeNull())
+  })
+
+  it('⛔ eticheta ferestrei vine de la SERVER, nu de la tap', async () => {
+    // Serverul margineste fereastra la 35%; daca eticheta ar urma tap-ul, ar
+    // scrie altceva decat fereastra pe care s-au numarat randurile.
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      if (String(url).includes('liq-predict')) return { ok: true, json: async () => ({ symbols: [], at: 0 }) } as any
+      return { ok: true, json: async () => ({ ...PANEL, map: { ...PANEL.map, spanPct: 0.5 } }) } as any
+    }))
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    expect(container.querySelector('.zlq-span')?.textContent?.trim()).toBe('±0.5%')
+  })
+
+  it('schimbarea simbolului scoate fereastra — alt simbol, alte distante', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    fireEvent.click(container.querySelector('.zlq-row') as HTMLElement)
+    await waitFor(() => expect(span(lastPanel())).toBeTruthy())
+    // Banda de simboluri taie sufixul USDT: butonul scrie ETH, nu ETHUSDT.
+    // Prima versiune a testului cauta ETHUSDT — testul se inselase, nu codul.
+    fireEvent.click(screen.getByText('ETH'))
+    await waitFor(() => expect(span(lastPanel())).toBeNull())
+  })
+})
+
+// ⛔ [ZOOM LIQ 2026-10-31] Gasit RANDAND: serverul trimitea 44 de niveluri la
+// ±0,128% si in DOM ajungeau 5. Scara avea pasul FIX 0,25%. Zoom-ul parea sa
+// functioneze — butonul scria ±0,128% — si arunca exact rezolutia castigata.
+// Deci se verifica DOM-ul, nu functia.
+describe('scara deseneaza rezolutia pe care o trimite serverul', () => {
+  function fin(bucket: number, stepPct: number, n: number) {
+    return {
+      ...PANEL,
+      map: {
+        ...PANEL.map, bucket,
+        buckets: Array.from({ length: n }, (_, i) => {
+          const pct = Number(((i - Math.floor(n / 2)) * stepPct).toFixed(6))
+          return { pct, price: 80000 * (1 + pct / 100), longUsd: 1e5 * (i + 1), shortUsd: 0, n: i + 1 }
+        }),
+      },
+    }
+  }
+
+  it('cu treapta de 0,005% se deseneaza toate nivelurile, nu 5', async () => {
+    const P = fin(200, 0.005, 21)
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      if (String(url).includes('liq-predict')) return { ok: true, json: async () => ({ symbols: [], at: 0 }) } as any
+      return { ok: true, json: async () => P } as any
+    }))
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(container.querySelectorAll('.zlq-row').length).toBeGreaterThan(0))
+    const cuDate = Array.from(container.querySelectorAll('.zlq-row'))
+      .filter((r) => r.querySelector('.zlq-bar i'))
+    // 20, nu 21: galeata de la 0% se deseneaza in marcajul de PRET, nu ca rand.
+    expect(cuDate.length).toBe(20)
+    // ...si marcajul de pret NU mai inghite dolarii ei.
+    expect(container.querySelector('.zlq-now')?.textContent).toMatch(/\$/)
+  })
+
+  it('⛔ marcajul de PRET isi arata dolarii — nu inghite galeata de langa pret', async () => {
+    // Bug preexistent: la fereastra plina, galeata de 0% avea 21,7 milioane cu
+    // 132 de lichidari in 24h si se desena ca o eticheta goala.
+    const P = {
+      ...PANEL,
+      map: { ...PANEL.map, bucket: 4,
+        buckets: [{ pct: 0, price: 80000, longUsd: 21_700_000, shortUsd: 0, n: 132 }] },
+    }
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      if (String(url).includes('liq-predict')) return { ok: true, json: async () => ({ symbols: [], at: 0 }) } as any
+      return { ok: true, json: async () => P } as any
+    }))
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(container.querySelector('.zlq-now')).toBeTruthy())
+    expect(container.querySelector('.zlq-now')?.textContent).toMatch(/21\.70M/)
+  })
+
+  it('fara treapta de la server, scara rămâne pe cea veche si nu crapa', async () => {
+    const P = fin(undefined as any, 0.25, 5)
+    vi.stubGlobal('fetch', vi.fn(async (url: any) => {
+      if (String(url).includes('liq-predict')) return { ok: true, json: async () => ({ symbols: [], at: 0 }) } as any
+      return { ok: true, json: async () => P } as any
+    }))
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(container.querySelectorAll('.zlq-row').length).toBeGreaterThan(0))
+    expect(container.querySelectorAll('.zlq-row').length).toBeGreaterThan(4)
+  })
+})
