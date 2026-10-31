@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
 import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, fmtSpan, LIQ } from '../../liqmap/scale'
+import { RANGES, rangeLabel } from '../../liqmap/ranges'
 import {
     fetchPredict, sideLabel, hitLabel, horizonLabel, strengthBar, targetLabel,
     historyLabel, crowdLabel, oiLabel, liftLabel, type PredictSymbol,
@@ -197,7 +198,14 @@ function Honesty({ stats, map, days, setDays, loading }: any) {
             <div className="zlq-hon-main">
                 <span className="zlq-k">HISTORY</span>
                 <b>{loading ? '…' : (stats?.events ?? 0).toLocaleString('ro-RO')}</b>
-                <span className="zlq-dim">liquidations</span>
+                {/* [RANGE 2026-10-31] Cifra sare de la ~1.500 la ~157.000 cand
+                    schimbi fereastra. Fara fereastra scrisa langa ea, acelasi
+                    panou arata doua adevaruri diferite si pare ca s-a stricat.
+                    Fereastra vine din `stats.days`, adica de la SERVER: el o
+                    margineste (365 de zile), deci butonul apasat poate sa nu
+                    fie fereastra pe care s-au numarat randurile. Aceeasi regula
+                    ca la eticheta de zoom si la „9 of 1000 trades drawn". */}
+                <span className="zlq-dim">liquidations · last {rangeLabel(stats?.days ?? days)}</span>
                 <b className="zlq-usd">{fmtUsd(stats?.totalUsd ?? 0)}</b>
             </div>
             <div className="zlq-hon-sub">
@@ -210,8 +218,13 @@ function Honesty({ stats, map, days, setDays, loading }: any) {
                     {!stats?.exchanges?.length && <i className="zlq-off">no source yet</i>}
                 </span>
                 <span className="zlq-win">
-                    {[7, 30, 90].map((d) => (
-                        <button key={d} className={days === d ? 'act' : ''} onClick={() => setDays(d)}>{d}D</button>
+                    {/* [RANGE 2026-10-31] 4H si 24H cerute („ca la coinglass").
+                        Intervalul pleaca spre server ca ZILE zecimale; eticheta
+                        NU poate fi `${days}D`, fiindca 4 ore ar scrie
+                        „0.16666666666666666D". */}
+                    {RANGES.map((r) => (
+                        <button key={r.label} className={days === r.days ? 'act' : ''}
+                            onClick={() => setDays(r.days)}>{r.label}</button>
                     ))}
                 </span>
             </div>

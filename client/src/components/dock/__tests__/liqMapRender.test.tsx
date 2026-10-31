@@ -217,3 +217,56 @@ describe('gol inseamna gol, si o spune', () => {
     expect(container.textContent).toMatch(/no source yet/)
   })
 })
+
+// [RANGE 2026-10-31] „poti face pe timeframe de 24h, 7 zile ca la coinglass si
+// 4 ore?" — harta avea doar 7D / 30D / 90D.
+describe('intervalele de timp cerute', () => {
+  it('cele cinci butoane exista, in ordine', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    const b = Array.from(container.querySelectorAll('.zlq-win button')).map((x) => x.textContent)
+    expect(b).toEqual(['4H', '24H', '7D', '30D', '90D'])
+  })
+
+  it('⛔ 4H cere serverului PATRU ORE, nu o zi', async () => {
+    render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    fireEvent.click(screen.getByText('4H'))
+    await waitFor(() => {
+      const calls = (globalThis.fetch as any).mock.calls.map((c: any[]) => String(c[0]))
+      const last = calls.filter((u: string) => u.includes('liq-panel')).pop() || ''
+      const d = Number(new URL('http://x' + last.replace(/^[^?]*/, '')).searchParams.get('days'))
+      expect(d * 24).toBeCloseTo(4, 6)
+    })
+  })
+
+  it('24H cere exact o zi', async () => {
+    render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    fireEvent.click(screen.getByText('24H'))
+    await waitFor(() => {
+      const calls = (globalThis.fetch as any).mock.calls.map((c: any[]) => String(c[0]))
+      const last = calls.filter((u: string) => u.includes('liq-panel')).pop() || ''
+      expect(last).toMatch(/days=1(&|$)/)
+    })
+  })
+
+  it('⛔ numarul de lichidari spune PE CE FEREASTRA, altfel sare de la 1.500 la 157.000 fara explicatie', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    // PANEL.stats.days este 90
+    expect(container.textContent).toMatch(/last 90D/)
+  })
+
+  it('fereastra afisata vine de la SERVER, nu de la butonul apasat', async () => {
+    // Serverul margineste la 365 de zile; daca eticheta ar urma butonul, ar
+    // scrie altceva decat fereastra pe care s-au numarat randurile.
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, json: async () => ({ ...PANEL, stats: { ...PANEL.stats, days: 1 } }),
+    })))
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    expect(container.textContent).toMatch(/last 24H/)
+    expect(container.textContent).not.toMatch(/last 90D/)
+  })
+})
