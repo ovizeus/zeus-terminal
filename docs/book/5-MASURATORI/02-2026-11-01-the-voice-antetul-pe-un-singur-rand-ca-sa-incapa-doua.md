@@ -39,3 +39,5 @@ Lista e un **scroller real** — componenta ţine o referinţă şi o duce la ze
 5 teste noi. Client **172 de fişiere, 1.668 de teste**, `tsc` 0 erori. Verificat în bundle-ul servit: clasa compactă e şi în CSS şi în JS, degradeul de 44px e în CSS.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---

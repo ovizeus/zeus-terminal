@@ -6855,12 +6855,21 @@ select option {
      in view now dissolves, and the cut stops looking like a mistake.
      The extra bottom padding lets the last thought scroll clear of the fade,
      so nothing is permanently dimmed once you reach the end. */
-  padding-bottom: 44px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent 100%);
-          mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent 100%);
+  /* [2026-11-01] Degradeul a ramas DOAR ca semn ca mai e lista sub deget, si e
+     mic: taierea propriu-zisa o face acum .omega-utter-clipped, care scoate de
+     tot gandul ce nu incape intreg. Un degrade mare peste un gand deja ascuns
+     ar fi stins fara motiv randul de deasupra lui. */
+  padding-bottom: 10px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%);
 }
 .omega-voice-feed::-webkit-scrollbar { width: 6px; }
 .omega-voice-feed::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }
+/* [2026-11-01] Gandul care nu incape INTREG nu se mai arata deloc. Masurat in
+   TheVoice dupa asezare; se aplica doar cand lista e la inceput, deci cand
+   operatorul deruleaza ca sa citeasca, totul reapare. */
+.omega-utter-clipped { display: none; }
+
 .omega-voice-empty {
   height: 100%; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px;
