@@ -109,3 +109,5 @@ Motorul face ce-i spun setările. Dacă vrei mai rar, pârghia e `cooldownMs` sa
 Teste: **35 noi**. Server **634 de suite, 10.086 verzi** pe 4 sharduri, 3 sărite, zero eşuate. Client **165 de fişiere, 1.630 de teste**, `tsc` 0 erori.
 
 **Server + client: build ŞI reload.**
+
+---

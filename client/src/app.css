@@ -6574,6 +6574,90 @@ select option {
   .omega-page-grid-no-chat { grid-template-rows: 180px minmax(200px, 1fr) !important; }
 }
 
+/* [OMEGA CHAT CARD 2026-11-01] The way into the chat.
+   Replaces a bar that was stuck to the bottom of the page, sat on top of the
+   thought list and had no visible close. The tile sits UNDER the thoughts, so
+   nothing is covered any more, and tapping it opens the chat as its own page
+   with the header's Back button. */
+/* Sits in the page's normal flow, under the voice grid — matches the grid's
+   own 12px gutter so the tile lines up with the zones above it. */
+.omega-page-chat-entry { padding: 0 12px 14px; }
+.omega-chat-card {
+  /* It is a <button>: reset the chrome a button brings, keep the semantics. */
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+  margin: 14px 0 4px;
+  padding: 18px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 190, 70, 0.34);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 140% at 50% 0%, rgba(255, 190, 70, 0.13) 0%, rgba(255, 190, 70, 0) 62%),
+    linear-gradient(180deg, rgba(10, 12, 26, 0.96) 0%, rgba(5, 5, 16, 0.96) 100%);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5) inset, 0 6px 22px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+.omega-chat-card:hover,
+.omega-chat-card:focus-visible {
+  border-color: rgba(255, 190, 70, 0.72);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5) inset, 0 8px 28px rgba(255, 170, 40, 0.20);
+}
+.omega-chat-card:focus-visible { outline: 2px solid rgba(255, 210, 120, 0.9); outline-offset: 2px; }
+.omega-chat-card:active { transform: translateY(1px); }
+.omega-chat-card-emblem {
+  width: 72px;
+  height: 72px;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 10px rgba(255, 170, 40, 0.35));
+}
+.omega-chat-card-title {
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #ffd98a;
+  text-shadow: 0 0 14px rgba(255, 170, 40, 0.35);
+}
+.omega-chat-card-hint {
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.52);
+}
+@media (max-width: 460px) {
+  .omega-chat-card { padding: 14px 12px 12px; margin-top: 12px; }
+  .omega-chat-card-emblem { width: 58px; height: 58px; }
+  .omega-chat-card-title { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .omega-chat-card { transition: none; }
+  .omega-chat-card:active { transform: none; }
+}
+
+/* Chat as its own page: fills the body, no collapsed state, no overlay. */
+.omega-page-chat-body { display: flex; min-height: 0; }
+.omega-chat-full {
+  max-height: none;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+}
+.omega-chat-full .omega-chat-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
 .omega-page-chat-sticky {
   position: sticky;
   bottom: 0;

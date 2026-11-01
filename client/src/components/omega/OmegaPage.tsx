@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { TheOrb } from './TheOrb'
 import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
+import { OmegaChatCard } from './OmegaChatCard'
+import { useOmegaChatStore } from '../../stores/omegaChatStore'
 import { ReportCard } from './ReportCard'
 import { R5AStats } from './R5AStats'
 import { DoctorPanel } from './DoctorPanel'
@@ -29,10 +31,13 @@ import * as omegaAmbient from '../../audio/omegaAmbient'
  * of "alive"), voice + health polled every 5s. Aborts in-flight requests
  * on unmount.
  */
-type OmegaView = 'main' | 'doctor' | 'ring5' | 'report'
+type OmegaView = 'main' | 'doctor' | 'ring5' | 'report' | 'chat'
 
 export function OmegaPage() {
     const [view, setView] = useState<OmegaView>('main')
+    // Only the count is read here; the chat itself owns the history.
+    const chatCount = useOmegaChatStore((s) => s.history.length)
+    const loadChatHistory = useOmegaChatStore((s) => s.loadHistory)
     const [mood, setMood] = useState<Mood>('CALM')
     const [intensity, setIntensity] = useState(0.5)
     const [utterances, setUtterances] = useState<Utterance[]>([])
@@ -111,6 +116,16 @@ export function OmegaPage() {
         return () => { alive = false; clearInterval(id) }
     }, [refreshTick])
 
+    // [OMEGA CHAT CARD 2026-11-01] The card on the main page shows how many
+    // messages are waiting, but the history used to be fetched by TalkWithMe on
+    // ITS mount — and TalkWithMe no longer mounts until you open the chat. So
+    // the card would have read 0 until after the first visit, which is the one
+    // moment the number actually matters. Load it here instead; the store dedups
+    // concurrent calls and caches for 60s, so opening the chat costs nothing extra.
+    useEffect(() => {
+        void loadChatHistory()
+    }, [loadChatHistory])
+
     // Intercept PageView "Back" when in dedicated sub-view (Ring5/Doctor).
     // Back returns to OMEGA main instead of closing the OMEGA panel entirely.
     useEffect(() => {
@@ -156,6 +171,25 @@ export function OmegaPage() {
                 </div>
                 <div className="omega-page-dedicated-body">
                     <Ring5Panel forceExpanded />
+                </div>
+            </div>
+        )
+    }
+
+    // [OMEGA CHAT CARD 2026-11-01] The chat is a place you go to now, not a bar
+    // stuck over the thought list. Back is already intercepted above and returns
+    // to 'main', so the operator lands exactly where he left.
+    if (view === 'chat') {
+        return (
+            <div className="omega-page omega-page-dedicated" data-mood={mood}>
+                <div className="omega-page-header">
+                    <h1 className="omega-page-title">
+                        <span className="omega-title-name">OMEGA CHAT AI</span>
+                        <span className="omega-title-tag">talk with me</span>
+                    </h1>
+                </div>
+                <div className="omega-page-dedicated-body omega-page-chat-body">
+                    <TalkWithMe voiceOn={voiceOn} onUtteranceLogged={handleUtteranceLogged} fullPage />
                 </div>
             </div>
         )
@@ -260,8 +294,8 @@ export function OmegaPage() {
 
             <R5AStats />
 
-            {/* [Day 29] Layout: 2-row grid (orb + voice) — chat moved to
-                sticky bottom container below for WhatsApp-style UX. */}
+            {/* Layout: 2-row grid (orb + voice). [2026-11-01] The chat is no longer
+                a sticky bar under this grid — it is the card below, and its own page. */}
             <div className="omega-page-grid omega-page-grid-no-chat">
                 <div className="omega-page-orb-zone">
                     <TheOrb mood={mood} intensity={intensity} />
@@ -271,10 +305,13 @@ export function OmegaPage() {
                 </div>
             </div>
 
-            {/* [Day 29] Chat sticky bottom — WhatsApp style.
-                Default: header + input row. Tap input → expand. ESC → collapse. */}
-            <div className="omega-page-chat-sticky">
-                <TalkWithMe voiceOn={voiceOn} onUtteranceLogged={handleUtteranceLogged} />
+            {/* [OMEGA CHAT CARD 2026-11-01] Below the thought list, in normal flow,
+                where the sticky bar used to sit ON TOP of it. Deliberately OUTSIDE
+                .omega-page-voice-zone: that zone is a fixed grid row with
+                overflow:hidden and <TheVoice> already fills its full height, so a
+                sibling in there would simply be clipped away. */}
+            <div className="omega-page-chat-entry">
+                <OmegaChatCard count={chatCount} onOpen={() => setView('chat')} />
             </div>
         </div>
     )

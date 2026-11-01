@@ -16,9 +16,17 @@ import { useOmegaChatStore, type ChatRow } from '../../stores/omegaChatStore'
 interface Props {
     voiceOn: boolean
     onUtteranceLogged: () => void
+    /**
+     * [OMEGA CHAT CARD 2026-11-01] Rendered as its own sub-page instead of the
+     * bar that used to be stuck to the bottom of the OMEGA page. In that mode
+     * there is no collapsed state to return to and no header to tap: the page
+     * header's Back button is the way out, so the toggle is gone and the chat
+     * simply fills the view.
+     */
+    fullPage?: boolean
 }
 
-export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
+export function TalkWithMe({ voiceOn, onUtteranceLogged, fullPage = false }: Props) {
     // [Sub-A 2026-05-19] consume Zustand store instead of local state — enables
     // cross-component sync with Settings Clear button + persistence on refresh
     const history = useOmegaChatStore((s) => s.history)
@@ -27,6 +35,8 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [expanded, setExpanded] = useState(false)
+    // On a full page there is nothing to expand into — it is already the page.
+    const isOpen = fullPage || expanded
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -165,13 +175,15 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
     }
 
     return (
-        <section className={`omega-chat${expanded ? ' omega-chat-expanded' : ''}`}>
-            <div className="omega-chat-header" onClick={() => setExpanded(e => !e)}>
-                <span className="omega-chat-title">💬 TALK WITH ME</span>
-                <span className="omega-chat-hint">
-                    {expanded ? 'tap to minimize · esc' : history.length > 0 ? `${history.length} messages — tap to open` : 'tap to chat'}
-                </span>
-            </div>
+        <section className={`omega-chat${isOpen ? ' omega-chat-expanded' : ''}${fullPage ? ' omega-chat-full' : ''}`}>
+            {!fullPage && (
+                <div className="omega-chat-header" onClick={() => setExpanded(e => !e)}>
+                    <span className="omega-chat-title">💬 TALK WITH ME</span>
+                    <span className="omega-chat-hint">
+                        {expanded ? 'tap to minimize · esc' : history.length > 0 ? `${history.length} messages — tap to open` : 'tap to chat'}
+                    </span>
+                </div>
+            )}
             <div className="omega-chat-scroll" ref={scrollRef}>
                 {history.length === 0 ? (
                     <div className="omega-chat-empty">
@@ -199,14 +211,16 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => {
                         if (e.key === 'Escape') {
-                            setExpanded(false);
+                            // On a full page Escape just drops the keyboard —
+                            // collapsing would leave an empty page behind.
+                            if (!fullPage) setExpanded(false);
                             (e.target as HTMLTextAreaElement).blur();
                         } else {
                             handleKeyDown(e);
                         }
                     }}
                     onFocus={() => {
-                        setExpanded(true);
+                        if (!fullPage) setExpanded(true);
                         // small delay so keyboard layout settles before scroll
                         setTimeout(_scrollChatToBottom, 250);
                     }}
