@@ -45,3 +45,5 @@ Test nou de regresie: `.omega-page-chat-entry` trebuie să fie **copil** al `.om
 Client **167 de fişiere, 1.643 de teste**, `tsc` 0 erori. Verificat în bundle-ul servit.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---

@@ -6808,6 +6808,16 @@ select option {
   flex: 1; overflow-y: auto; padding: 10px 14px;
   scrollbar-width: thin; scrollbar-color: #6a4f8a transparent;
   min-height: 0;
+  /* [2026-11-01] The feed is a scroll box with a hard edge, so the thought that
+     happens to straddle the bottom was guillotined mid-word — a half line of
+     text sitting right above the chat card, which is what the operator saw and
+     asked to get rid of. Fade the last 34px instead: a line that is only partly
+     in view now dissolves, and the cut stops looking like a mistake.
+     The extra bottom padding lets the last thought scroll clear of the fade,
+     so nothing is permanently dimmed once you reach the end. */
+  padding-bottom: 34px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
 }
 .omega-voice-feed::-webkit-scrollbar { width: 6px; }
 .omega-voice-feed::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }
