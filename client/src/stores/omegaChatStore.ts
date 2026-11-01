@@ -5,6 +5,7 @@
  * Dedups concurrent loadHistory calls via _loadInFlight Promise field.
  */
 import { create } from 'zustand'
+import { mergeChatHistory } from './chatHistoryMerge'
 
 export type Mood = 'CALM' | 'FOCUSED' | 'EXCITED' | 'NERVOUS' | 'ANGRY' | 'SAD' | 'BORED'
 
@@ -55,6 +56,10 @@ export const useOmegaChatStore = create<OmegaChatState>((set, get) => ({
         if (_loadInFlight) return _loadInFlight
         if (!force && lastFetchTs != null && Date.now() - lastFetchTs < _CACHE_TTL_MS) return
 
+        // [CHAT WIPE 2026-11-01] Remember when the request LEFT. Anything the
+        // operator types while it is in flight is newer than anything the
+        // server can possibly return, so it must survive the response.
+        const startedAt = Date.now()
         const p = (async () => {
             set({ loading: true, error: null })
             try {
@@ -62,20 +67,27 @@ export const useOmegaChatStore = create<OmegaChatState>((set, get) => ({
                 const data = (await res.json()) as HistoryResponse
                 if (!res.ok || !data.ok) {
                     const errMsg = data.error || `HTTP ${res.status}`
-                    set({ loading: false, error: errMsg, _loadInFlight: null })
+                    // Stamp the attempt even on failure: without it lastFetchTs
+                    // stayed null, the 60s dedup never engaged, and every caller
+                    // re-fetched — one broken endpoint became a request storm.
+                    set({ loading: false, error: errMsg, lastFetchTs: Date.now(), _loadInFlight: null })
                     return
                 }
-                set({
-                    history: data.history || [],
+                // MERGE, never replace. A straight replace threw away the message
+                // being typed and the reply streaming in beside it — which is how
+                // replies that exist in ml_voice_log were never seen on screen.
+                set((s) => ({
+                    history: mergeChatHistory(data.history || [], s.history, startedAt),
                     loading: false,
                     error: null,
                     lastFetchTs: Date.now(),
                     _loadInFlight: null,
-                })
+                }))
             } catch (err: any) {
                 set({
                     loading: false,
                     error: err && err.message ? err.message : String(err),
+                    lastFetchTs: Date.now(),
                     _loadInFlight: null,
                 })
             }

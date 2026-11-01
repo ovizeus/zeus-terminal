@@ -21,3 +21,5 @@ Ce am probat e proprietatea mecanică de care depinde şi care se pierde uşor l
 Client **168 de fişiere, 1.646 de teste**, `tsc` 0 erori. Verificat în CSS-ul servit că **amândouă** formele măştii sunt acolo.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---
