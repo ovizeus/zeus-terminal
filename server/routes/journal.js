@@ -232,6 +232,15 @@ router.post('/report', (req, res) => {
         // Map client trade format → at_closed data JSON (matches GET /api/journal parser)
         const data = {
             seq,
+            // [OWNERLESS BLOB FIX 2026-11-01] The owner belongs IN the object, not
+            // only in the row's user_id column. b297 had to make the directional
+            // guard fail-closed because 521 at_closed rows carried user_id=1 on the
+            // row and nothing in the JSON, and the writer could not be identified:
+            // it is this handler. _findSameModeOpposite and the [C5] load guard both
+            // read the owner off the OBJECT, so an ownerless blob is invisible to
+            // one and unloadable by the other. Always the SESSION user — a client
+            // that puts a userId in the payload is never believed.
+            userId: Number(userId),
             symbol: String(t.sym || ''),
             side: String(t.side || ''),
             mode: String(t.mode || 'demo'),

@@ -80,7 +80,28 @@ function recordObservation(params) {
     const cellKey = bp.buildCellKey({ level: 4, userId, env, symbol, regime });
 
     be.recordEvidence({ cellKey, moduleId, contribution, confidence, outcomeClass, ts });
-    bp.updatePosterior({ level: 4, cellKey, outcomeClass, ts });
+    // [ML POOLING WRITE 2026-11-01] Write the WHOLE hierarchy, not just the narrowest
+    // cell. Until today this line was `updatePosterior({ level: 4, ... })` alone, so
+    // levels 0-3 stayed empty forever — and walkHierarchy(), whose entire job is to
+    // rescue a thin L4 cell by borrowing a broader one, had nothing to borrow. Live
+    // DB before the fix: 88 rows, all level 4, 742 observations between them, exactly
+    // one cell at the promotion threshold of 30. Every other draw fell through to the
+    // hardcoded Beta(1,1) default — a uniform coin flip dressed as a posterior.
+    //
+    // An observation is evidence at every level of generality: a losing BREAKOUT on
+    // DEMO/ETHUSDT is also evidence about DEMO/ETHUSDT, about DEMO, and about the
+    // book. buildCellKey decides what each level is keyed by, so DEMO never pools
+    // into TESTNET and the user drops out above level 4 by design.
+    for (const level of [4, 3, 2, 1, 0]) {
+        bp.updatePosterior({
+            level,
+            cellKey: bp.buildCellKey({ level, userId, env, symbol, regime }),
+            outcomeClass, ts,
+        });
+    }
+    // Only this user's L4 key is cached (effectiveStatus keys its LRU by the L4
+    // cellKey), so that is what we invalidate. Another user whose cached entry
+    // resolved to a parent we just moved stays stale for at most the 60s TTL.
     es.invalidate({ cellKey });
 
     return { recorded: true, cellKey };

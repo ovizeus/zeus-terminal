@@ -42,6 +42,34 @@ function computeFullOwnership(ctx) {
   return false; // unknown/ambiguous creds → never own
 }
 
+// [DEMO TWO-ENGINE FIX 2026-11-01] Pure matrix for `serverActive`, the single
+// field that locks the CLIENT-side AT engine (client/src/engine/lockoutGate.ts
+// reads it as window._serverATEnabled; a false there leaves the client engine
+// UNLOCKED and free to open its own positions).
+//
+// The hole this closes: computeFullOwnership() above returns false whenever
+// engineMode !== 'live', and its own comment explains why — "demo is already
+// server-owned via SERVER_AT_DEMO". That assumption was never true. SERVER_AT_DEMO
+// makes the SERVER run the demo engine; it does not, anywhere, tell the client to
+// stand down. So a demo user received serverActive:false while the server engine
+// was trading, and BOTH engines opened into one book — exactly the two-engine race
+// that [SP2-b] fixed for testnet and left standing on demo. Measured on the live
+// DB before the fix: 82 client-engine positions in October, and same-mode LONG +
+// SHORT held together, which the server's own no-mixed-bias guard forbids but
+// cannot enforce because it only sees the server's own in-memory book.
+//
+// Fail-closed throughout: only a strict `true` counts, an unknown engineMode never
+// drives, and the demo carve-out needs BOTH demo flags — a server AT with no
+// server brain has no decisions to act on, so it must not claim the wheel.
+function computeServerDrivesAT(ctx) {
+  const { legacyServerAT, legacyServerBrain, fullOwnership,
+          serverAtDemo, serverBrainDemo, engineMode } = ctx || {};
+  if (legacyServerAT === true && legacyServerBrain === true) return true;
+  if (fullOwnership === true) return true;
+  if (engineMode === 'demo' && serverAtDemo === true && serverBrainDemo === true) return true;
+  return false;
+}
+
 // [SP2-b 2026-06-07] Defense-in-depth for POST /api/order/place: reject
 // client-originated AUTO opens when the server fully owns entries (a fresh
 // client whose lockout flag hasn't synced yet could otherwise double-open —
@@ -55,4 +83,4 @@ function shouldRejectClientAutoOrder(ctx) {
   return source === 'auto';
 }
 
-module.exports = { resolveOwnership, computeFullOwnership, shouldRejectClientAutoOrder };
+module.exports = { resolveOwnership, computeFullOwnership, computeServerDrivesAT, shouldRejectClientAutoOrder };

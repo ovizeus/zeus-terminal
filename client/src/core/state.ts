@@ -5,6 +5,7 @@
  */
 
 import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+import { shouldSerializeDemoPosition } from './syncPositionFilter'
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
 import { shouldFlagAttributionDivergence } from '../services/shadowCompareRules'
@@ -443,11 +444,8 @@ export const ZState = (() => {
       demoWins: (typeof TP !== 'undefined') ? TP.demoWins : 0,
       demoLosses: (typeof TP !== 'undefined') ? TP.demoLosses : 0,
       positions: (typeof TP !== 'undefined' ? TP.demoPositions || [] : [])
-        .filter(function (p: any) {
-          if (p.closed) return false
-          if (w._serverATEnabled && p.autoTrade) return false
-          return true
-        })
+        // [SYNC ZOMBIE 2026-11-01] Ownership, not a flag — see syncPositionFilter.ts.
+        .filter(function (p: any) { return shouldSerializeDemoPosition(p, w._serverATEnabled) })
         .map((p: any) => ({
           id: p.id, side: p.side, sym: p.sym, entry: p.entry,
           size: p.size, lev: p.lev, tp: p.tp, sl: p.sl,

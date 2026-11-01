@@ -12015,6 +12015,31 @@ module.exports = {
         const r2 = db.prepare('SELECT MAX(seq) as m FROM at_closed WHERE user_id = ?').get(userId);
         return Math.max((r1 && r1.m) || 0, (r2 && r2.m) || 0);
     },
+    // [SYNC ZOMBIE 2026-11-01] Which of these seqs has THIS user already closed?
+    // Used by POST /api/sync/state to stop the per-user JSON snapshot from
+    // resurrecting positions serverAT archived server-side. Scoped by user_id so
+    // one account can never answer for another. Returns a Set of STRING seqs —
+    // the sync payload carries ids as both numbers and strings.
+    atClosedSeqsForUser: (userId, seqs) => {
+        const out = new Set();
+        const uid = parseInt(userId, 10);
+        if (!Number.isFinite(uid) || uid <= 0) return out;
+        const list = (Array.isArray(seqs) ? seqs : [])
+            .map((s) => (typeof s === 'number' && Number.isFinite(s)) ? s
+                : (typeof s === 'string' && /^[0-9]+$/.test(s)) ? Number(s) : null)
+            .filter((n) => n !== null && n > 0);
+        if (list.length === 0) return out;
+        // Chunked so a large snapshot cannot blow SQLite's variable limit (999).
+        for (let i = 0; i < list.length; i += 400) {
+            const chunk = list.slice(i, i + 400);
+            const ph = chunk.map(() => '?').join(',');
+            const rows = db.prepare(
+                `SELECT seq FROM at_closed WHERE user_id = ? AND seq IN (${ph})`
+            ).all(uid, ...chunk);
+            for (const r of rows) out.add(String(r.seq));
+        }
+        return out;
+    },
     // Journal
     journalGetClosed: (userId, limit, offset) => _stmts.journalGetClosed.all(userId, limit, offset),
     journalCountClosed: (userId) => (_stmts.journalCountClosed.get(userId) || { cnt: 0 }).cnt,

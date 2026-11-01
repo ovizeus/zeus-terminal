@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../services/logger');
 const db = require('../services/database');
+const zombieFilter = require('../services/syncZombieFilter');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const SYNC_DIR = path.join(DATA_DIR, 'sync_user');
@@ -151,7 +152,35 @@ router.post('/state', (req, res) => {
                     body.demoBalance = bal.balance;
                 }
             } catch (_) { /* serverAT not ready — keep client value as fallback */ }
-            const finalPositions = Array.isArray(body.positions) ? body.positions : [];
+            // [SYNC ZOMBIE 2026-11-01] `closedIds` only ever learns about closes the
+            // CLIENT saw. serverAT closes demo positions on its own (DSL_PL /
+            // DSL_ML_CUT) and archives them to at_closed without touching this
+            // snapshot, so the merge above kept re-adding them forever. Measured
+            // on the live box: 13 positions in the snapshot, 4 open in the engine,
+            // the 9 extras all closed in at_closed — and SHORTs, so the phone
+            // showed a mixed LONG+SHORT demo book the engine never held.
+            // at_closed is authoritative: the row lands there in the same
+            // transaction that deletes it from at_positions. Their ids also join
+            // closedIds, so a stale client payload cannot push them back.
+            let finalPositions = Array.isArray(body.positions) ? body.positions : [];
+            try {
+                const archived = db.atClosedSeqsForUser(uid, finalPositions.map(p => p && p.id));
+                if (archived.size > 0) {
+                    const split = zombieFilter.partitionArchived(finalPositions, archived);
+                    if (split.dropped.length > 0) {
+                        logger.warn('SYNC', `[ZOMBIE] Dropped ${split.dropped.length} position(s) already closed server-side uid=${uid}: ${split.dropped.map(p => p.id).join(',')}`);
+                        finalPositions = split.kept;
+                        body.positions = split.kept;
+                        const _cl = new Set(body.closedIds || []);
+                        split.dropped.forEach(p => _cl.add(String(p.id)));
+                        body.closedIds = Array.from(_cl).slice(-1000);
+                    }
+                }
+            } catch (e) {
+                // Never let the archive lookup break a sync — a failed query means
+                // we persist what we had, exactly as before this guard existed.
+                logger.warn('SYNC', 'zombie filter failed uid=' + uid + ': ' + e.message);
+            }
             const tmpFile = sf + '.tmp';
             fs.writeFileSync(tmpFile, JSON.stringify(body), 'utf8');
             fs.renameSync(tmpFile, sf);
