@@ -6563,25 +6563,19 @@ select option {
 .omega-mode-real    { color: #ff3030; background: rgba(255, 48, 48, 0.12); box-shadow: 0 0 8px rgba(255, 48, 48, 0.4); animation: omega-real-pulse 2s ease-in-out infinite alternate; }
 .omega-mode-locked  { color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.3); }
 
-/* [Day 29] Chat sticky bottom — WhatsApp-style minimize/expand.
-   Default: small bar with header + input. Expand on focus to overlay
-   with full scroll history visible. */
-.omega-page-grid-no-chat { grid-template-rows: 280px minmax(260px, 1fr) !important; }
-@media (max-width: 720px) {
-  .omega-page-grid-no-chat { grid-template-rows: 220px minmax(220px, 1fr) !important; }
-}
-@media (max-width: 460px) {
-  .omega-page-grid-no-chat { grid-template-rows: 180px minmax(200px, 1fr) !important; }
-}
+/* [2026-11-01] The 2-row override that went with the sticky chat bar is gone:
+   the page uses its own three-row grid again, chat entry as the third row. */
 
 /* [OMEGA CHAT CARD 2026-11-01] The way into the chat.
    Replaces a bar that was stuck to the bottom of the page, sat on top of the
    thought list and had no visible close. The tile sits UNDER the thoughts, so
    nothing is covered any more, and tapping it opens the chat as its own page
    with the header's Back button. */
-/* Sits in the page's normal flow, under the voice grid — matches the grid's
-   own 12px gutter so the tile lines up with the zones above it. */
-.omega-page-chat-entry { padding: 0 12px 14px; }
+/* The grid's THIRD row — the slot the chat has always occupied on this page.
+   Not a sibling after the grid: tried that, and `.omega-page-grid` is `flex: 1`
+   with `min-height: 0`, so its box shrank to make room while its fixed rows did
+   not, and the thought list spilled straight over the card. */
+.omega-page-chat-entry { min-height: 0; display: flex; }
 .omega-chat-card {
   /* It is a <button>: reset the chrome a button brings, keep the semantics. */
   appearance: none;
@@ -6589,12 +6583,14 @@ select option {
   font: inherit;
   color: inherit;
   width: 100%;
-  margin: 14px 0 4px;
-  padding: 18px 16px 16px;
+  height: 100%;
+  min-height: 0;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   cursor: pointer;
   border: 1px solid rgba(255, 190, 70, 0.34);
   border-radius: 14px;
@@ -6611,13 +6607,19 @@ select option {
 }
 .omega-chat-card:focus-visible { outline: 2px solid rgba(255, 210, 120, 0.9); outline-offset: 2px; }
 .omega-chat-card:active { transform: translateY(1px); }
+/* emblem.jpg is gold on BLACK. Painted flat it shows as a dark square — it did,
+   in the operator's screenshot. TheOrb solves this with a screen blend, which
+   makes the black vanish and leaves only the gold; same recipe here. */
 .omega-chat-card-emblem {
-  width: 72px;
-  height: 72px;
-  background-size: contain;
+  flex: 0 1 auto;
+  width: 64px;
+  height: 64px;
+  min-height: 0;
+  background-size: 118%;
   background-position: center;
   background-repeat: no-repeat;
-  filter: drop-shadow(0 0 10px rgba(255, 170, 40, 0.35));
+  mix-blend-mode: screen;
+  filter: contrast(2.3) brightness(1.45) saturate(1.15) drop-shadow(0 0 12px rgba(255, 210, 140, 0.3));
 }
 .omega-chat-card-title {
   font-family: 'Orbitron', 'Rajdhani', sans-serif;
@@ -6632,9 +6634,13 @@ select option {
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.52);
 }
+@media (max-width: 720px) {
+  .omega-chat-card { padding: 12px; gap: 5px; }
+  .omega-chat-card-emblem { width: 56px; height: 56px; }
+}
 @media (max-width: 460px) {
-  .omega-chat-card { padding: 14px 12px 12px; margin-top: 12px; }
-  .omega-chat-card-emblem { width: 58px; height: 58px; }
+  .omega-chat-card { padding: 10px; gap: 4px; }
+  .omega-chat-card-emblem { width: 48px; height: 48px; }
   .omega-chat-card-title { font-size: 15px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -6642,33 +6648,6 @@ select option {
   .omega-chat-card:active { transform: none; }
 }
 
-/* Chat as its own page: fills the body, no collapsed state, no overlay. */
-.omega-page-chat-body { display: flex; min-height: 0; }
-.omega-chat-full {
-  max-height: none;
-  height: 100%;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: visible;
-}
-.omega-chat-full .omega-chat-scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
-  overflow-y: auto;
-}
-
-.omega-page-chat-sticky {
-  position: sticky;
-  bottom: 0;
-  z-index: 50;
-  background: rgba(5, 5, 16, 0.92);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(0, 212, 255, 0.18);
-  margin: 12px -12px 0 -12px;
-  padding: 0 12px;
-}
 
 /* Collapsed state — only header + input row visible, scroll hidden. */
 .omega-chat {
@@ -6697,18 +6676,6 @@ select option {
  * fills the remaining space stably.
  */
 @media (max-width: 768px) {
-  /* Pin the sticky container to viewport bottom while expanded */
-  .omega-page-chat-sticky:has(.omega-chat-expanded) {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    top: auto;
-    margin: 0;
-    padding: 0 12px;
-    z-index: 100;
-    background: rgba(5, 5, 16, 0.98);
-  }
   .omega-chat-expanded {
     /* dynamic viewport height accounts for mobile keyboard */
     max-height: 85dvh;
@@ -6733,9 +6700,6 @@ select option {
  * (will overlay even on desktop narrow viewports) but safer than drift. */
 @supports not selector(:has(*)) {
   @media (max-width: 768px) {
-    .omega-page-chat-sticky {
-      position: relative;
-    }
     .omega-chat.omega-chat-expanded {
       position: fixed;
       left: 0;
@@ -6748,6 +6712,40 @@ select option {
       padding: 0 12px;
     }
   }
+}
+
+/* [OMEGA CHAT CARD 2026-11-01] Chat as its own page.
+   These MUST come after every .omega-chat / .omega-chat-expanded rule above:
+   all three are single-class selectors, so specificity ties and the LAST one
+   wins. Placed earlier in the file, `.omega-chat { max-height: 110px }` and the
+   mobile `.omega-chat-expanded { height: 85dvh }` would have quietly clamped a
+   page that is supposed to fill its container. */
+.omega-page-chat-body { display: flex; min-height: 0; }
+.omega-chat.omega-chat-full {
+  max-height: none;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+  transition: none;
+}
+.omega-chat.omega-chat-full .omega-chat-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.omega-chat.omega-chat-full .omega-chat-input-row {
+  flex-shrink: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+@media (max-width: 768px) {
+  .omega-chat.omega-chat-full { height: 100%; max-height: none; }
+  .omega-chat.omega-chat-full .omega-chat-scroll { max-height: none; }
 }
 
 .omega-chat:not(.omega-chat-expanded) .omega-chat-scroll {

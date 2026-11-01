@@ -294,24 +294,26 @@ export function OmegaPage() {
 
             <R5AStats />
 
-            {/* Layout: 2-row grid (orb + voice). [2026-11-01] The chat is no longer
-                a sticky bar under this grid — it is the card below, and its own page. */}
-            <div className="omega-page-grid omega-page-grid-no-chat">
+            {/* [OMEGA CHAT CARD 2026-11-01 fix] Back to the page's OWN three-row grid
+                — orb, voice, and the chat entry as the third row.
+                The first attempt put the card after the grid in normal flow, and it
+                landed ON TOP of the thought list: `.omega-page-grid` is `flex: 1`
+                with `min-height: 0`, so making room for a sibling shrank its BOX
+                while its rows (a fixed orb row + a min-height voice row) kept their
+                size — the content spilled out of the box and over whatever came
+                next, and the grid's `z-index: 2` painted it above the card too.
+                The grid was built for three zones from the start; the third row is
+                where the chat always lived. Nothing fights for space now. */}
+            <div className="omega-page-grid">
                 <div className="omega-page-orb-zone">
                     <TheOrb mood={mood} intensity={intensity} />
                 </div>
                 <div className="omega-page-voice-zone">
                     <TheVoice utterances={utterances} loading={voiceLoading} />
                 </div>
-            </div>
-
-            {/* [OMEGA CHAT CARD 2026-11-01] Below the thought list, in normal flow,
-                where the sticky bar used to sit ON TOP of it. Deliberately OUTSIDE
-                .omega-page-voice-zone: that zone is a fixed grid row with
-                overflow:hidden and <TheVoice> already fills its full height, so a
-                sibling in there would simply be clipped away. */}
-            <div className="omega-page-chat-entry">
-                <OmegaChatCard count={chatCount} onOpen={() => setView('chat')} />
+                <div className="omega-page-chat-entry">
+                    <OmegaChatCard count={chatCount} onOpen={() => setView('chat')} />
+                </div>
             </div>
         </div>
     )

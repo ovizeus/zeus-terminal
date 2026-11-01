@@ -70,6 +70,23 @@ describe('OMEGA page — the chat is a place you go to, not a bar over the feed'
     expect(screen.getByText('OMEGA CHAT AI')).toBeTruthy()
   })
 
+  it('REGRESSION: the card lives INSIDE the page grid, as its third row', () => {
+    // It was briefly a sibling AFTER .omega-page-grid. The grid is `flex: 1`
+    // with `min-height: 0`, so making room for the sibling shrank its BOX while
+    // its fixed rows kept their size: the thought list spilled out of the box
+    // and over the card, and the grid's z-index painted it on top too. The
+    // operator's screenshot showed a thought printed straight through the tile.
+    const { container } = render(<OmegaPage />)
+    const grid = container.querySelector('.omega-page-grid')
+    expect(grid).toBeTruthy()
+    const entry = container.querySelector('.omega-page-chat-entry')
+    expect(entry).toBeTruthy()
+    expect(entry!.parentElement).toBe(grid)
+    // Three zones in order: orb, voice, chat entry — the layout this page was built for.
+    const zones = Array.from(grid!.children).map(c => c.className)
+    expect(zones).toEqual(['omega-page-orb-zone', 'omega-page-voice-zone', 'omega-page-chat-entry'])
+  })
+
   it('the card reads its count from the store, so it is right before the chat is ever opened', () => {
     render(<OmegaPage />)
     expect(screen.getByText('2 messages — tap to open')).toBeTruthy()

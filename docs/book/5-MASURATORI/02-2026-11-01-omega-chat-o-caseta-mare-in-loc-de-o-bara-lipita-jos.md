@@ -45,3 +45,5 @@ Client **167 de fişiere, 1.642 de teste**, `tsc` 0 erori. Verificat **în bundl
 Regulile `.omega-page-chat-sticky` au rămas în CSS fără niciun element care să le folosească. Nu strică nimic, dar sunt moarte.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---
