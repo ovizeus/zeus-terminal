@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { firstClippedIndex, shouldSpread, type Measured } from './voiceClip'
 import type { Utterance } from './omegaApi'
 import { MOOD_COLOR, MOOD_GLYPH, fmtTime, fetchVoice } from './omegaApi'
 
@@ -53,43 +52,6 @@ export function TheVoice({ utterances, loading }: Props) {
     const displayed = historyData != null ? historyData : utterances
     const isLoadingShown = historyData != null ? historyLoading : loading
 
-    // [2026-11-01] Taie gandul care nu incape INTREG, in loc sa-l lase o felie.
-    // Se face dupa asezare, fiindca inaltimea unui gand depinde de cate randuri
-    // de text are, iar inaltimea zonei vine din grila paginii — nu se potrivesc
-    // niciodata exact. Doar cand lista e la inceput: daca operatorul a derulat,
-    // vrea sa citeasca, deci se arata tot si nimic nu dispare sub degetul lui.
-    const [clipFrom, setClipFrom] = useState(-1)
-    const [spread, setSpread] = useState(false)
-    const rowsRef = useRef<Array<HTMLDivElement | null>>([])
-
-    useEffect(() => {
-        const box = listRef.current
-        if (!box) return
-        let raf = 0
-        const measure = () => {
-            const el = listRef.current
-            if (!el) return
-            const items: Measured[] = rowsRef.current
-                .slice(0, displayed.length)
-                .filter(Boolean)
-                .map((r) => ({ top: (r as HTMLDivElement).offsetTop, height: (r as HTMLDivElement).offsetHeight }))
-            if (el.scrollTop > 1) { setClipFrom(-1); setSpread(false); return }   // deruleaza → arata tot
-            setClipFrom(firstClippedIndex(items, el.clientHeight))
-            setSpread(shouldSpread(items, el.clientHeight, el.scrollTop))
-        }
-        const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(measure) }
-        schedule()
-        const onScroll = () => schedule()
-        box.addEventListener('scroll', onScroll, { passive: true })
-        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null
-        if (ro) ro.observe(box)
-        return () => {
-            cancelAnimationFrame(raf)
-            box.removeEventListener('scroll', onScroll)
-            if (ro) ro.disconnect()
-        }
-    }, [displayed])
-
     useEffect(() => {
         if (displayed.length === 0) return
         const topId = displayed[0].id
@@ -124,7 +86,7 @@ export function TheVoice({ utterances, loading }: Props) {
                     {isLoadingShown ? '...' : `${displayed.length} thought${displayed.length === 1 ? '' : 's'}`}
                 </span>
             </div>
-            <div className={`omega-voice-feed${spread ? ' omega-voice-feed-spread' : ''}`} ref={listRef}>
+            <div className="omega-voice-feed" ref={listRef}>
                 {displayed.length === 0 ? (
                     <div className="omega-voice-empty">
                         <div className="omega-voice-empty-glyph">⟡</div>
@@ -137,7 +99,7 @@ export function TheVoice({ utterances, loading }: Props) {
                         </div>
                     </div>
                 ) : (
-                    displayed.map((u, idx) => {
+                    displayed.map(u => {
                         // [Wave 8 C] Confidence display per utterance. Parses contextJson
                         // for {confidence, score, regime} hints when brain thoughts surface.
                         let ctx: any = null
@@ -148,12 +110,7 @@ export function TheVoice({ utterances, loading }: Props) {
                             : null
                         const regime = ctx && ctx.regime ? String(ctx.regime) : null
                         return (
-                        <div
-                            key={u.id}
-                            ref={(el) => { rowsRef.current[idx] = el }}
-                            className={`omega-utter omega-utter-${u.utterance_type.toLowerCase()}${clipFrom >= 0 && idx >= clipFrom ? ' omega-utter-clipped' : ''}`}
-                            style={{ borderLeftColor: MOOD_COLOR[u.mood] }}
-                        >
+                        <div key={u.id} className={`omega-utter omega-utter-${u.utterance_type.toLowerCase()}`} style={{ borderLeftColor: MOOD_COLOR[u.mood] }}>
                             <div className="omega-utter-head">
                                 <span className="omega-utter-glyph" style={{ color: MOOD_COLOR[u.mood] }}>{MOOD_GLYPH[u.mood]}</span>
                                 <span className="omega-utter-time">{fmtTime(u.created_at)}</span>

@@ -70,21 +70,41 @@ describe('OMEGA page — the chat is a place you go to, not a bar over the feed'
     expect(screen.getByText('OMEGA CHAT AI')).toBeTruthy()
   })
 
-  it('REGRESSION: the card lives INSIDE the page grid, as its third row', () => {
-    // It was briefly a sibling AFTER .omega-page-grid. The grid is `flex: 1`
+  it('REGRESSION: the cards live INSIDE the page grid', () => {
+    // A card was briefly a sibling AFTER .omega-page-grid. The grid is `flex: 1`
     // with `min-height: 0`, so making room for the sibling shrank its BOX while
-    // its fixed rows kept their size: the thought list spilled out of the box
-    // and over the card, and the grid's z-index painted it on top too. The
-    // operator's screenshot showed a thought printed straight through the tile.
+    // its rows kept their size: the content spilled out and over the card, and
+    // the grid's z-index painted it on top too. The operator's screenshot showed
+    // a thought printed straight through the tile.
     const { container } = render(<OmegaPage />)
     const grid = container.querySelector('.omega-page-grid')
     expect(grid).toBeTruthy()
-    const entry = container.querySelector('.omega-page-chat-entry')
-    expect(entry).toBeTruthy()
-    expect(entry!.parentElement).toBe(grid)
-    // Three zones in order: orb, voice, chat entry — the layout this page was built for.
+    // [2026-11-01] Three rows: the orb, then the two twin entry cards. THE VOICE
+    // stopped being a fixed-height list on this page — that box was taller than
+    // the thoughts it received, which is what produced every gap and clipped row.
     const zones = Array.from(grid!.children).map(c => c.className)
-    expect(zones).toEqual(['omega-page-orb-zone', 'omega-page-voice-zone', 'omega-page-chat-entry'])
+    expect(zones).toEqual(['omega-page-orb-zone', 'omega-page-entry', 'omega-page-entry'])
+    expect(container.querySelector('.omega-page-voice-zone')).toBeNull()
+  })
+
+  it('REGRESSION: tapping THE VOICE opens the thought stream as its own page', () => {
+    render(<OmegaPage />)
+    fireEvent.click(screen.getByRole('button', { name: /Open THE VOICE/i }))
+    expect(screen.getByTestId('voice')).toBeTruthy()           // lista reala, pe pagina ei
+    expect(screen.getByText('what OMEGA is thinking')).toBeTruthy()
+    // Pagina principala e inlocuita — nicio caseta nu mai concureaza cu lista.
+    expect(screen.queryByRole('button', { name: /Open OMEGA chat/i })).toBeNull()
+  })
+
+  it('REGRESSION: Back din fluxul de ganduri se intoarce la OMEGA, nu inchide panoul', () => {
+    render(<OmegaPage />)
+    fireEvent.click(screen.getByRole('button', { name: /Open THE VOICE/i }))
+    const ev = new CustomEvent('zeus:page-back', { cancelable: true })
+    act(() => { window.dispatchEvent(ev) })
+    expect(ev.defaultPrevented).toBe(true)
+    expect(screen.queryByTestId('voice')).toBeNull()
+    expect(screen.getByRole('button', { name: /Open THE VOICE/i })).toBeTruthy()
+    expect(card()).toBeTruthy()
   })
 
   it('the card reads its count from the store, so it is right before the chat is ever opened', () => {
@@ -102,7 +122,7 @@ describe('OMEGA page — the chat is a place you go to, not a bar over the feed'
     expect(chat.getAttribute('data-fullpage')).toBe('yes')
     expect(screen.getByText('OMEGA CHAT AI')).toBeTruthy() // page title
     // The main page is gone while chatting — nothing overlaps anything.
-    expect(screen.queryByTestId('voice')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Open THE VOICE/i })).toBeNull()
   })
 
   it('REGRESSION: Back returns to OMEGA, and does NOT close the whole panel', () => {
@@ -118,8 +138,9 @@ describe('OMEGA page — the chat is a place you go to, not a bar over the feed'
     // The page swallowed the Back — the dock must not pop OMEGA off.
     expect(ev.defaultPrevented).toBe(true)
     expect(screen.queryByTestId('talkwithme')).toBeNull()
-    expect(screen.getByTestId('voice')).toBeTruthy()
+    // Back on the MAIN page: both entry cards are there again.
     expect(card()).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Open THE VOICE/i })).toBeTruthy()
   })
 
   it('on the MAIN page Back is left alone, so it still closes OMEGA', () => {

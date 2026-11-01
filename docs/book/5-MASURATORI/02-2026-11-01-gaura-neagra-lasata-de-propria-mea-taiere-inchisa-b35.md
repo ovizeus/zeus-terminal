@@ -37,3 +37,5 @@ Un gând măsura ~115px, zona ~229px. Al doilea se termina la **230** — cu **u
 7 teste noi. Client **174 de fişiere, 1.686 de teste**, `tsc` 0 erori. Verificat în bundle-ul servit.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---

@@ -3,6 +3,7 @@ import { TheOrb } from './TheOrb'
 import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
 import { OmegaChatCard } from './OmegaChatCard'
+import { OmegaVoiceCard } from './OmegaVoiceCard'
 import { useOmegaChatStore } from '../../stores/omegaChatStore'
 import { ReportCard } from './ReportCard'
 import { R5AStats } from './R5AStats'
@@ -31,7 +32,13 @@ import * as omegaAmbient from '../../audio/omegaAmbient'
  * of "alive"), voice + health polled every 5s. Aborts in-flight requests
  * on unmount.
  */
-type OmegaView = 'main' | 'doctor' | 'ring5' | 'report' | 'chat'
+// Ora scurta pentru previzualizarea din caseta THE VOICE.
+function _fmtClock(ts: number): string {
+    try { return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }
+    catch (_) { return '' }
+}
+
+type OmegaView = 'main' | 'doctor' | 'ring5' | 'report' | 'chat' | 'voice'
 
 export function OmegaPage() {
     const [view, setView] = useState<OmegaView>('main')
@@ -195,6 +202,26 @@ export function OmegaPage() {
         )
     }
 
+    // [2026-11-01] THE VOICE a plecat de pe pagina principala. Statea intr-un rand
+    // de grila cu inaltime fixa si primea un gand la ~30 de secunde, deci cutia
+    // era mereu mai mare decat continutul: degradeul ascundea golul, taierea il
+    // muta, intinderea l-a despicat in doua. Aici are pagina ei si loc cat vrea.
+    if (view === 'voice') {
+        return (
+            <div className="omega-page omega-page-dedicated" data-mood={mood}>
+                <div className="omega-page-header">
+                    <h1 className="omega-page-title">
+                        <span className="omega-title-name">THE VOICE</span>
+                        <span className="omega-title-tag">what OMEGA is thinking</span>
+                    </h1>
+                </div>
+                <div className="omega-page-dedicated-body omega-page-voice-body">
+                    <TheVoice utterances={utterances} loading={voiceLoading} />
+                </div>
+            </div>
+        )
+    }
+
     if (view === 'report') {
         return (
             <div className="omega-page omega-page-dedicated" data-mood={mood}>
@@ -304,14 +331,23 @@ export function OmegaPage() {
                 next, and the grid's `z-index: 2` painted it above the card too.
                 The grid was built for three zones from the start; the third row is
                 where the chat always lived. Nothing fights for space now. */}
-            <div className="omega-page-grid">
+            {/* [2026-11-01] Orbul, apoi doua casete gemene. Randul de mijloc nu mai
+                e o cutie de inaltime fixa hranita cu un gand la jumatate de minut
+                — fiecare caseta e cat continutul ei, deci nu mai are de unde sa
+                apara nici gol, nici gand taiat. */}
+            <div className="omega-page-grid omega-page-grid-cards">
                 <div className="omega-page-orb-zone">
                     <TheOrb mood={mood} intensity={intensity} />
                 </div>
-                <div className="omega-page-voice-zone">
-                    <TheVoice utterances={utterances} loading={voiceLoading} />
+                <div className="omega-page-entry">
+                    <OmegaVoiceCard
+                        count={utterances.length}
+                        lastText={utterances.length > 0 ? utterances[0].text : null}
+                        lastTime={utterances.length > 0 ? _fmtClock(utterances[0].created_at) : null}
+                        onOpen={() => setView('voice')}
+                    />
                 </div>
-                <div className="omega-page-chat-entry">
+                <div className="omega-page-entry">
                     <OmegaChatCard count={chatCount} onOpen={() => setView('chat')} />
                 </div>
             </div>

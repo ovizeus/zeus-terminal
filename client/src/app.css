@@ -6439,6 +6439,15 @@ select option {
   }
 }
 
+/* [2026-11-01] Pagina principala: orbul, apoi doua casete gemene. Randurile de
+   caseta sunt `auto` — cat continutul lor — iar orbul ia ce ramane. Asa nu mai
+   exista cutie de inaltime fixa pe care continutul sa nu o poata umple, care
+   era cauza golurilor de la b355-b358. */
+.omega-page-grid-cards {
+  grid-template-rows: minmax(140px, 1fr) auto auto !important;
+}
+.omega-page-entry { min-height: 0; display: flex; }
+
 .omega-page-orb-zone,
 .omega-page-voice-zone,
 .omega-page-chat-zone {
@@ -6576,14 +6585,19 @@ select option {
    with `min-height: 0`, so its box shrank to make room while its fixed rows did
    not, and the thought list spilled straight over the card. */
 .omega-page-chat-entry { min-height: 0; display: flex; }
-.omega-chat-card {
+.omega-chat-card,
+.omega-entry-card {
   /* It is a <button>: reset the chrome a button brings, keep the semantics. */
   appearance: none;
   -webkit-appearance: none;
   font: inherit;
   color: inherit;
   width: 100%;
-  height: 100%;
+  /* [2026-11-01] `auto`, nu `100%`: randurile de caseta din grila sunt acum
+     `auto`, deci caseta isi da singura inaltimea din continut. Un `height:100%`
+     fata de un parinte cu inaltime automata e o cursa pe care am vrea sa o
+     evitam, nu sa o descoperim dintr-o captura. */
+  height: auto;
   min-height: 0;
   padding: 14px 16px;
   display: flex;
@@ -6714,13 +6728,53 @@ select option {
   }
 }
 
+/* [2026-11-01] Caseta THE VOICE — geamana celei de chat, dar in cyan, culoarea
+   pe care panoul o foloseste deja pentru ganduri. Formele vin din regula
+   comuna de mai sus; aici sunt doar accentul si continutul propriu. */
+.omega-voice-card {
+  border-color: rgba(0, 212, 255, 0.30);
+  background:
+    radial-gradient(120% 140% at 50% 0%, rgba(0, 212, 255, 0.11) 0%, rgba(0, 212, 255, 0) 62%),
+    linear-gradient(180deg, rgba(10, 12, 26, 0.96) 0%, rgba(5, 5, 16, 0.96) 100%);
+}
+.omega-voice-card:hover,
+.omega-voice-card:focus-visible {
+  border-color: rgba(0, 212, 255, 0.66);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5) inset, 0 8px 28px rgba(0, 212, 255, 0.18);
+}
+.omega-voice-card:focus-visible { outline-color: rgba(120, 225, 255, 0.9); }
+.omega-voice-card-glyph {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 13px; letter-spacing: 0.5em;
+  color: #00d4ff; opacity: 0.75;
+}
+.omega-entry-card-title {
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;
+  font-size: 17px; font-weight: 700; letter-spacing: 0.16em;
+  color: #ffd98a; text-shadow: 0 0 14px rgba(255, 170, 40, 0.35);
+}
+.omega-voice-card .omega-entry-card-title { color: #7fe6ff; text-shadow: 0 0 14px rgba(0, 212, 255, 0.35); }
+.omega-entry-card-hint {
+  font-size: 11.5px; letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.52);
+  line-height: 1.45; text-align: center;
+  /* Doua randuri cel mult: previzualizarea e un indiciu, nu continutul. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+@media (max-width: 460px) {
+  .omega-entry-card-title { font-size: 15px; }
+  .omega-voice-card-glyph { font-size: 11px; }
+}
+
 /* [OMEGA CHAT CARD 2026-11-01] Chat as its own page.
    These MUST come after every .omega-chat / .omega-chat-expanded rule above:
    all three are single-class selectors, so specificity ties and the LAST one
    wins. Placed earlier in the file, `.omega-chat { max-height: 110px }` and the
    mobile `.omega-chat-expanded { height: 85dvh }` would have quietly clamped a
    page that is supposed to fill its container. */
-.omega-page-chat-body { display: flex; min-height: 0; }
+.omega-page-chat-body,
+.omega-page-voice-body { display: flex; min-height: 0; }
 .omega-chat.omega-chat-full {
   max-height: none;
   height: 100%;
@@ -6855,32 +6909,17 @@ select option {
      in view now dissolves, and the cut stops looking like a mistake.
      The extra bottom padding lets the last thought scroll clear of the fade,
      so nothing is permanently dimmed once you reach the end. */
-  /* [2026-11-01] Degradeul a ramas DOAR ca semn ca mai e lista sub deget, si e
-     mic: taierea propriu-zisa o face acum .omega-utter-clipped, care scoate de
-     tot gandul ce nu incape intreg. Un degrade mare peste un gand deja ascuns
-     ar fi stins fara motiv randul de deasupra lui. */
+  /* [2026-11-01] Fara degrade si fara taiere: lista traieste acum pe pagina ei,
+     unde are loc si deruleaza normal. Degradeul (b355) si taierea (b357) existau
+     doar ca sa ascunda ca o cutie de inaltime fixa nu se potriveste cu continut
+     rar — cauza, nu simptomul, e ce s-a reparat. */
   padding-bottom: 10px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%);
-          mask-image: linear-gradient(to bottom, #000 calc(100% - 10px), transparent 100%);
 }
 .omega-voice-feed::-webkit-scrollbar { width: 6px; }
 .omega-voice-feed::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }
-/* [2026-11-01] Gandul care nu incape INTREG nu se mai arata deloc. Masurat in
-   TheVoice dupa asezare; se aplica doar cand lista e la inceput, deci cand
-   operatorul deruleaza ca sa citeasca, totul reapare. */
-.omega-utter-clipped { display: none; }
 
-/* [2026-11-01] Si ce ramane dupa taiere trebuie sa UMPLE zona. Altfel gaura de
-   jos arata la fel de rau ca felia scoasa — exact ce s-a intamplat la b357.
-   Se aplica DOAR cand continutul incape sigur (vezi shouldSpread): pe un flex
-   care da pe afara, justify-content impinge primele randuri dincolo de marginea
-   de sus, unde nu se mai ajunge cu degetul. */
-.omega-voice-feed-spread {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-evenly;
-}
-.omega-voice-feed-spread .omega-utter { margin-bottom: 0; }
+
+
 
 .omega-voice-empty {
   height: 100%; display: flex; flex-direction: column;
