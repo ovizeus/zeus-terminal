@@ -6870,6 +6870,18 @@ select option {
    operatorul deruleaza ca sa citeasca, totul reapare. */
 .omega-utter-clipped { display: none; }
 
+/* [2026-11-01] Si ce ramane dupa taiere trebuie sa UMPLE zona. Altfel gaura de
+   jos arata la fel de rau ca felia scoasa — exact ce s-a intamplat la b357.
+   Se aplica DOAR cand continutul incape sigur (vezi shouldSpread): pe un flex
+   care da pe afara, justify-content impinge primele randuri dincolo de marginea
+   de sus, unde nu se mai ajunge cu degetul. */
+.omega-voice-feed-spread {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+}
+.omega-voice-feed-spread .omega-utter { margin-bottom: 0; }
+
 .omega-voice-empty {
   height: 100%; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px;
@@ -6889,6 +6901,14 @@ select option {
   border-radius: 0 5px 5px 0;
   animation: omega-utter-in 0.3s ease;
   line-height: 1.5;
+}
+/* [2026-11-01] Pe telefon un gand masura ~115px si zona ~229px, deci al doilea
+   se termina cu un pixel PESTE margine si era taiat — ramanea unul singur si o
+   gaura de ~115px sub el. Cateva puncte mai stramt si intra doi intregi. */
+@media (max-width: 560px) {
+  .omega-utter { padding: 6px 10px; margin-bottom: 8px; line-height: 1.42; }
+  .omega-utter-head { gap: 7px; font-size: 9.5px; margin-bottom: 3px; }
+  .omega-utter-text { font-size: 14px; line-height: 1.42; }
 }
 @keyframes omega-utter-in { 0% { opacity: 0; transform: translateX(-8px); } 100% { opacity: 1; transform: translateX(0); } }
 .omega-utter-head {

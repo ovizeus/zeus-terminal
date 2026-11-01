@@ -42,3 +42,26 @@ export function firstClippedIndex(items: Measured[], viewportHeight: number): nu
     }
     return -1
 }
+
+/**
+ * Ce ramane dupa taiere trebuie sa UMPLE zona, altfel gaura de jos arata la fel
+ * de rau ca felia pe care tocmai am scos-o — asta a si pathit la b357: un gand
+ * si ~115px de negru sub el.
+ *
+ * Intoarce true cand continutul vizibil incape sigur, deci poate fi distribuit
+ * pe toata inaltimea. NU se distribuie cand operatorul deruleaza: acolo
+ * continutul depaseste zona, iar `justify-content` pe un flex care da pe afara
+ * impinge primele randuri dincolo de marginea de sus, unde nu se mai poate
+ * ajunge cu degetul.
+ */
+export function shouldSpread(items: Measured[], viewportHeight: number, scrollTop: number): boolean {
+    if (typeof scrollTop === 'number' && Number.isFinite(scrollTop) && scrollTop > 1) return false
+    if (!Array.isArray(items) || items.length === 0) return false
+    if (typeof viewportHeight !== 'number' || !Number.isFinite(viewportHeight) || viewportHeight <= 0) return false
+    const cut = firstClippedIndex(items, viewportHeight)
+    if (cut > 0) return true                      // am taiat → ce a ramas incape
+    if (cut === 0) return false                   // nu se intampla (guarda din firstClippedIndex)
+    const last = items[items.length - 1]
+    if (!last || !Number.isFinite(last.top) || !Number.isFinite(last.height)) return false
+    return last.top + last.height <= viewportHeight + 0.5   // incape tot fara taiere
+}

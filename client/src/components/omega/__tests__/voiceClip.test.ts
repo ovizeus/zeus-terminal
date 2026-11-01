@@ -50,3 +50,40 @@ describe('firstClippedIndex', () => {
     expect(firstClippedIndex(rows(100, 101), 200)).toBe(1)
   })
 })
+
+// [2026-11-01] "tot se vede si e urat acolo" — taierea de la b357 a scos felia
+// dar a lasat o gaura de ~115px sub singurul gand ramas. Ce ramane trebuie sa
+// umple zona.
+import { shouldSpread } from '../voiceClip'
+
+describe('shouldSpread', () => {
+  const rows2 = (...hs: number[]) => {
+    let top = 0
+    return hs.map(h => { const r = { top, height: h }; top += h; return r })
+  }
+
+  it('REGRESIE: dupa taiere, ce a ramas se intinde — fara gaura neagra', () => {
+    expect(shouldSpread(rows2(100, 100, 100), 229, 0)).toBe(true)
+  })
+
+  it('cand incap toate fara taiere, tot se intinde', () => {
+    expect(shouldSpread(rows2(80, 80), 229, 0)).toBe(true)
+  })
+
+  it('NU se intinde cand deruleaza — altfel primele randuri ies peste marginea de sus', () => {
+    expect(shouldSpread(rows2(100, 100, 100), 229, 120)).toBe(false)
+  })
+
+  it('NU se intinde cand nici primul gand nu incape', () => {
+    // firstClippedIndex intoarce -1 ca sa nu lase panoul gol, iar continutul
+    // depaseste — a intinde aici ar impinge textul afara.
+    expect(shouldSpread(rows2(300), 100, 0)).toBe(false)
+    expect(shouldSpread(rows2(300, 300), 100, 0)).toBe(false)
+  })
+
+  it('date lipsa → nu se intinde', () => {
+    expect(shouldSpread([], 229, 0)).toBe(false)
+    expect(shouldSpread(rows2(100), 0, 0)).toBe(false)
+    expect(shouldSpread(rows2(100), null as any, 0)).toBe(false)
+  })
+})

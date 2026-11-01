@@ -34,3 +34,5 @@ Singurul fel în care dispare e să **ştii** unde se termină fiecare gând —
 Client **174 de fişiere, 1.679 de teste**, `tsc` 0 erori. Verificat în bundle-ul servit: regula de tăiere în CSS, măsurarea şi `ResizeObserver` în JS.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---

@@ -67,6 +67,23 @@ describe('TheVoice — taie gandul care nu incape intreg', () => {
         await waitFor(() => expect(clipped(container)).toEqual([false, false, false]))
     })
 
+    it('REGRESIE: ce ramane dupa taiere UMPLE zona — fara gaura neagra sub el', async () => {
+        const { container } = render(<TheVoice utterances={[u(1), u(2), u(3)]} loading={false} />)
+        await waitFor(() => {
+            const feed = container.querySelector('.omega-voice-feed') as HTMLElement
+            expect(feed.classList.contains('omega-voice-feed-spread')).toBe(true)
+        })
+    })
+
+    it('cand deruleaza NU se mai intinde — altfel primele randuri ies peste marginea de sus', async () => {
+        const { container } = render(<TheVoice utterances={[u(1), u(2), u(3)]} loading={false} />)
+        const feed = container.querySelector('.omega-voice-feed') as HTMLElement
+        await waitFor(() => expect(feed.classList.contains('omega-voice-feed-spread')).toBe(true))
+        Object.defineProperty(feed, 'scrollTop', { configurable: true, value: 120 })
+        fireEvent.scroll(feed)
+        await waitFor(() => expect(feed.classList.contains('omega-voice-feed-spread')).toBe(false))
+    })
+
     it('textul gandurilor ramase se vede in continuare', () => {
         render(<TheVoice utterances={[u(1), u(2), u(3)]} loading={false} />)
         expect(screen.getByText('gand 1')).toBeTruthy()
