@@ -6804,6 +6804,46 @@ select option {
 .omega-voice-count {
   font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6a4f8a;
 }
+/* [2026-11-01] Antetul compact: titlu + intervale + numar pe UN rand.
+   Inainte erau doua randuri (antet + bara de intervale) care luau ~80px din
+   cei ~278px ai zonei pe telefonul operatorului, si ramanea loc pentru un
+   singur gand intreg — al doilea aparea ca o fantoma, doar ora fara text. */
+.omega-voice-header-compact {
+  gap: 8px;
+  padding: 6px 10px;
+  flex-wrap: nowrap;
+}
+.omega-voice-header-compact .omega-voice-title {
+  flex: 0 0 auto;
+  letter-spacing: 0.14em;   /* 0.3em nu incape langa cinci butoane */
+  white-space: nowrap;
+}
+.omega-voice-header-compact .omega-voice-history-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border-bottom: none;
+  background: none;
+  gap: 3px;
+}
+.omega-voice-header-compact .omega-voice-count {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.omega-voice-header-compact .omega-voice-history-btn {
+  padding: 3px 4px;
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+}
+@media (max-width: 560px) {
+  /* Numarul pleaca primul: butoanele si titlul sunt ce foloseste. */
+  .omega-voice-header-compact .omega-voice-count { display: none; }
+}
+@media (max-width: 380px) {
+  .omega-voice-header-compact { padding: 5px 8px; gap: 6px; }
+  .omega-voice-header-compact .omega-voice-title { letter-spacing: 0.08em; font-size: 10px; }
+}
+
 .omega-voice-feed {
   flex: 1; overflow-y: auto; padding: 10px 14px;
   scrollbar-width: thin; scrollbar-color: #6a4f8a transparent;
@@ -6815,9 +6855,9 @@ select option {
      in view now dissolves, and the cut stops looking like a mistake.
      The extra bottom padding lets the last thought scroll clear of the fade,
      so nothing is permanently dimmed once you reach the end. */
-  padding-bottom: 34px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
-          mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
+  padding-bottom: 44px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), transparent 100%);
 }
 .omega-voice-feed::-webkit-scrollbar { width: 6px; }
 .omega-voice-feed::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }

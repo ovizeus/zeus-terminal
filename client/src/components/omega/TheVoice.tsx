@@ -63,22 +63,28 @@ export function TheVoice({ utterances, loading }: Props) {
 
     return (
         <section className="omega-voice">
-            <div className="omega-voice-header">
-                <span className="omega-voice-title">► THE VOICE ◄</span>
+            {/* [2026-11-01] Titlul si butoanele de interval stau pe UN SINGUR rand.
+                Pe telefonul operatorului erau doua randuri care mancau ~80px din
+                cei ~278px ai zonei, si ramanea loc pentru UN singur gand intreg,
+                al doilea aparand ca o fantoma: doar ora, stinsa, fara text.
+                Cei ~44px recuperati aici sunt exact cat trebuie pentru al doilea
+                gand. Numarul de ganduri se ascunde sub 460px, unde nu incape. */}
+            <div className="omega-voice-header omega-voice-header-compact">
+                <span className="omega-voice-title">THE VOICE</span>
+                <div className="omega-voice-history-bar">
+                    {HISTORY_OPTIONS.map(opt => (
+                        <button
+                            key={opt.hours}
+                            className={`omega-voice-history-btn${historyHours === opt.hours ? ' active' : ''}`}
+                            onClick={() => setHistoryHours(opt.hours)}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
                 <span className="omega-voice-count">
                     {isLoadingShown ? '...' : `${displayed.length} thought${displayed.length === 1 ? '' : 's'}`}
                 </span>
-            </div>
-            <div className="omega-voice-history-bar">
-                {HISTORY_OPTIONS.map(opt => (
-                    <button
-                        key={opt.hours}
-                        className={`omega-voice-history-btn${historyHours === opt.hours ? ' active' : ''}`}
-                        onClick={() => setHistoryHours(opt.hours)}
-                    >
-                        {opt.label}
-                    </button>
-                ))}
             </div>
             <div className="omega-voice-feed" ref={listRef}>
                 {displayed.length === 0 ? (

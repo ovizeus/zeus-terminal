@@ -55,3 +55,5 @@ Niciuna dintre ipotezele mele iniţiale (tastatura de pe mobil, furnizorul retra
 Lentoarea pe care o descrie poate veni **şi** de la degradeul adăugat la b355: e o mască pe lista de gânduri, adică pe un container **care derulează şi se actualizează des**. Nu l-am atins azi, ca să schimbăm **o singură variabilă**. Dacă rămâne greu, îl mut de pe derulare.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---
