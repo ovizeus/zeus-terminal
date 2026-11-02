@@ -56,3 +56,5 @@ Cerea ca funcţia de decizii **să nu conţină** `ml_influence_audit` — dar c
 **10 mutaţii moarte:** reacţiile scriind iar `CHAT_REPLY` · filtrul nemaiprinzând rândurile vechi · numărătoarea nefiltrată · o comandă de stare mutată la model · şablonul dispărând şi când modelul lipseşte · plus cele cinci de la contextul nou.
 
 23 de teste noi. Două teste vechi **actualizate, nu şterse**. Regresie: **10.144 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---

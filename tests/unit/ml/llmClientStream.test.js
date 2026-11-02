@@ -8,15 +8,26 @@ describe('llmClient.chatStream', () => {
     let origFetch;
     let llmClient;
 
+    let origAllow;
+
     beforeEach(() => {
         jest.resetModules();
         origFetch = global.fetch;
         process.env.GROQ_API_KEY = 'test_key_abc';
         delete process.env.XAI_API_KEY;
+        // [2026-11-02] Suita nu are voie sa iasa pe retea: llmClient se inchide
+        // singur sub jest, dupa ce s-a descoperit ca testele chemau Groq pe
+        // bune si luau 429. Testele ASTEA insa pun un `fetch` fals, deci nimic
+        // real nu pleaca — si tocmai pentru ele exista portita. O ridicam
+        // explicit aici, si o lasam la loc dupa.
+        origAllow = process.env.OMEGA_LLM_ALLOW_NET_IN_TEST;
+        process.env.OMEGA_LLM_ALLOW_NET_IN_TEST = '1';
         llmClient = require('../../../server/services/ml/_voice/llmClient');
     });
 
     afterEach(() => {
+        if (origAllow === undefined) delete process.env.OMEGA_LLM_ALLOW_NET_IN_TEST;
+        else process.env.OMEGA_LLM_ALLOW_NET_IN_TEST = origAllow;
         global.fetch = origFetch;
         delete process.env.GROQ_API_KEY;
     });

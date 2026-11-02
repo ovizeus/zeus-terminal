@@ -1778,10 +1778,7 @@ async function respondStream(params) {
 // (= LLM fallback needed). Mirrors _respondImpl routing exactly but
 // without invoking the LLM path itself.
 async function _tryLocalIntent(ctx, text, originalText) {
-    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) {
-        if (preferLLMForIntent('greeting', llmClient.available())) return null;
-        return _replyGreeting(ctx, originalText);
-    }
+    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
     if (text.match(/\b(what (do you|d'?you|you) remember|ce [șs]tii despre mine|ce ai re[țt]inut|preferin[țt]ele mele|my preferences|show.+profile)/i)) {
         return _replyShowProfile(ctx, originalText);
@@ -1858,15 +1855,9 @@ async function _tryLocalIntent(ctx, text, originalText) {
     }
     if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
     if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
-    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) {
-        if (preferLLMForIntent('mood', llmClient.available())) return null;
-        return _replyMood(ctx);
-    }
+    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
     if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
-    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) {
-        if (preferLLMForIntent('decisions', llmClient.available())) return null;
-        return _replyDecisions(ctx);
-    }
+    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
     if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
     if (text.match(/\b(fuck|shit|wtf|hell|dammit|fute)\b/)) {
         return { reply: 'easy boss. breathe. markets do that. what do you want — positions, pnl, mood?', mood: 'CALM' };
@@ -1917,10 +1908,7 @@ async function _respondImpl(params, text) {
 
     const originalText = params.text || '';
     // Order: specific intents → generic.
-    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) {
-        if (preferLLMForIntent('greeting', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
-        return _replyGreeting(ctx, originalText);
-    }
+    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
 
     // [Day 33 #2] Trader profile intents — match BEFORE symbol regex.
@@ -2032,15 +2020,9 @@ async function _respondImpl(params, text) {
     // Now require domain-specific anchor words (pnl/profit/positions/etc).
     if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
     if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
-    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) {
-        if (preferLLMForIntent('mood', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
-        return _replyMood(ctx);
-    }
+    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
     if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
-    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) {
-        if (preferLLMForIntent('decisions', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
-        return _replyDecisions(ctx);
-    }
+    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
     if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
 
     // Rude language: short de-escalation, no LLM (saves quota for real questions).

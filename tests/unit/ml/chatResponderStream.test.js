@@ -30,6 +30,7 @@ describe('chatResponder.respondStream', () => {
     });
 
     afterEach(() => {
+        delete process.env.OMEGA_LLM_ALLOW_NET_IN_TEST;
         marketRadar._resetSnapshotForTest();
     });
 
@@ -57,6 +58,10 @@ describe('chatResponder.respondStream', () => {
 
     test('LLM fallback uses streaming when API key present', async () => {
         process.env.GROQ_API_KEY = 'test_key';
+        // [2026-11-02] Testul asta inlocuieste chiar `chatStream`, deci nimic
+        // nu pleaca pe retea; portita e exact pentru cazul asta. Garda din
+        // llmClient exista fiindca suita chema Groq pe bune si lua 429.
+        process.env.OMEGA_LLM_ALLOW_NET_IN_TEST = '1';
         jest.resetModules();
         const responder2 = require('../../../server/services/ml/_voice/chatResponder');
         const llmClient = require('../../../server/services/ml/_voice/llmClient');
@@ -87,6 +92,10 @@ describe('chatResponder.respondStream', () => {
 
     test('LLM stream rate-limit (429) returns honest rate-limit message (not generic help)', async () => {
         process.env.GROQ_API_KEY = 'test_key';
+        // [2026-11-02] Testul asta inlocuieste chiar `chatStream`, deci nimic
+        // nu pleaca pe retea; portita e exact pentru cazul asta. Garda din
+        // llmClient exista fiindca suita chema Groq pe bune si lua 429.
+        process.env.OMEGA_LLM_ALLOW_NET_IN_TEST = '1';
         jest.resetModules();
         const responder2 = require('../../../server/services/ml/_voice/chatResponder');
         const llmClient = require('../../../server/services/ml/_voice/llmClient');

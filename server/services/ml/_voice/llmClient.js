@@ -64,7 +64,29 @@ function _resolveProvider() {
     return null;
 }
 
+// [2026-11-02] Sub un executor de teste nu se iese pe retea.
+//
+// Descoperit livrand: dupa ce `symbol` si `market` au trecut la model, un test
+// din chatResponderPhaseB a inceput sa primeasca "brain is rate-limited right
+// now (Groq free tier)" — adica suita CHEMA cu adevarat Groq si lua 429.
+// Testele ardeau cota operatorului si treceau sau cadeau dupa cum raspundea un
+// serviciu extern. Fisierul acela incearca sa se apere singur cu un
+// `delete process.env.GROQ_API_KEY` la incarcare, dar cheia revine prin
+// `dotenv` din lantul de require-uri — o aparare care arata ca functioneaza si
+// nu functiona.
+//
+// Garda sta aici, la singura poarta spre retea, nu in fiecare test.
+// `OMEGA_LLM_ALLOW_NET_IN_TEST=1` o ridica explicit, pentru cand chiar vrei sa
+// probezi calea reala.
+const _UNDER_TEST = !!process.env.JEST_WORKER_ID || process.env.NODE_ENV === 'test';
+
+function _netAllowed() {
+    if (!_UNDER_TEST) return true;
+    return process.env.OMEGA_LLM_ALLOW_NET_IN_TEST === '1';
+}
+
 function available() {
+    if (!_netAllowed()) return false;
     return _resolveProvider() !== null;
 }
 
@@ -74,6 +96,9 @@ function getProviderName() {
 }
 
 async function chat(params) {
+    // Garda si aici, nu doar in available(): un apelant care sare peste
+    // verificare tot nu are voie sa iasa pe retea dintr-un test.
+    if (!_netAllowed()) return { ok: false, error: 'blocked_in_test' };
     const provider = _resolveProvider();
     if (!provider) return { ok: false, error: 'no_api_key' };
 
@@ -138,6 +163,9 @@ async function chat(params) {
 // provider} contract as chat(). The caller is responsible for pushing chunks
 // downstream (e.g. SSE proxy on /api/omega/chat-stream).
 async function chatStream(params) {
+    // Garda si aici, nu doar in available(): un apelant care sare peste
+    // verificare tot nu are voie sa iasa pe retea dintr-un test.
+    if (!_netAllowed()) return { ok: false, error: 'blocked_in_test' };
     const provider = _resolveProvider();
     if (!provider) return { ok: false, error: 'no_api_key' };
 
@@ -244,4 +272,4 @@ async function chatStream(params) {
 }
 
 module.exports = {
-    isRetryableStatus, RETRY_AFTER_MS, available, chat, chatStream, getProviderName, DEFAULT_TIMEOUT_MS, _resolveProvider };
+    isRetryableStatus, RETRY_AFTER_MS, _netAllowedForTest: _netAllowed, available, chat, chatStream, getProviderName, DEFAULT_TIMEOUT_MS, _resolveProvider };
