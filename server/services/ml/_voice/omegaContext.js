@@ -154,6 +154,43 @@ function formatThoughts(rows, now) {
     }).join(' | ');
 }
 
+/**
+ * [2026-11-02] Starea lui OMEGA, din ce se misca de fapt.
+ *
+ * Varianta veche o calcula din `ml_influence_audit`, testand `gate_status`
+ * pentru `accepted`, `rejected` si `no_proposal`. Tabela aia n-a avut NICIODATA
+ * altceva decat `skipped / insufficient_observations` — toate cele 522.400 de
+ * randuri. Deci cele trei ramuri erau matematic de neatins si functia putea
+ * intoarce doar CALM, sau BORED cand fereastra era goala. Masurat pe
+ * conversatia reala a operatorului: 40 de CALM, iar cele cateva stari diferite
+ * veneau din alte cai, cu starea scrisa de mana.
+ *
+ * Un asistent care spune CALM in timp ce cartea pierde a optsprezecea oara la
+ * rand nu e calm, e orb — si exact asta se simte ca incoerenta.
+ *
+ * Ordinea conteaza si e deliberata: intai lipsa de activitate, apoi durerea,
+ * apoi bucuria, apoi efortul. Un om care pierde nu e "concentrat", e ingrijorat,
+ * chiar daca motorul lucreaza mult.
+ */
+function moodFrom(ctx) {
+    const c = ctx && typeof ctx === 'object' ? ctx : {};
+    const decisions = _num(c.decisions) || 0;
+    if (decisions <= 0) return 'BORED';                 // creierul tace
+
+    const loss = _num(c.lossStreak) || 0;
+    const win = _num(c.winStreak) || 0;
+    const pnl = _num(c.dailyPnl);
+
+    if (loss >= 5) return 'SAD';                        // nu e o zi proasta, e o serie
+    if (loss >= 2 || (pnl !== null && pnl < 0)) return 'NERVOUS';
+    if (win >= 2 || (pnl !== null && pnl > 0)) return 'EXCITED';
+
+    // Fara durere si fara castig: cat de mult munceste ca sa NU intre.
+    const blocked = _num(c.blocked) || 0;
+    if (blocked / decisions > 0.5) return 'FOCUSED';
+    return 'CALM';
+}
+
 // ── Strangerea datelor ────────────────────────────────────────────────
 //
 // Fiecare bucata are try/catch-ul ei: un chat care cade fiindca o tabela s-a
@@ -259,6 +296,7 @@ function gatherLiquidations(liqStore) {
 module.exports = {
     fmtAge, fmtMoney,
     formatDecisions, formatBlocked, formatAccount, formatCloses, formatThoughts, formatLiquidations,
+    moodFrom,
     gatherLiquidations,
     gatherDecisions, gatherBlocked, gatherCloses, gatherThoughts, gatherAccount,
     MAX_DECISIONS, MAX_THOUGHTS, MAX_CLOSES,

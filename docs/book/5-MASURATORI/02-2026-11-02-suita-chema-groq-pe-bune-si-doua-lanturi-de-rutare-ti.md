@@ -48,3 +48,5 @@ Acum testul **pune o cheie falsă** şi cere ca tot să fie închis. *Un test ad
 **Producţie neatinsă:** garda se activează doar sub executorul de teste, iar ramurile scoase întorceau mereu fals — **nu e nevoie de reload**.
 
 Regresie: **10.151 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---

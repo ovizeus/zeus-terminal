@@ -259,7 +259,7 @@ function _replyGreeting(ctx, originalText) {
     const ro = _isRomanian(originalText);
     const todEN = t < 6 ? 'late grinding' : t < 12 ? 'morning' : t < 18 ? 'afternoon' : 'evening';
     const todRO = t < 6 ? 'noaptea (târziu)' : t < 12 ? 'dimineață' : t < 18 ? 'după-amiază' : 'seară';
-    const mood = _currentMood();
+    const mood = _currentMood(ctx && ctx.userId);
     if (ro) {
         return {
             reply: `salut boss, omega aici. ${todRO}. starea ${mood.toLowerCase()}, brain pulse ${ctx.brainHbAvgMs}ms. întreabă-mă despre poziții, pnl, decizii, bandit, alerte, sau orice simbol (btc/eth/sol/bnb).`,
@@ -330,7 +330,7 @@ function _replyPnl(ctx) {
 
 // ── Intent: mood / feeling ────────────────────────────────────────────
 function _replyMood(ctx) {
-    const mood = _currentMood();
+    const mood = _currentMood(ctx && ctx.userId);
     const since5m = Date.now() - 5 * 60 * 1000;
     const dist = db.prepare(`
         SELECT gate_status, COUNT(*) AS n
@@ -1201,27 +1201,35 @@ function _replyHelp(ctx, originalText) {
 }
 
 // ── Helper: current Ring5 mood ────────────────────────────────────────
-function _currentMood() {
+function _currentMood(userId) {
+    // [2026-11-02] Starea venea din `ml_influence_audit`, testand `gate_status`
+    // pentru `accepted`, `rejected` si `no_proposal`. Tabela aia n-a avut
+    // NICIODATA altceva decat `skipped / insufficient_observations` — toate
+    // cele 522.400 de randuri — deci cele trei ramuri erau de neatins si
+    // functia putea intoarce doar CALM. Masurat pe conversatia reala a
+    // operatorului: 40 de CALM, iar putinele stari diferite veneau din alte
+    // cai, cu starea scrisa de mana. Un asistent care spune CALM in timp ce
+    // cartea pierde a optsprezecea oara la rand nu e calm, e orb.
     try {
         const since5m = Date.now() - 5 * 60 * 1000;
-        const dist = db.prepare(`
-            SELECT gate_status, gate_reason, COUNT(*) AS n
-            FROM ml_influence_audit
-            WHERE created_at >= ?
-            GROUP BY gate_status, gate_reason
-        `).all(since5m);
-        const total = dist.reduce((s, r) => s + r.n, 0);
-        if (total === 0) return 'BORED';
-        let accepted = 0, rejected = 0, skippedNoProp = 0;
-        for (const r of dist) {
-            if (r.gate_status === 'accepted') accepted += r.n;
-            else if (r.gate_status === 'rejected') rejected += r.n;
-            else if (r.gate_status === 'skipped' && r.gate_reason === 'no_proposal') skippedNoProp += r.n;
-        }
-        if (accepted / total > 0.1) return 'EXCITED';
-        if (rejected / total > 0.1) return 'NERVOUS';
-        if (skippedNoProp / total > 0.3) return 'FOCUSED';
-        return 'CALM';
+        const uid = userId || 1;
+        const rows = db.prepare(`
+            SELECT final_action AS action, COUNT(*) AS n
+            FROM brain_decisions
+            WHERE user_id = ? AND ts >= ?
+            GROUP BY final_action
+        `).all(uid, since5m);
+        const decisions = rows.reduce((acc, r) => acc + r.n, 0);
+        const blocked = rows
+            .filter(r => String(r.action || '').startsWith('blocked') || String(r.action || '') === 'entry_blocked')
+            .reduce((acc, r) => acc + r.n, 0);
+        let dailyPnl = null, lossStreak = null, winStreak = null;
+        try {
+            const at = _getAT();
+            const us = at && at._uStateForTest ? at._uStateForTest(uid) : (at && at._uState ? at._uState(uid) : null);
+            if (us) { dailyPnl = us.dailyPnL; lossStreak = us.lossStreak; winStreak = us.winStreak; }
+        } catch (_) { /* best effort */ }
+        return omegaContext.moodFrom({ decisions, blocked, dailyPnl, lossStreak, winStreak });
     } catch (_) {
         return 'CALM';
     }
@@ -1251,7 +1259,7 @@ function _buildLLMContext(params) {
     const ctx = {
         userId,
         text: originalText,
-        brainMood: _currentMood(),
+        brainMood: _currentMood(userId),
         brainHbAvgMs: _brainHbAvgMs(),
         positions: [],
         engineMode: 'demo',
@@ -1646,7 +1654,7 @@ async function _replyLLMFallback(ctx, originalText) {
     }
     // [Sub-C.1 T8] Forward memory facts from ctx so _buildLLMContext can inject them
     const sys = _buildSystemPrompt({ userId: ctx.userId, text: originalText, _memoryFacts: ctx._memoryFacts || [] });
-    const mood = _currentMood();
+    const mood = _currentMood(ctx && ctx.userId);
 
     const history = _getConvo(ctx.userId).map(m => ({ role: m.role, content: m.content }));
     const messages = [
@@ -1742,7 +1750,7 @@ async function respondStream(params) {
     }
 
     const sys = _buildSystemPrompt({ userId, text: originalText, _memoryFacts });
-    const mood = _currentMood();
+    const mood = _currentMood(userId);
     const history = _getConvo(userId).map(m => ({ role: m.role, content: m.content }));
     const messages = [
         { role: 'system', content: sys },
