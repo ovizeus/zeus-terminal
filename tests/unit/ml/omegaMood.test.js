@@ -13,7 +13,9 @@
 //
 // Un asistent care spune CALM in timp ce cartea pierde a optsprezecea oara la
 // rand nu e calm, e orb — si exact asta se simte ca incoerenta.
-const { moodFrom } = require('../../../server/services/ml/_voice/omegaContext');
+const { moodFrom, moodReason } = require('../../../server/services/ml/_voice/omegaContext');
+const fs = require('fs');
+const path = require('path');
 
 describe('moodFrom — starea din ce se misca de fapt', () => {
     test('REGRESIE: o serie lunga de pierderi NU mai e "calm"', () => {
@@ -70,5 +72,54 @@ describe('moodFrom — starea din ce se misca de fapt', () => {
             moodFrom({ decisions: 100, blocked: 1, dailyPnl: 0 }),
         ]);
         expect(reached).toEqual(new Set(['BORED', 'SAD', 'NERVOUS', 'EXCITED', 'FOCUSED', 'CALM']));
+    });
+});
+
+describe('moodReason — explicatia vine din ce a produs starea', () => {
+    test('REGRESIE: nu mai vorbeste despre randuri de audit', () => {
+        // Inainte: "N skipped of N = bandit cold or no eligible cells".
+        const r = moodReason({ decisions: 62, blocked: 11, dailyPnl: -8.39, lossStreak: 21 });
+        expect(r).not.toMatch(/audit|skipped|bandit cold/i);
+        expect(r).toMatch(/21 losses in a row/);
+    });
+
+    test('starea si explicatia spun ACELASI lucru', () => {
+        // Un raspuns care isi contrazice propria stare e definitia incoerentei.
+        const cases = [
+            { decisions: 0 },
+            { decisions: 50, lossStreak: 18 },
+            { decisions: 50, dailyPnl: -2 },
+            { decisions: 50, dailyPnl: 2 },
+            { decisions: 100, blocked: 80, dailyPnl: 0 },
+            { decisions: 100, blocked: 1, dailyPnl: 0 },
+        ];
+        const pairs = cases.map(c => [moodFrom(c), moodReason(c)]);
+        expect(pairs.find(([m]) => m === 'BORED')[1]).toMatch(/quiet|no decisions/i);
+        expect(pairs.find(([m]) => m === 'SAD')[1]).toMatch(/streak|losses in a row/i);
+        expect(pairs.find(([m]) => m === 'NERVOUS')[1]).toMatch(/day is -|losses/i);
+        expect(pairs.find(([m]) => m === 'EXCITED')[1]).toMatch(/day is \+|wins/i);
+        expect(pairs.find(([m]) => m === 'FOCUSED')[1]).toMatch(/blocked/i);
+        expect(pairs.find(([m]) => m === 'CALM')[1]).toMatch(/nothing forcing/i);
+    });
+
+    test('date lipsa nu devin zero', () => {
+        expect(moodReason({ decisions: 50, dailyPnl: null, blocked: 1 })).toMatch(/nothing forcing/);
+        expect(moodReason(null)).toMatch(/quiet/);
+    });
+});
+
+describe('chatResponder nu mai citeste tabela moarta', () => {
+    const SRC = fs.readFileSync(
+        path.join(__dirname, '../../../server/services/ml/_voice/chatResponder.js'), 'utf8');
+
+    test('REGRESIE: nicio INTEROGARE nu mai atinge ml_influence_audit', () => {
+        // Comentariile o pomenesc legitim — explica de ce s-a plecat de acolo.
+        // Ce nu mai are voie sa existe e un `FROM` catre ea.
+        expect(SRC).not.toMatch(/FROM\s+ml_influence_audit/);
+    });
+
+    test('si deciziile vin din sursa reala', () => {
+        const n = (SRC.match(/FROM brain_decisions/g) || []).length;
+        expect(n).toBeGreaterThanOrEqual(3);   // decizii, simbol, stare
     });
 });

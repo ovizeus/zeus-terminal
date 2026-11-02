@@ -331,22 +331,33 @@ function _replyPnl(ctx) {
 // ── Intent: mood / feeling ────────────────────────────────────────────
 function _replyMood(ctx) {
     const mood = _currentMood(ctx && ctx.userId);
+    // [2026-11-02] Explicatia trebuie sa vina din CE A PRODUS starea.
+    // Pana azi starea se calcula dintr-o tabela moarta (vezi _currentMood), iar
+    // explicatia venea din aceeasi tabela: "N skipped of N = bandit cold". Dupa
+    // ce starea s-a mutat pe deciziile reale si pe cum sta omul, o explicatie
+    // ramasa pe audit ar fi fost mai rau decat inainte — ar fi spus SAD si ar fi
+    // motivat cu randuri de audit. Un raspuns care isi contrazice propria stare
+    // e exact ce operatorul numeste trangă-langa.
     const since5m = Date.now() - 5 * 60 * 1000;
-    const dist = db.prepare(`
-        SELECT gate_status, COUNT(*) AS n
-        FROM ml_influence_audit
-        WHERE created_at >= ?
-        GROUP BY gate_status
-    `).all(since5m);
-    const total = dist.reduce((s, r) => s + r.n, 0);
-    const accepted = dist.find(r => r.gate_status === 'accepted')?.n || 0;
-    const rejected = dist.find(r => r.gate_status === 'rejected')?.n || 0;
-    const skipped = dist.find(r => r.gate_status === 'skipped')?.n || 0;
-    let reason;
-    if (total === 0) reason = 'no audit rows last 5min — pipeline idle or just rebooted';
-    else if (accepted > 0) reason = `${accepted} accepted of ${total} = proposer firing, vibing`;
-    else if (rejected > 0) reason = `${rejected} rejected of ${total} = reflection blocking, second-guessing`;
-    else reason = `${skipped} skipped of ${total} = bandit cold or no eligible cells`;
+    let decisions = 0, blocked = 0;
+    try {
+        const rows = db.prepare(`
+            SELECT final_action AS action, COUNT(*) AS n
+            FROM brain_decisions WHERE user_id = ? AND ts >= ?
+            GROUP BY final_action
+        `).all((ctx && ctx.userId) || 1, since5m);
+        decisions = rows.reduce((acc, r) => acc + r.n, 0);
+        blocked = rows
+            .filter(r => String(r.action || '').startsWith('blocked') || String(r.action || '') === 'entry_blocked')
+            .reduce((acc, r) => acc + r.n, 0);
+    } catch (_) { /* best effort */ }
+    let dailyPnl = null, lossStreak = null, winStreak = null;
+    try {
+        const at = _getAT();
+        const us = at && at._uStateForTest ? at._uStateForTest((ctx && ctx.userId) || 1) : null;
+        if (us) { dailyPnl = us.dailyPnL; lossStreak = us.lossStreak; winStreak = us.winStreak; }
+    } catch (_) { /* best effort */ }
+    const reason = omegaContext.moodReason({ decisions, blocked, dailyPnl, lossStreak, winStreak });
     return {
         reply: `feeling ${mood.toLowerCase()}. ${reason}. brain heartbeat avg ${ctx.brainHbAvgMs}ms.`,
         mood
@@ -461,12 +472,19 @@ function _replySymbol(ctx, symbol) {
     const sym = _normSymbol(symbol);
     if (!sym) return _replyHelp(ctx);
     const since5m = Date.now() - 5 * 60 * 1000;
+    // [2026-11-02] Deciziile reale. Varianta veche citea `ml_influence_audit`
+    // si producea exact replica pe care a primit-o operatorul: "BTCUSDT last
+    // 5min: 10 decisions ... conf 0, status skipped. avg conf 0." Zece decizii
+    // fara continut, fiindca toate cele 522.400 de randuri ale tabelei sunt
+    // `skipped`. Acum spune directia, increderea si CE A OPRIT-O.
     const rows = db.prepare(`
-        SELECT regime, phase2_dir, phase2_confidence, phase2_score, gate_status, created_at
-        FROM ml_influence_audit
-        WHERE symbol = ? AND created_at >= ?
-        ORDER BY created_at DESC LIMIT 10
-    `).all(sym, since5m);
+        SELECT json_extract(data, '$.regime') AS regime,
+               final_dir AS phase2_dir, final_conf AS phase2_confidence,
+               final_tier AS tier, final_action AS gate_status, ts AS created_at
+        FROM brain_decisions
+        WHERE symbol = ? AND user_id = ? AND ts >= ?
+        ORDER BY ts DESC LIMIT 10
+    `).all(sym, (ctx && ctx.userId) || 1, since5m);
     const radarTail = _radarEnrichSymbol(sym);
     if (rows.length === 0) {
         return { reply: `no recent decisions on ${sym}. asleep on that one.${radarTail}`, mood: 'BORED' };
@@ -478,9 +496,20 @@ function _replySymbol(ctx, symbol) {
     for (const r of rows) regimeMix[r.regime] = (regimeMix[r.regime] || 0) + 1;
     const regimeStr = Object.entries(regimeMix).map(([k, v]) => `${k}×${v}`).join(', ');
     return {
-        reply: `${sym} last 5min: ${rows.length} decisions. latest ${ageS}s ago — regime ${latest.regime}, dir ${latest.phase2_dir}, conf ${latest.phase2_confidence}, status ${latest.gate_status}. avg conf ${avgConf}. regimes seen: ${regimeStr}.${radarTail}`,
+        reply: `${sym} last 5min: ${rows.length} decision${rows.length === 1 ? '' : 's'}. latest ${ageS}s ago — regime ${latest.regime || '?'}, ${latest.phase2_dir} conf ${latest.phase2_confidence}${_tierBit(latest)}, ${latest.gate_status}. avg conf ${avgConf}. regimes seen: ${regimeStr}.${radarTail}`,
         mood: 'FOCUSED'
     };
+}
+
+// [2026-11-02] Tier-ul se scrie doar cand adauga ceva. Pentru o decizie
+// `no_trade` tier-ul ESTE `NO_TRADE`, deci randul ieseau "tier no_trade,
+// no_trade" — acelasi cuvant de doua ori, pe care operatorul il citeste ca
+// balbaiala, nu ca informatie.
+function _tierBit(d) {
+    const tier = String((d && d.tier) || '').toLowerCase();
+    const action = String((d && d.gate_status) || '').toLowerCase();
+    if (!tier || tier === action || tier === 'no_trade') return '';
+    return `, tier ${tier}`;
 }
 
 // ── Helper: format symbol for human display (strip USDT suffix) ───────

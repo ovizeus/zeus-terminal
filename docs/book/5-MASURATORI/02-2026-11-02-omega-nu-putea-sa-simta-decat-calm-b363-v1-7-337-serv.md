@@ -38,3 +38,5 @@ Am adăugat `userId` ca parametru lui `_currentMood` şi l-am pasat cu un `repla
 **5 mutaţii moarte:** durerea nemaibătând efortul · seria lungă tratată ca una scurtă · un `pnl` lipsă devenind zi plată prin `Number(null)` · creierul tăcut nemaifiind plictisit · pragul de efort scos astfel încât `FOCUSED` să nu mai apară.
 
 10 teste noi. Regresie: **10.161 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---

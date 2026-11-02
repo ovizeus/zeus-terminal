@@ -191,6 +191,34 @@ function moodFrom(ctx) {
     return 'CALM';
 }
 
+/**
+ * De ce simte ce simte — in aceleasi cuvinte din care s-a calculat starea.
+ *
+ * Pana azi starea venea dintr-o tabela moarta SI explicatia venea din aceeasi
+ * tabela ("N skipped of N = bandit cold"). Dupa ce starea s-a mutat pe
+ * deciziile reale, o explicatie ramasa pe audit ar fi fost mai rau decat
+ * inainte: ar fi spus SAD si ar fi motivat cu randuri de audit. Un raspuns
+ * care isi contrazice propria stare e chiar definitia incoerentei.
+ */
+function moodReason(ctx) {
+    const c = ctx && typeof ctx === 'object' ? ctx : {};
+    const decisions = _num(c.decisions) || 0;
+    if (decisions <= 0) return 'brain quiet — no decisions in the last 5min';
+    const loss = _num(c.lossStreak) || 0;
+    const win = _num(c.winStreak) || 0;
+    const pnl = _num(c.dailyPnl);
+    if (loss >= 5) return `${loss} losses in a row — that is a streak, not a bad day`;
+    if (loss >= 2) return `${loss} losses back to back`;
+    if (pnl !== null && pnl < 0) return `day is ${fmtMoney(pnl)}`;
+    if (win >= 2) return `${win} wins in a row`;
+    if (pnl !== null && pnl > 0) return `day is ${fmtMoney(pnl)}`;
+    const blocked = _num(c.blocked) || 0;
+    if (decisions > 0 && blocked / decisions > 0.5) {
+        return `${blocked} of ${decisions} decisions blocked — working hard to stay out`;
+    }
+    return `${decisions} decisions, nothing forcing my hand`;
+}
+
 // ── Strangerea datelor ────────────────────────────────────────────────
 //
 // Fiecare bucata are try/catch-ul ei: un chat care cade fiindca o tabela s-a
@@ -296,7 +324,7 @@ function gatherLiquidations(liqStore) {
 module.exports = {
     fmtAge, fmtMoney,
     formatDecisions, formatBlocked, formatAccount, formatCloses, formatThoughts, formatLiquidations,
-    moodFrom,
+    moodFrom, moodReason,
     gatherLiquidations,
     gatherDecisions, gatherBlocked, gatherCloses, gatherThoughts, gatherAccount,
     MAX_DECISIONS, MAX_THOUGHTS, MAX_CLOSES,

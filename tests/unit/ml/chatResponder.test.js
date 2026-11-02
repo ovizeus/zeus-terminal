@@ -126,13 +126,28 @@ describe('chatResponder.respond', () => {
         expect(r.reply).toMatch(/BTCUSDT|asleep|no recent/i);
     });
 
-    test('symbol-specific intent — with audit data', async () => {
-        seedAuditRow('BTCUSDT', 'TREND', 'accepted');
-        seedAuditRow('BTCUSDT', 'TREND', 'skipped');
+    test('REGRESIE: raspunsul pe simbol vine din deciziile REALE, cu ce le-a oprit', async () => {
+        // Varianta veche citea `ml_influence_audit` si producea exact replica pe
+        // care a primit-o operatorul: "BTCUSDT last 5min: 10 decisions ...
+        // conf 0, status skipped. avg conf 0." Zece decizii fara continut,
+        // fiindca toate cele 522.400 de randuri ale tabelei sunt `skipped`.
+        const { db } = require('../../../server/services/database');
+        const now = Date.now();
+        const ins = db.prepare(`INSERT INTO brain_decisions
+            (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, data, resolved_env)
+            VALUES (?, 1, 'BTCUSDT', ?, 1, ?, ?, ?, 'SHORT', ?, ?, 'DEMO')`);
+        // Timpi DISTINCTI: "latest" trebuie sa fie determinist, altfel testul
+        // depinde de ordinea in care SQLite intoarce doua randuri identice.
+        ins.run('s1' + now, now - 1000, 'no_trade', 'NO_TRADE', 42, 'no_trade', JSON.stringify({ regime: 'TREND' }));
+        ins.run('s2' + now, now, 'blocked_reflection', 'MEDIUM', 81, 'blocked_reflection', JSON.stringify({ regime: 'TREND' }));
         const r = await responder.respond({ userId: 1, text: 'how is btc' });
+        db.prepare("DELETE FROM brain_decisions WHERE snap_id LIKE 's%' || ?").run(String(now));
         expect(r.reply).toMatch(/BTCUSDT/);
         expect(r.reply).toMatch(/2 decisions/);
         expect(r.reply).toMatch(/TREND/);
+        // Partea care lipsea cu totul inainte: ce s-a intamplat cu ele.
+        expect(r.reply).toMatch(/blocked_reflection/);
+        expect(r.reply).not.toMatch(/conf 0\b/);
     });
 
     test('fallback intent — unknown question', async () => {
