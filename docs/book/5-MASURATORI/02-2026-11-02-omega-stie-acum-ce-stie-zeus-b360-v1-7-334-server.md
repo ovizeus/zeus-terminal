@@ -59,3 +59,5 @@ Promptul: **15.474 caractere, ~4.300 tokeni** — bine sub plafon. Regresie: **1
 ### 🔧 Rămas, dacă vrea
 
 Cele **38 de intenţii pe expresii regulate** încă prind ~47% din întrebări înainte ca modelul să apuce să gândească — iar acum modelul are datele lor **plus** raţionament. De tăiat pe rând, cu teste, nu dintr-o dată.
+
+---

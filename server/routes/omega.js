@@ -13,6 +13,7 @@
  */
 
 const express = require('express');
+const chatHistoryFilter = require('../services/ml/_voice/chatHistoryFilter');
 const router = express.Router();
 
 const { db } = require('../services/database');
@@ -632,13 +633,13 @@ router.get('/chat/history', (req, res) => {
         const rows = db.prepare(`
             SELECT id, mood, text, context_json, created_at
             FROM ml_voice_log
-            WHERE user_id = ? AND utterance_type = 'CHAT_REPLY'
+            WHERE user_id = ? AND ${chatHistoryFilter.REAL_CHAT_SQL}
             ORDER BY created_at DESC
             LIMIT ?
         `).all(userId, dbRows);
         const totalRow = db.prepare(`
             SELECT COUNT(*) as c FROM ml_voice_log
-            WHERE user_id = ? AND utterance_type = 'CHAT_REPLY'
+            WHERE user_id = ? AND ${chatHistoryFilter.REAL_CHAT_SQL}
         `).get(userId);
         const total = totalRow ? totalRow.c : 0;
 

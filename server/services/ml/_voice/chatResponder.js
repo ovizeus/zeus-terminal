@@ -14,6 +14,7 @@
 const { db } = require('../../database');
 const llmClient = require('./llmClient');
 const omegaContext = require('./omegaContext');
+const chatHistoryFilter = require('./chatHistoryFilter');
 const marketRadar = require('../../marketRadar');
 
 // [Wave 9.5] Fundamentals — CoinGecko-backed market context (rank/dominance/
@@ -36,6 +37,45 @@ function _getServerState() {
 // LLM so multi-turn follow-ups work ("and eth?" after "how is btc").
 // Reset on server restart (acceptable trade-off vs DB persistence overhead).
 const _convoHistory = new Map(); // userId → Array<{role, content, ts}>
+// [2026-11-02] Care intentii merita sa treaca de la sablon la gandire.
+//
+// Masurat: 27 din 58 de replici recente (47%) veneau din sabloane, fiindca 38
+// de intentii pe expresii regulate prind intrebarea inainte ca modelul sa
+// apuce. Era corect cand modelul nu stia nimic. De la b360 are in fata exact
+// datele acestor sabloane — deciziile reale, contul, blocajele, gandurile lui,
+// lichidarile — plus capacitatea de a le CITI, nu doar de a le lista.
+//
+// Nu se muta tot. Raman la sablon:
+//   • comenzile care schimba o stare (retine / uita / arata profilul) — acolo
+//     un model care parafrazeaza e un bug, nu un stil;
+//   • listele exacte (pozitii, pnl, top movers, bandit, doctor, carte de
+//     ordine, ziduri, fundamentale, structura, indicatori) — cifra exacta bate
+//     proza, si oricum modelul le are pe toate in context daca vrea sa le lege.
+// Se muta cele in care raspunsul bun e o CITIRE, nu o listare.
+// [2026-11-02, a doua trecere] Lista s-a MICSORAT dupa ce am masurat costul.
+// Pusesem si `greeting` si `decisions` aici; testele au aratat ce inseamna:
+// fiecare „salut" devenea un drum la model, circa o secunda si o bucata din
+// cota unui plan gratuit care deja ne da rate-limit (5 replici pierdute din
+// 310). Un salut nu castiga nimic din gandire — raspunsul vechi e instant si
+// spune starea. Iar `decizii` nu avea nevoie de model, ci de sursa corecta:
+// citea tot auditul ML. Aia s-a reparat la fata locului, mai jos.
+// A treia restrangere, si ultima. `mood` a plecat si el: "cum te simti" costa
+// un drum la model pentru ceva ce raspunsul local spune instant si exact
+// (starea + pulsul creierului). Raman doar cele doua in care raspunsul bun e o
+// CITIRE a pietei, nu o listare — si tot restul contextului adunat azi le sta
+// oricum la dispozitie modelului cand ajunge la el.
+const LLM_PREFERRED_INTENTS = new Set(['symbol', 'market']);
+
+/**
+ * Pur, ca sa poata fi probat fara model si fara retea.
+ * Fara model disponibil raspunde mereu false: sablonul e tot ce avem atunci,
+ * si un raspuns rigid e infinit mai bun decat niciunul.
+ */
+function preferLLMForIntent(intent, llmAvailable) {
+    if (llmAvailable !== true) return false;
+    return LLM_PREFERRED_INTENTS.has(intent);
+}
+
 const CONVO_MAX_TURNS = 10; // user+assistant pairs to keep (=20 messages max)
 // [2026-06-23] Continuity window. Was 30min, which (plus a ts bug on DB-rehydrated rows) meant
 // Omega "forgot" the conversation whenever the user left and came back, or after any server
@@ -82,7 +122,7 @@ async function _loadConvoHistory(userId) {
             const rows = db.prepare(`
                 SELECT text, context_json, created_at
                 FROM ml_voice_log
-                WHERE user_id = ? AND utterance_type = 'CHAT_REPLY'
+                WHERE user_id = ? AND ${chatHistoryFilter.REAL_CHAT_SQL}
                 ORDER BY created_at DESC
                 LIMIT ?
             `).all(userId, CONVO_MAX_TURNS);
@@ -358,21 +398,29 @@ function _replyBandit(ctx) {
 
 // ── Intent: decisions / audit ─────────────────────────────────────────
 function _replyDecisions(ctx) {
+    // [2026-11-02] Numara deciziile REALE, nu randurile de audit ML.
+    // Varianta veche citea `ml_influence_audit` si raporta cate PERECHI
+    // simbol/regim a vazut — pe sistemul viu, 20.160 de randuri pe zi, toate
+    // `skipped`. Operatorul primea "10 decisions" despre zece nimicuri.
+    // Ce vrea sa stie cand intreaba „ce decizii ai luat" e CE L-A OPRIT.
     const since5m = Date.now() - 5 * 60 * 1000;
-    const bySymbol = db.prepare(`
-        SELECT symbol, regime, COUNT(*) AS n
-        FROM ml_influence_audit
-        WHERE created_at >= ?
-        GROUP BY symbol, regime
-        ORDER BY n DESC LIMIT 5
-    `).all(since5m);
-    if (bySymbol.length === 0) {
+    let rows = [];
+    try {
+        rows = db.prepare(`
+            SELECT final_action AS action, COUNT(*) AS n
+            FROM brain_decisions
+            WHERE user_id = ? AND ts >= ?
+            GROUP BY final_action
+            ORDER BY n DESC LIMIT 6
+        `).all(ctx.userId, since5m);
+    } catch (_) { rows = []; }
+    if (rows.length === 0) {
         return { reply: 'no decisions last 5min. brain idle.', mood: 'BORED' };
     }
-    const lines = bySymbol.map(b => `  ${b.symbol} (${b.regime}): ${b.n}`).join('\n');
-    const total = bySymbol.reduce((s, b) => s + b.n, 0);
+    const total = rows.reduce((acc, r) => acc + r.n, 0);
+    const lines = rows.map(r => `  ${r.action}: ${r.n}`).join('\n');
     return {
-        reply: `last 5min: ${total} decisions across ${bySymbol.length} symbol/regime pair${bySymbol.length > 1 ? 's' : ''}:\n${lines}`,
+        reply: `last 5min: ${total} decision${total === 1 ? '' : 's'} — what happened to them:\n${lines}`,
         mood: 'FOCUSED'
     };
 }
@@ -1730,7 +1778,10 @@ async function respondStream(params) {
 // (= LLM fallback needed). Mirrors _respondImpl routing exactly but
 // without invoking the LLM path itself.
 async function _tryLocalIntent(ctx, text, originalText) {
-    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
+    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) {
+        if (preferLLMForIntent('greeting', llmClient.available())) return null;
+        return _replyGreeting(ctx, originalText);
+    }
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
     if (text.match(/\b(what (do you|d'?you|you) remember|ce [șs]tii despre mine|ce ai re[țt]inut|preferin[țt]ele mele|my preferences|show.+profile)/i)) {
         return _replyShowProfile(ctx, originalText);
@@ -1796,15 +1847,26 @@ async function _tryLocalIntent(ctx, text, originalText) {
         return _replyTopMovers(ctx, 'volume', originalText);
     }
     if (text.match(/\b(how is the market|market overview|how.s the market|cum vezi pia[țt]a|cum e pia[țt]a|ce face pia[țt]a|ce vezi pe pia[țt]a|cum se mi[șs]c[aă] pia[țt]a)/i)) {
+        if (preferLLMForIntent('market', llmClient.available())) return null;
+        if (preferLLMForIntent('market', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
         return _replyMarketOverview(ctx, originalText);
     }
     const symMatch = text.match(SYMBOL_RE);
-    if (symMatch) return _replySymbol(ctx, symMatch[1]);
+    if (symMatch) {
+        if (preferLLMForIntent('symbol', llmClient.available())) return null;
+        return _replySymbol(ctx, symMatch[1]);
+    }
     if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
     if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
-    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
+    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) {
+        if (preferLLMForIntent('mood', llmClient.available())) return null;
+        return _replyMood(ctx);
+    }
     if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
-    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
+    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) {
+        if (preferLLMForIntent('decisions', llmClient.available())) return null;
+        return _replyDecisions(ctx);
+    }
     if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
     if (text.match(/\b(fuck|shit|wtf|hell|dammit|fute)\b/)) {
         return { reply: 'easy boss. breathe. markets do that. what do you want — positions, pnl, mood?', mood: 'CALM' };
@@ -1855,7 +1917,10 @@ async function _respondImpl(params, text) {
 
     const originalText = params.text || '';
     // Order: specific intents → generic.
-    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
+    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) {
+        if (preferLLMForIntent('greeting', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
+        return _replyGreeting(ctx, originalText);
+    }
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
 
     // [Day 33 #2] Trader profile intents — match BEFORE symbol regex.
@@ -1956,7 +2021,10 @@ async function _respondImpl(params, text) {
 
     // Symbol-specific first (more specific than "decisions" generic).
     const symMatch = text.match(SYMBOL_RE);
-    if (symMatch) return _replySymbol(ctx, symMatch[1]);
+    if (symMatch) {
+        if (preferLLMForIntent('symbol', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
+        return _replySymbol(ctx, symMatch[1]);
+    }
 
     // [Day 26.3] Tightened intent regexes — short Romanian/English particles
     // like "azi"/"today" alone were catching unrelated philosophical questions
@@ -1964,9 +2032,15 @@ async function _respondImpl(params, text) {
     // Now require domain-specific anchor words (pnl/profit/positions/etc).
     if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
     if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
-    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
+    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) {
+        if (preferLLMForIntent('mood', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
+        return _replyMood(ctx);
+    }
     if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
-    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
+    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) {
+        if (preferLLMForIntent('decisions', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
+        return _replyDecisions(ctx);
+    }
     if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
 
     // Rude language: short de-escalation, no LLM (saves quota for real questions).
@@ -1979,6 +2053,7 @@ async function _respondImpl(params, text) {
 }
 
 module.exports = {
+    preferLLMForIntent, LLM_PREFERRED_INTENTS,
     respond,
     respondStream,
     _resetConvoForTest,

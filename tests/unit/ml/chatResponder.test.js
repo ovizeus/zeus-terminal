@@ -82,13 +82,24 @@ describe('chatResponder.respond', () => {
         expect(r.reply).toMatch(/no decisions|idle/i);
     });
 
-    test('decisions intent — with audit data', async () => {
-        seedAuditRow('BTCUSDT', 'RANGE', 'skipped');
-        seedAuditRow('BTCUSDT', 'RANGE', 'skipped');
-        seedAuditRow('ETHUSDT', 'TREND', 'skipped');
+    test('REGRESIE: deciziile se numara din brain_decisions, grupate dupa CE S-A INTAMPLAT', async () => {
+        // Varianta veche citea `ml_influence_audit` si raporta perechi
+        // simbol/regim. Pe sistemul viu erau 20.160 de randuri pe zi, toate
+        // `skipped`, deci operatorul primea "10 decisions" despre zece
+        // nimicuri. Ce vrea sa stie e ce le-a oprit.
+        const { db } = require('../../../server/services/database');
+        const now = Date.now();
+        const ins = db.prepare(`INSERT INTO brain_decisions
+            (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, data, resolved_env)
+            VALUES (?, 1, ?, ?, 1, ?, 'SMALL', 70, 'LONG', ?, '{}', 'DEMO')`);
+        ins.run('d1' + now, 'BTCUSDT', now, 'blocked_gates', 'blocked_gates');
+        ins.run('d2' + now, 'BTCUSDT', now, 'blocked_gates', 'blocked_gates');
+        ins.run('d3' + now, 'ETHUSDT', now, 'no_trade', 'no_trade');
         const r = await responder.respond({ userId: 1, text: 'decisions' });
+        db.prepare("DELETE FROM brain_decisions WHERE snap_id LIKE 'd%' || ?").run(String(now));
         expect(r.reply).toMatch(/3 decisions/);
-        expect(r.reply).toMatch(/BTCUSDT|ETHUSDT/);
+        expect(r.reply).toMatch(/blocked_gates: 2/);
+        expect(r.reply).toMatch(/no_trade: 1/);
     });
 
     test('Romanian unscripted question does NOT trigger wrong intent (azi bug fix)', async () => {

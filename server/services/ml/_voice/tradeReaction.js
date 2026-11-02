@@ -61,7 +61,14 @@ function reactToTrade(params) {
         const _moodMap = { CALM: 'CALM', ALERT: 'FOCUSED', CAUTIOUS: 'NERVOUS' };
         const dbMood = _moodMap[mood] || 'CALM';
         voiceLogger.logUtterance({
-            userId, utteranceType: 'CHAT_REPLY', mood: dbMood, text,
+            // [2026-11-02] REACTION, nu CHAT_REPLY. Operatorul: "i raspunde
+            // manual long etc de ce". Fiindca reactiile la tranzactiile lui
+            // erau scrise cu tipul conversatiei: 262 din 322 de randuri
+            // `CHAT_REPLY` de pe contul lui erau de fapt astea. Ii umflau
+            // numarul de mesaje, apareau in panou ca raspunsuri la intrebari
+            // inexistente, si otraveau memoria trimisa modelului cu replici
+            // fara intrebare. Tipul corect exista deja.
+            userId, utteranceType: 'REACTION', mood: dbMood, text,
             templateId: 'omega_reaction',
             contextJson: JSON.stringify({ symbol, side, action, pnl: params.pnl || null }),
         });
