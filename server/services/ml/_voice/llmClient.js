@@ -15,6 +15,27 @@
 
 const DEFAULT_TIMEOUT_MS = 8000;
 
+// [2026-11-02] O singura reincercare pe un refuz TRECATOR.
+//
+// Nu exista niciuna pana azi: cand Groq raspundea 429, replica lui OMEGA murea
+// de tot si operatorul primea un sablon care-i spunea sa astepte 30 de secunde.
+// Rar — 5 din 310 replici, 1,6% — dar o pierdere inutila, fiindca al doilea
+// apel reuseste aproape mereu.
+//
+// Se reincearca DOAR ce are sens: 429 (prea des) si 5xx (partea lor). Un 401
+// sau un 400 nu se repara prin repetare si a repeta ar insemna doar sa mai arzi
+// o secunda din timpul omului.
+const RETRY_AFTER_MS = 700;
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
+
+function isRetryableStatus(status) {
+    // Tipul inaintea valorii: Number(null) e 0 si trece de isFinite.
+    if (typeof status !== 'number' || !Number.isFinite(status)) return false;
+    return RETRYABLE.has(status);
+}
+
+function _sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
 function _resolveProvider() {
     if (process.env.XAI_API_KEY) {
         return {
@@ -83,6 +104,11 @@ async function chat(params) {
         });
         clearTimeout(timer);
         if (!res.ok) {
+            // [2026-11-02] O singura reincercare, si doar pe un refuz trecator.
+            if (isRetryableStatus(res.status) && params._retried !== true) {
+                await _sleep(RETRY_AFTER_MS);
+                return chat({ ...params, _retried: true });
+            }
             return { ok: false, error: `http_${res.status}`, provider: provider.name };
         }
         const body = await res.json();
@@ -217,4 +243,5 @@ async function chatStream(params) {
     return { ok: true, text: fullText, model, provider: provider.name };
 }
 
-module.exports = { available, chat, chatStream, getProviderName, DEFAULT_TIMEOUT_MS, _resolveProvider };
+module.exports = {
+    isRetryableStatus, RETRY_AFTER_MS, available, chat, chatStream, getProviderName, DEFAULT_TIMEOUT_MS, _resolveProvider };

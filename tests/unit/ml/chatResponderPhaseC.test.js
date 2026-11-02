@@ -40,8 +40,24 @@ function seedAuditRow(symbol, regime, status, dir = 'LONG', conf = 70, ts) {
        .run(symbol, regime, dir, conf, dir, conf, status, ts);
 }
 
+// [2026-11-02] Deciziile pe care le citeste acum contextul. Cele din
+// `ml_influence_audit` ramaneau 100% `skipped / insufficient_observations` pe
+// sistemul viu — 20.160 de randuri intr-o zi — fiindca poarta de influenta ML
+// n-a trecut niciodata. `brain_decisions` are directia, increderea, tier-ul si
+// ACTIUNEA, adica exact ce l-a oprit.
+function seedDecision(symbol, regime, action, dir = 'LONG', conf = 70, tier = 'SMALL', ts) {
+    if (!ts) ts = Date.now();
+    db.prepare(`INSERT INTO brain_decisions
+        (snap_id, user_id, symbol, ts, cycle, source_path,
+         final_tier, final_conf, final_dir, final_action, data, resolved_env)
+        VALUES (?, 1, ?, ?, 1, ?, ?, ?, ?, ?, ?, 'DEMO')`)
+       .run('t' + ts + symbol + Math.random(), symbol, ts, action,
+            tier, conf, dir, action, JSON.stringify({ regime }));
+}
+
 function clean() {
     db.prepare("DELETE FROM ml_influence_audit").run();
+    db.prepare("DELETE FROM brain_decisions WHERE user_id = 1").run();
     marketRadar._ingestSnapshotForTest(FIXTURE);
 }
 
@@ -67,24 +83,46 @@ describe('chatResponder Phase C — LLM context enrichment', () => {
         expect(ctx.market.ethDelta24h).toBe(-1.2);
     });
 
-    test('buildLLMContext includes recent decisions when audit has data', () => {
-        seedAuditRow('BTCUSDT', 'TREND', 'accepted', 'LONG', 75);
-        seedAuditRow('ETHUSDT', 'RANGE', 'skipped', 'SHORT', 50);
+    test('REGRESIE: deciziile vin din brain_decisions, cu ACTIUNEA care le-a oprit', () => {
+        seedDecision('BTCUSDT', 'TREND', 'blocked_reflection', 'LONG', 75, 'MEDIUM');
+        seedDecision('ETHUSDT', 'RANGE', 'no_trade', 'SHORT', 50, 'NO_TRADE');
         const ctx = responder._buildLLMContextForTest({ userId: 1, text: 'cum stam' });
-        expect(ctx.recentDecisions).toBeDefined();
         expect(ctx.recentDecisions.length).toBeGreaterThanOrEqual(2);
-        expect(ctx.recentDecisions.some(d => d.symbol === 'BTCUSDT')).toBe(true);
+        const btc = ctx.recentDecisions.find(d => d.symbol === 'BTCUSDT');
+        expect(btc).toBeDefined();
+        expect(btc.action).toBe('blocked_reflection');  // ce l-a oprit — asta lipsea
+        expect(btc.conf).toBe(75);
+        expect(btc.tier).toBe('MEDIUM');
+    });
+
+    test('REGRESIE: randurile de audit ML NU mai ajung in decizii', () => {
+        // Erau singura sursa si erau 100% `skipped`. Daca cineva le pune la loc,
+        // operatorul primeste iar "10 decisions ... conf 0, status skipped".
+        seedAuditRow('BTCUSDT', 'TREND', 'skipped', 'LONG', 0);
+        seedAuditRow('ETHUSDT', 'RANGE', 'skipped', 'SHORT', 0);
+        const ctx = responder._buildLLMContextForTest({ userId: 1, text: 'cum stam' });
+        expect(ctx.recentDecisions).toHaveLength(0);
+    });
+
+    test('contextul poarta si de ce NU a intrat, contul si propriile ganduri', () => {
+        const ctx = responder._buildLLMContextForTest({ userId: 1, text: 'cum stam' });
+        expect(Array.isArray(ctx.blockedReasons)).toBe(true);
+        expect(Array.isArray(ctx.recentCloses)).toBe(true);
+        expect(Array.isArray(ctx.ownThoughts)).toBe(true);
+        expect(ctx.account).not.toBeUndefined();
     });
 
     test('buildLLMContext includes deep block when symbol mentioned', () => {
-        seedAuditRow('BTCUSDT', 'TREND', 'accepted', 'LONG', 75);
-        seedAuditRow('BTCUSDT', 'TREND', 'accepted', 'LONG', 80);
+        seedDecision('BTCUSDT', 'TREND', 'blocked_reflection', 'LONG', 75, 'MEDIUM');
+        seedDecision('BTCUSDT', 'TREND', 'no_trade', 'LONG', 80, 'NO_TRADE');
         const ctx = responder._buildLLMContextForTest({ userId: 1, text: 'cum vezi BTC long sau short' });
         expect(ctx.symbolDeep).toBeDefined();
         expect(ctx.symbolDeep.symbol).toBe('BTCUSDT');
         expect(ctx.symbolDeep.price).toBe(70000);
         expect(ctx.symbolDeep.decisions.length).toBe(2);
+        // Regimul vine acum din obiectul deciziei, nu dintr-o coloana de audit.
         expect(ctx.symbolDeep.regimeMix.TREND).toBe(2);
+        expect(ctx.symbolDeep.decisions[0].status).toBe('no_trade');
     });
 
     test('buildLLMContext symbolDeep null when no symbol in text', () => {

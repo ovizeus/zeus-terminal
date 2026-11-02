@@ -54,3 +54,5 @@ Testul cere acum ca **în textul original, imediat după ce am păstrat, să urm
 Client **172 de fişiere, 1.678 de teste**, `tsc` 0 erori. Verificat în bundle-ul servit.
 
 **Doar client: build, FĂRĂ reload** (R-OP-2).
+
+---

@@ -13,6 +13,7 @@
 
 const { db } = require('../../database');
 const llmClient = require('./llmClient');
+const omegaContext = require('./omegaContext');
 const marketRadar = require('../../marketRadar');
 
 // [Wave 9.5] Fundamentals — CoinGecko-backed market context (rank/dominance/
@@ -1209,6 +1210,12 @@ function _buildLLMContext(params) {
         recentDecisions: [],
         market: { gainers: [], losers: [], volume: [], btcDelta24h: null, ethDelta24h: null, btcPrice: null, ethPrice: null, solPrice: null, breadth: null },
         symbolDeep: null,
+        // [2026-11-02] Feliile noi — vezi omegaContext.js pentru ce lipsea.
+        blockedReasons: [],
+        recentCloses: [],
+        ownThoughts: [],
+        liquidations: [],
+        account: null,
         // [Day 33 #2] Operator-stated preferences ("remember that I prefer tight SL")
         traderProfile: _getTraderProfile(userId).map(p => p.text),
     };
@@ -1242,17 +1249,39 @@ function _buildLLMContext(params) {
         }
     } catch (_) {}
 
-    // Recent decisions (last 10, last 5 min)
+    // [2026-11-02] Deciziile REALE ale creierului, nu auditul de influenta ML.
+    // Blocul asta venea din `ml_influence_audit`, care in ultimele 24h avea
+    // 20.160 de randuri, TOATE `skipped / insufficient_observations`, fiindca
+    // poarta de influenta ML n-a trecut niciodata (vezi b352). Nu era zgomot pe
+    // langa semnal, era numai zgomot — si ii iesea pe gura verbatim catre
+    // operator: "10 decisions ... conf 0, status skipped". `brain_decisions`
+    // are 696.652 de randuri cu directie, incredere, tier si ACTIUNE, adica
+    // exact ce l-a oprit: no_trade / blocked_gates / blocked_reflection /
+    // entry_blocked / pending_expire.
+    const _now = Date.now();
+    ctx.recentDecisions = omegaContext.gatherDecisions(db, userId, _now);
+    // De ce NU a intrat — raspunsul exact, de 200 de ori in ultimele 24h.
+    ctx.blockedReasons = omegaContext.gatherBlocked(db, userId, _now);
+    // Ultimele inchideri si propriile lui ganduri din THE VOICE. Fara ele
+    // raspundea "Nu am un mesaj anterior de la echipa" despre un gand pe care
+    // tocmai il emisese el insusi.
+    ctx.recentCloses = omegaContext.gatherCloses(db, userId);
+    ctx.ownThoughts = omegaContext.gatherThoughts(db, userId, _now);
+    // Unde s-au ars banii in ultimele 24h. Zeus tine 30 de zile de lichidari si
+    // are doua panouri pe ele, dar OMEGA nu le vedea deloc.
+    try { ctx.liquidations = omegaContext.gatherLiquidations(require('../../liqStore')); }
+    catch (_) { ctx.liquidations = []; }
+    // Contul: balanta, ziua, rata de castig peste tot istoricul inchis. Nu
+    // aparea NICAIERI in promptul de sistem, desi e prima intrebare a oricui.
     try {
-        const since = Date.now() - 5 * 60 * 1000;
-        ctx.recentDecisions = db.prepare(`
-            SELECT symbol, regime, phase2_dir AS dir, phase2_confidence AS conf,
-                   gate_status AS status, gate_reason AS reason, created_at AS ts
-            FROM ml_influence_audit
-            WHERE user_id = ? AND created_at >= ?
-            ORDER BY created_at DESC LIMIT 10
-        `).all(userId, since);
-    } catch (_) {}
+        const _at = _getAT();
+        let _uState = null, _bal = null;
+        if (_at) {
+            try { _uState = _at._uStateForTest ? _at._uStateForTest(userId) : (_at._uState ? _at._uState(userId) : null); } catch (_) {}
+            try { const b = _at.getDemoBalance && _at.getDemoBalance(userId); _bal = b && typeof b.balance === 'number' ? b.balance : null; } catch (_) {}
+        }
+        ctx.account = omegaContext.gatherAccount(db, userId, _uState, _bal);
+    } catch (_) { ctx.account = null; }
 
     // Market snapshot from radar
     const gSnap = marketRadar.getTopSnapshot({ kind: 'gainers', limit: 5 });
@@ -1292,15 +1321,21 @@ function _buildLLMContext(params) {
         const sym = _normSymbol(symMatch[1]);
         const radarEntry = marketRadar.getSymbolFromSnapshot(sym);
         const since = Date.now() - 5 * 60 * 1000;
+        // [2026-11-02] Si aici erau randurile de audit ML, toate `skipped` cu
+        // `conf 0`. Replica pe care operatorul a primit-o cu ele arata asa:
+        // "BTCUSDT last 5min: 10 decisions ... conf 0, status skipped. avg conf
+        // 0." Zece decizii fara continut. Acum vine din deciziile reale, cu
+        // regimul citit din obiectul lor.
         let decisions = [];
         try {
             decisions = db.prepare(`
-                SELECT regime, phase2_dir AS dir, phase2_confidence AS conf,
-                       gate_status AS status, gate_reason AS reason, created_at AS ts
-                FROM ml_influence_audit
-                WHERE symbol = ? AND created_at >= ?
-                ORDER BY created_at DESC LIMIT 10
-            `).all(sym, since);
+                SELECT json_extract(data, '$.regime') AS regime,
+                       final_dir AS dir, final_conf AS conf,
+                       final_tier AS tier, final_action AS status, ts
+                FROM brain_decisions
+                WHERE symbol = ? AND user_id = ? AND ts >= ?
+                ORDER BY ts DESC LIMIT 10
+            `).all(sym, userId, since);
         } catch (_) {}
         const regimeMix = {};
         for (const d of decisions) regimeMix[d.regime] = (regimeMix[d.regime] || 0) + 1;
@@ -1338,14 +1373,6 @@ function _formatPositionsBlock(positions) {
         const age = p.ageMs != null ? ` (${_fmtAge(p.ageMs)})` : '';
         return `${p.side} ${_displaySym(p.symbol)} @${p.entry} ${p.lev}x [${p.mode}], ${pnl}, ${sl}, ${tp}${age}`;
     }).join('; ');
-}
-
-function _formatDecisionsBlock(decisions) {
-    if (!decisions || decisions.length === 0) return 'no decisions in last 5min.';
-    return decisions.slice(0, 6).map(d => {
-        const ageS = Math.round((Date.now() - d.ts) / 1000);
-        return `${_displaySym(d.symbol)} ${d.dir} ${d.regime} conf${d.conf} ${d.status}(${ageS}s)`;
-    }).join(' | ');
 }
 
 function _formatSymbolDeep(sd) {
@@ -1527,8 +1554,17 @@ function _buildSystemPrompt(params) {
         `LIVE STATE:`,
         `  Engine mode: ${ctx.engineMode}`,
         `  Brain mood: ${ctx.brainMood} (heartbeat ${ctx.brainHbAvgMs}ms)`,
+        `  Account: ${omegaContext.formatAccount(ctx.account)}`,
         `  Positions (${ctx.positions.length} open): ${_formatPositionsBlock(ctx.positions)}`,
-        `  Recent decisions (last 5min): ${_formatDecisionsBlock(ctx.recentDecisions)}`,
+        `  Last closes: ${omegaContext.formatCloses(ctx.recentCloses)}`,
+        `  Brain decisions (last 5min — dir, confidence, tier, what stopped it): ${omegaContext.formatDecisions(ctx.recentDecisions, Date.now())}`,
+        `  Entries BLOCKED (last 24h): ${omegaContext.formatBlocked(ctx.blockedReasons)}`,
+        `  Your own recent thoughts (THE VOICE — you said these, own them): ${omegaContext.formatThoughts(ctx.ownThoughts, Date.now())}`,
+        `  Liquidations burned (last 24h, biggest first): ${omegaContext.formatLiquidations(ctx.liquidations)}`,
+        '  (Decision words: no_trade = no setup; blocked_gates = a hard gate said no;',
+        '   blocked_reflection = you second-guessed it; entry_blocked = the entry guard refused',
+        '   it, usually mixed direction or max positions; pending_expire = the setup timed out.',
+        '   When the operator asks why you did not take something, answer from THESE — never guess.)',
         '',
         'MARKET (top-N from Binance USDT perps, 24h):',
         `  BTC: ${_px(ctx.market.btcPrice)}${ctx.market.btcDelta24h != null ? ` (${_fmtPct(ctx.market.btcDelta24h)} 24h)` : ''}, ETH: ${_px(ctx.market.ethPrice)}${ctx.market.ethDelta24h != null ? ` (${_fmtPct(ctx.market.ethDelta24h)})` : ''}${ctx.market.solPrice != null ? `, SOL: ${_px(ctx.market.solPrice)}` : ''}`,
