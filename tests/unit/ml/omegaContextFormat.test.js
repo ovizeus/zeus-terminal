@@ -78,14 +78,41 @@ describe('formatBlocked — de ce NU a intrat', () => {
 });
 
 describe('formatAccount — cum sta operatorul', () => {
-    it('balanta, ziua, rata de castig, seria', () => {
-        expect(C.formatAccount({ mode: 'demo', balance: 25755.54, dailyPnl: -9.8, closedCount: 100, wins: 38, lossStreak: 2 }))
-            .toBe('demo balance $25755.54 · today -9.80 · 100 closed, 38% win · loss streak 2.');
+    it('balanta, ziua, rata de castig pe tranzactii DECISE, seria', () => {
+        expect(C.formatAccount({ mode: 'demo', balance: 25755.54, dailyPnl: -9.8, decidedCount: 100, wins: 38, lossStreak: 2 }))
+            .toBe('demo balance $25755.54 · today -9.80 · 100 trades, 38% win · loss streak 2.');
+    });
+
+    it('REGRESIE: intrarile ESUATE nu se numara la rata de castig', () => {
+        // Masurat pe contul lui: din 3.216 randuri in at_closed, 1.860 au PnL
+        // exact ZERO — si nu sunt tranzactii la zero, sunt intrari care au
+        // esuat (1.199 doar pe margine insuficienta). N-au fost niciodata
+        // pozitii. Numarandu-le la numitor, fiecare esec de intrare arata ca o
+        // infrangere: ii raportam 18% castig in loc de 44,6%.
+        const out = C.formatAccount({
+            mode: 'demo', balance: 1000,
+            closedCount: 3216, decidedCount: 1327, wins: 592, failedEntries: 1860,
+        });
+        expect(out).toContain('1327 trades, 45% win');
+        expect(out).not.toContain('3216');
+        expect(out).not.toContain('18% win');
+    });
+
+    it('si SPUNE cate intrari n-au ajuns niciodata pozitii', () => {
+        // Nu e o pierdere, dar nici un detaliu: inseamna ca sistemul vrea sa
+        // tranzactioneze si nu poate.
+        expect(C.formatAccount({ balance: 1, decidedCount: 10, wins: 5, failedEntries: 1199 }))
+            .toContain('1199 entries never filled');
+    });
+
+    it('fara intrari esuate nu inventeaza randul', () => {
+        expect(C.formatAccount({ balance: 1, decidedCount: 10, wins: 5, failedEntries: 0 }))
+            .not.toContain('never filled');
     });
 
     it('REGRESIE: nu scrie 0% castig cand nu exista nicio tranzactie', () => {
         // Un procent dintr-un numitor zero suna ca o masuratoare si e o minciuna.
-        const out = C.formatAccount({ mode: 'demo', balance: 10000, closedCount: 0, wins: 0 });
+        const out = C.formatAccount({ mode: 'demo', balance: 10000, closedCount: 0, decidedCount: 0, wins: 0 });
         expect(out).not.toContain('%');
         expect(out).toContain('0 closed');
     });
@@ -165,5 +192,37 @@ describe('gatherLiquidations — "cele mai mari" inseamna bani, nu bucati', () =
     it('nu arunca daca liqStore lipseste sau crapa', () => {
         expect(C.gatherLiquidations(null)).toEqual([]);
         expect(C.gatherLiquidations({ symbols: () => { throw new Error('x'); } })).toEqual([]);
+    });
+});
+
+describe('gatherAccount — CALCULUL numitorului, nu doar forma lui', () => {
+    // Testele de mai sus hranesc `formatAccount` cu valori scrise de mana, deci
+    // nu pot prinde o greseala in felul in care se CALCULEAZA `decidedCount`.
+    // Mutatia care punea numitorul pe numarul TOTAL de randuri a supravietuit
+    // prima oara exact de aceea.
+    function fakeDb(row) {
+        return { prepare: () => ({ get: () => row, all: () => [] }) };
+    }
+
+    it('REGRESIE: numitorul = castiguri + pierderi, FARA randurile la zero', () => {
+        // Cifrele reale ale operatorului: 592 castiguri, 735 pierderi,
+        // 1.860 intrari esuate (PnL exact zero), 3.216 randuri in total.
+        const a = C.gatherAccount(fakeDb({ n: 3216, wins: 592, losses: 735, flat: 1860 }), 1, null, 1000);
+        expect(a.decidedCount).toBe(1327);
+        expect(a.failedEntries).toBe(1860);
+        expect(a.closedCount).toBe(3216);
+        // Si cifra care ajunge in fata modelului:
+        expect(C.formatAccount(a)).toContain('1327 trades, 45% win');
+    });
+
+    it('fara pierderi, numitorul e doar castigurile', () => {
+        const a = C.gatherAccount(fakeDb({ n: 5, wins: 3, losses: 0, flat: 2 }), 1, null, 10);
+        expect(a.decidedCount).toBe(3);
+    });
+
+    it('o baza care crapa nu rupe raspunsul', () => {
+        const a = C.gatherAccount({ prepare: () => { throw new Error('x'); } }, 1, null, 10);
+        expect(a.decidedCount).toBeNull();
+        expect(C.formatAccount(a)).toContain('balance');
     });
 });

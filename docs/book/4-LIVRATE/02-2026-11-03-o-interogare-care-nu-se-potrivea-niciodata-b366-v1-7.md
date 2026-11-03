@@ -37,3 +37,5 @@ BREAKOUT 19% (obs 27, testnet), TREND 25% (obs 20, demo), …
 Şi un test al meu scris încâlcit, cu o numărătoare care nu se înţelegea — rescris simplu: *un test greu de citit nu apără pe nimeni.*
 
 7 teste noi. Regresie: **10.182 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---

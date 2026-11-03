@@ -99,12 +99,31 @@ function formatAccount(a) {
     if (bal !== null) parts.push(`${String(a.mode || 'demo')} balance $${bal.toFixed(2)}`);
     const today = _num(a.dailyPnl);
     if (today !== null) parts.push(`today ${fmtMoney(today)}`);
-    const closed = _num(a.closedCount);
+    // [2026-11-03] Rata de castig se calculeaza DOAR peste tranzactiile decise.
+    //
+    // Pana azi o calculam peste TOT ce era in at_closed, si i-am spus
+    // operatorului ca are 18% castig. Masurat: din 3.216 randuri ale lui, 1.860
+    // au PnL exact ZERO — si nu sunt tranzactii la zero, sunt INTRARI CARE AU
+    // ESUAT: 1.199 pe margine insuficienta, plus erori de ordin, de levier si
+    // reseturi. N-au fost niciodata pozitii. Numarandu-le la numitor, fiecare
+    // esec de intrare arata ca o infrangere.
+    //
+    // Peste tranzactiile care chiar s-au decis, cifra lui e 44,6%. Diferenta
+    // dintre 18 si 45 nu e o nuanta: e diferenta dintre un om care crede ca
+    // sistemul lui nu merge si unul care stie ca merge pe jumatate.
+    const decided = _num(a.decidedCount);
     const wins = _num(a.wins);
-    if (closed !== null && closed > 0 && wins !== null) {
-        parts.push(`${closed} closed, ${Math.round((wins / closed) * 100)}% win`);
+    const closed = _num(a.closedCount);
+    if (decided !== null && decided > 0 && wins !== null) {
+        parts.push(`${decided} trades, ${Math.round((wins / decided) * 100)}% win`);
     } else if (closed !== null) {
         parts.push(`${closed} closed`);
+    }
+    const failed = _num(a.failedEntries);
+    if (failed !== null && failed > 0) {
+        // Nu e o pierdere, dar nici un detaliu: 1.199 intrari refuzate pe
+        // margine inseamna ca sistemul vrea sa tranzactioneze si nu poate.
+        parts.push(`${failed} entries never filled`);
     }
     const ls = _num(a.lossStreak);
     const ws = _num(a.winStreak);
@@ -323,7 +342,7 @@ function gatherThoughts(db, userId, now) {
  * intervalul, nu doar peste sesiunea curenta.
  */
 function gatherAccount(db, userId, uState, balance) {
-    const out = { mode: null, balance: null, dailyPnl: null, closedCount: null, wins: null, winStreak: null, lossStreak: null };
+    const out = { mode: null, balance: null, dailyPnl: null, closedCount: null, decidedCount: null, failedEntries: null, wins: null, winStreak: null, lossStreak: null };
     try {
         if (uState && typeof uState === 'object') {
             out.mode = uState.engineMode || uState.mode || null;
@@ -336,10 +355,19 @@ function gatherAccount(db, userId, uState, balance) {
     try {
         const r = db.prepare(`
             SELECT COUNT(*) AS n,
-                   SUM(CASE WHEN json_extract(data, '$.closePnl') > 0 THEN 1 ELSE 0 END) AS wins
+                   SUM(CASE WHEN json_extract(data, '$.closePnl') > 0 THEN 1 ELSE 0 END) AS wins,
+                   SUM(CASE WHEN json_extract(data, '$.closePnl') < 0 THEN 1 ELSE 0 END) AS losses,
+                   SUM(CASE WHEN json_extract(data, '$.closePnl') = 0 THEN 1 ELSE 0 END) AS flat
             FROM at_closed WHERE user_id = ?
         `).get(userId);
-        if (r) { out.closedCount = _num(r.n); out.wins = _num(r.wins); }
+        if (r) {
+            out.closedCount = _num(r.n);
+            out.wins = _num(r.wins);
+            const losses = _num(r.losses) || 0;
+            out.decidedCount = (_num(r.wins) || 0) + losses;
+            // Randurile la zero sunt intrari care au esuat — vezi formatAccount.
+            out.failedEntries = _num(r.flat);
+        }
     } catch (_) { /* best effort */ }
     return out;
 }
