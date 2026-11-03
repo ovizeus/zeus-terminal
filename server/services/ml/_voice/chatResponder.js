@@ -366,7 +366,7 @@ function _replyMood(ctx) {
 
 // ── Intent: bandit / ring5 / influence ────────────────────────────────
 function _replyBandit(ctx) {
-    let cellsCount = 0, topCell = null, hasInfluence = false;
+    let cellsCount = 0, topCell = null, hasInfluence = false, preRegExpiredAt = null;
     try {
         cellsCount = db.prepare('SELECT COUNT(*) AS n FROM ml_bandit_posteriors WHERE level=4').get().n;
         if (cellsCount > 0) {
@@ -383,13 +383,34 @@ function _replyBandit(ctx) {
         `).get();
         if (vrow) {
             const preReg = db.prepare(`
-                SELECT state FROM ml_hypothesis_pre_registrations
+                SELECT state, eval_window_to FROM ml_hypothesis_pre_registrations
                 WHERE version_id = ? AND state IN ('REGISTERED','EVALUATING')
                 LIMIT 1
             `).get(vrow.id);
             hasInfluence = !!preReg;
+            // [2026-11-03] Fereastra de evaluare e a DOUA conditie a portii, si
+            // raspunsul vechi nu o verifica deloc — de aceea spunea ACTIVE
+            // despre ceva refuzat. A pre-inregistrarii 6554 s-a inchis pe 9
+            // iulie 2026, si se vede in audit ca `eval_window_expired`.
+            if (preReg && preReg.eval_window_to && preReg.eval_window_to < Date.now()) {
+                preRegExpiredAt = preReg.eval_window_to;
+            }
         }
     } catch (_) { /* */ }
+    // Verdictul REAL al portii, nu o conditie care-i seamana.
+    let evals = 0, applied = 0, reasons = [];
+    try {
+        const since = Date.now() - 24 * 60 * 60 * 1000;
+        reasons = db.prepare(`
+            SELECT gate_reason AS reason, gate_status AS status, COUNT(*) AS n
+            FROM ml_influence_audit
+            WHERE user_id = ? AND created_at >= ?
+            GROUP BY gate_reason, gate_status ORDER BY n DESC
+        `).all((ctx && ctx.userId) || 1, since);
+        evals = reasons.reduce((acc, r) => acc + r.n, 0);
+        applied = reasons.filter(r => r.status === 'applied' || r.status === 'accepted')
+            .reduce((acc, r) => acc + r.n, 0);
+    } catch (_) { /* best effort */ }
     let line1 = `bandit: ${cellsCount} L4 cell${cellsCount === 1 ? '' : 's'} learned`;
     if (topCell) {
         const wr = topCell.observation_count > 0
@@ -398,12 +419,11 @@ function _replyBandit(ctx) {
     } else {
         line1 += '. all cold — waiting for trade closes to fill';
     }
-    const line2 = hasInfluence
-        ? 'influence: ACTIVE. seed + preReg live. eligibility passes for cells ≥30 obs.'
-        : 'influence: INACTIVE. seed via Ring5 panel button to activate.';
+    const line2 = omegaContext.influenceStatus({ evals, applied, reasons, preRegExpiredAt });
     return {
         reply: `${line1}\n${line2}`,
-        mood: hasInfluence && cellsCount > 0 ? 'FOCUSED' : 'BORED'
+        // Starea urmeaza adevarul: nimic aplicat nu e un motiv de concentrare.
+        mood: applied > 0 ? 'FOCUSED' : 'BORED'
     };
 }
 

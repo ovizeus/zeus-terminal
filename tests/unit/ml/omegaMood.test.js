@@ -112,10 +112,20 @@ describe('chatResponder nu mai citeste tabela moarta', () => {
     const SRC = fs.readFileSync(
         path.join(__dirname, '../../../server/services/ml/_voice/chatResponder.js'), 'utf8');
 
-    test('REGRESIE: nicio INTEROGARE nu mai atinge ml_influence_audit', () => {
-        // Comentariile o pomenesc legitim — explica de ce s-a plecat de acolo.
-        // Ce nu mai are voie sa existe e un `FROM` catre ea.
-        expect(SRC).not.toMatch(/FROM\s+ml_influence_audit/);
+    test('REGRESIE: auditul ML se citeste DOAR acolo unde chiar e adevarul', () => {
+        // Regula nu e "tabela asta e interzisa" — ar fi fost prea larga si ar fi
+        // interzis singurul loc unde e corecta. `ml_influence_audit`
+        // inregistreaza ce a hotarat POARTA de influenta, deci e sursa potrivita
+        // pentru raspunsul "cum e bandit-ul" (b364: acolo spunea ACTIVE despre
+        // ceva care n-a aplicat niciodata). Ce NU mai are voie: sa tina loc de
+        // decizii, de stare sau de raspunsul pe simbol — acolo e numai zgomot,
+        // fiindca toate cele 522.400 de randuri sunt `skipped`.
+        const allowed = SRC.slice(SRC.indexOf('function _replyBandit'), SRC.indexOf('function _replyDecisions'));
+        const outside = SRC.replace(allowed, '');
+        expect(outside).not.toMatch(/FROM\s+ml_influence_audit/);
+        // Si acolo unde e permisa, chiar se foloseste pentru verdict.
+        expect(allowed).toMatch(/FROM\s+ml_influence_audit/);
+        expect(allowed).toContain('gate_reason');
     });
 
     test('si deciziile vin din sursa reala', () => {

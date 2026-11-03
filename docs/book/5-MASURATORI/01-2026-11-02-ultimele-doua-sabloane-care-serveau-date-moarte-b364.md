@@ -37,3 +37,5 @@ Puneam două decizii cu **acelaşi timestamp** şi ceream ca „cea mai recentă
 5 teste noi. Un test vechi care apăra sursa greşită a fost **actualizat, nu şters**.
 
 Regresie: **10.166 verzi** pe 4 sharduri, 3 sărite, zero eşuate. (Un eşec pe `timeIntegrity` — pâlpâirea cunoscută sensibilă la ceas, verde la reluare, nelegată de lucrare.)
+
+---

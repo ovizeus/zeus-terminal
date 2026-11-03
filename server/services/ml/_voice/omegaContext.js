@@ -219,6 +219,48 @@ function moodReason(ctx) {
     return `${decisions} decisions, nothing forcing my hand`;
 }
 
+/**
+ * [2026-11-03] Adevarul despre influenta ML, in loc de "ACTIVE".
+ *
+ * Raspunsul vechi la "cum e bandit-ul" spunea, negru pe alb:
+ *   "influence: ACTIVE. seed + preReg live. eligibility passes for cells >= 30 obs."
+ * Era fals pe toate cele trei bucati. Masurat: 522.400 de evaluari de
+ * influenta, TOATE skipped — niciuna n-a schimbat vreodata o decizie. Si
+ * conditia pe care o verifica raspunsul (exista o pre-inregistrare in stare
+ * REGISTERED) nu e conditia pe care o verifica POARTA: poarta cere si ca
+ * fereastra de evaluare sa nu fie expirata, iar a pre-inregistrarii 6554 s-a
+ * inchis pe 9 iulie 2026. Se vede si in audit: cand o celula a atins 30 de
+ * observatii, verdictul a devenit `eval_window_expired`.
+ *
+ * Un asistent care raporteaza ACTIVE despre ceva care n-a functionat niciodata
+ * e mai rau decat unul care tace: operatorul ia decizii crezandu-l.
+ *
+ * Functia e pura: primeste numerele, scrie propozitia.
+ */
+function influenceStatus(st) {
+    const c = st && typeof st === 'object' ? st : {};
+    const evals = _num(c.evals) || 0;
+    const applied = _num(c.applied) || 0;
+    if (evals <= 0) return 'influence: no evaluations in the last 24h — pipeline idle.';
+    if (applied > 0) {
+        return `influence: APPLIED ${applied} of ${evals} evaluations in the last 24h.`;
+    }
+    const reasons = Array.isArray(c.reasons) ? c.reasons : [];
+    const top = reasons
+        .slice(0, 3)
+        .map(r => `${String((r && r.reason) || '?').replace(/^not_eligible_/, '')} ×${_num(r && r.n) || 0}`)
+        .join(', ');
+    let line = `influence: NEVER APPLIED — ${evals} evaluation${evals === 1 ? '' : 's'} in the last 24h, all skipped`;
+    if (top) line += ` (${top})`;
+    line += '.';
+    const expiredAt = _num(c.preRegExpiredAt);
+    if (expiredAt !== null && expiredAt > 0) {
+        const days = Math.floor((Date.now() - expiredAt) / 86400000);
+        line += ` Pre-registration window closed ${days} day${days === 1 ? '' : 's'} ago — even a cell with 30+ observations is refused.`;
+    }
+    return line;
+}
+
 // ── Strangerea datelor ────────────────────────────────────────────────
 //
 // Fiecare bucata are try/catch-ul ei: un chat care cade fiindca o tabela s-a
@@ -324,7 +366,7 @@ function gatherLiquidations(liqStore) {
 module.exports = {
     fmtAge, fmtMoney,
     formatDecisions, formatBlocked, formatAccount, formatCloses, formatThoughts, formatLiquidations,
-    moodFrom, moodReason,
+    moodFrom, moodReason, influenceStatus,
     gatherLiquidations,
     gatherDecisions, gatherBlocked, gatherCloses, gatherThoughts, gatherAccount,
     MAX_DECISIONS, MAX_THOUGHTS, MAX_CLOSES,
