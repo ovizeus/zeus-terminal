@@ -35,3 +35,5 @@ din ultimele 382 trade-uri închise: 44% (168/382). … bandit cells:
 7 teste noi. Un test de la b366 cerea forma scrisă inline şi a fost **actualizat** să ceară constructorul, cu motivul scris în el.
 
 Regresie: **10.208 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---

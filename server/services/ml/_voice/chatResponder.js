@@ -1813,7 +1813,26 @@ async function respondStream(params) {
     // running the same routing but return early when LLM is needed so we
     // can swap chat() for chatStream().
     const originalText = params.text || '';
-    const localResult = await _tryLocalIntent(ctx, text, originalText);
+    // [2026-11-03] Un sablon care arunca nu are voie sa omoare raspunsul.
+    //
+    // Sunt 27 de intentii, fiecare citind altceva — carte de ordine, ziduri,
+    // indicatori, structura, fundamentale. Un singur camp lipsa intr-un rand
+    // si `.toFixed` de pe el arunca, iar pana azi exceptia urca pana in ruta si
+    // operatorul ramane fara niciun raspuns. Nu e un bug pe care l-am VAZUT pe
+    // viu: l-am gasit proband, si tocmai de aceea merita acoperit — un singur
+    // rand malformat, oriunde in 27 de locuri, e o tacere completa.
+    //
+    // Caderea e in gol, nu intr-un mesaj de eroare: lasam modelul sa raspunda,
+    // care are oricum toate datele in context.
+    let localResult = null;
+    try {
+        localResult = await _tryLocalIntent(ctx, text, originalText);
+    } catch (err) {
+        if (typeof logger !== 'undefined' && logger && logger.warn) {
+            logger.warn('CHAT_RESP', `local intent threw, falling through to model: ${err && err.message}`);
+        }
+        localResult = null;
+    }
     if (localResult) {
         try { onChunk(localResult.reply); } catch (_) {}
         _pushConvo(userId, 'user', originalText);
@@ -1977,7 +1996,20 @@ async function respond(params) {
         memoryFacts = await omegaMemoryService.retrieve(userId, engineMode.toUpperCase());
     } catch (_) { /* graceful degrade — retrieve() already returns [] on DB error */ }
 
-    const result = await _respondImpl({ ...params, _memoryFacts: memoryFacts }, text);
+    // [2026-11-03] Acelasi scut si pe calea fara flux, ca cele doua lanturi sa
+    // se poarte la fel. Un sablon care arunca cade in gol catre model, nu peste
+    // tot raspunsul.
+    let result;
+    try {
+        result = await _respondImpl({ ...params, _memoryFacts: memoryFacts }, text);
+    } catch (err) {
+        if (typeof logger !== 'undefined' && logger && logger.warn) {
+            logger.warn('CHAT_RESP', `intent threw, falling back: ${err && err.message}`);
+        }
+        result = await _replyLLMFallback(
+            { userId, brainHbAvgMs: _brainHbAvgMs(), nowMs: Date.now(), _memoryFacts: memoryFacts },
+            params.text || '');
+    }
     // [Day 30] Track exchange in convo history for multi-turn context.
     _pushConvo(userId, 'user', params.text || '');
     _pushConvo(userId, 'assistant', result.reply || '');
