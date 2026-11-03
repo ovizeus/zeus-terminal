@@ -1108,7 +1108,12 @@ function _replyLearnings(ctx, originalText) {
     for (const r of closedRows) {
         try {
             const t = JSON.parse(r.data);
-            if (t.closePnl != null && t.closeReason && !String(t.closeReason).startsWith('ENTRY_FAILED')) {
+            // [2026-11-03] Aceeasi definitie ca randul de cont. Varianta de
+            // aici excludea doar `ENTRY_FAILED*`, deci numara ca tranzactii si
+            // reseturile (91) si randurile de reconciliere (32) — de unde 36,7%
+            // in loc de 39,6%. Doua definitii ale cuvantului tranzactie in
+            // aceeasi aplicatie inseamna doua cifre despre acelasi om.
+            if (omegaContext.isRealTrade(t.closeReason, t.closePnl)) {
                 trades.push(t);
             }
         } catch (_) {}

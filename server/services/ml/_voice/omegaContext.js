@@ -211,6 +211,46 @@ function moodFrom(ctx) {
 }
 
 /**
+ * [2026-11-03] CE ESTE o tranzactie. O singura definitie, pentru toata aplicatia.
+ *
+ * Zeus avea doua, si de aceea doua parti ale lui spuneau cifre diferite despre
+ * acelasi om:
+ *   • randul de cont (al meu, b360) numara TOT ce e in at_closed -> 18,5%;
+ *   • raspunsul despre invataminte excludea doar `ENTRY_FAILED*`      -> 36,7%.
+ * La b367 am reparat primul excluzand tot ce are PnL zero -> 44,6%. Si aia era
+ * gresita, in cealalta directie: arunca 139 de tranzactii ADEVARATE incheiate
+ * la zero (MANUAL_CLIENT, EMERGENCY_CLOSED, HIT_SL), care sunt inchideri reale,
+ * nu esecuri.
+ *
+ * Regula corecta nu e despre PnL, e despre ISTORIE: a fost vreodata o pozitie?
+ *   • `ENTRY_FAILED*` (1.572 la el) — ordinul n-a intrat niciodata;
+ *   • `RESET` (91) — stergere de stare, nu tranzactie;
+ *   • `RECON_PHANTOM*` (32) — randuri de reconciliere, nu tranzactie.
+ * Tot restul e tranzactie, inclusiv cea care a iesit exact pe zero.
+ *
+ * Pe datele lui: 1.366 de tranzactii, 39,6% castig. Nu 18, nu 45.
+ */
+const NON_TRADE_PREFIXES = ['ENTRY_FAILED', 'RECON_PHANTOM'];
+const NON_TRADE_EXACT = new Set(['RESET']);
+
+/** Pur: a fost randul asta vreodata o pozitie? */
+function isRealTrade(closeReason, closePnl) {
+    if (closePnl === null || closePnl === undefined) return false;  // nu stim cum s-a terminat
+    if (typeof closePnl !== 'number' || !Number.isFinite(closePnl)) return false;
+    const r = typeof closeReason === 'string' ? closeReason : '';
+    if (NON_TRADE_EXACT.has(r)) return false;
+    return !NON_TRADE_PREFIXES.some((pfx) => r.startsWith(pfx));
+}
+
+/** Aceeasi regula, in SQL, ca interogarile sa nu poata spune altceva. */
+const REAL_TRADE_SQL = [
+    "json_extract(data, '$.closePnl') IS NOT NULL",
+    "coalesce(json_extract(data, '$.closeReason'), '') NOT LIKE 'ENTRY_FAILED%'",
+    "coalesce(json_extract(data, '$.closeReason'), '') NOT LIKE 'RECON_PHANTOM%'",
+    "coalesce(json_extract(data, '$.closeReason'), '') <> 'RESET'",
+].join(' AND ');
+
+/**
  * De ce simte ce simte — in aceleasi cuvinte din care s-a calculat starea.
  *
  * Pana azi starea venea dintr-o tabela moarta SI explicatia venea din aceeasi
@@ -355,18 +395,18 @@ function gatherAccount(db, userId, uState, balance) {
     try {
         const r = db.prepare(`
             SELECT COUNT(*) AS n,
-                   SUM(CASE WHEN json_extract(data, '$.closePnl') > 0 THEN 1 ELSE 0 END) AS wins,
-                   SUM(CASE WHEN json_extract(data, '$.closePnl') < 0 THEN 1 ELSE 0 END) AS losses,
-                   SUM(CASE WHEN json_extract(data, '$.closePnl') = 0 THEN 1 ELSE 0 END) AS flat
+                   SUM(CASE WHEN ${REAL_TRADE_SQL} THEN 1 ELSE 0 END) AS trades,
+                   SUM(CASE WHEN (${REAL_TRADE_SQL}) AND json_extract(data, '$.closePnl') > 0 THEN 1 ELSE 0 END) AS wins,
+                   SUM(CASE WHEN coalesce(json_extract(data, '$.closeReason'), '') LIKE 'ENTRY_FAILED%' THEN 1 ELSE 0 END) AS failed
             FROM at_closed WHERE user_id = ?
         `).get(userId);
         if (r) {
             out.closedCount = _num(r.n);
             out.wins = _num(r.wins);
-            const losses = _num(r.losses) || 0;
-            out.decidedCount = (_num(r.wins) || 0) + losses;
-            // Randurile la zero sunt intrari care au esuat — vezi formatAccount.
-            out.failedEntries = _num(r.flat);
+            // Numitorul e numarul de TRANZACTII, dupa singura definitie a
+            // aplicatiei — nu "tot ce e in tabela" si nici "tot ce nu e zero".
+            out.decidedCount = _num(r.trades);
+            out.failedEntries = _num(r.failed);
         }
     } catch (_) { /* best effort */ }
     return out;
@@ -395,6 +435,7 @@ module.exports = {
     fmtAge, fmtMoney,
     formatDecisions, formatBlocked, formatAccount, formatCloses, formatThoughts, formatLiquidations,
     moodFrom, moodReason, influenceStatus,
+    isRealTrade, REAL_TRADE_SQL,
     gatherLiquidations,
     gatherDecisions, gatherBlocked, gatherCloses, gatherThoughts, gatherAccount,
     MAX_DECISIONS, MAX_THOUGHTS, MAX_CLOSES,

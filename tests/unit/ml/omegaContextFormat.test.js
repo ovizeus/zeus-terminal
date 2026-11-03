@@ -204,25 +204,99 @@ describe('gatherAccount — CALCULUL numitorului, nu doar forma lui', () => {
         return { prepare: () => ({ get: () => row, all: () => [] }) };
     }
 
-    it('REGRESIE: numitorul = castiguri + pierderi, FARA randurile la zero', () => {
-        // Cifrele reale ale operatorului: 592 castiguri, 735 pierderi,
-        // 1.860 intrari esuate (PnL exact zero), 3.216 randuri in total.
-        const a = C.gatherAccount(fakeDb({ n: 3216, wins: 592, losses: 735, flat: 1860 }), 1, null, 1000);
-        expect(a.decidedCount).toBe(1327);
-        expect(a.failedEntries).toBe(1860);
-        expect(a.closedCount).toBe(3216);
-        // Si cifra care ajunge in fata modelului:
-        expect(C.formatAccount(a)).toContain('1327 trades, 45% win');
+    it('REGRESIE: numitorul e numarul de TRANZACTII, dupa singura definitie', () => {
+        // Cifrele reale ale operatorului, numarate cu regula corecta:
+        // 3.216 randuri in tabela, din care 1.366 tranzactii (541 castiguri),
+        // si 1.572 intrari care n-au intrat niciodata.
+        //
+        // Istoricul acestui test merita pastrat, fiindca sunt trei greseli
+        // succesive pe acelasi numar: 18,5% (toata tabela, b360), 44,6% (fara
+        // nimic la zero, b367 — arunca 139 de inchideri REALE la zero), si
+        // 39,6%, care e adevarul.
+        const a = C.gatherAccount(fakeDb({ n: 3216, trades: 1366, wins: 541, failed: 1572 }), 1, null, 1000);
+        expect(a.decidedCount).toBe(1366);
+        expect(a.wins).toBe(541);
+        expect(a.failedEntries).toBe(1572);
+        expect(C.formatAccount(a)).toContain('1366 trades, 40% win');
+        expect(C.formatAccount(a)).not.toContain('18%');
+        expect(C.formatAccount(a)).not.toContain('45% win');
     });
 
-    it('fara pierderi, numitorul e doar castigurile', () => {
-        const a = C.gatherAccount(fakeDb({ n: 5, wins: 3, losses: 0, flat: 2 }), 1, null, 10);
-        expect(a.decidedCount).toBe(3);
+    it('intrarile esuate se numara separat, nu la tranzactii', () => {
+        const a = C.gatherAccount(fakeDb({ n: 10, trades: 4, wins: 2, failed: 6 }), 1, null, 10);
+        expect(a.decidedCount).toBe(4);
+        expect(C.formatAccount(a)).toContain('4 trades, 50% win');
+        expect(C.formatAccount(a)).toContain('6 entries never filled');
     });
 
     it('o baza care crapa nu rupe raspunsul', () => {
         const a = C.gatherAccount({ prepare: () => { throw new Error('x'); } }, 1, null, 10);
         expect(a.decidedCount).toBeNull();
         expect(C.formatAccount(a)).toContain('balance');
+    });
+});
+
+describe('isRealTrade — o singura definitie pentru toata aplicatia', () => {
+    // Zeus avea DOUA, si doua parti ale lui spuneau cifre diferite despre
+    // acelasi om: 18,5% (tot ce e in tabela), 36,7% (fara ENTRY_FAILED) si
+    // 44,6% (fara nimic la zero). Corect: 39,6% peste 1.366 de tranzactii.
+    it('REGRESIE: o intrare care n-a intrat NU e tranzactie', () => {
+        expect(C.isRealTrade('ENTRY_FAILED_INSUFFICIENT_MARGIN', 0)).toBe(false);
+        expect(C.isRealTrade('ENTRY_FAILED_ERROR', 0)).toBe(false);
+    });
+
+    it('REGRESIE: resetul si reconcilierea nu sunt tranzactii', () => {
+        // Astea treceau de filtrul vechi si se numarau ca infrangeri.
+        expect(C.isRealTrade('RESET', 0)).toBe(false);
+        expect(C.isRealTrade('RECON_PHANTOM', 0)).toBe(false);
+        expect(C.isRealTrade('RECON_PHANTOM_STALE_EMPTY', 0)).toBe(false);
+    });
+
+    it('REGRESIE: o inchidere REALA la zero ESTE tranzactie', () => {
+        // Regula mea de la b367 le arunca — 139 de tranzactii adevarate.
+        expect(C.isRealTrade('MANUAL_CLIENT', 0)).toBe(true);
+        expect(C.isRealTrade('EMERGENCY_CLOSED', 0)).toBe(true);
+        expect(C.isRealTrade('HIT_SL', 0)).toBe(true);
+    });
+
+    it('inchiderile obisnuite trec, cu orice semn', () => {
+        expect(C.isRealTrade('DSL_PL', 12.4)).toBe(true);
+        expect(C.isRealTrade('HIT_SL', -8.4)).toBe(true);
+        expect(C.isRealTrade(null, 3)).toBe(true);     // motiv lipsa, dar s-a inchis
+    });
+
+    it('fara PnL nu stim cum s-a terminat — nu se numara', () => {
+        for (const v of [null, undefined, NaN, '5']) expect(C.isRealTrade('DSL_PL', v)).toBe(false);
+    });
+
+    it('regula SQL spune ACELASI lucru ca cea din cod', () => {
+        for (const w of ['ENTRY_FAILED%', 'RECON_PHANTOM%', 'RESET', 'IS NOT NULL']) {
+            expect(C.REAL_TRADE_SQL).toContain(w);
+        }
+    });
+});
+
+describe('definitia tranzactiei e FOLOSITA peste tot, nu doar declarata', () => {
+    // Mutatia care intorcea `_replyLearnings` la propriul filtru a supravietuit
+    // prima oara: aveam regula unica scrisa si testata, dar nimic nu cerea ca
+    // raspunsurile sa o FOLOSEASCA. O definitie comuna pe care o foloseste un
+    // singur apelant nu rezolva nimic — exact starea de dinainte.
+    const fs = require('fs');
+    const path = require('path');
+    const SRC = fs.readFileSync(
+        path.join(__dirname, '../../../server/services/ml/_voice/chatResponder.js'), 'utf8');
+
+    it('REGRESIE: raspunsul despre invataminte foloseste regula comuna', () => {
+        const body = SRC.slice(SRC.indexOf('function _replyLearnings'),
+                               SRC.indexOf('function _reply', SRC.indexOf('function _replyLearnings') + 10));
+        expect(body).toContain('omegaContext.isRealTrade');
+        // Si NU mai are filtrul lui de mana, care numara reseturile ca tranzactii.
+        expect(body).not.toContain("startsWith('ENTRY_FAILED')");
+    });
+
+    it('nimeni nu-si mai scrie singur filtrul de intrari esuate', () => {
+        // Daca apare iar undeva, aplicatia are din nou doua adevaruri.
+        const handRolled = (SRC.match(/startsWith\('ENTRY_FAILED'\)/g) || []).length;
+        expect(handRolled).toBe(0);
     });
 });

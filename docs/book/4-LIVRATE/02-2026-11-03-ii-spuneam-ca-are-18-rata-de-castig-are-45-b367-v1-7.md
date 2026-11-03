@@ -47,3 +47,5 @@ Prima mutaţie pe **calculul** numitorului a **supravieţuit** — fiindcă test
 **3 mutaţii moarte:** rata revenită pe toate rândurile · intrările eşuate neraportate · numitorul luând şi rândurile la zero.
 
 7 teste noi. Regresie: **10.188 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---
