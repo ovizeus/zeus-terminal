@@ -902,12 +902,18 @@ function _replyPredictivity(ctx, symbolHint, originalText) {
     const sym = _normSymbol(symbolHint);
     let rows = [];
     try {
+        // [2026-11-03] Separatorul cheii de celula e DOUA PUNCTE, nu bara
+        // verticala: `1:DEMO:BNBUSDT:BREAKOUT`. Cu bara, interogarea intorcea
+        // ZERO randuri mereu, deci raspunsul spunea "bandit cold start, no edge
+        // yet" indiferent de date — inclusiv pentru BTCUSDT, care are celule cu
+        // 36, 29, 27 si 20 de observatii. O interogare care nu se potriveste
+        // niciodata nu da eroare, da un raspuns linistit si fals.
         rows = db.prepare(
             `SELECT cell_key, alpha, beta, observation_count
              FROM ml_bandit_posteriors
              WHERE level = 4 AND cell_key LIKE ?
              ORDER BY observation_count DESC LIMIT 5`
-        ).all(`${ctx.userId}|%|${sym}|%`);
+        ).all(`${ctx.userId}:%:${sym}:%`);
     } catch (_) {}
     if (rows.length === 0 || rows.every(r => r.observation_count < 10)) {
         return {
@@ -919,9 +925,13 @@ function _replyPredictivity(ctx, symbolHint, originalText) {
     }
     const cells = rows.filter(r => r.observation_count >= 10).map(r => {
         const wr = ((r.alpha - 1) / r.observation_count * 100).toFixed(0);
-        const parts = r.cell_key.split('|');
+        // Acelasi separator. Si ARATAM mediul: celulele cele mai invatate sunt
+        // pe testnet, iar operatorul tradeaza demo — fara eticheta, cifra pare
+        // a lui si nu e.
+        const parts = String(r.cell_key || '').split(':');
+        const env = (parts[1] || '').toLowerCase();
         const regime = parts[3] || '?';
-        return `${regime} ${wr}% (obs ${r.observation_count})`;
+        return `${regime} ${wr}% (obs ${r.observation_count}${env ? ', ' + env : ''})`;
     });
     return {
         reply: ro
@@ -1883,7 +1893,7 @@ async function _tryLocalIntent(ctx, text, originalText) {
     if (text.match(/\b(sentiment|sentimentul|risk.?on|risk.?off|breadth|mood market|cum e sentimentul)\b/i)) {
         return _replySentiment(ctx, originalText);
     }
-    if (text.match(/\b(pump|wash|spoof|manipulation|manipul[aă]r[ie]|outlier|schem[ăa])\b/i)) {
+    if (text.match(/\b(pump|wash|spoof|manipul\w*|outlier|schem[ăa])\b/i)) {
         return _replyManipulationCheck(ctx, originalText);
     }
     {
@@ -2034,7 +2044,7 @@ async function _respondImpl(params, text) {
     }
 
     // [Day 34 #6] Manipulation / pump detection (market-wide)
-    if (text.match(/\b(pump|wash|spoof|manipulation|manipul[aă]r[ie]|outlier|schem[ăa])\b/i)) {
+    if (text.match(/\b(pump|wash|spoof|manipul\w*|outlier|schem[ăa])\b/i)) {
         return _replyManipulationCheck(ctx, originalText);
     }
 

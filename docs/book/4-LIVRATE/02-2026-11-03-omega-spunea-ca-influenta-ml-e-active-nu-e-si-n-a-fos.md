@@ -44,3 +44,5 @@ Starea răspunsului urmează adevărul: nimic aplicat nu e motiv de concentrare.
 **7 mutaţii moarte:** revenirea la `ACTIVE` pe simpla existenţă a pre-înregistrării · fereastra neraportată · „aplicat" raportat când e zero · motivele ascunse · fereastra scoasă din `SELECT` · deciziile revenite pe auditul ML · bandit-ul nemaicitind verdictul.
 
 12 teste noi. Regresie: **10.175 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---
