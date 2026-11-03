@@ -298,15 +298,32 @@ function _replyPositions(ctx) {
 // ── Intent: pnl / today ───────────────────────────────────────────────
 function _replyPnl(ctx) {
     try {
+        // [2026-11-03] Trei lucruri reparate aici, toate LATENTE azi — pe datele
+        // de acum niciuna nu schimba cifra, fiindca doar operatorul a inchis
+        // tranzactii in ultimele 24h si toate cele 14 sunt reale. Le repar
+        // fiindca sunt defecte adevarate, nu fiindca mint acum:
+        //
+        // 1. `LIMIT 50` se aplica INAINTE de filtrul pe utilizator, iar
+        //    filtrul se facea in JS. La primul alt cont care inchide 50 de
+        //    tranzactii intr-o zi, raspunsul lui devine gol, in liniste.
+        // 2. Filtrul citea `userId` din BLOB. La b352 am masurat 521 de randuri
+        //    cu `user_id` in COLOANA si nimic in obiect — alea ar fi aruncate.
+        //    Coloana e adevarul; obiectul e ce s-a intamplat sa fie scris.
+        // 3. Nu excludea randurile care n-au fost niciodata tranzactii
+        //    (`ENTRY_FAILED*`, `RESET`, `RECON_PHANTOM*`), deci le numara la
+        //    "trades closed" si la numitorul ratei de castig — a treia definitie
+        //    a cuvantului tranzactie din aceeasi aplicatie.
         const rows = db.prepare(`
             SELECT data FROM at_closed
-            WHERE closed_at >= datetime('now','-1 day')
+            WHERE user_id = ?
+              AND closed_at >= datetime('now','-1 day')
+              AND ${omegaContext.REAL_TRADE_SQL}
             ORDER BY closed_at DESC
             LIMIT 50
-        `).all();
+        `).all(ctx.userId);
         const userTrades = rows
             .map(r => { try { return JSON.parse(r.data); } catch (_) { return null; } })
-            .filter(t => t && t.userId === ctx.userId);
+            .filter(Boolean);
         if (userTrades.length === 0) {
             return { reply: 'no closed trades today for you. patience boss.', mood: 'CALM' };
         }

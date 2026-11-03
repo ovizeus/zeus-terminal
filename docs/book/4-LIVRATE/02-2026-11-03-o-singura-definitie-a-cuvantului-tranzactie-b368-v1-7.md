@@ -44,3 +44,5 @@ Testul cere acum ca nimeni să nu-şi mai scrie singur filtrul.
 8 teste noi. Două teste ale mele de la b367 codificau regula greşită şi au fost **actualizate, nu şterse** — cu toate cele trei cifre păstrate în comentariu, ca să se vadă drumul.
 
 Regresie: **10.196 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---
