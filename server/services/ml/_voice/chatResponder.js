@@ -930,7 +930,7 @@ function _replyPredictivity(ctx, symbolHint, originalText) {
              FROM ml_bandit_posteriors
              WHERE level = 4 AND cell_key LIKE ?
              ORDER BY observation_count DESC LIMIT 5`
-        ).all(`${ctx.userId}:%:${sym}:%`);
+        ).all(omegaContext.cellKeyPrefix(ctx.userId, sym));
     } catch (_) {}
     if (rows.length === 0 || rows.every(r => r.observation_count < 10)) {
         return {
@@ -1171,7 +1171,7 @@ function _replyLearnings(ctx, originalText) {
              FROM ml_bandit_posteriors
              WHERE level = 4 AND cell_key LIKE ?
              ORDER BY observation_count DESC LIMIT 3`
-        ).all(`${userId}|%`);
+        ).all(omegaContext.cellKeyPrefix(userId));
         banditLines = rows.map(r => {
             const wrPct = r.observation_count > 0
                 ? ((r.alpha - 1) / r.observation_count * 100).toFixed(0)
@@ -1186,7 +1186,7 @@ function _replyLearnings(ctx, originalText) {
     const overall = wr(trades);
     if (ro) {
         const parts = [
-            `am ${trades.length} trade-uri închise. overall ${(overall.winRate * 100).toFixed(0)}% (${overall.wins}/${overall.total}).`,
+            `din ultimele ${trades.length} trade-uri închise: ${(overall.winRate * 100).toFixed(0)}% (${overall.wins}/${overall.total}).`,
         ];
         if (regimeLines.length) parts.push(`pe regime: ${regimeLines.join(', ')}.`);
         if (dirLines.length) parts.push(`direcții: ${dirLines.join(', ')}.`);
@@ -1196,7 +1196,7 @@ function _replyLearnings(ctx, originalText) {
         return { reply: parts.join(' '), mood: 'FOCUSED' };
     }
     const parts = [
-        `${trades.length} closed trades. overall ${(overall.winRate * 100).toFixed(0)}% (${overall.wins}/${overall.total}).`,
+        `over the last ${trades.length} closed trades: ${(overall.winRate * 100).toFixed(0)}% (${overall.wins}/${overall.total}).`,
     ];
     if (regimeLines.length) parts.push(`by regime: ${regimeLines.join(', ')}.`);
     if (dirLines.length) parts.push(`dir: ${dirLines.join(', ')}.`);

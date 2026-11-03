@@ -27,3 +27,5 @@ Căuta `LIMIT 50` în tot corpul funcţiei — dar **comentariul de deasupra vor
 **2 mutaţii moarte:** filtrul revenit pe obiectul JSON · definiţia comună scoasă.
 
 5 teste noi. Regresie: **10.201 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---

@@ -23,9 +23,15 @@ describe('cheia de celula — separatorul potrivit', () => {
     const body = SRC.slice(SRC.indexOf('function _replyPredictivity'),
                            SRC.indexOf('function _reply', SRC.indexOf('function _replyPredictivity') + 10));
 
-    test('REGRESIE: cauta cu DOUA PUNCTE, nu cu bara verticala', () => {
-        expect(body).toContain('${ctx.userId}:%:${sym}:%');
-        expect(body).not.toContain('${ctx.userId}|%|${sym}|%');
+    test('REGRESIE: prefixul vine din constructorul COMUN, nu scris de mana', () => {
+        // Prima versiune cerea forma scrisa inline, `${ctx.userId}:%:${sym}:%`.
+        // Era corecta, dar a doua aparitie a aceleiasi forme, in raspunsul
+        // despre invataminte, a ramas pe bara verticala inca un build — am
+        // reparat instanta, nu clasa. Acum exista un singur constructor si
+        // testul cere sa fie FOLOSIT; forma propriu-zisa e probata separat,
+        // in omegaCellKey.test.js.
+        expect(body).toContain('omegaContext.cellKeyPrefix(');
+        expect(body).not.toContain('|%|');
     });
 
     test('REGRESIE: si desparte cheia tot cu doua puncte', () => {

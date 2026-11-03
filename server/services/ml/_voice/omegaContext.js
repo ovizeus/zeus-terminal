@@ -211,6 +211,34 @@ function moodFrom(ctx) {
 }
 
 /**
+ * [2026-11-03] Prefixul cheii de celula de bandit, construit intr-un singur loc.
+ *
+ * Separatorul e DOUA PUNCTE: `1:DEMO:BNBUSDT:BREAKOUT`. Scris de mana cu bara
+ * verticala, interogarea intoarce zero randuri MEREU si raspunsul iese linistit
+ * si fals. S-a intamplat de DOUA ori, in doua raspunsuri diferite: la
+ * predictivitate (reparat b366) si la invataminte — unde inca spunea "bandit
+ * cells: cold" desi exista celule cu 36, 29, 27 si 20 de observatii.
+ *
+ * Am reparat prima aparitie si am ratat clasa. Cartea are deja lectia asta
+ * scrisa, de la escaparea pentru Telegram: cand gasesti un bug de forma, cauta
+ * TOATE locurile care scriu forma aia, nu doar pe cel care te-a adus acolo.
+ */
+const CELL_KEY_SEP = ':';
+
+/** Prefix pentru `LIKE`. Fara simbol: toate celulele utilizatorului. */
+function cellKeyPrefix(userId, symbol) {
+    const uid = (userId === null || userId === undefined) ? '' : String(userId);
+    if (!symbol) return `${uid}${CELL_KEY_SEP}%`;
+    return `${uid}${CELL_KEY_SEP}%${CELL_KEY_SEP}${String(symbol)}${CELL_KEY_SEP}%`;
+}
+
+/** Desparte o cheie in bucatile ei, cu acelasi separator. */
+function parseCellKey(key) {
+    const parts = String(key || '').split(CELL_KEY_SEP);
+    return { userId: parts[0] || null, env: parts[1] || null, symbol: parts[2] || null, regime: parts[3] || null };
+}
+
+/**
  * [2026-11-03] CE ESTE o tranzactie. O singura definitie, pentru toata aplicatia.
  *
  * Zeus avea doua, si de aceea doua parti ale lui spuneau cifre diferite despre
@@ -436,6 +464,7 @@ module.exports = {
     formatDecisions, formatBlocked, formatAccount, formatCloses, formatThoughts, formatLiquidations,
     moodFrom, moodReason, influenceStatus,
     isRealTrade, REAL_TRADE_SQL,
+    cellKeyPrefix, parseCellKey, CELL_KEY_SEP,
     gatherLiquidations,
     gatherDecisions, gatherBlocked, gatherCloses, gatherThoughts, gatherAccount,
     MAX_DECISIONS, MAX_THOUGHTS, MAX_CLOSES,
