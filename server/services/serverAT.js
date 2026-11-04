@@ -2608,6 +2608,20 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                 // nu se poate lua fără date — iar retroactiv nu se poate calcula, fiindcă
                 // urmele de preţ se şterg la închidere. Deci trebuie colectat de acum.
                 // Pur măsurătoare: nu atinge nicio poziţie şi nu schimbă nicio execuţie.
+                //
+                // [2026-11-04 — CAUZA, găsită] De ce `dslArm` şi `dslCohort` n-au
+                // scriitor: scriitorul lor (`_resolveDslParams`, care cheamă
+                // `mlDslBandit.sampleArm` ca să aleagă braţul la intrare) există, dar
+                // pe ramura NEMERGE-UITĂ `feat/ml-dsl-v2-control` — commit b614f271,
+                // 18 iunie, 5 commits, iar main e cu ~691 înainte. Pe main
+                // `bandit.sampleArm` are ZERO apelanţi, deci post-mortemul antrenează
+                // un bandit (92 celule, 1.770 observaţii) pe care nimeni nu-l
+                // întreabă, iar controlul vine din `mlDslPolicy.decide` — praguri
+                // deterministe, care se autodescriu drept „the bootstrap policy the
+                // ML learner will later refine".
+                // Ramura cere şi `mlDslOptin` + `mlDslCohort`, care NU există pe main
+                // (tabela `ml_dsl_optin` există, cu 0 rânduri: migrarea a ajuns, codul
+                // nu). Reconectarea NU e un cherry-pick — e decizia operatorului.
                 try {
                     const _geom = require('./dslGeomShadow').buildGeomRows({
                         presets: serverDSL.DSL_PRESETS, meta: _meta,
