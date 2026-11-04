@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendChatStream, MOOD_COLOR } from './omegaApi'
 import { useOmegaChatStore, type ChatRow } from '../../stores/omegaChatStore'
+import { keyboardInset, readViewport } from './chatViewport'
 
 /**
  * Talk With Me — OMEGA chat panel.
@@ -39,6 +40,7 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged, fullPage = false }: Pro
     const isOpen = fullPage || expanded
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
+    const sectionRef = useRef<HTMLElement | null>(null)
 
     // [Sub-A 2026-05-19] Load chat history from DB on mount
     useEffect(() => {
@@ -74,18 +76,47 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged, fullPage = false }: Pro
     // also re-scroll whenever the visual viewport resizes (soft keyboard
     // show/hide). Otherwise the chat content drifts up and the user
     // loses sight of the most recent message.
+    // [2026-11-04] Gated on isOpen, not `expanded`. On the full page `expanded`
+    // stays false forever (both setters are guarded with !fullPage and the
+    // header that toggles it is not rendered), so from b353 until now the chat
+    // PAGE had no soft-keyboard handling at all -- this effect never ran there.
+    //
+    // Keyboards only shrink the VISUAL viewport, so the page keeps its layout
+    // height and the input row ends up under the keyboard. We publish the
+    // covered height as --omega-kb-inset and let CSS give that space back.
     useEffect(() => {
-        if (!expanded) return
-        // Use rAF so the scroll runs after the expand layout settles
-        const raf = requestAnimationFrame(_scrollChatToBottom)
+        if (!isOpen) return
+        // Captured once, NOT read in the cleanup: React detaches the ref before
+        // effect cleanups run, so reading it there leaves the inset stuck on the
+        // element. That matters in bar mode, where collapsing re-runs this effect
+        // while the component stays mounted.
+        const el = sectionRef.current
+        const applyInset = () => {
+            if (!el) return
+            el.style.setProperty('--omega-kb-inset', keyboardInset(readViewport()) + 'px')
+        }
+        const onViewportChange = () => {
+            applyInset()
+            _scrollChatToBottom()
+        }
+        // Use rAF so the first measure runs after the layout settles
+        const raf = requestAnimationFrame(onViewportChange)
         const vv = (typeof window !== 'undefined' && window.visualViewport) || null
-        const onResize = () => _scrollChatToBottom()
-        if (vv) vv.addEventListener('resize', onResize)
+        if (vv) {
+            vv.addEventListener('resize', onViewportChange)
+            // iOS pans the visual viewport instead of resizing it when moving
+            // between inputs; without this the inset goes stale mid-typing.
+            vv.addEventListener('scroll', onViewportChange)
+        }
         return () => {
             cancelAnimationFrame(raf)
-            if (vv) vv.removeEventListener('resize', onResize)
+            if (vv) {
+                vv.removeEventListener('resize', onViewportChange)
+                vv.removeEventListener('scroll', onViewportChange)
+            }
+            el?.style.removeProperty('--omega-kb-inset')
         }
-    }, [expanded])
+    }, [isOpen])
 
     async function handleSend() {
         const text = input.trim()
@@ -175,7 +206,7 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged, fullPage = false }: Pro
     }
 
     return (
-        <section className={`omega-chat${isOpen ? ' omega-chat-expanded' : ''}${fullPage ? ' omega-chat-full' : ''}`}>
+        <section ref={sectionRef} className={`omega-chat${isOpen ? ' omega-chat-expanded' : ''}${fullPage ? ' omega-chat-full' : ''}`}>
             {!fullPage && (
                 <div className="omega-chat-header" onClick={() => setExpanded(e => !e)}>
                     <span className="omega-chat-title">💬 TALK WITH ME</span>

@@ -28,3 +28,5 @@ Acum o intenţie care aruncă e prinsă şi **cade în gol către model** — ca
 **3 mutaţii moarte:** scutul scos din lanţul cu flux · scos din cel fără flux · căderea transformată în mesaj de eroare în loc de model.
 
 4 teste noi. Regresie: **10.212 verzi** pe 4 sharduri, 3 sărite, zero eşuate.
+
+---

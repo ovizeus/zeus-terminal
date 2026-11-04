@@ -6782,6 +6782,14 @@ select option {
   min-height: 0;
   overflow: visible;
   transition: none;
+  /* [2026-11-04] Soft keyboard: TalkWithMe publishes the covered height as
+     --omega-kb-inset (see chatViewport.ts). Padding, not height, because the
+     page is sized by its flex ancestors -- box-sizing: border-box shrinks the
+     content box so the scroll area gives way and the input row rides up above
+     the keyboard instead of sitting under it. Replaces the protection that
+     b354 removed with the sticky bar. Two classes so it wins on specificity,
+     not on position in the file. */
+  padding-bottom: var(--omega-kb-inset, 0px);
 }
 .omega-chat.omega-chat-full .omega-chat-scroll {
   display: flex;
