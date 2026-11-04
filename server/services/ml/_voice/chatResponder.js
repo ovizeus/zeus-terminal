@@ -1932,6 +1932,138 @@ function _replyConstitution(ctx) {
     return { reply: `constitution — ${body}${tail}`, mood: 'FOCUSED' };
 }
 
+/**
+ * Detaliul celui mai zgomotos eveniment din ultima ora.
+ *
+ * [2026-11-04] Prima versiune cerea o coloana `message` care NU EXISTA in
+ * `ml_diagnostic_events` (coloanele sunt event_id/severity/module_id/
+ * event_type/payload_json/verdict/ts). Interogarea arunca, catch-ul o prindea,
+ * si urmarea raspundea "nothing in the last hour to detail" IMEDIAT dupa un
+ * rand care listase trei evenimente din ultima ora. **O contradictie e mai rea
+ * decat o eroare**, fiindca il face sa se indoiasca de tot ce spune.
+ *
+ * De-aia „n-am date" si „n-am putut citi" sunt acum raspunsuri DIFERITE.
+ */
+function _doctorDetail(dbh) {
+    let rows;
+    try {
+        rows = dbh.prepare(`
+            SELECT severity, module_id, event_type, payload_json, ts
+            FROM ml_diagnostic_events
+            WHERE ts >= (strftime('%s','now')-3600)*1000
+            ORDER BY severity ASC, ts DESC LIMIT 1
+        `).all();
+    } catch (_) {
+        return { reply: 'could not read the diagnostics table just now.', mood: 'NERVOUS' };
+    }
+    const r = rows && rows[0];
+    if (!r) return { reply: 'nothing in the last hour to detail.', mood: 'CALM' };
+
+    // Ce conteaza e in payload: `concerns` spune ce a semnalat modulul.
+    let detail = '';
+    try {
+        const p = JSON.parse(r.payload_json || '{}');
+        const concerns = Array.isArray(p && p.concerns) ? p.concerns.filter((c) => typeof c === 'string') : [];
+        if (concerns.length > 0) {
+            // Aceeasi grija apare des de mai multe ori in acelasi eveniment.
+            const uniq = [...new Set(concerns)];
+            detail = ' — ' + uniq.slice(0, 2).join('; ').slice(0, 240);
+        } else if (p && typeof p.symbol === 'string') {
+            detail = ` — on ${p.symbol}`;
+        }
+    } catch (_) { detail = ''; }
+
+    const kind = r.event_type ? String(r.event_type) : 'event';
+    return {
+        reply: `loudest, last hour: ${r.severity} ${r.module_id} (${kind})${detail}`,
+        mood: 'FOCUSED',
+    };
+}
+
+// ── Urmarea unei deschideri ───────────────────────────────────────────
+// [2026-11-04] O invitatie e o PROMISIUNE. Randat pe o conversatie adevarata:
+//
+//   » cum te simti  ->  "...want to know what is driving it?"
+//   » si de ce?     ->  "pot raspunde despre: pozitii/deschise, pnl/azi, ..."
+//
+// OMEGA ofera ceva, el accepta, si primeste UN MENIU DE COMENZI. Nu exista fel
+// mai bun de a suna a robot. (Calea care ar fi raspuns e modelul; in teste e
+// inchis prin construcţie, dar pe viu se intampla la fel cand e picat sau
+// limitat -- si atunci oferta de pe randul anterior devine un meniu.)
+//
+// Reparatia: deschiderea devine o promisiune pe care sistemul o tine SINGUR,
+// din date. Pentru fiecare deschidere din OPENINGS exista obligatoriu o urmare,
+// si un test o verifica -- altfel se ofera ce nu se poate livra.
+const _pendingFollowUp = new Map();
+
+/** Formele fireşti de „da, spune". `nu` NU e intre ele. */
+const FOLLOWUP_ACCEPT_RE = /^(da|da,? (vreau|spune|zi|hai)|vreau|spune(-?mi)?|zi(-?mi)?|arat[aă](-?mi)?|hai|ok|okay|sigur|yes|yeah|sure|go|please|si de ce\??|de ce\??|why\??|cum a[șs]a\??)$/i;
+
+function _setFollowUp(userId, intentName) {
+    if (userId === null || userId === undefined) return;
+    _pendingFollowUp.set(userId, intentName);
+}
+
+/**
+ * Intoarce numele intentiei promise daca mesajul asta o accepta, altfel null.
+ * Se consuma o singura data, si orice mesaj care NU e o acceptare o uita: o
+ * oferta nu are voie sa se aplice peste doua ture.
+ */
+function _matchFollowUp(userId, text) {
+    const pending = _pendingFollowUp.get(userId);
+    if (!pending) return null;
+    _pendingFollowUp.delete(userId);
+    const t = typeof text === 'string' ? text.trim() : '';
+    if (!t) return null;
+    return FOLLOWUP_ACCEPT_RE.test(t) ? pending : null;
+}
+
+// Urmarile. Fiecare raspunde CONCRET la ce a promis deschiderea.
+const FOLLOWUPS = {
+    // "want to know what is driving it?"
+    mood: (ctx) => {
+        const closes = omegaContext.gatherCloses(db, (ctx && ctx.userId) || 1);
+        const line = omegaContext.formatCloses(closes);
+        return { reply: `what is driving it: ${line}`, mood: 'FOCUSED' };
+    },
+    // "want me to look at what those losses have in common?"
+    pnl: (ctx) => {
+        const closes = omegaContext.gatherCloses(db, (ctx && ctx.userId) || 1) || [];
+        const losses = closes.filter((c) => {
+            const n = Number(c && c.pnl);
+            return Number.isFinite(n) && n < 0;
+        });
+        if (losses.length === 0) {
+            return { reply: 'nothing to compare — no losses in the recent closes.', mood: 'CALM' };
+        }
+        const by = (key) => {
+            const m = new Map();
+            for (const l of losses) {
+                const k = String((l && l[key]) || '?');
+                m.set(k, (m.get(k) || 0) + 1);
+            }
+            return [...m.entries()].sort((a, b) => b[1] - a[1])
+                .map(([k, n]) => `${k} x${n}`).join(', ');
+        };
+        return {
+            reply: `${losses.length} recent losses — by symbol: ${by('symbol')}; by side: ${by('side')}; by exit: ${by('reason')}.`,
+            mood: 'FOCUSED',
+        };
+    },
+    // "want to know what would have to change to unlock it?"
+    bandit: () => ({
+        reply: 'three locks, and all three have to open together: '
+            + 'MIN_OBSERVATIONS is 30 measured on level 4 only; eligibility reads level 4 directly '
+            + 'rather than through the hierarchy, so pooling cannot help; and the pre-registration '
+            + 'window for the active version has expired. none of them is a bug — they are your call.',
+        mood: 'FOCUSED',
+    }),
+    // "a mixed book is a constitution rule sitting on advisory — want the count?"
+    positions: (ctx) => _replyConstitution(ctx),
+    // "want the detail on the loudest one?"
+    doctor: (ctx) => _doctorDetail(db),
+};
+
 // ── Deschiderile ──────────────────────────────────────────────────────
 // [2026-11-04] Din 24 de sabloane, UNUL singur se termina cu semn de intrebare
 // -- cel de la injuraturi. Toate celelalte raspund si se opresc, si de-aia suna
@@ -1972,6 +2104,8 @@ function _withOpening(intentName, ctx, result) {
     for (const o of OPENINGS) {
         if (o.intent !== intentName) continue;
         if (!o.when.test(result.reply)) continue;
+        // Tine minte CE a promis, ca sa poata fi tinut fara model.
+        _setFollowUp(ctx && ctx.userId, o.intent);
         return { ...result, reply: _appendOpening(result.reply, o.say) };
     }
     return result;
@@ -2186,6 +2320,13 @@ function routeIntent(text, originalText) {
 // (= LLM fallback needed). Mirrors _respondImpl routing exactly but
 // without invoking the LLM path itself.
 async function _tryLocalIntent(ctx, text, originalText) {
+    // Deschiderea de pe randul anterior, daca el a acceptat-o. Inaintea mesei:
+    // "da" nu se potriveste cu nicio intentie, si fara asta ar cadea la model
+    // sau, cand modelul e picat, la meniul de comenzi.
+    const promised = _matchFollowUp(ctx && ctx.userId, originalText);
+    if (promised && typeof FOLLOWUPS[promised] === 'function') {
+        try { return await FOLLOWUPS[promised](ctx); } catch (_) { /* cade la model */ }
+    }
     const hit = routeIntent(text, originalText);
     if (!hit) return null;
     // Preferinta declarata castiga. `null` inseamna "cade catre model", care are
@@ -2255,6 +2396,10 @@ async function _respondImpl(params, text) {
     // driftul nu mai e o scapare posibila -- si `market`, care era declarat
     // preferat de model dar respectat numai pe calea cu flux, se comporta la fel
     // pe ambele.
+    const promised = _matchFollowUp(ctx && ctx.userId, originalText);
+    if (promised && typeof FOLLOWUPS[promised] === 'function') {
+        try { return await FOLLOWUPS[promised](ctx); } catch (_) { /* cade mai jos */ }
+    }
     const hit = routeIntent(text, originalText);
     if (hit) {
         if (preferLLMForIntent(hit.name, llmClient.available())) {
@@ -2277,6 +2422,11 @@ module.exports = {
     _appendOpeningForTest: _appendOpening,
     _withOpeningForTest: _withOpening,
     _OPENINGS_FOR_TEST: OPENINGS,
+    _FOLLOWUPS_FOR_TEST: FOLLOWUPS,
+    _matchFollowUpForTest: _matchFollowUp,
+    _setFollowUpForTest: _setFollowUp,
+    _resetFollowUpForTest: () => _pendingFollowUp.clear(),
+    _doctorDetailForTest: _doctorDetail,
     respond,
     respondStream,
     _resetConvoForTest,
