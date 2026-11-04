@@ -1910,6 +1910,28 @@ async function respondStream(params) {
     };
 }
 
+// ── Intent: constitutia R1 ────────────────────────────────────────────
+// [2026-11-04] Probat pe formulari naturale dupa b373: "de ce am long si short
+// deschise" era prins de intentia `positions`, care LISTEAZA pozitiile. O
+// intrebare DE CE primea un raspuns CE -- si formularea mai vaga, care cadea la
+// model, primea un raspuns mai bun decat cea precisa.
+//
+// Raspunsul asta da CIFRELE chiar si cand modelul e picat, fiindca e intrebarea
+// pe care el a pus-o pe 1 noiembrie si la care OMEGA a vorbit pe langa.
+function _replyConstitution(ctx) {
+    let mode = 'advisory';
+    try {
+        const MF = require('../../../migrationFlags');
+        if (MF && MF.R1_ENFORCEMENT_MODE === 'blocking') mode = 'blocking';
+    } catch (_) { /* implicit advisory, ca in enforcementEngine */ }
+    const c = omegaContext.gatherConstitution(db, (ctx && ctx.userId) || 1, Date.now(), mode);
+    const body = omegaContext.formatConstitution(c);
+    const tail = mode === 'blocking'
+        ? ''
+        : ' the switch that turns these into refusals is yours, not mine.';
+    return { reply: `constitution — ${body}${tail}`, mood: 'FOCUSED' };
+}
+
 // ── Deschiderile ──────────────────────────────────────────────────────
 // [2026-11-04] Din 24 de sabloane, UNUL singur se termina cu semn de intrebare
 // -- cel de la injuraturi. Toate celelalte raspund si se opresc, si de-aia suna
@@ -2015,14 +2037,14 @@ const INTENTS = [
 
     { name: 'liquidity_walls',
       match: (t, o) => {
-          if (!/\b(liquidity walls?|order book walls?|wall(uri)?|zid(uri)?|pereți)\b/i.test(t)) return null;
+          if (!/\b(liquidity walls?|order book walls?|wall(uri|urile)?|zid(uri|urile|ul)?|pere[tț]i\w*)\b/i.test(t)) return null;
           const sym = _sym(o); return sym ? { sym } : null;
       },
       run: (ctx, o, m) => _replyLiquidityWalls(ctx, m.sym, o) },
 
     { name: 'order_book',
       match: (t, o) => {
-          if (!/\b(order book|orderbook|depth|carte de ordine|registru de ordine|carnet|liquidit[aă]te|book pe|book on)\b/i.test(t)) return null;
+          if (!/\b(order book|orderbook|depth|carte[a]? de ordine|registru[l]? de ordine|carnet\w*|liquidit[aă]te|lichidit\w*|book pe|book on)\b/i.test(t)) return null;
           const sym = _sym(o); return sym ? { sym } : null;
       },
       run: (ctx, o, m) => _replyOrderBook(ctx, m.sym, o) },
@@ -2087,6 +2109,34 @@ const INTENTS = [
       match: (t) => /\b(how is the market|market overview|how.s the market|cum vezi pia[țt]a|cum e pia[țt]a|ce face pia[țt]a|ce vezi pe pia[țt]a|cum se mi[șs]c[aă] pia[țt]a)/i.test(t) || null,
       run: (ctx, o) => _replyMarketOverview(ctx, o) },
 
+    // [2026-11-04] INAINTEA lui `positions`: o intrebare "de ce am long si
+    // short" e despre REGULA, nu o cerere de lista. Ordinea e contractul.
+    { name: 'constitution',
+      match: (t) => {
+          // Reguli / constitutie, direct.
+          if (/\b(constitut\w*|princip\w*)\b/i.test(t)) return true;
+          if (/\b(reguli|regula|rules?)\b/i.test(t)) return true;
+          // Carte mixta, in formulari firesti.
+          if (/\bcarte[ae]? mixt\w*\b|\bmixed book\b/i.test(t)) return true;
+          if (/\bambele (p[aă]r[tț]i|direc[tț]ii|sensuri)\b|\bboth sides\b/i.test(t)) return true;
+          if (/\bintrare[a]? opus[aă]\b|\bopposite (side|entry)\b/i.test(t)) return true;
+          // "de ce ... long ... short" / "why ... long ... short": o intrebare
+          // despre motiv, nu o cerere de lista. Cere AMBELE cuvinte si un
+          // declansator de motiv, ca sa nu fure "ce pozitii am".
+          if (/\b(de ce|why|cum se face|cum poate)\b/i.test(t)
+              && /\blong\b/i.test(t) && /\bshort\b/i.test(t)) return true;
+          return null;
+      },
+      run: (ctx) => _replyConstitution(ctx) },
+
+    // [2026-11-04] `positions` INAINTEA lui `symbol`: "pozitia pe BTCUSDT" cadea
+    // pe rezumatul de simbol, adica intrebai de poziţia TA si primeai preţul si
+    // trendul. Un raspuns greşit e mai rau decat o ratare, care ar fi mers la
+    // model cu tot contextul.
+    { name: 'positions',
+      match: (t) => /\b(positions?|pozi[tț]i\w*|deschis\w*|long position|short position)\b/.test(t) || null,
+      run: (ctx) => _replyPositions(ctx) },
+
     // Simbolul singur, dupa tot ce e mai specific.
     { name: 'symbol',
       match: (t) => { const sym = _sym(t); return sym ? { sym } : null; },
@@ -2094,28 +2144,25 @@ const INTENTS = [
 
     // [Day 26.3] Regexuri strânse: particule scurte ca "azi"/"today" prindeau
     // intrebari filozofice fara legatura. Cer acum cuvinte-ancora.
-    { name: 'positions',
-      match: (t) => /\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/.test(t) || null,
-      run: (ctx) => _replyPositions(ctx) },
 
     { name: 'pnl',
-      match: (t) => /\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/.test(t) || null,
+      match: (t) => /\b(pnl|p&l|profit\w*|wins?|loss|losses|win.?rate|cum stau cu|trades closed|24h|pierder\w*|c[aâ][sș]tig\w*)\b/.test(t) || null,
       run: (ctx) => _replyPnl(ctx) },
 
     { name: 'mood',
-      match: (t) => /\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/.test(t) || null,
+      match: (t) => /\b(mood|feel|feeling|feelings|emotion|emotions|simt[eiaă]\w*|sim[tț]it|cum esti|cum e[sș]ti|star(e|ea))\b/.test(t) || null,
       run: (ctx) => _replyMood(ctx) },
 
     { name: 'bandit',
-      match: (t) => /\b(bandit|ring5|ring 5|influence|eligibility)\b/.test(t) || null,
+      match: (t) => /\b(bandit|ring5|ring 5|influence|influen[tț]\w*|eligibility)\b/.test(t) || null,
       run: (ctx) => _replyBandit(ctx) },
 
     { name: 'decisions',
-      match: (t) => /\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/.test(t) || null,
+      match: (t) => /\b(decisions?|audit trail|decizi\w*)\b/.test(t) || null,
       run: (ctx) => _replyDecisions(ctx) },
 
     { name: 'doctor',
-      match: (t) => /\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/.test(t) || null,
+      match: (t) => /\b(alert\w*|doctor panel|errors?|problems?|problem\w*|health check|s[aă]n[aă]tate|sanatate)\b/.test(t) || null,
       run: (ctx) => _replyDoctor(ctx) },
 
     // Injuraturi: dezescaladare scurta, fara LLM (pastreaza cota pentru

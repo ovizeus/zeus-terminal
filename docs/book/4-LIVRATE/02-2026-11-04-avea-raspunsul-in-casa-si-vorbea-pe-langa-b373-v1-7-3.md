@@ -85,3 +85,5 @@ Două teste vechi **rescrise cinstit**: cereau duplicarea între lanţuri, ceea 
 | producător de ipoteze | deschide bucla de reflecţie; funcţie nouă, cale nedovedită |
 | ~207 rânduri orfane din octombrie | re-extragerea lor = 207 apeluri LLM |
 | poarta ML, flipul `CLIENT_AT`, 7 chei localStorage | nemişcate din 1 noiembrie |
+
+---
