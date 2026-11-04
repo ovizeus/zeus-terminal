@@ -1430,6 +1430,12 @@ function _buildLLMContext(params) {
     }
     // Propria lui dispozitie IN TIMP. Vezi formatMoodTrend pentru de ce pe cote.
     ctx.moodTrend = omegaContext.gatherMoodTrend(db, userId, _now);
+    // Avantajul ieşirii ML fata de linia de baza, pe fiecare poziţie inchisa.
+    // Asta e „de ce nu iese pe castig" in forma masurata, si nu o vedea.
+    ctx.dslAdvantage = omegaContext.gatherDslAdvantage(db, userId);
+    // Cat de des se schimba regimul: o decizie luata „pe regim" sta pe ceva ce
+    // basculeaza la ~16 minute, si asta nu se vedea nicaieri.
+    ctx.regimeFlips = omegaContext.gatherRegimeFlips(db, userId);
     // Contul: balanta, ziua, rata de castig peste tot istoricul inchis. Nu
     // aparea NICAIERI in promptul de sistem, desi e prima intrebare a oricui.
     try {
@@ -1722,6 +1728,11 @@ function _buildSystemPrompt(params) {
         `  Liquidations burned (last 24h, biggest first): ${omegaContext.formatLiquidations(ctx.liquidations)}`,
         `  Constitution (R1 — the rules your own entries are measured against): ${omegaContext.formatConstitution(ctx.constitution)}`,
         `  Your own mood over time: ${omegaContext.formatMoodTrend(ctx.moodTrend)}`,
+        `  Your ML exit vs the plain baseline: ${omegaContext.formatDslAdvantage(ctx.dslAdvantage)}`,
+        `  How fast the regime flips under you: ${omegaContext.formatRegimeFlips(ctx.regimeFlips)}`,
+        '  (That last line is the measured answer to "why does it not come out ahead": it compares,',
+        '   per closed position, what the ML exit got against what the baseline would have got.',
+        '   Quote it when he asks — never guess, and never present a small sample as a verdict.)',
         '  (The constitution is WHY long and short can sit open on the same symbol: the rule',
         '   against it exists and is severity `hard`, but while the mode is advisory it only',
         '   writes a record and lets the entry through. If he asks about mixed direction,',

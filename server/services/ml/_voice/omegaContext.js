@@ -615,13 +615,165 @@ function formatMoodTrend(t) {
         + `(${Math.round(Math.abs(best.d))}pp).`;
 }
 
+// ── Avantajul ieşirii ML fata de linia de baza ────────────────────────
+// [2026-11-04] „de ce nu iese pe castig" e intrebarea lui de luni de zile, si
+// are o masuratoare in casa pe care OMEGA n-o vedea: `ml_dsl_outcome` compara,
+// pe FIECARE poziţie inchisa, ce a scos ieşirea ML cu ce ar fi scos linia de
+// baza. 2.299 randuri.
+//
+// ⚠️ Convenţia de semn a fost VERIFICATA pe date inainte de a scrie un cuvant:
+// `advantage = ml_pnl_pct - baseline_pnl_pct`, 1387 din 1387 randuri unde
+// difera se potrivesc, ZERO pe convenţia inversa. Un semn intors a fost retras
+// odata, pe 23 octombrie, si nu se repeta.
+//
+// ⚠️ Disciplina de eşantion: `ml:EXIT` are n=8 si avantaj +0,45 -- de zece ori
+// orice altceva. Randat ca „cel mai bun bra[", ar fi o minciuna din opt randuri.
+const DSL_MIN_TOTAL = 30;      // sub atat, nicio concluzie
+const DSL_MIN_ARM_N = 50;      // un brat sub atat nu se numeste
+
+function gatherDslAdvantage(db, userId) {
+    const empty = { total: 0, better: 0, same: 0, worse: 0, meanAdvantage: null, arms: [] };
+    let head = null;
+    try {
+        head = db.prepare(`
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN advantage > 0 THEN 1 ELSE 0 END) AS better,
+                   SUM(CASE WHEN advantage = 0 THEN 1 ELSE 0 END) AS same,
+                   SUM(CASE WHEN advantage < 0 THEN 1 ELSE 0 END) AS worse,
+                   AVG(advantage) AS meanAdvantage
+            FROM ml_dsl_outcome WHERE user_id = ?
+        `).get(userId);
+    } catch (_) { return empty; }
+    if (!head) return empty;
+    let arms = [];
+    try {
+        arms = db.prepare(`
+            SELECT arm, COUNT(*) AS n, AVG(advantage) AS advantage
+            FROM ml_dsl_outcome
+            WHERE user_id = ? AND arm IS NOT NULL AND arm <> ''
+            GROUP BY arm
+            HAVING COUNT(*) >= ${DSL_MIN_ARM_N}
+            ORDER BY n DESC LIMIT 4
+        `).all(userId) || [];
+    } catch (_) { arms = []; }
+    return {
+        total: _num(head.total) || 0,
+        better: _num(head.better) || 0,
+        same: _num(head.same) || 0,
+        worse: _num(head.worse) || 0,
+        meanAdvantage: _num(head.meanAdvantage),
+        arms,
+    };
+}
+
+function formatDslAdvantage(d) {
+    if (!d || typeof d !== 'object') return 'n/a.';
+    const total = _num(d.total) || 0;
+    if (total <= 0) return 'no comparison recorded yet.';
+    if (total < DSL_MIN_TOTAL) return `too few comparisons to call it (${total}).`;
+
+    const same = _num(d.same) || 0;
+    const mean = _num(d.meanAdvantage);
+    const parts = [`${total} closes compared against the plain baseline`];
+
+    // Media singura ascunde doua lucruri diferite: „a incercat si n-a reuşit" si
+    // „n-a schimbat nimic". Cat de des NU schimba nimic e informatie.
+    parts.push(`${Math.round((same / total) * 100)}% came out exactly the same`);
+
+    if (mean !== null) {
+        const pp = mean.toFixed(2);
+        if (Math.abs(mean) < 0.01) {
+            parts.push(`average difference ${pp}pp — call it nothing`);
+        } else {
+            parts.push(`average ${mean > 0 ? 'ahead' : 'behind'} by ${Math.abs(mean).toFixed(2)}pp (${pp})`);
+        }
+    }
+
+    const arms = (Array.isArray(d.arms) ? d.arms : []).filter(
+        (a) => a && typeof a.arm === 'string' && a.arm && (_num(a.n) || 0) >= DSL_MIN_ARM_N
+    );
+    if (arms.length > 0) {
+        const top = arms[0];
+        const adv = _num(top.advantage);
+        const word = adv === null ? '' : (adv < 0 ? ', and it is the weaker one' : '');
+        parts.push(`most used exit is \`${top.arm}\` (${_num(top.n)} closes, `
+            + `${adv === null ? 'n/a' : adv.toFixed(2) + 'pp'}${word})`);
+    }
+    return parts.join(' · ') + '.';
+}
+
+// ── Cat de des se schimba regimul ─────────────────────────────────────
+// [2026-11-04] OMEGA citea `regime` din JSON-ul UNEI SINGURE decizii, deci
+// putea spune „TREND" dar niciodata „a basculat de 88 de ori azi pe BNB" -- iar
+// a doua propozitie e cea care conteaza: o decizie luata „pe regim" sta pe ceva
+// ce se schimba la ~16 minute.
+//
+// ⚠️ `created_at` e TEXT datetime, NU `ts` INTEGER ms. O interogare pe `ts` nu
+// arunca zgomotos, doar intoarce GOL -- si golul se citeste ca lipsa de date.
+function gatherRegimeFlips(db, userId) {
+    const empty = { total: 0, symbols: 0, byRegime: [], busiest: null };
+    try {
+        const head = db.prepare(`
+            SELECT COUNT(*) AS total, COUNT(DISTINCT symbol) AS symbols
+            FROM regime_history
+            WHERE user_id = ? AND created_at >= datetime('now','-1 day')
+        `).get(userId);
+        const byRegime = db.prepare(`
+            SELECT regime, COUNT(*) AS n FROM regime_history
+            WHERE user_id = ? AND created_at >= datetime('now','-1 day')
+            GROUP BY regime ORDER BY n DESC LIMIT 4
+        `).all(userId) || [];
+        const busiestRows = db.prepare(`
+            SELECT symbol, COUNT(*) AS n FROM regime_history
+            WHERE user_id = ? AND created_at >= datetime('now','-1 day')
+            GROUP BY symbol ORDER BY n DESC LIMIT 1
+        `).all(userId) || [];
+        return {
+            total: _num(head && head.total) || 0,
+            symbols: _num(head && head.symbols) || 0,
+            byRegime,
+            busiest: busiestRows[0] || null,
+        };
+    } catch (_) { return empty; }
+}
+
+function formatRegimeFlips(r) {
+    if (!r || typeof r !== 'object') return 'n/a.';
+    const total = _num(r.total) || 0;
+    if (total <= 0) return 'no regime changes in the last 24h.';
+    const symbols = _num(r.symbols) || 0;
+    const parts = [`${total} regime changes in 24h`];
+    if (symbols > 0) parts[0] += ` across ${symbols} symbol${symbols === 1 ? '' : 's'}`;
+
+    const by = (Array.isArray(r.byRegime) ? r.byRegime : [])
+        .filter((x) => x && typeof x.regime === 'string' && _num(x.n) !== null)
+        .map((x) => `${String(x.regime).toLowerCase()} ${_num(x.n)}`);
+    if (by.length > 0) parts.push(`into: ${by.join(', ')}`);
+
+    const b = r.busiest;
+    const bn = _num(b && b.n);
+    if (b && typeof b.symbol === 'string' && bn !== null && bn > 0) {
+        // Un numar brut nu spune nimic; frecventa spune. Dar un singur flip nu
+        // ESTE o frecventa.
+        if (bn > 1) {
+            const mins = Math.round((24 * 60) / bn);
+            parts.push(`busiest is ${b.symbol} with ${bn} — one every ~${mins}min`);
+        } else {
+            parts.push(`busiest is ${b.symbol} with ${bn}`);
+        }
+    }
+    return parts.join(' · ') + '.';
+}
+
 module.exports = {
     fmtAge, fmtMoney,
     formatDecisions, formatBlocked, formatAccount, formatCloses, formatThoughts, formatLiquidations,
     moodFrom, moodReason, influenceStatus,
     isRealTrade, REAL_TRADE_SQL,
     cellKeyPrefix, parseCellKey, CELL_KEY_SEP,
-    gatherLiquidations, gatherConstitution, gatherMoodTrend,
+    gatherLiquidations, gatherConstitution, gatherMoodTrend, gatherDslAdvantage,
+    formatDslAdvantage, DSL_MIN_TOTAL, DSL_MIN_ARM_N,
+    gatherRegimeFlips, formatRegimeFlips,
     formatMoodTrend, MOOD_MIN_SAMPLE, MOOD_SHIFT_PP,
     formatConstitution, normalizeEnforcementMode, CONSTITUTION_WINDOW_MS,
     gatherDecisions, gatherBlocked, gatherCloses, gatherThoughts, gatherAccount,
