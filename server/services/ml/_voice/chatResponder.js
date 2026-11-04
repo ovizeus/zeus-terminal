@@ -375,8 +375,18 @@ function _replyMood(ctx) {
         if (us) { dailyPnl = us.dailyPnL; lossStreak = us.lossStreak; winStreak = us.winStreak; }
     } catch (_) { /* best effort */ }
     const reason = omegaContext.moodReason({ decisions, blocked, dailyPnl, lossStreak, winStreak });
+    // [2026-11-04] Pana azi raspundea numai despre CLIPA asta, desi starea lui e
+    // scrisa de sase luni in `ml_voice_log.mood`. Nu lipsea scriitorul, lipsea
+    // cititorul. Trendul se citeste pe cote, nu pe numere brute -- ziua in curs
+    // e partiala si pe brut orice dimineata pare mai liniştita decat ieri.
+    let trend = '';
+    try {
+        trend = ' ' + omegaContext.formatMoodTrend(
+            omegaContext.gatherMoodTrend(db, (ctx && ctx.userId) || 1, Date.now())
+        );
+    } catch (_) { trend = ''; }
     return {
-        reply: `feeling ${mood.toLowerCase()}. ${reason}. brain heartbeat avg ${ctx.brainHbAvgMs}ms.`,
+        reply: `feeling ${mood.toLowerCase()}. ${reason}.${trend} brain heartbeat avg ${ctx.brainHbAvgMs}ms.`,
         mood
     };
 }
@@ -1408,6 +1418,18 @@ function _buildLLMContext(params) {
     // are doua panouri pe ele, dar OMEGA nu le vedea deloc.
     try { ctx.liquidations = omegaContext.gatherLiquidations(require('../../liqStore')); }
     catch (_) { ctx.liquidations = []; }
+    // [2026-11-04] Constitutia R1. Pe 1 noiembrie el a intrebat de ce are LONG
+    // si SHORT deschise simultan; regula care interzice exact asta se masoara
+    // din 18 mai si OMEGA nu avea nicio referinta la ea. Modul vine de la flag,
+    // nu din rânduri: rândurile spun ce era modul CÂND s-au scris.
+    try {
+        const MF = require('../../../migrationFlags');
+        ctx.constitution = omegaContext.gatherConstitution(db, userId, _now, MF.R1_ENFORCEMENT_MODE);
+    } catch (_) {
+        ctx.constitution = omegaContext.gatherConstitution(db, userId, _now, 'advisory');
+    }
+    // Propria lui dispozitie IN TIMP. Vezi formatMoodTrend pentru de ce pe cote.
+    ctx.moodTrend = omegaContext.gatherMoodTrend(db, userId, _now);
     // Contul: balanta, ziua, rata de castig peste tot istoricul inchis. Nu
     // aparea NICAIERI in promptul de sistem, desi e prima intrebare a oricui.
     try {
@@ -1698,6 +1720,12 @@ function _buildSystemPrompt(params) {
         `  Entries BLOCKED (last 24h): ${omegaContext.formatBlocked(ctx.blockedReasons)}`,
         `  Your own recent thoughts (THE VOICE — you said these, own them): ${omegaContext.formatThoughts(ctx.ownThoughts, Date.now())}`,
         `  Liquidations burned (last 24h, biggest first): ${omegaContext.formatLiquidations(ctx.liquidations)}`,
+        `  Constitution (R1 — the rules your own entries are measured against): ${omegaContext.formatConstitution(ctx.constitution)}`,
+        `  Your own mood over time: ${omegaContext.formatMoodTrend(ctx.moodTrend)}`,
+        '  (The constitution is WHY long and short can sit open on the same symbol: the rule',
+        '   against it exists and is severity `hard`, but while the mode is advisory it only',
+        '   writes a record and lets the entry through. If he asks about mixed direction,',
+        '   say that plainly — the switch is his to flip, not yours.)',
         '  (Decision words: no_trade = no setup; blocked_gates = a hard gate said no;',
         '   blocked_reflection = you second-guessed it; entry_blocked = the entry guard refused',
         '   it, usually mixed direction or max positions; pending_expire = the setup timed out.',
@@ -1882,95 +1910,242 @@ async function respondStream(params) {
     };
 }
 
+// ── Deschiderile ──────────────────────────────────────────────────────
+// [2026-11-04] Din 24 de sabloane, UNUL singur se termina cu semn de intrebare
+// -- cel de la injuraturi. Toate celelalte raspund si se opresc, si de-aia suna
+// a terminal, nu a asistent.
+//
+// Deschiderea se alege din TEXTUL RASPUNSULUI, nu din `ctx`. Deliberat: `ctx` e
+// mai bogat pe calea cu flux decat pe cealalta, deci o deschidere care s-ar
+// uita in el ar reintroduce exact driftul intre lanturi pe care masa de
+// intentii tocmai l-a scos. Textul e identic pe ambele cai.
+const OPENINGS = [
+    { intent: 'pnl', when: /loss streak [2-9]|losing streak|[2-9] losses/i,
+      say: 'want me to look at what those losses have in common?' },
+    { intent: 'mood', when: /feeling (nervous|sad)/i,
+      say: 'want to know what is driving it?' },
+    { intent: 'bandit', when: /never applied/i,
+      say: 'want to know what would have to change to unlock it?' },
+    { intent: 'positions', when: /(long[\s\S]*short)|(short[\s\S]*long)/i,
+      say: 'a mixed book is a constitution rule sitting on advisory — want the count?' },
+    { intent: 'doctor', when: /\bP0\b|\bP1\b|alert/i,
+      say: 'want the detail on the loudest one?' },
+];
+
+/** Un raspuns care deja intreaba ceva nu primeste a doua intrebare. */
+function _appendOpening(reply, opening) {
+    const base = typeof reply === 'string' ? reply : '';
+    if (!opening || typeof opening !== 'string' || !opening.trim()) return base;
+    if (/\?\s*$/.test(base)) return base;
+    if (!base.trim()) return base;
+    // Randat pe viu ieşea "...serverBrain.reflection want the detail?" -- doua
+    // propozitii lipite arata ca o eroare de randare, nu ca o oferta.
+    const trimmed = base.replace(/\s+$/, '');
+    const sep = /[.!?:;,—-]$/.test(trimmed) ? '' : '.';
+    return `${trimmed}${sep} ${opening.trim()}`;
+}
+
+function _withOpening(intentName, ctx, result) {
+    if (!result || typeof result !== 'object' || typeof result.reply !== 'string') return result;
+    for (const o of OPENINGS) {
+        if (o.intent !== intentName) continue;
+        if (!o.when.test(result.reply)) continue;
+        return { ...result, reply: _appendOpening(result.reply, o.say) };
+    }
+    return result;
+}
+
+// ── Masa de intentii ──────────────────────────────────────────────────
+// [2026-11-04] Erau DOUA lanturi de ~27 regexuri scrise de mana:
+// `_tryLocalIntent` (calea cu flux, ce atinge operatorul) si lantul din
+// `_respondImpl` (fara flux, ce ating majoritatea testelor). Driftul dintre ele
+// s-a inchis la b362 cu un test care COMPARA textul celor doua functii -- deci
+// il prindea DUPA ce se intampla, si fiecare intentie noua trebuia scrisa de
+// doua ori.
+//
+// Si chiar avea drift: `market` e declarat in LLM_PREFERRED_INTENTS, dar numai
+// lantul cu flux il respecta. Pe calea fara flux aceeasi intrebare primea
+// mereu sablonul, desi preferinta spunea altceva. Cu o masa unica asta nu mai
+// e o scapare posibila.
+//
+// ORDINEA E CONTRACTUL, nu un detaliu: intentiile cu simbol trebuie sa bata
+// calea de simbol gol ("RSI on BTC" merge la indicatori, nu la rezumat), si
+// cele de piata trebuie sa bata simbolul ("care a urcat cel mai mult" nu are
+// voie sa cada pe calea de simbol). Prima potrivire castiga.
+//
+// `match` e PUR -- nu atinge ctx si nu atinge baza -- ca sa poata fi probat
+// fara sa porneasca jumatate de server.
+function _sym(src) {
+    const m = src && src.match ? src.match(SYMBOL_RE) : null;
+    return m ? m[1] : null;
+}
+
+const INTENTS = [
+    { name: 'greeting',
+      match: (t) => /\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/.test(t) || null,
+      run: (ctx, o) => _replyGreeting(ctx, o) },
+
+    { name: 'help',
+      match: (t) => /\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/.test(t) || null,
+      run: (ctx, o) => _replyHelp(ctx, o) },
+
+    { name: 'show_profile',
+      match: (t) => /\b(what (do you|d'?you|you) remember|ce [șs]tii despre mine|ce ai re[țt]inut|preferin[țt]ele mele|my preferences|show.+profile)/i.test(t) || null,
+      run: (ctx, o) => _replyShowProfile(ctx, o) },
+
+    { name: 'forget_pref',
+      match: (t) => ((/\b(forget|ui[țt][ăa])\b/.test(t) && /\b(prefer|sl|tp|size|alts?|leverage|c[uăa]t|cum)\b/i.test(t))
+                     || /^(forget|ui[țt][ăa])\b/i.test(t)) || null,
+      run: (ctx, o) => _replyForgetPref(ctx, o) },
+
+    { name: 'remember_pref',
+      match: (t) => /\b(remember|re[țt]ine|noteaz[ăa])\b/.test(t) || null,
+      run: (ctx, o) => _replyRememberPref(ctx, o) },
+
+    { name: 'learnings',
+      match: (t) => /\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i.test(t) || null,
+      run: (ctx, o) => _replyLearnings(ctx, o) },
+
+    { name: 'long_term_forecast',
+      match: (t, o) => {
+          if (!/\b(long.?term|forecast|prognoz[aă]|termen lung|pe termen lung|long range)\b/i.test(t)) return null;
+          const sym = _sym(o); return sym ? { sym } : null;
+      },
+      run: (ctx, o, m) => _replyLongTermForecast(ctx, m.sym, o) },
+
+    { name: 'liquidity_walls',
+      match: (t, o) => {
+          if (!/\b(liquidity walls?|order book walls?|wall(uri)?|zid(uri)?|pereți)\b/i.test(t)) return null;
+          const sym = _sym(o); return sym ? { sym } : null;
+      },
+      run: (ctx, o, m) => _replyLiquidityWalls(ctx, m.sym, o) },
+
+    { name: 'order_book',
+      match: (t, o) => {
+          if (!/\b(order book|orderbook|depth|carte de ordine|registru de ordine|carnet|liquidit[aă]te|book pe|book on)\b/i.test(t)) return null;
+          const sym = _sym(o); return sym ? { sym } : null;
+      },
+      run: (ctx, o, m) => _replyOrderBook(ctx, m.sym, o) },
+
+    // [Wave 9.5] Inaintea structurii, ca o intrebare care le menţioneaza pe
+    // amandoua sa nu fie umbrita.
+    { name: 'fundamentals',
+      match: (t, o) => {
+          if (!/(?<!\w)(market\s*cap|mcap|m\.cap|fundamental\w*|fundamentale|fondamental\w*|fundamentos|fundament|dominance|dominan[țt][ăa]|dominancia|dominância|rank|ranking|cap pe|cap on)(?!\w)/i.test(o)) return null;
+          const sym = _sym(o); return sym ? { sym } : null;
+      },
+      run: (ctx, o, m) => _replyFundamentals(ctx, m.sym, o) },
+
+    { name: 'structure',
+      match: (t, o) => {
+          if (!/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i.test(t)) return null;
+          const sym = _sym(o); return sym ? { sym } : null;
+      },
+      run: (ctx, o, m) => _replyStructure(ctx, m.sym, o) },
+
+    // [Day 34 #2] Predictivitate / bias Ring5 — cere un simbol.
+    { name: 'predictivity',
+      match: (t, o) => {
+          if (!/\b(ai (prediction|bias|forecast|predict|edge)|ai-?ul|ce zice ai|predictivity|ce prezice)\b/i.test(t)) return null;
+          const sym = _sym(o); return sym ? { sym } : null;
+      },
+      run: (ctx, o, m) => _replyPredictivity(ctx, m.sym, o) },
+
+    // [Day 34 #5] Sentiment (pe toata piata, fara simbol)
+    { name: 'sentiment',
+      match: (t) => /\b(sentiment|sentimentul|risk.?on|risk.?off|breadth|mood market|cum e sentimentul)\b/i.test(t) || null,
+      run: (ctx, o) => _replySentiment(ctx, o) },
+
+    // [Day 34 #6] Manipulare / pump (pe toata piata)
+    { name: 'manipulation',
+      match: (t) => /\b(pump|wash|spoof|manipul\w*|outlier|schem[ăa])\b/i.test(t) || null,
+      run: (ctx, o) => _replyManipulationCheck(ctx, o) },
+
+    // [Day 33 #3] Indicatori — simbolul se ia din TEXTUL NORMALIZAT, nu din cel
+    // original: asa era in ambele lanturi si se pastreaza neschimbat.
+    { name: 'indicators',
+      match: (t) => {
+          if (!/\b(rsi|macd|adx|atr|indicators?|indicatori\w*|ta)\b/i.test(t)) return null;
+          const sym = _sym(t); return sym ? { sym } : null;
+      },
+      run: (ctx, o, m) => _replyIndicators(ctx, m.sym, o) },
+
+    // [Day 32B] Intentiile de piata — INAINTEA simbolului.
+    { name: 'top_gainers',
+      match: (t) => /\b(top gainers?|biggest gainers?|cei mai urca[țt]i|care a urcat|care e cel mai urcat|cei mai inal[țt]i|cea mai urcat)/i.test(t) || null,
+      run: (ctx, o) => _replyTopMovers(ctx, 'gainers', o) },
+
+    { name: 'top_losers',
+      match: (t) => /\b(top losers?|biggest losers?|cei mai sc[aă]zu[țt]i|care a sc[aă]zut|care e cel mai sc[aă]zut|cea mai sc[aă]zut)/i.test(t) || null,
+      run: (ctx, o) => _replyTopMovers(ctx, 'losers', o) },
+
+    { name: 'top_volume',
+      match: (t) => /\b(top volume|biggest volume|cel mai mare volum|care e cel mai mare volum|cel mai tranzac[țt]ionat|cele mai tranzac[țt]ionate)/i.test(t) || null,
+      run: (ctx, o) => _replyTopMovers(ctx, 'volume', o) },
+
+    { name: 'market',
+      match: (t) => /\b(how is the market|market overview|how.s the market|cum vezi pia[țt]a|cum e pia[țt]a|ce face pia[țt]a|ce vezi pe pia[țt]a|cum se mi[șs]c[aă] pia[țt]a)/i.test(t) || null,
+      run: (ctx, o) => _replyMarketOverview(ctx, o) },
+
+    // Simbolul singur, dupa tot ce e mai specific.
+    { name: 'symbol',
+      match: (t) => { const sym = _sym(t); return sym ? { sym } : null; },
+      run: (ctx, o, m) => _replySymbol(ctx, m.sym) },
+
+    // [Day 26.3] Regexuri strânse: particule scurte ca "azi"/"today" prindeau
+    // intrebari filozofice fara legatura. Cer acum cuvinte-ancora.
+    { name: 'positions',
+      match: (t) => /\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/.test(t) || null,
+      run: (ctx) => _replyPositions(ctx) },
+
+    { name: 'pnl',
+      match: (t) => /\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/.test(t) || null,
+      run: (ctx) => _replyPnl(ctx) },
+
+    { name: 'mood',
+      match: (t) => /\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/.test(t) || null,
+      run: (ctx) => _replyMood(ctx) },
+
+    { name: 'bandit',
+      match: (t) => /\b(bandit|ring5|ring 5|influence|eligibility)\b/.test(t) || null,
+      run: (ctx) => _replyBandit(ctx) },
+
+    { name: 'decisions',
+      match: (t) => /\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/.test(t) || null,
+      run: (ctx) => _replyDecisions(ctx) },
+
+    { name: 'doctor',
+      match: (t) => /\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/.test(t) || null,
+      run: (ctx) => _replyDoctor(ctx) },
+
+    // Injuraturi: dezescaladare scurta, fara LLM (pastreaza cota pentru
+    // intrebari adevarate).
+    { name: 'rude',
+      match: (t) => /\b(fuck|shit|wtf|hell|dammit|fute)\b/.test(t) || null,
+      run: () => ({ reply: 'easy boss. breathe. markets do that. what do you want — positions, pnl, mood?', mood: 'CALM' }) },
+];
+
+/** Prima potrivire castiga. Intoarce {entry, m} sau null. */
+function routeIntent(text, originalText) {
+    for (const entry of INTENTS) {
+        let m = null;
+        try { m = entry.match(text, originalText); } catch (_) { m = null; }
+        if (m) return { name: entry.name, run: entry.run, m: m === true ? {} : m };
+    }
+    return null;
+}
+
 // Internal helper: returns the intent reply if one matches, else null
 // (= LLM fallback needed). Mirrors _respondImpl routing exactly but
 // without invoking the LLM path itself.
 async function _tryLocalIntent(ctx, text, originalText) {
-    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
-    if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
-    if (text.match(/\b(what (do you|d'?you|you) remember|ce [șs]tii despre mine|ce ai re[țt]inut|preferin[țt]ele mele|my preferences|show.+profile)/i)) {
-        return _replyShowProfile(ctx, originalText);
-    }
-    if (text.match(/\b(forget|ui[țt][ăa])\b/) && text.match(/\b(prefer|sl|tp|size|alts?|leverage|c[uăa]t|cum)\b/i) || text.match(/^(forget|ui[țt][ăa])\b/i)) {
-        return _replyForgetPref(ctx, originalText);
-    }
-    if (text.match(/\b(remember|re[țt]ine|noteaz[ăa])\b/)) return _replyRememberPref(ctx, originalText);
-    if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
-        return _replyLearnings(ctx, originalText);
-    }
-    {
-        const fcMatch = text.match(/\b(long.?term|forecast|prognoz[aă]|termen lung|pe termen lung|long range)\b/i);
-        const symInFc = originalText.match(SYMBOL_RE);
-        if (fcMatch && symInFc) return _replyLongTermForecast(ctx, symInFc[1], originalText);
-    }
-    {
-        const wallsMatch = text.match(/\b(liquidity walls?|order book walls?|wall(uri)?|zid(uri)?|pereți)\b/i);
-        const symInWalls = originalText.match(SYMBOL_RE);
-        if (wallsMatch && symInWalls) return _replyLiquidityWalls(ctx, symInWalls[1], originalText);
-    }
-    {
-        const obMatch = text.match(/\b(order book|orderbook|depth|carte de ordine|registru de ordine|carnet|liquidit[aă]te|book pe|book on)\b/i);
-        const symInOb = originalText.match(SYMBOL_RE);
-        if (obMatch && symInOb) return _replyOrderBook(ctx, symInOb[1], originalText);
-    }
-    {
-        // [Wave 9.5] Fundamentals intent — match before structure to avoid
-        // shadowing on queries that mention both. Triggers: "market cap",
-        // "fundamental", "dominance/dominanță/dominancia", "rank", "cap pe".
-        const fundMatch = originalText.match(/(?<!\w)(market\s*cap|mcap|m\.cap|fundamental\w*|fundamentale|fondamental\w*|fundamentos|fundament|dominance|dominan[țt][ăa]|dominancia|dominância|rank|ranking|cap pe|cap on)(?!\w)/i);
-        const symInFund = originalText.match(SYMBOL_RE);
-        if (fundMatch && symInFund) return _replyFundamentals(ctx, symInFund[1], originalText);
-    }
-    {
-        const structMatch = text.match(/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i);
-        const symInStruct = originalText.match(SYMBOL_RE);
-        if (structMatch && symInStruct) return _replyStructure(ctx, symInStruct[1], originalText);
-    }
-    {
-        const aiMatch = text.match(/\b(ai (prediction|bias|forecast|predict|edge)|ai-?ul|ce zice ai|predictivity|ce prezice)\b/i);
-        const symInAi = originalText.match(SYMBOL_RE);
-        if (aiMatch && symInAi) return _replyPredictivity(ctx, symInAi[1], originalText);
-    }
-    if (text.match(/\b(sentiment|sentimentul|risk.?on|risk.?off|breadth|mood market|cum e sentimentul)\b/i)) {
-        return _replySentiment(ctx, originalText);
-    }
-    if (text.match(/\b(pump|wash|spoof|manipul\w*|outlier|schem[ăa])\b/i)) {
-        return _replyManipulationCheck(ctx, originalText);
-    }
-    {
-        const taMatch = text.match(/\b(rsi|macd|adx|atr|indicators?|indicatori\w*|ta)\b/i);
-        const symInTa = text.match(SYMBOL_RE);
-        if (taMatch && symInTa) return _replyIndicators(ctx, symInTa[1], originalText);
-    }
-    if (text.match(/\b(top gainers?|biggest gainers?|cei mai urca[țt]i|care a urcat|care e cel mai urcat|cei mai inal[țt]i|cea mai urcat)/i)) {
-        return _replyTopMovers(ctx, 'gainers', originalText);
-    }
-    if (text.match(/\b(top losers?|biggest losers?|cei mai sc[aă]zu[țt]i|care a sc[aă]zut|care e cel mai sc[aă]zut|cea mai sc[aă]zut)/i)) {
-        return _replyTopMovers(ctx, 'losers', originalText);
-    }
-    if (text.match(/\b(top volume|biggest volume|cel mai mare volum|care e cel mai mare volum|cel mai tranzac[țt]ionat|cele mai tranzac[țt]ionate)/i)) {
-        return _replyTopMovers(ctx, 'volume', originalText);
-    }
-    if (text.match(/\b(how is the market|market overview|how.s the market|cum vezi pia[țt]a|cum e pia[țt]a|ce face pia[țt]a|ce vezi pe pia[țt]a|cum se mi[șs]c[aă] pia[țt]a)/i)) {
-        if (preferLLMForIntent('market', llmClient.available())) return null;
-        if (preferLLMForIntent('market', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
-        return _replyMarketOverview(ctx, originalText);
-    }
-    const symMatch = text.match(SYMBOL_RE);
-    if (symMatch) {
-        if (preferLLMForIntent('symbol', llmClient.available())) return null;
-        return _replySymbol(ctx, symMatch[1]);
-    }
-    if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
-    if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
-    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
-    if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
-    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
-    if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
-    if (text.match(/\b(fuck|shit|wtf|hell|dammit|fute)\b/)) {
-        return { reply: 'easy boss. breathe. markets do that. what do you want — positions, pnl, mood?', mood: 'CALM' };
-    }
-    return null;
+    const hit = routeIntent(text, originalText);
+    if (!hit) return null;
+    // Preferinta declarata castiga. `null` inseamna "cade catre model", care are
+    // deja tot contextul asta in promptul lui de sistem.
+    if (preferLLMForIntent(hit.name, llmClient.available())) return null;
+    const result = await hit.run(ctx, originalText, hit.m);
+    return _withOpening(hit.name, ctx, result);
 }
 
 // ── Main entry ────────────────────────────────────────────────────────
@@ -2028,127 +2203,18 @@ async function _respondImpl(params, text) {
     };
 
     const originalText = params.text || '';
-    // Order: specific intents → generic.
-    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
-    if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
-
-    // [Day 33 #2] Trader profile intents — match BEFORE symbol regex.
-    // Show-profile MUST come before remember (so "what do you remember about me" wins).
-    if (text.match(/\b(what (do you|d'?you|you) remember|ce [șs]tii despre mine|ce ai re[țt]inut|preferin[țt]ele mele|my preferences|show.+profile)/i)) {
-        return _replyShowProfile(ctx, originalText);
-    }
-    if (text.match(/\b(forget|ui[țt][ăa])\b/) && text.match(/\b(prefer|sl|tp|size|alts?|leverage|c[uăa]t|cum)\b/i) || text.match(/^(forget|ui[țt][ăa])\b/i)) {
-        return _replyForgetPref(ctx, originalText);
-    }
-    if (text.match(/\b(remember|re[țt]ine|noteaz[ăa])\b/)) {
-        return _replyRememberPref(ctx, originalText);
-    }
-
-    // [Day 33 #1] Learnings intent — what has the bot learned. Match BEFORE
-    // symbol regex (originalText "ce ai învățat" could contain ada/btc otherwise).
-    if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
-        return _replyLearnings(ctx, originalText);
-    }
-
-    // [Day 34 #9] Long-term forecast — needs symbol hint. Match BEFORE structure
-    // (so "long-term forecast on BTC" doesn't go to plain structure).
-    {
-        const fcMatch = text.match(/\b(long.?term|forecast|prognoz[aă]|termen lung|pe termen lung|long range)\b/i);
-        const symInFc = originalText.match(SYMBOL_RE);
-        if (fcMatch && symInFc) return _replyLongTermForecast(ctx, symInFc[1], originalText);
-    }
-
-    // [Day 35 #3] Order book / walls intents — match BEFORE structure.
-    {
-        const wallsMatch = text.match(/\b(liquidity walls?|order book walls?|wall(uri)?|zid(uri)?|pereți)\b/i);
-        const symInWalls = originalText.match(SYMBOL_RE);
-        if (wallsMatch && symInWalls) return _replyLiquidityWalls(ctx, symInWalls[1], originalText);
-    }
-    {
-        const obMatch = text.match(/\b(order book|orderbook|depth|carte de ordine|registru de ordine|carnet|liquidit[aă]te|book pe|book on)\b/i);
-        const symInOb = originalText.match(SYMBOL_RE);
-        if (obMatch && symInOb) return _replyOrderBook(ctx, symInOb[1], originalText);
-    }
-
-    // [Day 34 #1] Structure intent — match BEFORE TA indicators (more specific).
-    {
-        // [Wave 9.5] Fundamentals intent — match before structure to avoid
-        // shadowing on queries that mention both. Triggers: "market cap",
-        // "fundamental", "dominance/dominanță/dominancia", "rank", "cap pe".
-        const fundMatch = originalText.match(/(?<!\w)(market\s*cap|mcap|m\.cap|fundamental\w*|fundamentale|fondamental\w*|fundamentos|fundament|dominance|dominan[țt][ăa]|dominancia|dominância|rank|ranking|cap pe|cap on)(?!\w)/i);
-        const symInFund = originalText.match(SYMBOL_RE);
-        if (fundMatch && symInFund) return _replyFundamentals(ctx, symInFund[1], originalText);
-    }
-    {
-        const structMatch = text.match(/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i);
-        const symInStruct = originalText.match(SYMBOL_RE);
-        if (structMatch && symInStruct) return _replyStructure(ctx, symInStruct[1], originalText);
-    }
-
-    // [Day 34 #2] AI predictivity / Ring5 bias surface — needs symbol hint.
-    {
-        const aiMatch = text.match(/\b(ai (prediction|bias|forecast|predict|edge)|ai-?ul|ce zice ai|predictivity|ce prezice)\b/i);
-        const symInAi = originalText.match(SYMBOL_RE);
-        if (aiMatch && symInAi) return _replyPredictivity(ctx, symInAi[1], originalText);
-    }
-
-    // [Day 34 #5] Sentiment intent (market-wide, no symbol needed)
-    if (text.match(/\b(sentiment|sentimentul|risk.?on|risk.?off|breadth|mood market|cum e sentimentul)\b/i)) {
-        return _replySentiment(ctx, originalText);
-    }
-
-    // [Day 34 #6] Manipulation / pump detection (market-wide)
-    if (text.match(/\b(pump|wash|spoof|manipul\w*|outlier|schem[ăa])\b/i)) {
-        return _replyManipulationCheck(ctx, originalText);
-    }
-
-    // [Day 33 #3] Indicators intent — RSI/MACD/ADX/etc. Requires a symbol
-    // hint in the text. Match BEFORE symbol-only path so "RSI on BTC" goes
-    // to indicators (richer) not _replySymbol (audit-only).
-    {
-        const taMatch = text.match(/\b(rsi|macd|adx|atr|indicators?|indicatori\w*|ta)\b/i);
-        const symInTa = text.match(SYMBOL_RE);
-        if (taMatch && symInTa) {
-            return _replyIndicators(ctx, symInTa[1], originalText);
+    // [2026-11-04] Era un al doilea lant de ~27 regexuri, intretinut cu mana in
+    // paralel cu `_tryLocalIntent`. Acum amandoua citesc aceeasi masa, deci
+    // driftul nu mai e o scapare posibila -- si `market`, care era declarat
+    // preferat de model dar respectat numai pe calea cu flux, se comporta la fel
+    // pe ambele.
+    const hit = routeIntent(text, originalText);
+    if (hit) {
+        if (preferLLMForIntent(hit.name, llmClient.available())) {
+            return await _replyLLMFallback(ctx, originalText);
         }
-    }
-
-    // [Day 32B] Market intents — match BEFORE symbol regex so "care a urcat
-    // cel mai mult" doesn't accidentally hit the symbol path.
-    if (text.match(/\b(top gainers?|biggest gainers?|cei mai urca[țt]i|care a urcat|care e cel mai urcat|cei mai inal[țt]i|cea mai urcat)/i)) {
-        return _replyTopMovers(ctx, 'gainers', originalText);
-    }
-    if (text.match(/\b(top losers?|biggest losers?|cei mai sc[aă]zu[țt]i|care a sc[aă]zut|care e cel mai sc[aă]zut|cea mai sc[aă]zut)/i)) {
-        return _replyTopMovers(ctx, 'losers', originalText);
-    }
-    if (text.match(/\b(top volume|biggest volume|cel mai mare volum|care e cel mai mare volum|cel mai tranzac[țt]ionat|cele mai tranzac[țt]ionate)/i)) {
-        return _replyTopMovers(ctx, 'volume', originalText);
-    }
-    if (text.match(/\b(how is the market|market overview|how.s the market|cum vezi pia[țt]a|cum e pia[țt]a|ce face pia[țt]a|ce vezi pe pia[țt]a|cum se mi[șs]c[aă] pia[țt]a)/i)) {
-        return _replyMarketOverview(ctx, originalText);
-    }
-
-    // Symbol-specific first (more specific than "decisions" generic).
-    const symMatch = text.match(SYMBOL_RE);
-    if (symMatch) {
-        if (preferLLMForIntent('symbol', llmClient.available())) return await _replyLLMFallback(ctx, originalText);
-        return _replySymbol(ctx, symMatch[1]);
-    }
-
-    // [Day 26.3] Tightened intent regexes — short Romanian/English particles
-    // like "azi"/"today" alone were catching unrelated philosophical questions
-    // (e.g. "ce parere despre crypto azi" → pnl intent triggered wrongly).
-    // Now require domain-specific anchor words (pnl/profit/positions/etc).
-    if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
-    if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
-    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
-    if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
-    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
-    if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
-
-    // Rude language: short de-escalation, no LLM (saves quota for real questions).
-    if (text.match(/\b(fuck|shit|wtf|hell|dammit|fute)\b/)) {
-        return { reply: 'easy boss. breathe. markets do that. what do you want — positions, pnl, mood?', mood: 'CALM' };
+        const result = await hit.run(ctx, originalText, hit.m);
+        return _withOpening(hit.name, ctx, result);
     }
 
     // Unknown intent → Groq LLM fallback (with Zeus context) OR local help if unavailable.
@@ -2157,6 +2223,13 @@ async function _respondImpl(params, text) {
 
 module.exports = {
     preferLLMForIntent, LLM_PREFERRED_INTENTS,
+    // [2026-11-04] Masa de intentii si stratul de deschidere, expuse pentru
+    // proba: ordinea lor E contractul, deci trebuie sa poata fi verificata.
+    _INTENTS_FOR_TEST: INTENTS,
+    _routeIntentForTest: routeIntent,
+    _appendOpeningForTest: _appendOpening,
+    _withOpeningForTest: _withOpening,
+    _OPENINGS_FOR_TEST: OPENINGS,
     respond,
     respondStream,
     _resetConvoForTest,

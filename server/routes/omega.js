@@ -499,7 +499,13 @@ router.post('/chat', express.json(), async (req, res) => {
                 question: safeQuestion, reply: safeReply
             }).catch(err => {
                 if (typeof logger !== 'undefined' && logger && logger.warn) {
-                    logger.warn('OMEGA', `[chat] extraction failed (cron will retry): uid=${userId} voiceLogId=${voiceLogId} err=${err.message}`);
+                    // [2026-11-04] Scria "cron will retry" si nu era adevarat:
+                    // omegaMemoryCleanup recupereaza `pending` si
+                    // `failed_transient`, NU randurile ramase cu status NULL.
+                    // Daca `extract` arunca inainte sa scrie un status, randul
+                    // nu mai e vazut de nimeni. ~207 randuri din octombrie stau
+                    // asa. Mesajul spune acum ce se intampla cu adevarat.
+                    logger.warn('OMEGA', `[chat] extraction failed BEFORE status was set — no cron recovers a NULL status: uid=${userId} voiceLogId=${voiceLogId} err=${err.message}`);
                 }
             });
         });

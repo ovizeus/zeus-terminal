@@ -68,11 +68,17 @@ describe('intentia de manipulare prinde formele cuvantului', () => {
         }
     });
 
-    test('regexul e acelasi in AMBELE lanturi de rutare', () => {
-        // OMEGA are doua liste de intentii tinute in acord cu mana (vezi b362).
-        // Daca una prinde forma verbala si cealalta nu, operatorul primeste alt
-        // raspuns pe telefon decat dovedesc testele.
+    test('regexul exista o SINGURA data — nu mai e nimic de tinut in acord', () => {
+        // [2026-11-04] Testul asta cerea DOUA copii, si avea dreptate cat timp
+        // OMEGA avea doua liste de intentii tinute in acord cu mana (b362):
+        // daca una prindea forma verbala si cealalta nu, operatorul primea alt
+        // raspuns pe telefon decat dovedeau testele.
+        //
+        // Acum exista o singura masa de intentii, citita de ambele lanturi, deci
+        // ce apara testul s-a mutat: nu "sa fie identice in doua locuri", ci "sa
+        // nu existe un al doilea loc". Un `2` aici ar insemna ca duplicarea s-a
+        // intors.
         const occurrences = (SRC.match(/manipul\\w\*/g) || []).length;
-        expect(occurrences).toBe(2);
+        expect(occurrences).toBe(1);
     });
 });

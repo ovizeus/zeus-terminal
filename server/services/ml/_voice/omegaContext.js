@@ -459,13 +459,171 @@ function gatherLiquidations(liqStore) {
     } catch (_) { return []; }
 }
 
+// ── Constitutia R1 ────────────────────────────────────────────────────
+// [2026-11-04] Pe 1 noiembrie el a intrebat de ce are LONG si SHORT deschise
+// in acelasi timp. Regula care interzice exact asta exista si se masoara din
+// 18 mai (`NO_OPPOSITE_ENTRY_ON_OPEN`, severitate `hard`), iar OMEGA nu avea
+// nicio referinta la ea. Avea raspunsul in casa si a vorbit pe langa.
+//
+// Adevarul care conteaza nu e numarul de incalcari, e MODUL: `advisory`
+// inseamna ca s-a scris in jurnal si intrarea a trecut oricum. Daca nu se
+// spune asta explicit, "35.805 incalcari" sună ca 35.805 opriri -- exact
+// greseala de la `influenceStatus`, unde "ACTIVE" insemna "n-a rulat".
+const CONSTITUTION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Doar sirul exact 'blocking' blocheaza -- oglindeste enforcementEngine.shouldBlock. */
+function normalizeEnforcementMode(mode) {
+    return mode === 'blocking' ? 'blocking' : 'advisory';
+}
+
+function gatherConstitution(db, userId, now, enforcementMode) {
+    const mode = normalizeEnforcementMode(enforcementMode);
+    let rows = [];
+    let totalEver = null;
+    try {
+        rows = db.prepare(`
+            SELECT principle_id, principle_name, severity, COUNT(*) AS n
+            FROM ml_r1_violations
+            WHERE user_id = ? AND ts >= ?
+            GROUP BY principle_id, principle_name, severity
+            ORDER BY n DESC LIMIT 5
+        `).all(userId, now - CONSTITUTION_WINDOW_MS) || [];
+    } catch (_) { rows = []; }
+    try {
+        const r = db.prepare(
+            'SELECT COUNT(*) AS n FROM ml_r1_violations WHERE user_id = ?'
+        ).get(userId);
+        const n = _num(r && r.n);
+        totalEver = n;
+    } catch (_) { totalEver = null; }
+    return { rows, totalEver, mode };
+}
+
+/** `No opposite-side entry while same-symbol open` -> `opposite-side entry while same-symbol open` */
+function _principleLabel(row) {
+    const name = row && typeof row.principle_name === 'string' && row.principle_name.trim()
+        ? row.principle_name.trim()
+        : String((row && row.principle_id) || 'unnamed rule').toLowerCase().replace(/_/g, ' ');
+    return name.replace(/^no\s+/i, '').toLowerCase();
+}
+
+function formatConstitution(c) {
+    if (!c || typeof c !== 'object') return 'n/a.';
+    const mode = normalizeEnforcementMode(c.mode);
+    const rows = Array.isArray(c.rows) ? c.rows.filter(Boolean) : [];
+    const ever = _num(c.totalEver);
+
+    const parts = [];
+    if (rows.length === 0) {
+        parts.push('no breaches in the last 24h');
+    } else {
+        const list = rows.map((r) => {
+            const n = _num(r.n);
+            const sev = r.severity ? ` ${String(r.severity)}` : '';
+            return `${_principleLabel(r)}${n === null ? '' : ' x' + n}${sev}`;
+        }).join(', ');
+        parts.push(`in the last 24h: ${list}`);
+    }
+    if (ever !== null) parts.push(`${ever} on record since the rule went in`);
+
+    // The whole point of the line.
+    parts.push(mode === 'blocking'
+        ? 'mode is blocking — a hard breach stops the entry'
+        : 'mode is advisory — every one of these was logged and the entry went through anyway; nothing was blocked');
+
+    return parts.join(' · ') + '.';
+}
+
+// ── Trendul de dispozitie ─────────────────────────────────────────────
+// [2026-11-04] "cum te simti" raspundea doar despre clipa asta. Starea lui
+// este scrisa de sase luni in `ml_voice_log.mood` -- nu lipsea scriitorul, ci
+// cititorul.
+//
+// Datele au o forma care pacaleste: in ACEEASI secunda apar mai multe stari,
+// cate una per rostire, deci "sunt nervos de trei zile" nu se poate afirma din
+// ele. Se poate afirma amestecul. Si comparatia se face pe COTE, nu pe numere
+// brute, fiindca ziua in curs e partiala: pe brut, orice dimineata pare mai
+// liniştita decat ziua de ieri intreaga, din simplul motiv ca are mai putine
+// ore in ea.
+const MOOD_DAY_MS = 24 * 60 * 60 * 1000;
+/** Sub atat, amestecul e zgomot si nu se pronunta nicio schimbare. */
+const MOOD_MIN_SAMPLE = 30;
+/** Cat trebuie sa se mute o cota ca sa merite spusa (puncte procentuale). */
+const MOOD_SHIFT_PP = 8;
+
+function gatherMoodTrend(db, userId, now) {
+    const q = `
+        SELECT mood, COUNT(*) AS n
+        FROM ml_voice_log
+        WHERE user_id = ? AND created_at >= ? AND created_at < ?
+          AND mood IS NOT NULL AND mood <> ''
+        GROUP BY mood ORDER BY n DESC`;
+    try {
+        const today = db.prepare(q).all(userId, now - MOOD_DAY_MS, now) || [];
+        const yesterday = db.prepare(q).all(userId, now - 2 * MOOD_DAY_MS, now - MOOD_DAY_MS) || [];
+        return { today, yesterday };
+    } catch (_) { return { today: [], yesterday: [] }; }
+}
+
+function _moodShares(rows) {
+    const clean = (Array.isArray(rows) ? rows : []).filter(
+        (r) => r && typeof r.mood === 'string' && r.mood && _num(r.n) !== null && _num(r.n) > 0
+    );
+    const total = clean.reduce((acc, r) => acc + _num(r.n), 0);
+    if (total <= 0) return { total: 0, shares: new Map(), ordered: [] };
+    const shares = new Map();
+    for (const r of clean) shares.set(r.mood, _num(r.n) / total);
+    const ordered = clean.slice().sort((a, b) => _num(b.n) - _num(a.n));
+    return { total, shares, ordered };
+}
+
+function formatMoodTrend(t) {
+    if (!t || typeof t !== 'object') return 'n/a.';
+    const today = _moodShares(t.today);
+    if (today.total === 0) return 'nothing said in the last 24h — quiet.';
+
+    // A share that rounds to 0% is not a measurement, it is noise wearing the
+    // clothes of one: 8 utterances out of 7583 rendered as "sad 0%" reads as a
+    // statement about sadness. Dropped from the mix, still counted in the total.
+    const mix = today.ordered
+        .map((r) => ({ mood: r.mood, pct: Math.round(today.shares.get(r.mood) * 100) }))
+        .filter((r) => r.pct >= 1)
+        .map((r) => `${String(r.mood).toLowerCase()} ${r.pct}%`)
+        .join(', ');
+
+    const yday = _moodShares(t.yesterday);
+    // No comparison without both sides, and not on a sample too small to mean
+    // anything -- a verdict from three utterances is an invented mood.
+    if (yday.total === 0 || today.total < MOOD_MIN_SAMPLE || yday.total < MOOD_MIN_SAMPLE) {
+        return `last 24h: ${mix}.`;
+    }
+
+    // Biggest genuine move in share, in percentage points.
+    let best = null;
+    const moods = new Set([...today.shares.keys(), ...yday.shares.keys()]);
+    for (const m of moods) {
+        const d = ((today.shares.get(m) || 0) - (yday.shares.get(m) || 0)) * 100;
+        if (Math.abs(d) >= MOOD_SHIFT_PP && (best === null || Math.abs(d) > Math.abs(best.d))) {
+            best = { mood: m, d };
+        }
+    }
+    if (!best) return `last 24h: ${mix} — same as the day before.`;
+
+    const word = String(best.mood).toLowerCase();
+    const dir = best.d > 0 ? 'more' : 'less';
+    return `last 24h: ${mix} — ${dir} ${word} than the day before `
+        + `(${Math.round(Math.abs(best.d))}pp).`;
+}
+
 module.exports = {
     fmtAge, fmtMoney,
     formatDecisions, formatBlocked, formatAccount, formatCloses, formatThoughts, formatLiquidations,
     moodFrom, moodReason, influenceStatus,
     isRealTrade, REAL_TRADE_SQL,
     cellKeyPrefix, parseCellKey, CELL_KEY_SEP,
-    gatherLiquidations,
+    gatherLiquidations, gatherConstitution, gatherMoodTrend,
+    formatMoodTrend, MOOD_MIN_SAMPLE, MOOD_SHIFT_PP,
+    formatConstitution, normalizeEnforcementMode, CONSTITUTION_WINDOW_MS,
     gatherDecisions, gatherBlocked, gatherCloses, gatherThoughts, gatherAccount,
     MAX_DECISIONS, MAX_THOUGHTS, MAX_CLOSES,
     DECISION_WINDOW_MS, BLOCKED_WINDOW_MS,

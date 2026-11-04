@@ -73,3 +73,5 @@ Schimbare doar de client → build, **fără** reload (R-OP-2).
 ### Ce rămâne de confirmat
 
 Pragul de 90px şi plafonul de 75% sunt judecata mea, nu măsurători pe telefonul tău. Dacă la scris randul sare sau rămâne ascuns, cifra de ajustat e `KB_MIN_INSET_PX` din `client/src/components/omega/chatViewport.ts`.
+
+---
