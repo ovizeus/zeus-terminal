@@ -2649,6 +2649,21 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                 // ACTUAL per-tick ML proposals the policy emitted live (stamped on the trace) vs the
                 // static baseline preset. THIS measures ML decision quality (unlike the 'shadow'
                 // cohort above, which only compares live-exec vs a re-sim of the same preset).
+                //
+                // ⚠️ [2026-11-05 — MASURAT, cat chiar livreaza] Pe 403 inchideri,
+                // `simulateMlPath` da EXACT acelasi rezultat ca presetul static in
+                // 81,6% din cazuri — inclusiv cand actiunea dominanta a fost LOOSEN
+                // (137/178) sau TIGHTEN (131/145). Singura care schimba mereu ceva e
+                // `ml:EXIT` (0/7 identice), fiindca taie pozitia. Adica repivotarea ML
+                // nu muta locul ieşirii in 4 din 5 tranzactii: latimile se misca, pretul
+                // iese in acelasi loc.
+                // Efectul total masurabil: −10,81$ pe 403 inchideri (−0,03$/tranz.).
+                //
+                // ⚠️ Si cohortul `shadow` NU poate fi folosit ca sa masoare asta:
+                // simularea e optimista cu +0,0697 pp fata de realitate (mai buna in
+                // 388 din 403 cazuri), iar diferenta de masurat e 0,045 pp —
+                // PREJUDECATA E MAI MARE DECAT SEMNALUL. Orice concluzie despre costul
+                // controlului ML scoasa din `shadow` e zgomot citit ca masuratoare.
                 try {
                     const _mlSim = serverDSL.simulateMlPath(
                         { side: pos.side, entry: pos.price, originalSL: pos.originalSL || pos.sl, openDslPct: _baseParams.openDslPct, fallbackParams: _baseParams },

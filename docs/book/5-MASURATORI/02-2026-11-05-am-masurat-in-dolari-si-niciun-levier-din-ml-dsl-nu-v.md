@@ -52,3 +52,5 @@ S-a oprit după reparaţia de proprietate de la **b352** — pe care am livrat-o
 Bucla ML-DSL e acum **corectă** şi va învăţa curat. Dar **nu e acolo levierul**: presetul valorează 0,0165 pp, controlul ML −11$ pe 403 închideri.
 
 Ce a mişcat bani cu adevărat a fost **operaţional**, nu ML: proprietatea motorului şi păzirea stopului. Un eveniment de deconectare a costat 36 de ori cât tot ML-ul.
+
+---
