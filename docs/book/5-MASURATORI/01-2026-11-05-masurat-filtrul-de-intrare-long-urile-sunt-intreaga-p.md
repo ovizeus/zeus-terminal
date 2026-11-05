@@ -80,3 +80,5 @@ Nu există niciun filtru de direcţie. `stc` are `confMin`, `sigMin`, `adxMin`, 
 ### ⏳ Rămas neverificat
 
 Dovada pe date vii a recompensei curate (b378/b379): observatorul a expirat după 25 de minute **fără nicio închidere**. Vine la prima.
+
+---

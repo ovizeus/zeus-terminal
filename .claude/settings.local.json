@@ -69,7 +69,8 @@
       "Bash(mv zeus-claude-continue.sh zeus-claude-continue.sh.OBSOLETE-20260425)",
       "Bash(chmod +x /root/zeus-terminal/zeus-claude-continue-current.sh)",
       "Bash(npm view *)",
-      "Bash(sqlite3 -header -column data/zeus.db 'SELECT source, COUNT\\(*\\) AS rows, datetime\\(MIN\\(created_at\\)/1000,'\\\\''unixepoch'\\\\''\\) AS first, datetime\\(MAX\\(created_at\\)/1000,'\\\\''unixepoch'\\\\''\\) AS last, ROUND\\(\\(MAX\\(created_at\\)-MIN\\(created_at\\)\\)/1000.0/3600,2\\) AS span_h FROM brain_parity_log WHERE created_at >= __TRACKED_VAR__ GROUP BY source;')"
+      "Bash(sqlite3 -header -column data/zeus.db 'SELECT source, COUNT\\(*\\) AS rows, datetime\\(MIN\\(created_at\\)/1000,'\\\\''unixepoch'\\\\''\\) AS first, datetime\\(MAX\\(created_at\\)/1000,'\\\\''unixepoch'\\\\''\\) AS last, ROUND\\(\\(MAX\\(created_at\\)-MIN\\(created_at\\)\\)/1000.0/3600,2\\) AS span_h FROM brain_parity_log WHERE created_at >= __TRACKED_VAR__ GROUP BY source;')",
+      "Bash(sudo -u zeus sqlite3 /opt/zeus-terminal/data/zeus.db \"UPDATE ml_dsl_arm_posterior SET alpha=1.0, beta=1.0, n=0;\")"
     ]
   }
 }

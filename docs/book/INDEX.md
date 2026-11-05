@@ -1,9 +1,10 @@
 # Index complet — toate secţiunile cartii
 
-Toate cele 176 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde sta.
+Toate cele 177 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde sta.
 
 | Data | Coş | Secţiunea |
 |---|---|---|
+| 2026-11-05 | `6-RETRACTARI` | [✅ 2026-11-05 — Resetarea posteriorului: FĂCUTĂ. Şi unde am greşit de două ori pe acelaşi drum](6-RETRACTARI/01-2026-11-05-resetarea-posteriorului-facuta-si-unde-am-gresit-de-d.md) |
 | 2026-11-05 | `5-MASURATORI` | [🎯 2026-11-05 — Măsurat filtrul de intrare: LONG-urile sunt întreaga pierdere](5-MASURATORI/01-2026-11-05-masurat-filtrul-de-intrare-long-urile-sunt-intreaga-p.md) |
 | 2026-11-05 | `5-MASURATORI` | [📏 2026-11-05 — Am măsurat de ce `DSL_PL` iese pe minus. Nu e ieşirea. E rata de nimerire](5-MASURATORI/02-2026-11-05-am-masurat-de-ce-dsl-pl-iese-pe-minus-nu-e-iesirea-e.md) |
 | 2026-11-05 | `5-MASURATORI` | [💰 2026-11-05 — Am măsurat în DOLARI, şi niciun levier din ML/DSL nu valorează nimic (măsurătoare, fără schimbare de cod)](5-MASURATORI/03-2026-11-05-am-masurat-in-dolari-si-niciun-levier-din-ml-dsl-nu-v.md) |
@@ -76,20 +77,20 @@ Toate cele 176 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-24 | `4-LIVRATE` | [📱 2026-10-24 — pe TELEFON: fixul meu de la b307 a mutat problema, nu a rezolvat-o (b308 v1.7.282)](4-LIVRATE/39-2026-10-24-pe-telefon-fixul-meu-de-la-b307-a-mutat-problema-nu-a.md) |
 | 2026-10-24 | `4-LIVRATE` | [🖐️ 2026-10-24 — „nu merge să trag dungi": chartul se muta sub tine (b307 v1.7.281)](4-LIVRATE/40-2026-10-24-nu-merge-sa-trag-dungi-chartul-se-muta-sub-tine-b307.md) |
 | 2026-10-24 | `4-LIVRATE` | [✏️ 2026-10-24 — „dungile nu se pun": desenul se dezarma în secret (b306 v1.7.280)](4-LIVRATE/41-2026-10-24-dungile-nu-se-pun-desenul-se-dezarma-in-secret-b306-v.md) |
-| 2026-10-24 | `6-RETRACTARI` | [⛔ 2026-10-24 — RETRAGERE MAJORĂ: contrafactualul din 22 oct avea SEMNUL ÎNTORS](6-RETRACTARI/01-2026-10-24-retragere-majora-contrafactualul-din-22-oct-avea-semn.md) |
+| 2026-10-24 | `6-RETRACTARI` | [⛔ 2026-10-24 — RETRAGERE MAJORĂ: contrafactualul din 22 oct avea SEMNUL ÎNTORS](6-RETRACTARI/02-2026-10-24-retragere-majora-contrafactualul-din-22-oct-avea-semn.md) |
 | 2026-10-24 | `5-MASURATORI` | [🔒 AVIZ HETZNER (PHP) — verificat: NU ne priveşte. Plus o trecere de securitate — 2026-10-24](5-MASURATORI/27-aviz-hetzner-php-verificat-nu-ne-priveste-plus-o-trecere-de-secu.md) |
 | 2026-10-23 | `5-MASURATORI` | [🎯 SINCRONIZAREA, ascuţită — sunt de acord când nu fac nimic, şi opuse când contează — 2026-10-23](5-MASURATORI/28-sincronizarea-ascutita-sunt-de-acord-cand-nu-fac-nimic-si-opuse.md) |
 | 2026-10-23 | `5-MASURATORI` | [🚫 GĂSIT — brain-ul e MATEMATIC interzis să tranzacţioneze în 68,5% din momente — 2026-10-23](5-MASURATORI/29-gasit-brain-ul-e-matematic-interzis-sa-tranzactioneze-in-68-5-di.md) |
-| 2026-10-23 | `6-RETRACTARI` | [🧪 PREDICŢIE INFIRMATĂ — vetoul de `LiqDanger` NU explică desincronizarea — 2026-10-23](6-RETRACTARI/02-predictie-infirmata-vetoul-de-liqdanger-nu-explica-desincronizar.md) |
-| 2026-10-23 | `6-RETRACTARI` | [🔇 Ipoteză INFIRMATĂ — „clientul rulează cu intrările lipsă" (depăşită de secţiunea de deasupra) — 2026-10-23](6-RETRACTARI/03-ipoteza-infirmata-clientul-ruleaza-cu-intrarile-lipsa-depasita-d.md) |
-| 2026-10-23 | `6-RETRACTARI` | [🧨 RĂSTURNARE — „cele două creiere se contrazic" era un ARTEFACT. Sunt de acord în 99% — 2026-10-23](6-RETRACTARI/04-rasturnare-cele-doua-creiere-se-contrazic-era-un-artefact-sunt-d.md) |
-| 2026-10-23 | `6-RETRACTARI` | [⛔ RETRACTARE + RĂSPUNSUL REAL — vetoul de 68,5% era iar instrumentul. Calea vie e alta — 2026-10-23](6-RETRACTARI/05-retractare-raspunsul-real-vetoul-de-68-5-era-iar-instrumentul-ca.md) |
+| 2026-10-23 | `6-RETRACTARI` | [🧪 PREDICŢIE INFIRMATĂ — vetoul de `LiqDanger` NU explică desincronizarea — 2026-10-23](6-RETRACTARI/03-predictie-infirmata-vetoul-de-liqdanger-nu-explica-desincronizar.md) |
+| 2026-10-23 | `6-RETRACTARI` | [🔇 Ipoteză INFIRMATĂ — „clientul rulează cu intrările lipsă" (depăşită de secţiunea de deasupra) — 2026-10-23](6-RETRACTARI/04-ipoteza-infirmata-clientul-ruleaza-cu-intrarile-lipsa-depasita-d.md) |
+| 2026-10-23 | `6-RETRACTARI` | [🧨 RĂSTURNARE — „cele două creiere se contrazic" era un ARTEFACT. Sunt de acord în 99% — 2026-10-23](6-RETRACTARI/05-rasturnare-cele-doua-creiere-se-contrazic-era-un-artefact-sunt-d.md) |
+| 2026-10-23 | `6-RETRACTARI` | [⛔ RETRACTARE + RĂSPUNSUL REAL — vetoul de 68,5% era iar instrumentul. Calea vie e alta — 2026-10-23](6-RETRACTARI/06-retractare-raspunsul-real-vetoul-de-68-5-era-iar-instrumentul-ca.md) |
 | 2026-10-23 | `5-MASURATORI` | [🪣 PÂLNIA COMPLETĂ, pe calea vie — de ce din 100 de evaluări rămâne o jumătate de intrare — 2026-10-23](5-MASURATORI/30-palnia-completa-pe-calea-vie-de-ce-din-100-de-evaluari-ramane-o.md) |
 | 2026-10-23 | `5-MASURATORI` | [🔄 CONTRAFACTUAL — selecţia e ANTI-SELECTIVĂ: ce trece e mai prost ca ce se aruncă — 2026-10-23](5-MASURATORI/31-contrafactual-selectia-e-anti-selectiva-ce-trece-e-mai-prost-ca.md) |
 | 2026-10-23 | `5-MASURATORI` | [🎯 NUMIT — filtrul care costă bani: blocajul pe UN SINGUR anti-pattern — 2026-10-23](5-MASURATORI/32-numit-filtrul-care-costa-bani-blocajul-pe-un-singur-anti-pattern.md) |
 | 2026-10-22 | `5-MASURATORI` | [📌 LIMITARE a măsurătorii de paritate — se adună doar cât ai aplicaţia deschisă — 2026-10-22](5-MASURATORI/33-limitare-a-masuratorii-de-paritate-se-aduna-doar-cat-ai-aplicati.md) |
-| 2026-10-22 | `6-RETRACTARI` | [🔁 CORECŢIE MAJORĂ — titlul auditului descria un regim care s-a încheiat în iunie — 2026-10-22](6-RETRACTARI/06-corectie-majora-titlul-auditului-descria-un-regim-care-s-a-inche.md) |
-| 2026-10-22 | `6-RETRACTARI` | [❌ AM GREŞIT — un ordin DSL Drive pe o poziţie în pierdere EXISTĂ, de două ori — 2026-10-22](6-RETRACTARI/07-am-gresit-un-ordin-dsl-drive-pe-o-pozitie-in-pierdere-exista-de.md) |
+| 2026-10-22 | `6-RETRACTARI` | [🔁 CORECŢIE MAJORĂ — titlul auditului descria un regim care s-a încheiat în iunie — 2026-10-22](6-RETRACTARI/07-corectie-majora-titlul-auditului-descria-un-regim-care-s-a-inche.md) |
+| 2026-10-22 | `6-RETRACTARI` | [❌ AM GREŞIT — un ordin DSL Drive pe o poziţie în pierdere EXISTĂ, de două ori — 2026-10-22](6-RETRACTARI/08-am-gresit-un-ordin-dsl-drive-pe-o-pozitie-in-pierdere-exista-de.md) |
 | 2026-10-22 | `5-MASURATORI` | [✅ ÎNCHIS — cele 51 de conflicte „cu cale nedeterminată" sunt explicate 100% — 2026-10-22](5-MASURATORI/34-inchis-cele-51-de-conflicte-cu-cale-nedeterminata-sunt-explicate.md) |
 | 2026-10-22 | `5-MASURATORI` | [📸 INSTANTANEU VIU — „câştigul e plat" văzut pe poziţiile deschise acum — 2026-10-22 03:03 UTC](5-MASURATORI/35-instantaneu-viu-castigul-e-plat-vazut-pe-pozitiile-deschise-acum.md) |
 | 2026-10-22 | `5-MASURATORI` | [✅ VERIFICAT LIVE — colectarea pe geometrie scrie, şi presetele se diferenţiază — 2026-10-22](5-MASURATORI/36-verificat-live-colectarea-pe-geometrie-scrie-si-presetele-se-dif.md) |
@@ -100,8 +101,8 @@ Toate cele 176 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-21 | `4-LIVRATE` | [🫁 REPARAT — CVD Divergence şi SMF pot semnala, în sfârşit — 2026-10-21 (b301 v1.7.275)](4-LIVRATE/46-reparat-cvd-divergence-si-smf-pot-semnala-in-sfarsit-2026-10-21.md) |
 | 2026-10-21 | `4-LIVRATE` | [🧹 REPARAT — risipa de 1 000 de obiecte/secundă şi mina din `calcFLOW` — 2026-10-21 (b302 v1.7.276)](4-LIVRATE/47-reparat-risipa-de-1-000-de-obiecte-secunda-si-mina-din-calcflow.md) |
 | 2026-10-21 | `4-LIVRATE` | [📉 REPARAT — CVD devine real, şi a scos la lumină a doua intrare moartă a lui SMF — 2026-10-21 (b303 v1.7.277)](4-LIVRATE/48-reparat-cvd-devine-real-si-a-scos-la-lumina-a-doua-intrare-moart.md) |
-| 2026-10-21 | `6-RETRACTARI` | [⚠️ RETRACTARE (depăşită de secţiunea de deasupra) — dovada pentru `SMART_CUT` aşa cum arăta înainte de calibrare — 2026-10-21](6-RETRACTARI/08-retractare-depasita-de-sectiunea-de-deasupra-dovada-pentru-smart.md) |
-| 2026-10-21 | `6-RETRACTARI` | [🎯 CIFRA CORECTĂ pentru `SMART_CUT` — după ce am greşit de două ori, în direcţii opuse — 2026-10-21](6-RETRACTARI/09-cifra-corecta-pentru-smart-cut-dupa-ce-am-gresit-de-doua-ori-in.md) |
+| 2026-10-21 | `6-RETRACTARI` | [⚠️ RETRACTARE (depăşită de secţiunea de deasupra) — dovada pentru `SMART_CUT` aşa cum arăta înainte de calibrare — 2026-10-21](6-RETRACTARI/09-retractare-depasita-de-sectiunea-de-deasupra-dovada-pentru-smart.md) |
+| 2026-10-21 | `6-RETRACTARI` | [🎯 CIFRA CORECTĂ pentru `SMART_CUT` — după ce am greşit de două ori, în direcţii opuse — 2026-10-21](6-RETRACTARI/10-cifra-corecta-pentru-smart-cut-dupa-ce-am-gresit-de-doua-ori-in.md) |
 | 2026-10-21 | `3-IN-COLECTARE` | [🔭 ÎNCEPEM SĂ COLECTĂM contrafactualul pe geometria DSL — 2026-10-21 (b304 v1.7.278)](3-IN-COLECTARE/02-incepem-sa-colectam-contrafactualul-pe-geometria-dsl-2026-10-21.md) |
 | 2026-10-21 | `4-LIVRATE` | [👁️ CITIREA pentru geometrie — plus un bug pe care l-am introdus eu la b304 — 2026-10-21 (b305 v1.7.279)](4-LIVRATE/49-citirea-pentru-geometrie-plus-un-bug-pe-care-l-am-introdus-eu-la.md) |
 | 2026-10-21 | `4-LIVRATE` | [⚰️➡️🫀 SMART_CUT înviat — era cod mort de la livrare — 2026-10-21 (b299 v1.7.273)](4-LIVRATE/50-smart-cut-inviat-era-cod-mort-de-la-livrare-2026-10-21-b299-v1-7.md) |
@@ -121,7 +122,7 @@ Toate cele 176 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-19 | `7-INCIDENTE` | [🔴 2026-10-19 16:23 — AI APĂSAT BUTONUL ȘI NU S-A TERMINAT NICIODATĂ. Cauză găsită, reparat (b276 v1.7.250)](7-INCIDENTE/04-2026-10-19-16-23-ai-apasat-butonul-si-nu-s-a-terminat-niciodata.md) |
 | 2026-10-19 | `4-LIVRATE` | [🧹 2026-10-19 — Proprietatea fișierelor: 21 813 → 0](4-LIVRATE/63-2026-10-19-proprietatea-fisierelor-21-813-0.md) |
 | 2026-10-19 | `4-LIVRATE` | [🔎 2026-10-19 — REPARAT: 20 265 de eșecuri care spuneau „HTTP 503" și nimic altceva (b275 v1.7.249)](4-LIVRATE/64-2026-10-19-reparat-20-265-de-esecuri-care-spuneau-http-503-si-ni.md) |
-| 2026-10-19 | `6-RETRACTARI` | [🧾 2026-10-19 — P1 era o atribuire greșită, și am dovada într-o singură linie de log](6-RETRACTARI/10-2026-10-19-p1-era-o-atribuire-gresita-si-am-dovada-intr-o-singur.md) |
+| 2026-10-19 | `6-RETRACTARI` | [🧾 2026-10-19 — P1 era o atribuire greșită, și am dovada într-o singură linie de log](6-RETRACTARI/11-2026-10-19-p1-era-o-atribuire-gresita-si-am-dovada-intr-o-singur.md) |
 | 2026-10-19 | `7-INCIDENTE` | [2026-10-19 — Backup Zeus (admin) + incidentul care l-a cerut](7-INCIDENTE/05-2026-10-19-backup-zeus-admin-incidentul-care-l-a-cerut.md) |
 | 2026-10-19 | `2-DECIZII-ALE-TALE` | [⏸️ R16 — **DECIZIA OPERATORULUI 2026-10-19: A, nu facem nimic (provizoriu)**](2-DECIZII-ALE-TALE/01-r16-decizia-operatorului-2026-10-19-a-nu-facem-nimic-provizoriu.md) |
 | 2026-10-18 | `5-MASURATORI` | [2026-10-18 — TERMINATOR confirmat de operator + ETA real pentru poarta de paritate](5-MASURATORI/38-2026-10-18-terminator-confirmat-de-operator-eta-real-pentru-poar.md) |
@@ -140,7 +141,7 @@ Toate cele 176 secţiuni, cele mai noi primele. Coloana „Coş" iţi spune unde
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14 — REPARAT: testele nu mai ating fișierele de producție](4-LIVRATE/70-2026-10-14-reparat-testele-nu-mai-ating-fisierele-de-productie.md) |
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14 — REPARAT: testul flaky și cauza lui (un timer care nu se oprea)](4-LIVRATE/71-2026-10-14-reparat-testul-flaky-si-cauza-lui-un-timer-care-nu-se.md) |
 | 2026-10-14 | `4-LIVRATE` | [✅ 2026-10-14 — REPARAT: cinci cron-uri care porneau în teste și PUTEAU să-ți trimită alerte false](4-LIVRATE/72-2026-10-14-reparat-cinci-cron-uri-care-porneau-in-teste-si-putea.md) |
-| 2026-10-14 | `6-RETRACTARI` | [🔴 2026-10-14 TÂRZIU — CORECTEZ PLANUL PE CARE TOCMAI L-AM DAT: paritatea NU se poate aduna peste noapte](6-RETRACTARI/11-2026-10-14-tarziu-corectez-planul-pe-care-tocmai-l-am-dat-parita.md) |
+| 2026-10-14 | `6-RETRACTARI` | [🔴 2026-10-14 TÂRZIU — CORECTEZ PLANUL PE CARE TOCMAI L-AM DAT: paritatea NU se poate aduna peste noapte](6-RETRACTARI/12-2026-10-14-tarziu-corectez-planul-pe-care-tocmai-l-am-dat-parita.md) |
 | 2026-10-14 | `5-MASURATORI` | [🧩 2026-10-14, 21:10 — DIAGNOSTIC ÎNCHIS: poarta de migrare e CIRCULARĂ, nu doar neîndeplinită](5-MASURATORI/44-2026-10-14-21-10-diagnostic-inchis-poarta-de-migrare-e-circulara.md) |
 | 2026-10-14 | `4-LIVRATE` | [🛡️ 2026-10-14, 21:05 — FIXAT CU TESTE: singurul lucru care te apără de execuție dublă](4-LIVRATE/73-2026-10-14-21-05-fixat-cu-teste-singurul-lucru-care-te-apara-de.md) |
 | 2026-10-14 | `5-MASURATORI` | [🔍 2026-10-14, 21:10 — AUDIT: două flag-uri PORNITE care nu fac nimic](5-MASURATORI/45-2026-10-14-21-10-audit-doua-flag-uri-pornite-care-nu-fac-nimic.md) |
