@@ -54,3 +54,5 @@ Deci: **nu avem nicio măsurătoare validă a ce costă controlul ML.** Instrume
 Problema e că **28,4% din intrări nimeresc, şi ai nevoie de 34,9%.** Niciun reglaj de geometrie nu acoperă 6,5 puncte: presetul valorează 0,0165 pp, controlul ML nu mută ieşirea în 81,6% din cazuri.
 
 **Lucrul care schimbă semnul e filtrul de intrare, nu ieşirea.**
+
+---
