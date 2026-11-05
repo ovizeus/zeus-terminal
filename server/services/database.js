@@ -10339,6 +10339,25 @@ migrate('409_ml_dsl_arm_posterior', () => {
         );
     `);
 });
+migrate('423_ml_dsl_arm_posterior_r2', () => {
+    // [2026-11-05] Schema 2 a recompensei ML-DSL. Tabela 409 rămâne NEATINSA:
+    // observatiile ei s-au strans sub o recompensa poluata (doua comparatii
+    // oglinda sub acelasi brat) si saturata (`win` binar fata de o baza comuna
+    // pe care toate presetele o bat). Nu sunt comparabile cu cele noi, dar sunt
+    // un document util al ce a produs schema veche — deci se versioneaza, nu se
+    // sterge. Vezi mlDslBandit.POSTERIOR_TABLE.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dsl_arm_posterior_r2 (
+            cell_key   TEXT NOT NULL,
+            arm        TEXT NOT NULL,
+            alpha      REAL NOT NULL DEFAULT 1,
+            beta       REAL NOT NULL DEFAULT 1,
+            n          INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (cell_key, arm)
+        );
+    `);
+});
 migrate('410_ml_dsl_outcome', () => {
     db.exec(`
         CREATE TABLE IF NOT EXISTS ml_dsl_outcome (

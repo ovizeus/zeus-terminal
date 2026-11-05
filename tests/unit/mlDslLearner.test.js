@@ -3,7 +3,10 @@ const learner = require('../../server/services/mlDslLearner');
 let db;
 beforeAll(() => {
   db = new Database(':memory:');
-  db.exec(`CREATE TABLE ml_dsl_arm_posterior (cell_key TEXT NOT NULL, arm TEXT NOT NULL, alpha REAL NOT NULL DEFAULT 1, beta REAL NOT NULL DEFAULT 1, n INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (cell_key, arm));`);
+  // [2026-11-05] Numele vine din modul, nu scris cu mana: la b379 posteriorul
+  // s-a versionat (ml_dsl_arm_posterior -> _r2) fiindca definitia recompensei
+  // s-a schimbat, si testul a picat pe un nume, nu pe un comportament.
+  db.exec(`CREATE TABLE ${require('../../server/services/mlDslBandit').POSTERIOR_TABLE} (cell_key TEXT NOT NULL, arm TEXT NOT NULL, alpha REAL NOT NULL DEFAULT 1, beta REAL NOT NULL DEFAULT 1, n INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (cell_key, arm));`);
   db.exec(`CREATE TABLE ml_dsl_outcome (id INTEGER PRIMARY KEY AUTOINCREMENT, pos_id TEXT NOT NULL, user_id INTEGER NOT NULL, env TEXT, symbol TEXT, regime TEXT, arm TEXT, cohort TEXT, ml_pnl_pct REAL, baseline_pnl_pct REAL, advantage REAL, win INTEGER, ts INTEGER NOT NULL);`);
   learner._setDb(db);
 });
@@ -27,7 +30,8 @@ describe('mlDslLearner', () => {
     expect(r.advantage).toBeCloseTo(1.5, 6);
     const row = db.prepare('SELECT * FROM ml_dsl_outcome WHERE pos_id=?').get('p1');
     expect(row.arm).toBe('swing'); expect(row.win).toBe(1);
-    const post = db.prepare('SELECT alpha, beta FROM ml_dsl_arm_posterior WHERE cell_key=? AND arm=?').get('1:TESTNET:BTCUSDT:TREND', 'swing');
+    const _T = require('../../server/services/mlDslBandit').POSTERIOR_TABLE;
+    const post = db.prepare(`SELECT alpha, beta FROM ${_T} WHERE cell_key=? AND arm=?`).get('1:TESTNET:BTCUSDT:TREND', 'swing');
     expect(post.alpha).toBe(2);
   });
 });

@@ -3,7 +3,10 @@ const bandit = require('../../server/services/mlDslBandit');
 let db;
 beforeAll(() => {
   db = new Database(':memory:');
-  db.exec(`CREATE TABLE ml_dsl_arm_posterior (cell_key TEXT NOT NULL, arm TEXT NOT NULL, alpha REAL NOT NULL DEFAULT 1, beta REAL NOT NULL DEFAULT 1, n INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (cell_key, arm));`);
+  // [2026-11-05] Numele vine din modul, nu scris cu mana: la b379 posteriorul
+  // s-a versionat (ml_dsl_arm_posterior -> _r2) fiindca definitia recompensei
+  // s-a schimbat, si testul a picat pe un nume, nu pe un comportament.
+  db.exec(`CREATE TABLE ${require('../../server/services/mlDslBandit').POSTERIOR_TABLE} (cell_key TEXT NOT NULL, arm TEXT NOT NULL, alpha REAL NOT NULL DEFAULT 1, beta REAL NOT NULL DEFAULT 1, n INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (cell_key, arm));`);
   bandit._setDb(db);
 });
 afterAll(() => { try { db.close(); } catch (_) {} });

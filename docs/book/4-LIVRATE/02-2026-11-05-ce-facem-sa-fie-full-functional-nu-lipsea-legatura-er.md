@@ -76,3 +76,5 @@ Lista mea de cohorte omitea **`ml`** — cohorta în care bandit-ul îşi alege 
 | 4. politica tick-cu-tick | aici e semnalul: `ml:LOOSEN` 3/173 |
 
 ⏳ **b376, b377, b378 nu sunt live** — aşteaptă un reload.
+
+---

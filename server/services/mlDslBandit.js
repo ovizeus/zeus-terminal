@@ -1,8 +1,26 @@
 // server/services/mlDslBandit.js
 // Per-(cellKey × arm) Thompson Beta posteriors for ML-DSL param-set selection.
-// Persisted additively in ml_dsl_arm_posterior. db is injectable (defaults to the
+// Persisted additively in POSTERIOR_TABLE. db is injectable (defaults to the
 // live singleton; tests inject in-memory). Telemetry-safe (never throws to caller).
 'use strict';
+
+// [2026-11-05] POSTERIOR VERSIONAT — de ce exista o a doua tabela.
+//
+// La b378 recompensa si-a schimbat DEFINITIA: inainte era poluata (cohortul
+// `shadow` si `shadow_geom` scriau doua comparatii OGLINDA sub acelasi nume de
+// brat) si saturata (`win` binar fata de o baza comuna pe care toate presetele o
+// bat, deci toate cele cinci ieseau 0,966 identic). Cele 1.826 de observatii
+// strânse asa NU sunt comparabile cu cele noi, si amestecate ar avea nevoie de
+// ~3 saptamani ca sa se spele.
+//
+// Varianta evidenta era sa golim tabela. Dar cand se schimba definitia unei
+// recompense, lucrul corect nu e sa stergi istoricul — e sa versionezi schema:
+//   * nicio scriere distructiva pe baza vie a operatorului;
+//   * randurile vechi rămân, ca document al ce a produs schema veche;
+//   * numaratoarea curata e EXACTA de la prima inchidere, fara amestec.
+//
+// `ml_dsl_arm_posterior` (schema 1) rămâne, inert. Tot ce urmeaza merge in r2.
+const POSTERIOR_TABLE = 'ml_dsl_arm_posterior_r2';
 let _db = null;
 function _getDb() { return _db || require('./database').db; }
 function _setDb(db) { _db = db; } // test hook
@@ -22,12 +40,12 @@ function _gamma(k, rng) {
 function _betaSample(alpha, beta, rng) { const x = _gamma(alpha, rng), y = _gamma(beta, rng); return x / (x + y); }
 
 function _post(cellKey, arm) {
-  try { const r = _getDb().prepare('SELECT alpha, beta FROM ml_dsl_arm_posterior WHERE cell_key=? AND arm=?').get(cellKey, arm); return r ? { alpha: r.alpha, beta: r.beta } : { alpha: 1, beta: 1 }; }
+  try { const r = _getDb().prepare(`SELECT alpha, beta FROM ${POSTERIOR_TABLE} WHERE cell_key=? AND arm=?`).get(cellKey, arm); return r ? { alpha: r.alpha, beta: r.beta } : { alpha: 1, beta: 1 }; }
   catch (_) { return { alpha: 1, beta: 1 }; }
 }
 function update(cellKey, arm, win) {
   try {
-    _getDb().prepare(`INSERT INTO ml_dsl_arm_posterior (cell_key, arm, alpha, beta, n, updated_at)
+    _getDb().prepare(`INSERT INTO ${POSTERIOR_TABLE} (cell_key, arm, alpha, beta, n, updated_at)
       VALUES (?, ?, 1 + ?, 1 + ?, 1, ?)
       ON CONFLICT(cell_key, arm) DO UPDATE SET alpha = alpha + ?, beta = beta + ?, n = n + 1, updated_at = ?`)
       .run(cellKey, arm, win ? 1 : 0, win ? 0 : 1, Date.now(), win ? 1 : 0, win ? 0 : 1, Date.now());
@@ -44,4 +62,4 @@ function sampleArm(cellKey, arms, rng) {
   }
   return best;
 }
-module.exports = { update, sampleArm, _post, _setDb };
+module.exports = { update, sampleArm, _post, POSTERIOR_TABLE, _setDb };
