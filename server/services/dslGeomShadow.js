@@ -46,7 +46,33 @@ function buildGeomRows({ presets, meta, prices, realizedPnlPct, simulate } = {})
         } catch (_) { continue; }
         const p = sim && Number(sim.pnlPct);
         if (!Number.isFinite(p)) continue;
-        rows.push({ arm, simPnlPct: p, baselinePnlPct: base, advantage: p - base });
+        rows.push({ arm, simPnlPct: p, baselinePnlPct: base, advantage: p - base, relWin: 0 });
+    }
+
+    // [2026-11-04] RECOMPENSA RELATIVA — de ce exista.
+    //
+    // Baza comuna (PnL-ul realizat) e corecta prin design: se anuleaza la
+    // scadere, deci advantage(A) - advantage(B) = sim(A) - sim(B). Dar bandit-ul
+    // consuma `win = advantage > 0`, iar fata de o baza pe care TOATE presetele
+    // o bat — masurat pe date vii: 142 din 146, pe fiecare bra[ — `win` iese 1
+    // pentru toate. Exact diferentele pe care se baza designul erau aruncate de
+    // codificarea binara, si de-aia toate cinci bratele stateau la 0,966
+    // identic, deci bandit-ul nu putea clasifica nimic.
+    //
+    // `relWin` e comparativ: pe o urma, bratul cu cel mai mare PnL simulat ia
+    // punctul, restul nu. Semnalul masurat asa, pe aceeasi pozitie: `fast` bate
+    // `def`/`swing`/`atr` cu 146 din 146 si `tp` cu 142 din 146 — adica EXACT
+    // invers decat spunea posteriorul poluat.
+    //
+    // La egalitate perfecta NIMENI nu ia punctul: cu presete largi care nu se
+    // activeaza egalitatea e frecventa, iar daca primul din obiect ar lua
+    // punctul, bandit-ul ar invata ordinea cheilor din `DSL_PRESETS`.
+    // Un singur brat valid nu e un clasament, deci nici acolo nu se da punct.
+    if (rows.length > 1) {
+        let best = -Infinity;
+        for (const r of rows) if (r.simPnlPct > best) best = r.simPnlPct;
+        const winners = rows.filter((r) => r.simPnlPct === best);
+        if (winners.length === 1) winners[0].relWin = 1;
     }
     return rows;
 }

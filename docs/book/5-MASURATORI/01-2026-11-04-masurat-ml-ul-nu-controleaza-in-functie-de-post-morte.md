@@ -74,3 +74,5 @@ Niciun flag, nicio ramură, nicio decizie. Singura schimbare: un comentariu în 
 | reconectarea buclei | merge `feat/ml-dsl-v2-control` (691 commits divergenţă, module lipsă) sau rescrie `sampleArm` pe main |
 | `fast` la 0,355 | bandit-ul o ştie de luni de zile; politica determinstă îl alege în continuare |
 | tăietura pe reversal | 3/3 pe pierdere — de recalibrat pragul sau de stins |
+
+---

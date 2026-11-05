@@ -2634,6 +2634,12 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                             symbol: pos.symbol, regime: pos.regime || pos.closeRegime || 'unknown',
                             arm: g.arm, cohort: 'shadow_geom',
                             outcome: { pnlPct: g.simPnlPct }, baseline: { pnlPct: g.baselinePnlPct },
+                            // [2026-11-04] Clasamentul RELATIV pe aceasta urma. Fara el,
+                            // bandit-ul primea `advantage > 0` fata de o baza comuna pe
+                            // care toate presetele o bat (142/146 pe fiecare brat), deci
+                            // toate cele cinci ajungeau la 0,966 identic si nu putea
+                            // clasifica nimic. Vezi dslGeomShadow.buildGeomRows.
+                            relWin: g.relWin,
                             ts: Date.now(),
                         });
                     }
