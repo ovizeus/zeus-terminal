@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 // [Phase 3C] Engine mode single source — useATStore.mode. AT.mode is a read mirror.
-import { useATStore } from '../../stores'
+import { useATStore, useAuthStore } from '../../stores'
 
 // [R24.1] SVG contents converted from hardcoded HTML strings (which were fed
 // into dangerouslySetInnerHTML) to structured JSX fragments. No user data
@@ -12,9 +12,29 @@ interface DockItem {
   label: string
   group: string
   icon: ReactNode
+  /** [2026-11-06] Rendered only when the session role is exactly 'admin'.
+   *  Opt-in, and the check fails CLOSED: an unknown or absent role hides it. */
+  adminOnly?: boolean
 }
 
 const DOCK_ITEMS: DockItem[] = [
+  // [2026-11-06] Admin Control Center. Was a small shield in the header's top
+  // bar; moved here as the first, full-size dock icon at the operator's request.
+  // Deliberately NOT mirrored into ui/dock.ts: that legacy list has no access to
+  // the session role, so an entry there could only ever be shown to everyone.
+  // Missing from the legacy dock means the icon is absent, which is the safe
+  // direction for a door into the admin surface.
+  // A shield with a KEYHOLE, not ARES's shield with a check -- same family,
+  // unmistakably a different door.
+  { id: 'admin', label: 'Admin', group: 'admin', adminOnly: true,
+    icon: (
+      <>
+        <path d="M12 1.6L4.6 4.5v6.2c0 5 3.1 9.3 7.4 11.7 4.3-2.4 7.4-6.7 7.4-11.7V4.5L12 1.6z" fill="currentColor" opacity=".10" />
+        <path d="M12 1.6L4.6 4.5v6.2c0 5 3.1 9.3 7.4 11.7 4.3-2.4 7.4-6.7 7.4-11.7V4.5L12 1.6z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        <circle cx="12" cy="10.2" r="2.1" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M12 12.3v3.4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </>
+    ) },
   { id: 'autotrade', label: 'AutoTrade', group: 'trading',
     icon: (
       <>
@@ -326,13 +346,38 @@ function LinkDots({ forItem, atHasPos, manualHasPos }: { forItem: string; atHasP
   return <>{dots}</>
 }
 
+/** [2026-11-06] Pending-approval count, moved here with the admin entry so the
+ *  badge is not lost in the move. Best-effort: a failed fetch leaves it at 0 and
+ *  never affects whether the icon renders. */
+function useAdminPendingCount(isAdmin: boolean) {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    if (!isAdmin) { setCount(0); return }
+    let alive = true
+    const load = () => {
+      fetch('/auth/admin/pending-count', { credentials: 'same-origin' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (alive && d && d.ok) setCount(d.count || 0) })
+        .catch(() => { /* badge is best-effort — never breaks the dock */ })
+    }
+    load()
+    const id = setInterval(load, 60000)
+    window.addEventListener('focus', load)
+    return () => { alive = false; clearInterval(id); window.removeEventListener('focus', load) }
+  }, [isAdmin])
+  return count
+}
+
 export function ZeusDock({ active, onDockClick }: ZeusDockProps) {
   const { atHasPos, manualHasPos } = useDockLinkState()
+  const role = useAuthStore((s) => s.role)
+  const isAdmin = role === 'admin'
+  const pendingCount = useAdminPendingCount(isAdmin)
   let lastGroup = ''
 
   return (
     <div id="zeus-dock">
-      {DOCK_ITEMS.map((item) => {
+      {DOCK_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
         const showSep = lastGroup !== '' && item.group !== lastGroup
         lastGroup = item.group
         return (
@@ -346,6 +391,11 @@ export function ZeusDock({ active, onDockClick }: ZeusDockProps) {
               <div className="zd-icon">
                 <svg viewBox="0 0 24 24" width="24" height="24">{item.icon}</svg>
                 <LinkDots forItem={item.id} atHasPos={atHasPos} manualHasPos={manualHasPos} />
+                {item.id === 'admin' && pendingCount > 0 && (
+                  <span className="zd-badge" aria-label={`${pendingCount} pending approval${pendingCount > 1 ? 's' : ''}`}>
+                    {pendingCount > 9 ? '9+' : pendingCount}
+                  </span>
+                )}
               </div>
               <span className="zd-label">{item.label}</span>
             </div>

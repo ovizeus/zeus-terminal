@@ -155,6 +155,13 @@ export function PanelShell() {
       _zComingSoon()
       return
     }
+    // [2026-11-06] Admin Control Center is a modal, not a dock panel. Opening it
+    // must NOT set dockActive, or the dock would try to render a panel that does
+    // not exist and blank the view behind the modal.
+    if (id === 'admin') {
+      openModal('adminPage')
+      return
+    }
     const next = dockActive === id ? null : id
     setDockActive(next)
     try { if (next) sessionStorage.setItem('zeusDock', next); else sessionStorage.removeItem('zeusDock') } catch {}

@@ -2523,6 +2523,27 @@ select.zac-select optgroup {
   transition: border-color .2s, box-shadow .2s, background .2s;
 }
 
+/* [2026-11-06] Pending-approval badge on the Admin dock icon. Came across with
+   the entry when it left the header, so the count is not lost in the move.
+   .zd-icon is already position:relative, which anchors it. */
+#zeus-dock .zd-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #ff4d4d;
+  color: #fff;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px #0a0f16;
+}
+
 /* [BATCH3-N] Link dots — pulsing indicator that AT/Manual are bonded to DSL
    via currently open positions. Shared animation start across items gives the
    eye a synchronized-heartbeat reading of "these two are linked". */

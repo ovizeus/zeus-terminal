@@ -11774,3 +11774,43 @@ Am verificat întâi dacă icoana mai apare şi altundeva: **nu**, era unicat, u
 Construit ca `zeus`. Verificarea s-a făcut **în bundle-ul pe care îl referă `public/app/index.html`** (`index-Ba7nSxa7.js`), nu în sursă: traseul rotiţei prezent (1), traseul soarelui **dispărut** (0), un singur bundle rămas, zero artefacte root în `public/app`. Testele panoului: **22/22** verzi.
 
 **Fără reload** — R-OP-2, schimbare doar de client.
+
+---
+
+## 🛡️ 2026-11-06 — Admin Control Center: din bara de sus în dock, prima pictogramă
+
+A cerut: scutul de Admin scos din bara de sus, o **pictogramă ADMIN mare, prima, în stânga lui AutoTrade**, doar pe contul lui, fără să se strice nimic din Admin Control Center, şi bara de sus rearanjată să nu rămână gol.
+
+### Ce s-a mutat, ce nu
+
+**Nu am atins nimic** din Admin Control Center: `AdminPage.tsx`, secţiunile, rutele — neschimbate. S-a mutat **numai uşa**.
+
+| | |
+|---|---|
+| scos | butonul-scut `adminBtn` din `Header.tsx` |
+| adăugat | intrare `admin` **prima** în `DOCK_ITEMS` din `ZeusDock.tsx`, cu `adminOnly: true` |
+| click | deschide **modala** `adminPage`, nu setează `dockActive` — altfel dock-ul ar încerca să randeze un panou inexistent şi ar goli ecranul din spatele modalei |
+| insigna de aprobări | a venit cu uşa: pollerul `/auth/admin/pending-count` s-a mutat din Header în dock, ca să nu se piardă |
+| bara de sus | `.hdr-btns` e `display:flex; gap:5px` — setările şi lupa **se strâng singure**, nu rămâne niciun gol. N-a trebuit cod |
+
+### Decizia de siguranţă: NU am oglindit-o în dock-ul vechi
+
+Convenţia casei e că orice intrare de dock există în **ambele** liste (`ui/dock.ts` legacy + `ZeusDock.tsx` React). **Pentru asta am încălcat-o intenţionat.** Lista veche n-are acces la rolul sesiunii, deci o intrare acolo ar putea fi arătată **doar tuturor**. Absentă din lista veche înseamnă pictogramă absentă — direcţia sigură pentru o uşă spre suprafaţa de admin. Există un test care păzeşte tocmai asta.
+
+Poarta e **fail-closed**: `role === 'admin'` exact. Rol necunoscut sau lipsă → ascunsă. Iar protecţia reală rămâne pe server — rutele din `server/routes/admin.js` trec prin `_requireAdmin`, care verifică `req.user.role`. UI-ul ascunde uşa; serverul o încuie.
+
+### Icoana
+
+Scut cu **gaură de cheie** — aceeaşi familie cu ARES (scut cu bifă), dar vizibil altă uşă. Grup propriu `admin`, deci apare un separator între ea şi AutoTrade.
+
+### Testat, nu presupus
+
+9 teste noi în `components/__tests__/adminDockEntry.test.tsx`. Le-am rulat **întâi pe codul vechi**: 5 au picat, din motivul corect (al şaselea picase fiindcă testul meu era prost scris — `import.meta.url` nu e URL de fişier în vitest aici; l-am reparat).
+
+**Mutaţie pe poartă** — am schimbat `!item.adminOnly || isAdmin` în `|| true`: **4 teste au picat**. Poarta e apărată, nu decorată.
+
+Suita întreagă de client: **1703/1703**, 175 fişiere. `tsc --noEmit` curat.
+
+### Verificat în bundle-ul servit
+
+În `index-BVmnkYyA.js`, exact cel referit de `public/app/index.html`: scutul-cu-gaură-de-cheie prezent, `adminOnly` prezent, **`adminBtn` dispărut (0)**, rotiţa AutoTrade de mai devreme încă acolo. Zero artefacte root. Serverul neatins — 1153 reporniri, neschimbat. **Fără reload**, R-OP-2.
