@@ -11692,3 +11692,25 @@ Pagina servită 200, 107.705 B. `div` 172/172 · `svg` 5/5 · acolade CSS 283/28
 sudo -u zeus cp public/login.html.bak-pre-barcode-20261106 public/login.html   # doar codul de bare
 sudo -u zeus cp public/login.html.bak-pre-qr-20261106      public/login.html   # tot blocul
 ```
+
+---
+
+## 🔧 2026-11-06 — Codurile erau ascunse pe telefon. Greşeala mea.
+
+Mi-a trimis o captură de pe telefon: blocul „Install" arăta logo, paşii, butonul verde — **dar niciun cod**. Cauza era regula mea, scrisă două ore mai devreme:
+
+```css
+@media(max-width:560px) { .getapp-qrwrap, .getapp-barwrap { display: none } }
+```
+
+Am argumentat atunci că „nimeni nu-şi scanează propriul ecran". Logic, şi irelevant: pe telefon codurile sunt **ce atingi**, şi sunt jumătate din motivul blocului. Le-am ascuns tocmai de la cine le căuta.
+
+**Reparat:** ambele coduri se văd pe telefon, centrate, cu barele mai înalte (58px). Logo-ul s-a întors **în mijlocul QR-ului**, cum a cerut — corecţia H acoperă lejer cei ~7% din suprafaţă. Insigna laterală a dispărut.
+
+**În plus:** ambele coduri sunt acum `<a href="/app">`. Pe desktop le scanezi, pe telefon le atingi — acelaşi rezultat, descărcarea aplicaţiei.
+
+Codul de bare rămâne la 286 de module. Pe desktop (684px) sunt 2,39 px/modul şi se scanează; pe telefon (~330px) iese 1,15 px/modul — **prea dens ca să fie scanat de pe un ecran de telefon**, dar e vizibil şi se atinge. QR-ul e cel care funcţionează la scanare pe orice lăţime.
+
+Verificat pe pagina vie: codul de bare decodat din geometria dreptunghiurilor → `"zeus-terminal.com/app"`; traseul QR neatins; `a` 17/17, `div` 168/168, acolade CSS 284/284.
+
+**Lecţia:** am optimizat pentru un scenariu pe care mi-l imaginasem, în loc să las utilizatorul să vadă ce i-am construit. O ascundere „deşteaptă" e tot o ascundere.
