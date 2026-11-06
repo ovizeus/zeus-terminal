@@ -11644,3 +11644,51 @@ sudo -u zeus cp public/login.html.bak-pre-qr-20261106 public/login.html
 ```
 
 Instantaneu, fără build, fără reload.
+
+---
+
+## ✅ 2026-11-06 — Cod de bare real pe pagina de pornire + logo scos din QR
+
+Ai cerut două lucruri: logo-ul din mijlocul QR-ului mutat, şi **un cod de bare adevărat**, nu desenat. Ambele sunt live.
+
+### Logo-ul
+
+L-am scos complet din cod şi l-am pus ca insignă în dreapta lui, cu eticheta „APP". Două câştiguri: codul se decodează fără nimic deasupra (marja de corecţie H rămâne întreagă, nefolosită), iar insigna poate purta o etichetă — ceea ce un strat suprapus nu putea.
+
+### Codul de bare
+
+**Nu există lib de cod de bare în proiect**, şi nu instalez una pe o maşină vie pentru o imagine statică. Am scris Code 128 (Code Set B) de la zero: tabelul de 107 modele, suma de control `(104 + Σ i·valoare) mod 103`, zone de linişte de 10 module pe fiecare parte, cum cere simbologia.
+
+**Auditul mi-a prins trei erori în propriul tabel.** Scrisesem codurile de start ca `112213/112231/112321`; invarianţii simbologiei le-au respins imediat — 10 module în loc de 11, iar la Start C paritatea barelor ieşea impară. Corecte sunt `211412/211214/211232`. Fără audit, codul **nu s-ar fi scanat niciodată**, şi exact asta ai cerut să nu se întâmple.
+
+Verificările, pe straturi:
+
+| strat | ce dovedeşte |
+|---|---|
+| invarianţii tabelului | 107 modele: lăţimi 1–4, 6 elemente (stop 7), 11 module (stop 13), **suma barelor pară** la toate, toate unice |
+| round-trip ×7 | codificare → şir de module → **decodor independent** → text identic. Inclusiv un şir cu toată punctuaţia ASCII |
+| control negativ | un singur modul răsturnat e **respins** (`unknown pattern 125111`), nu trecut cu vederea |
+| **decodare din pagina vie** | am extras SVG-ul din ce serveşte serverul, am reconstruit şirul de module **numai din geometria dreptunghiurilor** şi l-am decodat: `"zeus-terminal.com/app"`. Bare, etichetă şi ţintă — toate trei coincid |
+
+Linia lizibilă de sub bare e intenţionată: dacă un scaner arată altceva decât scrie acolo, se vede din prima.
+
+### Densitate
+
+266 module + 20 de linişte = 286. La 684px de lăţime → **2,39 px pe modul**, peste pragul practic de 2,0 pentru scanare de pe ecran. De-asta am codat `zeus-terminal.com/app` şi nu `https://zeus-terminal.com/app`: cele 8 caractere în plus ar fi coborât densitatea la 1,8 px/modul.
+
+Sub 560px codul de bare dispare, ca şi QR-ul — **nimeni nu-şi scanează propriul ecran**.
+
+### Ce trebuie să ştii despre coduri de bare 1D
+
+Un QR deschide linkul direct. Un cod de bare 1D **poartă acelaşi text şi se scanează**, dar camera telefonului nu-l transformă de obicei în link apăsabil — Google Lens sau o aplicaţie de scanare îl citesc şi-ţi dau textul. Pentru „sunt pe PC, vreau pe telefon", **QR-ul e unealta care funcţionează**; codul de bare e completarea pe care ai cerut-o, şi e reală.
+
+### Verificat
+
+Pagina servită 200, 107.705 B. `div` 172/172 · `svg` 5/5 · acolade CSS 283/283. Cele 73 de dreptunghiuri prezente octet cu octet în pagina servită. Traseul modulelor QR neschimbat. Zone de linişte 10/10. Fişier `zeus:zeus`. **Fără build, fără reload.**
+
+### Întoarcere
+
+```
+sudo -u zeus cp public/login.html.bak-pre-barcode-20261106 public/login.html   # doar codul de bare
+sudo -u zeus cp public/login.html.bak-pre-qr-20261106      public/login.html   # tot blocul
+```
