@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 
 export type AdminSection =
+  // [2026-11-06] The launcher, and the landing view when Admin opens.
+  | 'home'
   | 'book'
   | 'uploads'
   | 'backup'
@@ -126,7 +128,7 @@ const DEFAULT_AUDIT_FILTERS: AuditFilters = {
 }
 
 export const useAdminStore = create<AdminStore>()((set, get) => ({
-  currentSection: 'dashboard',
+  currentSection: 'home',
   selectedUserId: null,
   search: '',
   userFilters: DEFAULT_USER_FILTERS,

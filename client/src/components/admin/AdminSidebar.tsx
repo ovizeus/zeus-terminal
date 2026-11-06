@@ -1,38 +1,8 @@
 import { useAdminStore, type AdminSection } from '../../stores/adminStore'
-
-interface NavItem {
-  id: AdminSection
-  label: string
-  icon: string
-  group: 'overview' | 'people' | 'system' | 'config'
-  /** [P3 2026-06-06] Scaffold sections stay listed (operator: keep the roadmap
-   *  visible) but carry a WIP chip so nobody expects them to work yet. */
-  wip?: boolean
-}
-
-const NAV: NavItem[] = [
-  { id: 'book', label: 'Book of All', icon: '▤', group: 'overview' },
-  { id: 'uploads', label: 'Uploads', icon: '▥', group: 'overview' },
-  { id: 'backup', label: 'Backup Zeus', icon: '▧', group: 'overview' },
-  { id: 'vault', label: 'Vault', icon: '▦', group: 'overview' },
-  { id: 'dashboard', label: 'Dashboard', icon: '◉', group: 'overview' },
-  { id: 'users', label: 'Users', icon: '◐', group: 'people' },
-  { id: 'audit', label: 'Audit Log', icon: '☰', group: 'people' },
-  { id: 'roles', label: 'Roles & Permissions', icon: '◆', group: 'people', wip: true },
-  { id: 'security', label: 'Security', icon: '⬡', group: 'system' },
-  { id: 'monitoring', label: 'Monitoring', icon: '◈', group: 'system' },
-  { id: 'billing', label: 'Billing / Plans', icon: '❖', group: 'config', wip: true },
-  { id: 'indicators', label: 'Indicator Requests', icon: '✦', group: 'config' },
-  { id: 'support', label: 'Support / Ops', icon: '☍', group: 'config' },
-  { id: 'settings', label: 'Settings / Flags', icon: '⚙', group: 'config' },
-]
-
-const GROUPS: Array<{ id: NavItem['group']; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'people', label: 'People' },
-  { id: 'system', label: 'System' },
-  { id: 'config', label: 'Configuration' },
-]
+// [2026-11-06] NAV and GROUPS moved to ./adminNav so the launcher and this
+// sidebar render from ONE list. Two copies drift the first time a section
+// is added, which is exactly what happened to the dock.
+import { NAV, GROUPS } from './adminNav'
 
 export function AdminSidebar() {
   const currentSection = useAdminStore((s) => s.currentSection)
@@ -49,6 +19,14 @@ export function AdminSidebar() {
 
   return (
     <nav className="zac-side">
+      {/* [2026-11-06] Back to the launcher, from anywhere. */}
+      <div
+        className={`zac-nav-item ${currentSection === 'home' ? 'active' : ''}`}
+        onClick={() => setSection('home')}
+      >
+        <span className="ico" aria-hidden>⊞</span>
+        <span>All sections</span>
+      </div>
       {GROUPS.map((g) => {
         const items = NAV.filter((n) => n.group === g.id)
         return (

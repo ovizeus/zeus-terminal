@@ -476,3 +476,80 @@
 .zac *::-webkit-scrollbar-track { background: transparent; }
 .zac *::-webkit-scrollbar-thumb { background: var(--ac-border); border-radius: 4px; }
 .zac *::-webkit-scrollbar-thumb:hover { background: var(--ac-border-strong); }
+
+/* ══ [2026-11-06] Admin launcher ══
+   Every section as a tile on one screen. Replaces hunting through a strip you
+   had to scroll before you could see what was in it. Uses the panel's own
+   tokens throughout — a second visual language down here would read as a
+   different product. */
+.zac-home-lead {
+  font-size: 13px;
+  color: var(--ac-fg-dim);
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+.zac-home-lead b { color: var(--ac-accent); font-weight: 700; }
+
+.zac-home-group { margin-bottom: 22px; }
+.zac-home-group-label {
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--ac-fg-mute);
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--ac-border);
+}
+.zac-home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 9px;
+}
+
+.zac-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  padding: 13px 13px 12px;
+  background: var(--ac-card);
+  border: 1px solid var(--ac-border);
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .18s, background .18s, transform .18s;
+}
+.zac-tile:hover { background: var(--ac-card-hov); border-color: var(--ac-border-strong); transform: translateY(-1px); }
+.zac-tile:active { transform: none; }
+.zac-tile:focus-visible { outline: 2px solid var(--ac-accent); outline-offset: 2px; }
+
+.zac-tile-ico { font-size: 19px; line-height: 1; color: var(--ac-accent); margin-bottom: 5px; }
+.zac-tile-label { font-size: 13px; font-weight: 600; color: var(--ac-fg); }
+.zac-tile-blurb { font-size: 10.5px; color: var(--ac-fg-mute); line-height: 1.35; }
+
+/* A scaffold stays listed so the roadmap is visible, but must not look ready. */
+.zac-tile.wip { opacity: .55; }
+.zac-tile-wip {
+  position: absolute; top: 9px; right: 9px;
+  font-size: 7.5px; font-weight: 700; letter-spacing: 1px;
+  color: var(--ac-gold); border: 1px solid #f0c04055; border-radius: 3px; padding: 1px 4px;
+}
+
+/* A count is a call to act, so it is loud and the tile answers to it. */
+.zac-tile.has-count { border-color: #00d4ff55; }
+.zac-tile-count {
+  position: absolute; top: 8px; right: 8px;
+  min-width: 19px; height: 19px; padding: 0 5px;
+  background: var(--ac-accent); color: #04121a;
+  border-radius: 10px;
+  font-size: 11px; font-weight: 700; line-height: 19px; text-align: center;
+}
+
+@media (max-width: 520px) {
+  .zac-home-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .zac-tile { padding: 11px; }
+  .zac-tile-blurb { display: none; }
+}

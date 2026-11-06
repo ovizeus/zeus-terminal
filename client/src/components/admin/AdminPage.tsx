@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useAdminStore } from '../../stores/adminStore'
 import { AdminSidebar } from './AdminSidebar'
+import { AdminHome } from './AdminHome'
 import { AdminHeader } from './AdminHeader'
 import { BookSection } from './sections/BookSection'
 import { UploadsSection } from './sections/UploadsSection'
@@ -25,11 +26,12 @@ export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () 
 
   useEffect(() => {
     if (!visible) return
-    // [ADMIN-BACK 2026-06-06] Fresh entry always lands on Dashboard — the
+    // [ADMIN-BACK 2026-06-06 / 2026-11-06] Fresh entry always lands on the
+    // launcher — the
     // zustand store outlives the modal, so without this a re-open resumed on
     // whatever sub-page was last visited (phone UX complaint: had to refresh
     // the whole app to get the panel's first page back).
-    setSection('dashboard')
+    setSection('home')
     loadUsers()
   }, [visible])
 
@@ -61,6 +63,7 @@ export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () 
       <AdminSidebar />
 
       <main className="zac-main">
+        {currentSection === 'home' && <AdminHome />}
         {currentSection === 'book' && <BookSection />}
         {currentSection === 'uploads' && <UploadsSection />}
         {currentSection === 'backup' && <BackupSection />}

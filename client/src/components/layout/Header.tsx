@@ -39,7 +39,6 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
   // [ADMIN-BADGE 2026-06-06 / moved 2026-11-06] The pending-approval counter and
   // its poller left with the admin shield; both now live in ZeusDock.tsx.
   const [confirmLogout, setConfirmLogout] = useState(false)
-  const supportUnread = useSupportStore((s) => s.adminUnread)
   const setSupportUnread = useSupportStore((s) => s.setAdminUnread)
   const userUnread = useSupportStore((s) => s.userUnread)
   const setUserUnread = useSupportStore((s) => s.setUserUnread)

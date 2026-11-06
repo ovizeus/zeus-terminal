@@ -11961,3 +11961,57 @@ Aici e inofensiv — `CREATE TABLE IF NOT EXISTS`, 0 rânduri. **Dar înseamnă 
 Migrarea 425 aplicată, tabela există, 0 rânduri. Clientul construit şi servit. **Ruta `/api/byoi/indicators` NU e încă live** — procesul n-a repornit de când am scris-o, iar reload-ul sesiunii era deja consumat (R-OP-1). Clientul **degradează curat**: cererea eşuează, prinde `.catch`, lista se deschide cu setul standard şi invitaţia. Nimic rupt, doar grupele noi inerte până la următoarea repornire.
 
 Suite: **10.417 server** (4 shard-uri) **+ 1.725 client**, verzi.
+
+---
+
+## ⊞ 2026-11-06 — Admin: pagină de pornire cu plăci, în loc de bandă derulabilă
+
+A cerut: în Admin, titlurile stau într-o bandă pe care trebuie s-o derulezi. Vrea **toate secţiunile ca pictograme pe un ecran**, iar la click să se deschidă exact ca acum.
+
+### Ce am făcut
+
+Secţiune nouă `home`, **devenită ce vezi când intri**. Paisprezece plăci, grupate ca înainte (Overview / People / System / Configuration), toate vizibile deodată. Înăuntru **nu s-a schimbat nimic** — fiecare secţiune e exact cea de dinainte.
+
+Navigarea înapoi exista deja şi ducea la `dashboard`; **am redirecţionat-o spre lansator**, deci refolosesc mecanismul în loc să inventez altul. `dashboard` a redevenit o secţiune ca oricare.
+
+### Două lucruri peste ce a cerut
+
+**Plăcile poartă cifrele.** Întrebarea pentru care deschizi Admin e „unde mă aşteaptă treabă", iar răspunsul era ascuns în banda pe care trebuia s-o derulezi. Acum: aprobări în aşteptare, cereri de indicator, mesaje necitite — pe plăci, plus o linie sus: *„ai 3 lucruri în aşteptare"* sau *„nimic nu te aşteaptă"*.
+
+**Dar nu orice cifră.** Totalul de useri şi cel de audit **nu** primesc insignă. O insignă e o chemare la acţiune, iar una care stă aprinsă mereu e o insignă pe care ochiul învaţă s-o ignore. Rămân în bara laterală, ca referinţă.
+
+**Lista de secţiuni a devenit una singură** (`adminNav.ts`), folosită şi de plăci şi de bară. Două copii se desincronizează la prima secţiune nouă — exact ce s-a întâmplat cu dock-ul.
+
+### 🔴 Corecţie pe care i-o datorez: „tsc curat" era o afirmaţie goală
+
+Am raportat de mai multe ori azi „`tsc` curat". Comanda pe care o rulam:
+
+```
+npx tsc --noEmit -p tsconfig.json
+```
+
+Dar `client/tsconfig.json` are **`"files": []`** şi doar referinţe către sub-proiecte. Pe o configuraţie de tip soluţie, comanda aia **nu verifică niciun fişier.** Trecea instant fiindcă nu se uita la nimic.
+
+L-am descoperit fiindcă un test a prins un bug pe care `tsc` ar fi trebuit să-l prindă: importasem `useSupportStore` din `stores/index`, unde **nu e exportat**. Verificarea reală e `-p tsconfig.app.json`, şi ea chiar prinde:
+
+```
+error TS2305: Module './stores' has no exported member 'useSupportStore'
+```
+
+### Ce arată verificarea adevărată
+
+**77 de erori de tip în proiect, aproape toate preexistente** — `togInd('ema', e.currentTarget)` în ChartControls, `bootstrapMisc`, fişiere de test vechi. Proiectul nu a trecut niciodată `tsc` curat; Vite transpilează fără să verifice tipuri, deci nimic nu le semnala.
+
+Dintre ele, **una era a mea**: o variabilă moartă (`supportUnread`) rămasă în Header după ce am scos scutul de admin. Reparată. **Zero erori în codul scris azi.**
+
+Şi o greşeală de igienă: pusesem folderele de backup **în `src/`**, unde TypeScript le compila — copii cu import-uri rupte, 40+ erori false. Mutate în `/opt/zeus-terminal/_backups/`.
+
+### Testat
+
+13 teste noi. Ce apără: **o singură listă** (un test verifică explicit că bara laterală importă lista comună şi nu-şi ţine una proprie), fiecare placă duce la secţiunea ei şi nu la alta, insignele se aprind doar când e ceva de făcut, iar lansatorul se randează şi când endpoint-ul de numărare e căzut.
+
+Suite: **10.417 server + 1.738 client**, verzi.
+
+### Notă: un eşec instabil, explicat
+
+La o rulare, shard 2 a picat cu un test; la următoarele două, verde. Logul arată `db locked`. E acelaşi lucru ca descoperirea de mai devreme — **mai multe teste deschid baza de producţie reală** — iar contenţia dintre ele produce exact genul ăsta de eşec intermitent. Nu e cauzat de lucrarea asta, dar e o altă faţă a aceleiaşi probleme.

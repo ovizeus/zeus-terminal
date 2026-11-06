@@ -2,7 +2,8 @@ import { useAdminStore } from '../../stores/adminStore'
 import { fmtRelative } from './shared/components'
 
 const SECTION_TITLES: Record<string, { title: string; sub: string }> = {
-  dashboard: { title: 'Admin Control Center', sub: 'Overview and system health' },
+  home: { title: 'Admin Control Center', sub: 'Every section, one screen' },
+  dashboard: { title: 'Dashboard', sub: 'Overview and system health' },
   users: { title: 'Users Management', sub: 'Accounts, roles, access control' },
   audit: { title: 'Audit Log', sub: 'Full activity trail' },
   roles: { title: 'Roles & Permissions', sub: 'Access matrix and role assignments' },
@@ -10,6 +11,7 @@ const SECTION_TITLES: Record<string, { title: string; sub: string }> = {
   monitoring: { title: 'Monitoring', sub: 'Server, modules, connectivity' },
   billing: { title: 'Billing & Plans', sub: 'Subscriptions and revenue' },
   support: { title: 'Support & Operations', sub: 'Ops workspace and account tools' },
+  indicators: { title: 'Indicator Requests', sub: 'Built-to-order queue' },
   settings: { title: 'Settings & Feature Flags', sub: 'Global toggles and rollouts' },
 }
 
@@ -23,7 +25,7 @@ export function AdminHeader({ onClose }: { onClose: () => void }) {
   const loadAudit = useAdminStore((s) => s.loadAudit)
   const loadHealth = useAdminStore((s) => s.loadHealth)
 
-  const meta = SECTION_TITLES[section] || SECTION_TITLES.dashboard
+  const meta = SECTION_TITLES[section] || SECTION_TITLES.home
 
   function refreshAll() {
     loadUsers()
@@ -34,10 +36,12 @@ export function AdminHeader({ onClose }: { onClose: () => void }) {
   // [ADMIN-BACK 2026-06-06] In-panel back navigation (phone): a user drawer
   // closes first, any sub-section returns to Dashboard, and only from
   // Dashboard does back leave the panel. "Back to App" always exits.
-  const inSubPage = selectedUserId !== null || section !== 'dashboard'
+  // [2026-11-06] Back now returns to the launcher rather than the dashboard,
+  // which is just one section among the rest again.
+  const inSubPage = selectedUserId !== null || section !== 'home'
   function goBack() {
     if (selectedUserId !== null) { setSelectedUser(null); return }
-    if (section !== 'dashboard') { setSection('dashboard'); return }
+    if (section !== 'home') { setSection('home'); return }
     onClose()
   }
 
