@@ -10568,6 +10568,44 @@ migrate('424_byoi_requests', () => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_byoi_att ON byoi_attachments(request_id)');
 });
 
+migrate('425_byoi_indicators', () => {
+    // [2026-11-06] A DELIVERED indicator. Separate from byoi_requests on
+    // purpose: a request is one buyer's private paperwork, while a public
+    // indicator is visible to everyone, and conflating the two would mean the
+    // list query had to reason about order status.
+    //
+    // A row here means THE CODE EXISTS. The operator registers the slug only
+    // after building and shipping the indicator, so a row can never promise a
+    // toggle that does nothing. slug matches the indicator's id in the chart.
+    //
+    // visibility is 'private' or 'public'. The buyer can only ever ask for
+    // public (spec.visibility = 'public_request'); granting it is the
+    // operator's call, because it is their product's list.
+    //
+    // TIMESTAMPS ARE INTEGER MILLISECONDS.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS byoi_indicators (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_id    INTEGER,
+            owner_user_id INTEGER NOT NULL,
+            slug          TEXT    NOT NULL UNIQUE,
+            name          TEXT    NOT NULL,
+            description   TEXT    NOT NULL DEFAULT '',
+            author_label  TEXT,
+            visibility    TEXT    NOT NULL DEFAULT 'private',
+            created_at    INTEGER NOT NULL,
+            updated_at    INTEGER NOT NULL
+        )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_byoi_ind_owner ON byoi_indicators(owner_user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_byoi_ind_vis   ON byoi_indicators(visibility)');
+    // Two buyers will eventually both want "ZEUS WAVE". Private names may
+    // collide harmlessly — they are only ever seen by one person each — but a
+    // public list with two identical names is unusable, so the index guards
+    // only the public ones.
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_byoi_ind_pubname ON byoi_indicators(name) WHERE visibility = 'public'");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -12055,6 +12093,46 @@ function byoiDeleteAttachment(attId, userId) {
     return info.changes === 1;
 }
 
+// ── delivered indicators ──
+// [2026-11-06] What the chart's SELECT INDICATOR list is built from, above the
+// built-in set. Two groups: the ones this user owns, and the public ones.
+
+function byoiIndicatorsForUser(userId) {
+    const mine = db.prepare(
+        'SELECT * FROM byoi_indicators WHERE owner_user_id = ? ORDER BY created_at DESC'
+    ).all(userId);
+    // A public indicator this user owns belongs in "mine", not twice over.
+    const community = db.prepare(
+        "SELECT * FROM byoi_indicators WHERE visibility = 'public' AND owner_user_id != ? ORDER BY created_at DESC"
+    ).all(userId);
+    return { mine, community };
+}
+
+function byoiCreateIndicator({ requestId, ownerUserId, slug, name, description, authorLabel, visibility }) {
+    const now = Date.now();
+    const info = db.prepare(`
+        INSERT INTO byoi_indicators (request_id, owner_user_id, slug, name, description, author_label, visibility, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(requestId || null, ownerUserId, slug, name, description || '', authorLabel || null, visibility || 'private', now, now);
+    return db.prepare('SELECT * FROM byoi_indicators WHERE id = ?').get(info.lastInsertRowid);
+}
+
+function byoiSetIndicatorVisibility(id, visibility) {
+    const info = db.prepare('UPDATE byoi_indicators SET visibility = ?, updated_at = ? WHERE id = ?')
+        .run(visibility, Date.now(), id);
+    return info.changes === 1 ? db.prepare('SELECT * FROM byoi_indicators WHERE id = ?').get(id) : null;
+}
+
+function byoiListIndicatorsForAdmin() {
+    return db.prepare(
+        'SELECT i.*, u.email FROM byoi_indicators i LEFT JOIN users u ON u.id = i.owner_user_id ORDER BY i.created_at DESC'
+    ).all();
+}
+
+function byoiIndicatorBySlug(slug) {
+    return db.prepare('SELECT * FROM byoi_indicators WHERE slug = ?').get(slug) || null;
+}
+
 // ── admin side ──
 function byoiListForAdmin(status) {
     // Drafts are the buyer's private scratch space and never reach the operator.
@@ -12092,6 +12170,8 @@ module.exports = {
     byoiInsertDraft, byoiUpdateDraft, byoiGetOwned, byoiListForUser, byoiDeleteDraft,
     byoiMarkSubmitted, byoiAddAttachment, byoiListAttachments, byoiGetAttachment,
     byoiDeleteAttachment, byoiListForAdmin, byoiGetForAdmin, byoiSetStatus, byoiCountForAdmin,
+    byoiIndicatorsForUser, byoiCreateIndicator, byoiSetIndicatorVisibility,
+    byoiListIndicatorsForAdmin, byoiIndicatorBySlug,
     USER_STATUS, // [M6]
     findUserByEmail,
     findUserById,

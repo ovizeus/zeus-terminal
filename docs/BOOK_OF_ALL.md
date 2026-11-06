@@ -11913,3 +11913,51 @@ Suita completă: **10.397 teste server** (4 shard-uri) **+ 1.713 client**, verzi
 ### Verificat pe serverul viu
 
 Reload unic al sesiunii (R-OP-1). Migrarea 424 aplicată, ambele tabele create, toate coloanele de timp INTEGER. `/api/byoi/config` răspunde **401 fără sesiune**, la fel şi ruta de admin. `BYOI_BILLING_MODE` nesetat → poarta **închisă**. Reporniri 1154, zero erori reale, zero 429. Zero artefacte root.
+
+---
+
+## ✦ 2026-11-06 — Privat vs public: ce vinzi şi ce acorzi
+
+A întrebat, înainte să fac: indicatorul privat sau public, şi cum arată lista.
+
+### Ce i-am spus şi de ce
+
+**Aveai deja jumătate din câmp.** Pusesem `exclusive` — *„nimeni altcineva nu-l primeşte"*. Privat/public e **aceeaşi axă**, iar două câmpuri care înseamnă aproape acelaşi lucru e un bug care aşteaptă: cineva bifează „exclusive" şi alege „public" şi nu ştie nimeni ce-a vrut. L-am **înlocuit**, nu adăugat.
+
+**Partea care schimbă decizia:** omul care „se dă mare" are nevoie de **martori**. Un indicator pe care-l vede doar el nu satisface nimic. **Publicul e premiul**, nu privatul.
+
+Dar publicul înseamnă, pentru operator: un loc în lista fiecărui user pe veci, ştacheta de calitate devine a lui, întreţinere permanentă — şi, decisiv, **nu poţi promite „public" în momentul plăţii, fiindcă n-ai văzut rezultatul.** Dacă-l vinzi şi iese slab: ori livrezi ceva prost în faţa tuturor, ori refuzi şi datorezi rambursarea.
+
+**Decizia lui: publicul se acordă, nu se vinde. Acelaşi preţ.**
+
+Şi economia se întoarce în favoarea lui: un „ZEUS WAVE — by Ovi" bun, în lista tuturor, e **reclamă pentru funcţia BYOI însăşi.** Să ceri bani în plus pe public înseamnă să-ţi taxezi propriul marketing.
+
+### Cum se apără în cod
+
+Formularul oferă doar `private` şi **`public_request`** — cuvântul `public` nu e o opţiune pe care userul s-o poată trimite. Acordarea se face **exclusiv** din `/admin/request/:id/deliver`, şi e testată.
+
+**Lipsa alegerii înseamnă PRIVAT.** Întâi făcusem câmpul obligatoriu — şi **mi-a picat propria suită**, pe bună dreptate: o comandă fără bifă devenea incompletă. Un câmp cu implicit sigur nu blochează o vânzare. Valoarea sigură trebuie să fie cea tăcută.
+
+### Rândul din listă există doar dacă există codul
+
+Livrarea **nu e o simplă mutare de stare**. Înregistrează `slug`-ul indicatorului **chiar construit**, care trebuie să coincidă cu id-ul lui din codul chartului. Altfel ar apărea în listă un comutator care nu face nimic. Indicatorul se creează **înaintea** marcării ca livrat — ordinea e testată.
+
+Nume publice unice, printr-un index parţial: `UNIQUE(name) WHERE visibility='public'`. Cele private pot coincide — fiecare e văzut de un singur om.
+
+### Lista: trei grupe
+
+`MINE` / `COMMUNITY` / `STANDARD`. `MINE` apare **şi goală**, cu invitaţie — selectorul e exact locul unde omul se gândeşte deja la indicatori. `COMMUNITY` stă ascunsă până există ceva. În timpul căutării, antetele şi invitaţia **se retrag**: o listă de rezultate nu e un catalog.
+
+**Am scris întâi teste prin grep în sursă — adică decorative.** Le-am aruncat şi am extras logica într-un modul pur (`byoiIndicators.ts`), testat pe comportament. Mutaţiile: „Community mereu vizibilă" → 2 teste picate; „invitaţia apare şi când are deja indicatori" → 1 test picat.
+
+### ⚠️ Descoperire: suita de teste modifică schema bazei VII
+
+Migrarea 425 a ajuns pe baza de producţie **fără niciun reload** — procesul n-a repornit (1154 reporniri, 27 min uptime). Mai multe teste existente fac `require('services/database')`, iar modulul deschide **fişierul real** şi rulează migrările la încărcare.
+
+Aici e inofensiv — `CREATE TABLE IF NOT EXISTS`, 0 rânduri. **Dar înseamnă că o migrare distructivă s-ar aplica pe producţie dintr-o rulare de teste.** De notat, separat de lucrarea asta.
+
+### Stare live
+
+Migrarea 425 aplicată, tabela există, 0 rânduri. Clientul construit şi servit. **Ruta `/api/byoi/indicators` NU e încă live** — procesul n-a repornit de când am scris-o, iar reload-ul sesiunii era deja consumat (R-OP-1). Clientul **degradează curat**: cererea eşuează, prinde `.catch`, lista se deschide cu setul standard şi invitaţia. Nimic rupt, doar grupele noi inerte până la următoarea repornire.
+
+Suite: **10.417 server** (4 shard-uri) **+ 1.725 client**, verzi.

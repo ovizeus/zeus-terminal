@@ -10,6 +10,8 @@ import { setSymbol } from '../../data/marketDataWS'
 import { openIndSettings } from '../../engine/indicators'
 import { _indMatchesQuery, _usageBadge } from '../../engine/indicatorPicker'
 import { useScrollLock } from '../../core/scrollLock'
+import { filterCustom, customTag, showChrome, showInvite, showCommunity } from './byoiIndicators'
+import type { CustomInd } from './byoiIndicators'
 import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
 import { USER_SETTINGS } from '../../core/config'
 import { IND_ICONS } from '../../constants/indicatorIcons'
@@ -616,6 +618,11 @@ export function _mergePanelList(
   return extra.length ? list.concat(extra) : list
 }
 
+const GROUP_HDR: React.CSSProperties = {
+  fontSize: 9, letterSpacing: 1.6, textTransform: 'uppercase', fontWeight: 700,
+  color: '#50647a', padding: '10px 2px 5px', borderBottom: '1px solid #12253a', marginBottom: 2,
+}
+
 const IND_LIST: IndMeta[] = [
   // [2026-06-16] Dedicated, distinct icon per indicator (no recycled emoji).
   { id: 'ema',      ico: '📈', name: 'EMA 50/200',      desc: 'Exponential Moving Average',   hasGenericSettings: true },
@@ -756,6 +763,10 @@ export function ChartControls() {
   const [indPanelOpen, setIndPanelOpen] = useState(false)
   useScrollLock(indPanelOpen) // lock the page behind the SELECT INDICATOR sheet (mobile scroll-through)
   const [indSearch, setIndSearch] = useState('') // picker search filter
+  // [2026-11-06] Indicators built to order. A row exists only once the operator
+  // registered a delivered slug, so nothing here is a toggle that does nothing.
+  const [byoiMine, setByoiMine] = useState<CustomInd[]>([])
+  const [byoiCommunity, setByoiCommunity] = useState<CustomInd[]>([])
   const [indUsage, setIndUsage] = useState<Record<string, number>>({}) // live usage counts per indicator
   // Live usage counts: fetch on open + poll every 5s while the picker stays open, so the
   // per-indicator user counts update in real time (a toggle by THIS user — or any other user —
@@ -771,6 +782,18 @@ export function ChartControls() {
     load()
     const t = setInterval(load, 5000)
     return () => { alive = false; clearInterval(t) }
+  }, [indPanelOpen])
+
+  // Fetched when the sheet opens, not at boot: most users own none, and the
+  // chart toolbar must not wait on a request it usually does not need.
+  useEffect(() => {
+    if (!indPanelOpen) return
+    let alive = true
+    fetch('/api/byoi/indicators', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d && d.ok) { setByoiMine(d.mine || []); setByoiCommunity(d.community || []) } })
+      .catch(() => { /* the picker opens with the built-in set either way */ })
+    return () => { alive = false }
   }, [indPanelOpen])
   const [fsMode, setFsMode] = useState(false)
   // [Pack D.1 + D.2] Read initial state with FOUR fallback layers because
@@ -1296,6 +1319,66 @@ export function ChartControls() {
           {indSearch && <span className="ind-search-x" onClick={() => setIndSearch('')}>✕</span>}
         </div>
         <div className="ind-panel-body" id="indPanelBody">
+          {/* [2026-11-06] Three groups, because "mine, private" and "someone
+              else's, public" read as different things. MINE shows even when
+              empty: the picker is exactly where someone is already thinking
+              about indicators, so an invitation belongs there rather than a
+              gap. COMMUNITY stays hidden until there is something in it. */}
+          {(() => {
+            const mine = filterCustom(byoiMine, indSearch)
+            const community = filterCustom(byoiCommunity, indSearch)
+            const chrome = showChrome(indSearch)
+            const row = (c: CustomInd, tag: string) => {
+              const on = activeInds[c.id] ?? false
+              return (
+                <div key={c.id} className="ind-row">
+                  <div className="ind-row-l">
+                    <span className="ind-row-ico">&#10022;</span>
+                    <div>
+                      <div className="ind-row-name">{c.name}</div>
+                      <div className="ind-row-desc">{c.desc || tag}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: 8, letterSpacing: 1, textTransform: 'uppercase', color: '#5a6b7a' }}>{tag}</span>
+                    <button type="button" role="switch" aria-checked={on}
+                      className={`ind-toggle${on ? ' on' : ''}`}
+                      onClick={() => togInd(c.id)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                      <span className="ind-toggle-dot" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </div>
+              )
+            }
+            return (
+              <>
+                {chrome && (
+                  <div className="ind-group-hdr" style={GROUP_HDR}>Mine</div>
+                )}
+                {mine.map((c) => row(c, customTag(c, 'mine')))}
+                {showInvite(byoiMine, indSearch) && (
+                  <div className="ind-row" style={{ cursor: 'pointer', opacity: 0.75 }} onClick={() => { setIndPanelOpen(false); openModal('byoi') }}>
+                    <div className="ind-row-l">
+                      <span className="ind-row-ico">&#10022;</span>
+                      <div>
+                        <div className="ind-row-name">Build your own</div>
+                        <div className="ind-row-desc">Your own indicator, your name on it</div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', color: '#00afff' }}>Start</span>
+                  </div>
+                )}
+                {showCommunity(byoiCommunity, indSearch) && (
+                  <>
+                    {chrome && <div className="ind-group-hdr" style={GROUP_HDR}>Community</div>}
+                    {community.map((c) => row(c, customTag(c, 'community')))}
+                  </>
+                )}
+                {chrome && <div className="ind-group-hdr" style={GROUP_HDR}>Standard</div>}
+              </>
+            )
+          })()}
           {/* [2026-06-16] Ordering: (1) favorites pinned top in the order the operator
               starred them; (2) among the rest, active indicators float up. Stable sort
               (V8) keeps original order within each group. */}

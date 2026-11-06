@@ -65,8 +65,22 @@ const FIELDS = Object.freeze([
       columns: [{ key: 'name', label: 'Input', max: 24 }, { key: 'def', label: 'Default', max: 12 }],
       hint: 'Anything you want a settings box for — lengths, thresholds, multipliers.' },
 
-    { key: 'exclusive', type: 'bool', label: 'Exclusive to me', required: false,
-      hint: 'Nobody else gets this indicator. Changes the quote.' },
+    // [2026-11-06] This replaced a separate `exclusive` boolean. Private/public
+    // is ONE axis, and two fields meaning nearly the same thing is a bug waiting
+    // to happen — someone ticks "exclusive" and picks "public" and nobody knows
+    // what they wanted. Public is a REQUEST, never a purchase: the operator has
+    // not seen the build at the moment of payment, and selling a place in every
+    // user's list sight-unseen means either shipping something weak or declining
+    // and owing a refund.
+    // required:false with def 'private' on purpose. A missing answer must mean
+    // PRIVATE, not a blocked order: the safe value is the silent one, and an
+    // order that cannot be sent because nobody ticked a box is a lost sale.
+    { key: 'visibility', type: 'select', label: 'Who can see it', required: false, def: 'private',
+      options: [
+          { v: 'private', l: 'Only me' },
+          { v: 'public_request', l: 'Everyone, credited to me — subject to approval' },
+      ],
+      hint: 'Private is yours alone. Public puts it in every trader\'s list with your name on it, if we agree it is ready — same price either way.' },
 
     { key: 'notes', type: 'textarea', label: 'Describe it in your own words', required: true, max: 4000,
       hint: 'What should it tell you, and when? The more precisely you say it, the closer the build lands.' },

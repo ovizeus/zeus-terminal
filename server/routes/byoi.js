@@ -210,6 +210,25 @@ router.post('/submit/:id', _requireAuth, (req, res) => {
     res.json({ ok: true, request: _publicRow(saved) });
 });
 
+// ── The chart's SELECT INDICATOR list, above the built-in set ──
+// Two groups: what this user owns, and what anyone made public. A row exists
+// only once the operator registered a delivered slug, so nothing listed here
+// can be a toggle that does nothing.
+router.get('/indicators', _requireAuth, (req, res) => {
+    try {
+        const { mine, community } = db.byoiIndicatorsForUser(req.user.id);
+        const shape = (r) => ({
+            id: r.slug, name: r.name, desc: r.description || '',
+            author: r.author_label || null, visibility: r.visibility,
+        });
+        res.json({ ok: true, mine: mine.map(shape), community: community.map(shape) });
+    } catch (e) {
+        // The chart must open even if this fails — an empty list is a far
+        // better outcome than a toolbar that will not render.
+        res.json({ ok: true, mine: [], community: [] });
+    }
+});
+
 // ── Operator side ──
 router.get('/admin/requests', _requireAuth, _requireAdmin, (req, res) => {
     const status = typeof req.query.status === 'string' ? req.query.status : null;
@@ -251,6 +270,77 @@ router.post('/admin/request/:id/status', _requireAuth, _requireAdmin, (req, res)
         // Surfaced so the UI states it rather than leaving it to memory.
         refundOwed: P.refundOwed(to),
     });
+});
+
+/**
+ * Deliver: register the indicator that was actually built.
+ *
+ * The slug must match the id the indicator has in the chart code, which is why
+ * this is a separate step from the status move — pressing "delivered" without
+ * having shipped code would put a dead toggle in someone's list.
+ *
+ * visibility is decided HERE, by the operator. The buyer could only ask.
+ */
+router.post('/admin/request/:id/deliver', _requireAuth, _requireAdmin, (req, res) => {
+    const id = _id(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'bad id' });
+    const reqRow = db.byoiGetForAdmin(id);
+    if (!reqRow) return res.status(404).json({ ok: false, error: 'not found' });
+    if (!P.canTransition(reqRow.status, P.STATUS.DELIVERED)) {
+        return res.status(409).json({ ok: false, error: `cannot go ${reqRow.status} -> delivered` });
+    }
+
+    const b = req.body || {};
+    const slug = String(b.slug || '').trim().toLowerCase();
+    const visibility = b.visibility === 'public' ? 'public' : 'private';
+    const authorLabel = typeof b.authorLabel === 'string' ? b.authorLabel.trim().slice(0, 40) : '';
+
+    if (!/^[a-z0-9][a-z0-9_-]{2,39}$/.test(slug)) {
+        return res.status(400).json({ ok: false, error: 'slug must be 3-40 chars, a-z 0-9 _ -' });
+    }
+    if (db.byoiIndicatorBySlug(slug)) {
+        return res.status(409).json({ ok: false, error: 'that slug is already registered' });
+    }
+    if (visibility === 'public' && !authorLabel) {
+        // "by <someone>" is the whole point of a public one.
+        return res.status(400).json({ ok: false, error: 'a public indicator needs an author label' });
+    }
+
+    let created;
+    try {
+        created = db.byoiCreateIndicator({
+            requestId: reqRow.id, ownerUserId: reqRow.user_id, slug,
+            name: reqRow.title || slug, description: '', authorLabel, visibility,
+        });
+    } catch (e) {
+        // The unique index on public names fires here.
+        const msg = String((e && e.message) || '');
+        if (/UNIQUE/i.test(msg)) return res.status(409).json({ ok: false, error: 'a public indicator already has that name' });
+        return res.status(500).json({ ok: false, error: 'could not register the indicator' });
+    }
+
+    const saved = db.byoiSetStatus(id, P.STATUS.DELIVERED, { adminNote: b.adminNote });
+    res.json({ ok: true, request: { ..._publicRow(saved), email: saved.email || null }, indicator: created });
+});
+
+router.get('/admin/indicators', _requireAuth, _requireAdmin, (req, res) => {
+    res.json({ ok: true, indicators: db.byoiListIndicatorsForAdmin() });
+});
+
+router.post('/admin/indicator/:id/visibility', _requireAuth, _requireAdmin, (req, res) => {
+    const id = _id(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, error: 'bad id' });
+    const to = (req.body && req.body.visibility) === 'public' ? 'public' : 'private';
+    try {
+        const row = db.byoiSetIndicatorVisibility(id, to);
+        if (!row) return res.status(404).json({ ok: false, error: 'not found' });
+        res.json({ ok: true, indicator: row });
+    } catch (e) {
+        if (/UNIQUE/i.test(String((e && e.message) || ''))) {
+            return res.status(409).json({ ok: false, error: 'a public indicator already has that name' });
+        }
+        res.status(500).json({ ok: false, error: 'could not change visibility' });
+    }
 });
 
 module.exports = router;

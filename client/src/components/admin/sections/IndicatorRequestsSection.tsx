@@ -52,13 +52,35 @@ export function IndicatorRequestsSection() {
   const [open, setOpen] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  // [2026-11-06] Delivering is not a plain status move: it registers the slug
+  // of the indicator that was actually BUILT, and decides whether it goes
+  // public. The buyer could only ask; granting is the operator's call, because
+  // a public indicator lands in every user's list and that list is the product.
+  const [deliver, setDeliver] = useState<{ id: number; slug: string; visibility: string; author: string } | null>(null)
 
   const load = useCallback(() => {
     api('/api/byoi/admin/requests').then(({ body }) => { if (body && body.ok) setRows(body.requests) })
   }, [])
   useEffect(() => { load() }, [load])
 
+  async function doDeliver(r: Req) {
+    if (!deliver) return
+    const res = await api(`/api/byoi/admin/request/${r.id}/deliver`, {
+      method: 'POST',
+      body: JSON.stringify({ slug: deliver.slug, visibility: deliver.visibility, authorLabel: deliver.author, adminNote: note.trim() || undefined }),
+    })
+    if (!res.body.ok) { alert(res.body.error || 'Could not deliver'); return }
+    setDeliver(null); setNote(''); load()
+  }
+
   async function move(r: Req, to: string) {
+    if (to === 'delivered') {
+      // Open the registration form instead; the plain status move would mark
+      // it delivered with no indicator behind it.
+      const wanted = String(r.spec.visibility || 'private')
+      setDeliver({ id: r.id, slug: '', visibility: 'private', author: wanted === 'public_request' ? (r.email || '').split('@')[0] : '' })
+      return
+    }
     if (to === 'declined' && !note.trim()) {
       // A decline with no reason is a refund the buyer cannot understand.
       alert('Give a reason — the buyer sees it, and it is the only explanation they get.')
@@ -138,6 +160,43 @@ export function IndicatorRequestsSection() {
                       <input value={note} onChange={(e) => setNote(e.target.value)}
                         placeholder="Note to the buyer (required when declining)"
                         style={{ width: '100%', background: '#0a1119', border: '1px solid #1e2a3a', borderRadius: 6, color: '#c0d8ec', fontSize: 12, padding: '8px 10px', marginBottom: 8, fontFamily: 'var(--ff)' }} />
+                      {deliver && deliver.id === r.id && (
+                        <div style={{ background: '#0a1119', border: '1px solid #1e2a3a', borderRadius: 6, padding: 12, marginBottom: 10 }}>
+                          <div style={{ fontSize: 11, color: '#8aa8c4', marginBottom: 8, lineHeight: 1.5 }}>
+                            Register the indicator you built. The slug must match its id in the chart code —
+                            a row here promises a working toggle.
+                            {String(r.spec.visibility || '') === 'public_request' && (
+                              <><br /><b style={{ color: '#f0c040' }}>They asked for this to be public.</b> Your call.</>
+                            )}
+                          </div>
+                          <input value={deliver.slug} onChange={(e) => setDeliver({ ...deliver, slug: e.target.value })}
+                            placeholder="slug, e.g. ovi_wave"
+                            style={{ width: '100%', background: '#0b1120', border: '1px solid #1e2a3a', borderRadius: 6, color: '#c0d8ec', fontSize: 12, padding: '8px 10px', marginBottom: 8, fontFamily: 'monospace' }} />
+                          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                            {['private', 'public'].map((v) => (
+                              <button key={v} onClick={() => setDeliver({ ...deliver, visibility: v })}
+                                style={{
+                                  flex: 1, background: deliver.visibility === v ? 'rgba(0,175,255,0.1)' : 'none',
+                                  border: `1px solid ${deliver.visibility === v ? '#00afff' : '#1e2a3a'}`,
+                                  color: deliver.visibility === v ? '#00afff' : '#8aa8c4',
+                                  borderRadius: 6, fontSize: 12, padding: '7px 0', cursor: 'pointer', fontFamily: 'var(--ff)',
+                                }}>{v === 'private' ? 'Only them' : 'Everyone'}</button>
+                            ))}
+                          </div>
+                          {deliver.visibility === 'public' && (
+                            <input value={deliver.author} onChange={(e) => setDeliver({ ...deliver, author: e.target.value })}
+                              placeholder="credit, shown as “by …”"
+                              style={{ width: '100%', background: '#0b1120', border: '1px solid #1e2a3a', borderRadius: 6, color: '#c0d8ec', fontSize: 12, padding: '8px 10px', marginBottom: 8, fontFamily: 'var(--ff)' }} />
+                          )}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => setDeliver(null)}
+                              style={{ flex: 1, background: 'none', border: '1px solid #1e2a3a', color: '#8aa8c4', borderRadius: 6, fontSize: 12, padding: '8px 0', cursor: 'pointer', fontFamily: 'var(--ff)' }}>Cancel</button>
+                            <button onClick={() => doDeliver(r)}
+                              style={{ flex: 1, background: '#00ff88', border: '1px solid #00ff88', color: '#061018', borderRadius: 6, fontSize: 12, fontWeight: 700, padding: '8px 0', cursor: 'pointer', fontFamily: 'var(--ff)' }}>Register &amp; deliver</button>
+                          </div>
+                        </div>
+                      )}
+
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {NEXT[r.status].map((to) => (
                           <button key={to} disabled={busy} onClick={() => move(r, to)}
