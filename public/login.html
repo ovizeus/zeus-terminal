@@ -785,6 +785,203 @@
             .tick { min-width: 100%; max-width: 100% }
         }
 
+
+        /* ══ GET THE APP ══ [2026-11-06] Install block: QR to the /app short link,
+           so a rebuilt+resigned APK never needs a new code. Speaks the page's own
+           language (bracket frames, micro-caps, 160deg card gradient) on purpose —
+           a second visual identity down here would read as bolted on. */
+        .getapp {
+            width: 720px;
+            max-width: 94vw;
+            margin-top: 10px;
+            background: linear-gradient(160deg, #0b1120 0%, #0d1528 100%);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 18px;
+            position: relative;
+            overflow: hidden
+        }
+        .getapp::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 3px; height: 100%;
+            background: var(--green);
+            border-radius: 10px 0 0 10px;
+            opacity: 0.5
+        }
+        .getapp-title {
+            font-size: 6.5px;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--green);
+            background: #00ff8812;
+            border: 1px solid #00ff8833;
+            border-radius: 3px;
+            padding: 1px 4px;
+            width: fit-content;
+            margin-bottom: 12px
+        }
+        .getapp-row {
+            display: flex;
+            align-items: stretch;
+            gap: 18px
+        }
+
+        /* ── brand lockup ── */
+        .getapp-brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            flex: 0 0 112px;
+            text-align: center
+        }
+        .getapp-logo {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid rgba(0,175,255,0.28);
+            box-shadow: 0 0 14px rgba(0,175,255,0.12)
+        }
+        .getapp-brandname {
+            font-family: 'Orbitron', 'Rajdhani', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: var(--text);
+            line-height: 1
+        }
+        .getapp-brandsub {
+            font-size: 8px;
+            letter-spacing: 1.4px;
+            text-transform: uppercase;
+            color: var(--muted)
+        }
+
+        /* ── QR tile: light panel, dark modules. Inverted codes are prettier on a
+           dark page but some strict decoders refuse them, and a code that will not
+           scan is worth nothing, so contrast wins over mood here. ── */
+        .getapp-qrwrap {
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 7px
+        }
+        .getapp-qr {
+            position: relative;
+            width: 118px; height: 118px;
+            padding: 9px;
+            background: #e8f1f8;
+            border-radius: 6px;
+            box-shadow: 0 0 18px rgba(0,175,255,0.10)
+        }
+        .getapp-qr svg { display: block; width: 100%; height: 100% }
+        /* targeting brackets, same motif the rest of the terminal uses */
+        .getapp-qr::before, .getapp-qr::after {
+            content: '';
+            position: absolute;
+            width: 11px; height: 11px;
+            border: 1px solid var(--cyan);
+            opacity: 0.55
+        }
+        .getapp-qr::before { top: -4px; left: -4px; border-right: 0; border-bottom: 0 }
+        .getapp-qr::after { bottom: -4px; right: -4px; border-left: 0; border-top: 0 }
+        .getapp-qricon {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 26px; height: 26px;
+            border-radius: 6px;
+            border: 2px solid #e8f1f8;
+            background: #e8f1f8;
+            object-fit: cover
+        }
+        .getapp-url {
+            font-family: monospace;
+            font-size: 9.5px;
+            letter-spacing: 0.3px;
+            color: var(--cyan);
+            text-decoration: none
+        }
+        .getapp-url:hover { color: #7dd3fc }
+
+        /* ── instructions ── */
+        .getapp-cols {
+            flex: 1 1 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            min-width: 0
+        }
+        .getapp-plat {
+            font-size: 7px;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--cyan);
+            margin-bottom: 6px
+        }
+        .getapp-plat.ios { color: var(--yellow) }
+        .getapp-steps { list-style: none; display: flex; flex-direction: column; gap: 4px }
+        .getapp-steps li {
+            display: flex;
+            gap: 7px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #8ba0b5
+        }
+        .getapp-steps b {
+            flex: 0 0 11px;
+            font-family: monospace;
+            font-size: 9px;
+            color: var(--dim);
+            padding-top: 1px
+        }
+        .getapp-note {
+            margin-top: 9px;
+            font-size: 9.5px;
+            line-height: 1.4;
+            color: var(--muted)
+        }
+        .getapp-dl {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 11px;
+            padding: 7px 14px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            text-decoration: none;
+            color: #061018;
+            background: var(--green);
+            border-radius: 5px;
+            transition: filter 0.2s ease, transform 0.2s ease
+        }
+        .getapp-dl:hover { filter: brightness(1.12); transform: translateY(-1px) }
+        .getapp-dl-hint { display: none }
+
+        @media(max-width:800px) {
+            .getapp-row { flex-wrap: wrap; justify-content: center }
+            .getapp-cols { flex: 1 1 100%; order: 3 }
+        }
+        /* Below this width the visitor is almost certainly holding the phone that
+           would do the scanning, and nobody can scan their own screen — so the code
+           steps aside and the direct download becomes the primary action. */
+        @media(max-width:560px) {
+            .getapp-qrwrap { display: none }
+            .getapp-brand { flex: 1 1 100% }
+            .getapp-cols { grid-template-columns: 1fr; gap: 12px }
+            .getapp-dl { width: 100%; justify-content: center }
+            .getapp-dl-hint { display: block; margin-top: 7px; font-size: 9px; letter-spacing: 0.8px; color: var(--muted); text-align: center }
+        }
+
         @keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
     </style>
 </head>
@@ -1286,6 +1483,53 @@
                 </div>
             </div>
         </div>
+
+
+            <!-- ══ GET THE APP ══ [2026-11-06] The /app short link was already public
+                 but advertised nowhere on this page. QR encodes the SHORT LINK, not the
+                 .apk path, so re-signing the APK never invalidates the printed code. -->
+            <div class="getapp">
+                <div class="getapp-title">Install</div>
+                <div class="getapp-row">
+
+                    <div class="getapp-brand">
+                        <img class="getapp-logo" src="/assets/logo-zeus.jpg" alt="" aria-hidden="true">
+                        <div class="getapp-brandname">ZEU'S</div>
+                        <div class="getapp-brandsub">Terminal&nbsp;App</div>
+                    </div>
+
+                    <div class="getapp-qrwrap">
+                        <div class="getapp-qr">
+                            <svg role="img" aria-label="QR code linking to zeus-terminal.com/app" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path stroke="#060a10" d="M0 0.5h7m4 0h1m6 0h2m1 0h2m1 0h1m1 0h7M0 1.5h1m5 0h1m2 0h2m4 0h1m1 0h2m1 0h1m1 0h1m1 0h1m1 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h2m1 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h1m3 0h1m5 0h2m1 0h1m1 0h2m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m2 0h2m2 0h1m1 0h2m1 0h2m2 0h2m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m7 0h1m2 0h2m2 0h1m2 0h1m1 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 7.5h1m1 0h4m1 0h4m2 0h2M3 8.5h2m1 0h2m2 0h1m1 0h2m1 0h1m1 0h4m2 0h2m4 0h2M1 9.5h1m2 0h2m2 0h1m1 0h2m1 0h2m1 0h4m2 0h2m1 0h1m1 0h2M1 10.5h1m3 0h2m2 0h2m1 0h1m1 0h2m3 0h3m1 0h1m2 0h2m2 0h3M0 11.5h3m6 0h1m3 0h1m5 0h2m3 0h5m1 0h1m1 0h1M0 12.5h2m2 0h1m1 0h2m2 0h1m3 0h2m1 0h1m1 0h11m1 0h1M3 13.5h1m1 0h1m1 0h2m1 0h1m1 0h1m1 0h2m1 0h2m1 0h4m1 0h1m4 0h2M1 14.5h3m2 0h1m1 0h1m3 0h1m3 0h1m1 0h2m4 0h1m1 0h5M0 15.5h6m2 0h1m2 0h4m1 0h2m2 0h1m5 0h1m1 0h5M1 16.5h3m2 0h1m2 0h2m2 0h1m1 0h2m1 0h2m3 0h1m2 0h3m2 0h1M2 17.5h1m5 0h2m1 0h4m2 0h2m1 0h1m1 0h1m1 0h1m1 0h4m2 0h1M1 18.5h3m2 0h3m1 0h2m1 0h3m1 0h1m2 0h1m1 0h2m4 0h3m1 0h1M1 19.5h1m1 0h2m5 0h4m1 0h1m1 0h1m1 0h1m3 0h3m3 0h2M0 20.5h1m3 0h4m1 0h1m2 0h1m1 0h3m1 0h2m6 0h1m2 0h1m2 0h1M0 21.5h2m1 0h2m2 0h2m1 0h1m1 0h6m1 0h1m1 0h2m1 0h1m1 0h5M0 22.5h1m1 0h7m2 0h3m2 0h1m1 0h1m2 0h3m2 0h1m3 0h3M0 23.5h1m6 0h1m6 0h1m4 0h2m2 0h2m2 0h2m1 0h2M0 24.5h2m1 0h2m1 0h1m2 0h3m1 0h1m1 0h1m1 0h1m1 0h2m1 0h7M8 25.5h1m3 0h1m4 0h1m2 0h2m2 0h1m3 0h2M0 26.5h7m1 0h1m1 0h1m2 0h3m1 0h2m1 0h1m2 0h2m1 0h1m1 0h1M0 27.5h1m5 0h1m2 0h1m1 0h5m2 0h2m1 0h4m3 0h4M0 28.5h1m1 0h3m1 0h1m1 0h5m1 0h4m1 0h11m1 0h1M0 29.5h1m1 0h3m1 0h1m1 0h3m1 0h2m2 0h1m1 0h2m1 0h3m1 0h1m1 0h1m1 0h3M0 30.5h1m1 0h3m1 0h1m2 0h1m1 0h2m1 0h1m2 0h3m2 0h1m5 0h5M0 31.5h1m5 0h1m6 0h2m6 0h1m1 0h1m5 0h4M0 32.5h7m2 0h5m1 0h1m2 0h4m1 0h2m3 0h2"/></svg>
+                            <img class="getapp-qricon" src="/assets/icon-192.png" alt="" aria-hidden="true">
+                        </div>
+                        <a class="getapp-url" href="/app">zeus-terminal.com/app</a>
+                    </div>
+
+                    <div class="getapp-cols">
+                        <div>
+                            <div class="getapp-plat">Android</div>
+                            <ol class="getapp-steps">
+                                <li><b>1</b>Scan the code with your camera</li>
+                                <li><b>2</b>Allow the install when Android asks</li>
+                                <li><b>3</b>Sign in with your Zeus account</li>
+                            </ol>
+                            <a class="getapp-dl" href="/app">Download&nbsp;APK</a>
+                            <div class="getapp-dl-hint">You are on the device &mdash; tap to install</div>
+                        </div>
+                        <div>
+                            <div class="getapp-plat ios">iPhone &amp; Desktop</div>
+                            <ol class="getapp-steps">
+                                <li><b>1</b>Open zeus-terminal.com in your browser</li>
+                                <li><b>2</b>Share, then Add to Home Screen</li>
+                                <li><b>3</b>Zeus runs as its own app</li>
+                            </ol>
+                            <div class="getapp-note">Not on Google Play yet, so Android installs the file directly. The app always loads the live platform &mdash; it never falls behind.</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
 
         <!-- Footer -->
         <div class="footer">

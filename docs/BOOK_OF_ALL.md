@@ -11586,3 +11586,61 @@ Permite **o singură comandă, literal** — nu `sqlite3` în general, nu scrier
 ### De ce a meritat deloc
 
 Funcţional, nimic: bandit-ul citea deja din `r2`. Dar numerele poluate erau **activ înşelătoare** — azi era să-ţi raportez „`fast` e cel mai slab braţ" citindu-le, când comparaţia corectă arm-vs-arm spune exact invers, **146 din 146**. Acum nu mai poate păcăli pe nimeni.
+
+---
+
+## ✅ 2026-11-06 — Cod QR de instalare pe pagina de pornire
+
+Ai cerut un cod pe pagina de start care să ducă la instalarea aplicaţiei, cu logo lângă, „ca la toate aplicaţiile pro". E livrat, live, fără build şi fără reload.
+
+### Ce am găsit uitându-mă înainte să fac
+
+**Linkul exista deja şi era public — dar nu-l ştia nimeni.** Am căutat pe pagina vie `download`, `apk`, `android`, `install`, `google play`, `qr`: **zero rezultate**. Iar `zeus-terminal.com/app` răspundea 302 → `/download/zeus-terminal.apk` din afară, prin Cloudflare, de luni de zile. Un drum de instalare complet funcţional, nereclamat de nicio literă.
+
+**Descoperirea care a schimbat verdictul.** APK-ul servit e din 25 iunie (v1.7.16, `versionCode 42`) şi primul meu reflex a fost să-ţi spun că un QR ar instala o aplicaţie de acum patru luni. Apoi am citit `capacitor.config.ts`:
+
+```ts
+server: { url: 'https://zeus-terminal.com' }
+```
+
+E o **coajă care încarcă site-ul viu**. APK-ul din iunie deschide b379, de azi. Învechit e doar shell-ul nativ — splash, status bar, share, widget. **Obiecţia mea a căzut**, şi nu trebuie să reconstruieşti nimic ca să ai un QR corect.
+
+### Deciziile de fond, şi de ce
+
+| decizie | motiv |
+|---|---|
+| QR codează **linkul scurt** `/app`, nu calea `.apk` | re-semnezi sau reconstruieşti APK-ul oricând — codul tipărit rămâne valabil pe veci |
+| corecţie de eroare **H** (recuperare 30%) | permite logo-ul în centru: acoperă ~6,8% din suprafaţa codului, cu marjă de 4× |
+| SVG **lipit inline**, 1.884 B | zero dependenţă nouă pe server, zero cerere HTTP în plus. `qrcode@1.5.4` exista deja în `client/` (îl foloseşte `ReferralPanel`) — l-am folosit o dată, la generare, nu în rulare |
+| module **închise pe fond deschis**, nu invers | un QR inversat arată mai bine pe pagina întunecată, dar unele decodoare stricte îl refuză. **Un cod care nu se scanează nu valorează nimic** — contrastul bate estetica aici |
+| **două coloane**, nu una | un singur QR ar minţi. Android → QR + APK. iPhone/desktop → „Add to Home Screen" (`manifest.json` + `sw.js` + icoane 192/512 există şi sunt înregistrate: PWA-ul e deja complet instalabil). Un iPhone care scanează un QR de APK ajunge în gol |
+| sub 560px **QR-ul dispare**, butonul devine principal | nimeni nu-şi poate scana propriul ecran. Cine e pe telefon are nevoie de „Download APK", nu de un cod |
+| limbajul vizual al paginii, nu unul nou | aceleaşi colţuri-ţintă, micro-majuscule, gradient 160deg, `--border`. O a doua identitate vizuală jos în pagină s-ar fi citit ca lipită pe deasupra |
+
+Am scos `Share Tech Mono` din foaia mea de stil: **nu e încărcat în pagină**. Ar fi căzut pe un monospace generic, diferit la fiecare vizitator. Folosesc `monospace`, convenţia paginii.
+
+### Verificat
+
+| | |
+|---|---|
+| pagina servită live | 200, 101.386 B (de la 90.069) |
+| `div` / `ol` / `li` / `svg` / acolade CSS | 163/163 · 2/2 · 6/6 · 4/4 · 273/273 — toate echilibrate |
+| traseul modulelor QR în pagina servită | prezent octet cu octet, identic cu cel generat |
+| `/assets/logo-zeus.jpg` · `/assets/icon-192.png` · `/app` | 200 · 200 · 302 → APK |
+| proprietar fişier | `zeus:zeus` — niciun artefact root (R8) |
+| build / reload | **niciunul**. `public/login.html` e servit static, nu trece prin bundle-ul React |
+
+**Ce n-am verificat: cum arată.** Nu pot face captură de ecran — Playwright/Chrome nu stau pe VPS-ul viu. Confirmarea vizuală şi scanarea reală cu telefonul rămân la tine.
+
+### Două lucruri care rămân, spuse dinainte
+
+1. **Sideload-ul.** Android cere „instalare din surse necunoscute". Fără Play Store, cine scanează ajunge la un avertisment care sperie. Am pus instrucţiunea în trei paşi sub cod, dar **nu-l pot elimina din cod** — doar magazinul îl elimină. De-asta aplicaţiile „pro" au QR curat: trimit în magazin, nu în fişier.
+2. **Tonul.** Pe pagină scrie „Private Beta · Invite-Only", iar codul anunţă public descărcarea. Nu e o scurgere — aplicaţia doar deschide ecranul de login, iar un străin ajunge la „Request an Invite". E o mică contradicţie de ton, decizia a fost a ta: public.
+
+### Întoarcere
+
+```
+sudo -u zeus cp public/login.html.bak-pre-qr-20261106 public/login.html
+```
+
+Instantaneu, fără build, fără reload.
