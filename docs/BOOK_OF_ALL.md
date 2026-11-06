@@ -11814,3 +11814,38 @@ Suita întreagă de client: **1703/1703**, 175 fişiere. `tsc --noEmit` curat.
 ### Verificat în bundle-ul servit
 
 În `index-BVmnkYyA.js`, exact cel referit de `public/app/index.html`: scutul-cu-gaură-de-cheie prezent, `adminOnly` prezent, **`adminBtn` dispărut (0)**, rotiţa AutoTrade de mai devreme încă acolo. Zero artefacte root. Serverul neatins — 1153 reporniri, neschimbat. **Fără reload**, R-OP-2.
+
+---
+
+## 🔙 2026-11-06 — Butonul Back din jurnal era singurul care nu arăta a buton
+
+A observat din captură: în Trade Journal, Back era un simplu text cyan `← BACK`, pe când peste tot în aplicaţie e un buton încadrat.
+
+### Ce era
+
+```html
+<a href="/" style="…color:#00d4ff;text-decoration:none;font-size:12px;…">← BACK</a>
+```
+
+Stil scris de mână, direct în atribut. Nicio legătură cu butonul real al aplicaţiei.
+
+### Ce e acum
+
+**Aceeaşi clasă**, nu una asemănătoare: `.zpv-back`, exact cea folosită de `PageView.tsx`, antetul oricărei pagini din dock. Nu a trebuit niciun CSS nou — `main.css`, pe care `journal.html` **deja o încarcă**, defineşte clasa (verificat că e identică cu cea din `app.css`, în afara unui `-webkit-tap-highlight-color` în plus, care e un bonus pe mobil). Săgeata e **acelaşi traseu SVG**, copiat octet cu octet din `PageView.tsx`, iar eticheta e `Back`, nu `BACK`.
+
+Două amănunte care altfel l-ar fi stricat:
+
+- `.zpv-back` e `display:flex`. În aplicaţie stă într-un antet flex care îl strânge la lăţimea conţinutului; aici, într-un bloc, s-ar fi **întins pe toată lăţimea paginii**. L-am pus într-un înveliş flex.
+- Clasa a fost scrisă pentru `<button>`, deci nu anulează sublinierea. Pe un `<a>` ar fi ieşit subliniat. Resetat explicit.
+
+### Testat
+
+`tests/unit/journalBackButton.test.js` — 6 teste care citesc **fişierele livrate**, nu o copie (`public/journal.html` e servit static, deci fişierul de pe disc *este* ce primeşte browserul).
+
+**Mutaţie:** am pus butonul vechi la loc din backup → **5 din 6 teste au picat**. Testul apără, nu decorează.
+
+### Ce am găsit şi NU am atins
+
+`privacy`, `terms`, `cookies`, `support` au şi ele un Back text (`.back`, culoare `#667`). **Le-am lăsat.** Sunt altă familie — pagini publice, legale, ajungi la ele din subsolul paginii de login, cu designul lor sobru, şi sunt **consecvente între ele**. Jurnalul e altceva: se intră în el din interiorul aplicaţiei, deci trebuie să semene cu aplicaţia. Dacă le vrei aliniate şi pe alea, e o linie fiecare.
+
+**Fără build, fără reload** — pagină statică. Backup: `public/journal.html.bak-pre-back-20261106`.
