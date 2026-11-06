@@ -10517,6 +10517,57 @@ migrate('415_users_app_version', () => {
     db.exec("ALTER TABLE users ADD COLUMN app_version_at TEXT DEFAULT NULL");
 });
 
+migrate('424_byoi_requests', () => {
+    // [2026-11-06] Build Your Own Indicator. A user describes the indicator they
+    // want, saves as many drafts as they like, and on send pays before the order
+    // reaches the operator. Prices and the state machine live in
+    // server/services/byoiPricing.js — this table only stores what happened.
+    //
+    // TIMESTAMPS ARE INTEGER MILLISECONDS. Said out loud because this codebase
+    // mixes TEXT and INTEGER time columns, and in SQLite `TEXT >= INTEGER` is
+    // ALWAYS true, so a window filter against a TEXT column silently matches
+    // every row. Every time column below is INTEGER ms. Compare them to
+    // Date.now(), never to a datetime() string.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS byoi_requests (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            tier          TEXT    NOT NULL,
+            title         TEXT    NOT NULL DEFAULT '',
+            spec_json     TEXT    NOT NULL DEFAULT '{}',
+            notes         TEXT    NOT NULL DEFAULT '',
+            status        TEXT    NOT NULL DEFAULT 'draft',
+            price_cents   INTEGER NOT NULL DEFAULT 0,
+            currency      TEXT    NOT NULL DEFAULT 'USD',
+            payment_ref   TEXT,
+            billing_mode  TEXT,
+            decline_reason TEXT,
+            admin_note    TEXT,
+            created_at    INTEGER NOT NULL,
+            updated_at    INTEGER NOT NULL,
+            submitted_at  INTEGER,
+            delivered_at  INTEGER
+        )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_byoi_user   ON byoi_requests(user_id, status)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_byoi_status ON byoi_requests(status, submitted_at)');
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS byoi_attachments (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_id  INTEGER NOT NULL,
+            user_id     INTEGER NOT NULL,
+            filename    TEXT    NOT NULL,
+            mime        TEXT    NOT NULL,
+            bytes       INTEGER NOT NULL,
+            data_b64    TEXT    NOT NULL,
+            created_at  INTEGER NOT NULL,
+            FOREIGN KEY (request_id) REFERENCES byoi_requests(id) ON DELETE CASCADE
+        )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_byoi_att ON byoi_attachments(request_id)');
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -11925,8 +11976,122 @@ function markSupportThreadReadByUser(userId) { _supMarkUser.run(userId); }
 function getSupportInbox() { return _supInbox.all(); }
 function getAdminUserIds() { return _supAdminIds.all().map(r => r.id); }
 
+// ─── Build Your Own Indicator ───
+// [2026-11-06] Every read is scoped by user_id as well as id. A request is a
+// paid order carrying the buyer's own words and screenshots, so "knows the id"
+// must never be enough to read or change one. The admin reads go through their
+// own functions, which the route guards behind _requireAdmin.
+// All *_at columns are INTEGER MILLISECONDS (see migration 424).
+
+function byoiInsertDraft(userId, { tier, title, specJson, notes, priceCents, currency }) {
+    const now = Date.now();
+    const info = db.prepare(`
+        INSERT INTO byoi_requests (user_id, tier, title, spec_json, notes, status, price_cents, currency, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)
+    `).run(userId, tier, title || '', specJson || '{}', notes || '', priceCents | 0, currency || 'USD', now, now);
+    return byoiGetOwned(info.lastInsertRowid, userId);
+}
+
+function byoiUpdateDraft(id, userId, { tier, title, specJson, notes, priceCents }) {
+    // The WHERE clause carries the guard: a row that is not this user's draft
+    // simply does not match, so there is no path that edits a submitted order.
+    const info = db.prepare(`
+        UPDATE byoi_requests
+           SET tier = ?, title = ?, spec_json = ?, notes = ?, price_cents = ?, updated_at = ?
+         WHERE id = ? AND user_id = ? AND status = 'draft'
+    `).run(tier, title || '', specJson || '{}', notes || '', priceCents | 0, Date.now(), id, userId);
+    return info.changes === 1 ? byoiGetOwned(id, userId) : null;
+}
+
+function byoiGetOwned(id, userId) {
+    return db.prepare('SELECT * FROM byoi_requests WHERE id = ? AND user_id = ?').get(id, userId) || null;
+}
+
+function byoiListForUser(userId) {
+    return db.prepare('SELECT * FROM byoi_requests WHERE user_id = ? ORDER BY updated_at DESC').all(userId);
+}
+
+function byoiDeleteDraft(id, userId) {
+    const info = db.prepare("DELETE FROM byoi_requests WHERE id = ? AND user_id = ? AND status = 'draft'").run(id, userId);
+    if (info.changes === 1) db.prepare('DELETE FROM byoi_attachments WHERE request_id = ?').run(id);
+    return info.changes === 1;
+}
+
+function byoiMarkSubmitted(id, userId, { status, paymentRef, billingMode }) {
+    const info = db.prepare(`
+        UPDATE byoi_requests
+           SET status = ?, payment_ref = ?, billing_mode = ?, submitted_at = ?, updated_at = ?
+         WHERE id = ? AND user_id = ? AND status = 'draft'
+    `).run(status, paymentRef || null, billingMode || null, Date.now(), Date.now(), id, userId);
+    return info.changes === 1 ? byoiGetOwned(id, userId) : null;
+}
+
+function byoiAddAttachment(requestId, userId, { filename, mime, bytes, dataB64 }) {
+    const own = db.prepare("SELECT id FROM byoi_requests WHERE id = ? AND user_id = ? AND status = 'draft'").get(requestId, userId);
+    if (!own) return null;
+    const info = db.prepare(`
+        INSERT INTO byoi_attachments (request_id, user_id, filename, mime, bytes, data_b64, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(requestId, userId, filename, mime, bytes | 0, dataB64, Date.now());
+    return { id: info.lastInsertRowid, filename, mime, bytes: bytes | 0 };
+}
+
+function byoiListAttachments(requestId) {
+    // Metadata only — the base64 payload is fetched one at a time, so a list
+    // of ten screenshots does not ship megabytes into a JSON response.
+    return db.prepare('SELECT id, filename, mime, bytes, created_at FROM byoi_attachments WHERE request_id = ? ORDER BY id').all(requestId);
+}
+
+function byoiGetAttachment(attId) {
+    return db.prepare('SELECT * FROM byoi_attachments WHERE id = ?').get(attId) || null;
+}
+
+function byoiDeleteAttachment(attId, userId) {
+    const info = db.prepare(`
+        DELETE FROM byoi_attachments
+         WHERE id = ? AND user_id = ?
+           AND request_id IN (SELECT id FROM byoi_requests WHERE user_id = ? AND status = 'draft')
+    `).run(attId, userId, userId);
+    return info.changes === 1;
+}
+
+// ── admin side ──
+function byoiListForAdmin(status) {
+    // Drafts are the buyer's private scratch space and never reach the operator.
+    const base = "SELECT r.*, u.email FROM byoi_requests r LEFT JOIN users u ON u.id = r.user_id WHERE r.status != 'draft'";
+    const sql = status ? base + ' AND r.status = ? ORDER BY r.submitted_at DESC' : base + ' ORDER BY r.submitted_at DESC';
+    return status ? db.prepare(sql).all(status) : db.prepare(sql).all();
+}
+
+function byoiGetForAdmin(id) {
+    return db.prepare('SELECT r.*, u.email FROM byoi_requests r LEFT JOIN users u ON u.id = r.user_id WHERE r.id = ?').get(id) || null;
+}
+
+function byoiSetStatus(id, status, { declineReason, adminNote } = {}) {
+    const now = Date.now();
+    const delivered = status === 'delivered' ? now : null;
+    const info = db.prepare(`
+        UPDATE byoi_requests
+           SET status = ?,
+               decline_reason = COALESCE(?, decline_reason),
+               admin_note     = COALESCE(?, admin_note),
+               delivered_at   = COALESCE(?, delivered_at),
+               updated_at     = ?
+         WHERE id = ?
+    `).run(status, declineReason || null, adminNote || null, delivered, now, id);
+    return info.changes === 1 ? byoiGetForAdmin(id) : null;
+}
+
+function byoiCountForAdmin() {
+    const row = db.prepare("SELECT COUNT(*) AS n FROM byoi_requests WHERE status IN ('paid','in_progress')").get();
+    return (row && row.n) || 0;
+}
+
 module.exports = {
     db,
+    byoiInsertDraft, byoiUpdateDraft, byoiGetOwned, byoiListForUser, byoiDeleteDraft,
+    byoiMarkSubmitted, byoiAddAttachment, byoiListAttachments, byoiGetAttachment,
+    byoiDeleteAttachment, byoiListForAdmin, byoiGetForAdmin, byoiSetStatus, byoiCountForAdmin,
     USER_STATUS, // [M6]
     findUserByEmail,
     findUserById,

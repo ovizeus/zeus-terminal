@@ -1294,6 +1294,8 @@ app.use('/api/indicators', require('./server/routes/indicators'));
 // [Task B 2026-05-28] Admin operations — global halt toggle endpoint
 app.use('/api/admin', require('./server/routes/admin'));
 app.use('/api/support', require('./server/routes/support'));
+// [2026-11-06] Build Your Own Indicator — paid bespoke indicator orders.
+app.use('/api/byoi', require('./server/routes/byoi'));
 
 // ─── Health Routes (Tasks 54-56: feed / locks / recovery) ───
 const healthRoutes = require('./server/routes/health');
