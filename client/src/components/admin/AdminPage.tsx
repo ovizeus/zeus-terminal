@@ -12,6 +12,7 @@ import { AuditSection } from './sections/AuditSection'
 import { UserDetailDrawer } from './sections/UserDetailDrawer'
 import { RolesSection, SecuritySection, BillingSection, MonitoringSection, SettingsSection } from './sections/stubs'
 import { SupportSection } from './sections/SupportSection'
+import { IndicatorRequestsSection } from './sections/IndicatorRequestsSection'
 import './admin.css'
 
 export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -71,6 +72,7 @@ export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () 
         {currentSection === 'security' && <SecuritySection />}
         {currentSection === 'monitoring' && <MonitoringSection />}
         {currentSection === 'billing' && <BillingSection />}
+        {currentSection === 'indicators' && <IndicatorRequestsSection />}
         {currentSection === 'support' && <SupportSection />}
         {currentSection === 'settings' && <SettingsSection />}
       </main>

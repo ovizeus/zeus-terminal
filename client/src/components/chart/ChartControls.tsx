@@ -1225,6 +1225,10 @@ export function ChartControls() {
             )}
           </div>
           <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => openModal('exposure')}>EXP</button>
+          {/* [2026-11-06] Build Your Own Indicator. Same classes as EXP on purpose:
+              a bespoke control here would read as bolted on, and this sits in the
+              row the user already scans for chart tools. */}
+          <button className="tfb ztf-sibling" id="byoiToggleBtn" title="Build Your Own Indicator" onClick={() => openModal('byoi')}>BYOI</button>
         </div>
 
         {/* Exposure inline panel (hidden by default) */}

@@ -8,6 +8,7 @@ export type AdminSection =
   | 'dashboard'
   | 'users'
   | 'audit'
+  | 'indicators'
   | 'roles'
   | 'security'
   | 'billing'

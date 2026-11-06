@@ -22,6 +22,7 @@ const NAV: NavItem[] = [
   { id: 'security', label: 'Security', icon: '⬡', group: 'system' },
   { id: 'monitoring', label: 'Monitoring', icon: '◈', group: 'system' },
   { id: 'billing', label: 'Billing / Plans', icon: '❖', group: 'config', wip: true },
+  { id: 'indicators', label: 'Indicator Requests', icon: '✦', group: 'config' },
   { id: 'support', label: 'Support / Ops', icon: '☍', group: 'config' },
   { id: 'settings', label: 'Settings / Flags', icon: '⚙', group: 'config' },
 ]

@@ -11849,3 +11849,67 @@ Două amănunte care altfel l-ar fi stricat:
 `privacy`, `terms`, `cookies`, `support` au şi ele un Back text (`.back`, culoare `#667`). **Le-am lăsat.** Sunt altă familie — pagini publice, legale, ajungi la ele din subsolul paginii de login, cu designul lor sobru, şi sunt **consecvente între ele**. Jurnalul e altceva: se intră în el din interiorul aplicaţiei, deci trebuie să semene cu aplicaţia. Dacă le vrei aliniate şi pe alea, e o linie fiecare.
 
 **Fără build, fără reload** — pagină statică. Backup: `public/journal.html.bak-pre-back-20261106`.
+
+---
+
+## ✦ 2026-11-06 — Build Your Own Indicator: funcţia, construită întreagă, fără să atingă un ban
+
+A cerut o casetă nouă lângă `EXP`: userul descrie indicatorul pe care-l vrea, salvează schiţe, plăteşte, iar comanda ajunge la operator. Şi a întrebat direct: **e $10 bine?**
+
+### Răspunsul la întrebarea de preţ
+
+**Nu banii erau problema — ci ce atrage $10.** Preţul are două treburi: să acopere munca **şi să filtreze neseriozitatea.** Zece dolari nu face niciuna. Primeşti „vreau un indicator bun care prinde vârfurile" — scop infinit, preţ fix, şi ai încasat deja, deci negociezi din poziţia slabă.
+
+Iar produsul adevărat era ascuns în propria lui frază de final: *„unu dacă vrea să se dea mare face indicator cu numele lui"*. **Omul nu vrea matematică nouă, vrea numele lui pe chart.** Aia nu e muncă de ore, e o configurare.
+
+A ales trei niveluri:
+
+| nivel | ce primeşte | preţ | munca |
+|---|---|---|---|
+| **Signature** | numele şi culorile lui pe un motor existent | **$29** | minute — şi ăsta vinde în volum |
+| **Custom** | indicator nou, domeniu mărginit | **$149** | ore reale |
+| **Bespoke** | orice peste | **ofertă** | supapa contra scopului infinit |
+
+Şi: **refuz → rambursare automată.** Bani intraţi = obligaţie ieşită; posibilitatea de a refuza curat e ce face refuzul sigur.
+
+### Poarta de facturare — construit întreg, pornit pe zero
+
+`BYOI_BILLING_MODE`, implicit **`disabled`**:
+
+- **`disabled`** — userii obişnuiţi nu pot trimite; **adminul poate**, ca să parcurgă fluxul cap-coadă, iar rândurile lui se marchează `BYPASS:` ca să nu poată fi niciodată citite drept plată.
+- **`live` fără furnizor legat → CADE ÎNCHIS.** Refuză comanda în loc să dea o lucrare de $149 pe gratis. Aia e direcţia în care trebuie să cadă o greşeală.
+- O valoare greşită în `.env` cade înapoi pe `disabled`. **Un typo nu poate deschide poarta.**
+
+### Trei decizii de proiectare care contează
+
+**Formularul stă pe server**, în `byoiSpec.js`, iar clientul îl randează din el. Formularul pe care-l completează cumpărătorul şi regulile care-l validează **nu pot ieşi din sincron**, iar un câmp nou e o modificare de server, nu o reconstrucţie de client. Un test verifică exact asta: clientul nu are niciun preţ scris în el.
+
+**E în mare parte bifat, intenţionat.** Proza n-are margini: o comandă numai din text liber transformă fiecare vânzare în negociere. Textul liber e completarea, nu specificaţia.
+
+**Fiecare citire e limitată la `user_id`, nu doar la `id`.** „Nu e al tău" răspunde exact ce răspunde „nu există" — altfel se poate sonda existenţa comenzilor altora.
+
+Ataşamentele se măsoară pe **dimensiunea decodată**: base64 e 4/3 din octeţii reali, iar limita promisă cumpărătorului e în octeţi reali. Au parser propriu de 4MB, ca limita globală de 1MB să nu fie lărgită pentru tot restul aplicaţiei.
+
+Migrarea 424 **scrie negru pe alb** că fiecare coloană `*_at` e INTEGER milisecunde — capcana care m-a prins de patru ori în proiectul ăsta.
+
+### Testat
+
+**78 de teste noi.** Mutaţiile, ca dovadă că apără:
+
+| mutaţie | rezultat |
+|---|---|
+| `disabled` lasă pe oricine să trimită | **1 test picat** |
+| `live` acceptă plată goală | **2 teste picate** |
+| Send trimite fără confirmare | **4 teste picate** |
+
+Suita completă: **10.397 teste server** (4 shard-uri) **+ 1.713 client**, verzi. `tsc` curat.
+
+### CE NU E FĂCUT — şi e important să ştii
+
+**Livrarea indicatorului e manuală, per comandă.** Conducta e completă: cerere → plată → ajunge la tine în Admin cu specificaţia şi pozele. Dar **nu există un sistem care să injecteze automat un indicator construit în setul userului** — aia ar însemna indicatoare scrise de utilizator rulate în siguranţă, un proiect în sine. Când vine o comandă, indicatorul se scrie de mână şi se livrează ca orice altă funcţie. La volumul aşteptat, e alegerea corectă.
+
+**Stripe nu e legat.** Intenţionat. Când lansezi: pui `BYOI_BILLING_MODE=live`, legi furnizorul, şi nimic altceva nu se rescrie.
+
+### Verificat pe serverul viu
+
+Reload unic al sesiunii (R-OP-1). Migrarea 424 aplicată, ambele tabele create, toate coloanele de timp INTEGER. `/api/byoi/config` răspunde **401 fără sesiune**, la fel şi ruta de admin. `BYOI_BILLING_MODE` nesetat → poarta **închisă**. Reporniri 1154, zero erori reale, zero 429. Zero artefacte root.
