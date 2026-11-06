@@ -11736,3 +11736,18 @@ Primul verde pe care-l alesesem pica sub pragul de 4:1. L-am închis până a tr
 **Chenarul:** inel în degrade cyan → verde → auriu (paleta terminalului, `--cyan`/`--green`/`--yellow`), placă deschisă înăuntru, colţuri de vizor în afară şi o aură dublă. Acelaşi tratament, pe orizontală, la codul de bare.
 
 Verificat pe pagina vie: ambele degradeuri au id-uri unice (`zqg`/`zbg` — două SVG-uri în aceeaşi pagină se calcă altfel pe picioare), QR-ul are traseul de module **neschimbat** (1759 caractere), iar codul de bare decodat din geometrie dă tot `"zeus-terminal.com/app"`.
+
+---
+
+## 🐞 2026-11-06 — Colţurile albe rupte: plăci `<span>` inline
+
+A văzut „nişte colţuri albe rupte" în stânga codului de bare şi a întrebat dacă e doar pe telefon. **Nu era** — era pe orice ecran.
+
+Când am adăugat ramele în degrade, am împachetat ambele coduri în `<span class="...tile">`. Un `<span>` e **inline**:
+
+1. `width: 124px; height: 124px` pe un element inline se **ignoră complet**;
+2. în placa codului de bare pusesem un `<div>` — **imbricare invalidă**. Browserul rupe cutia inline în fragmente ca să scoată blocul afară, şi **fiecare fragment îşi pictează propriul fundal deschis şi propriile colţuri rotunjite**. De aici cioburile albe.
+
+**Reparat:** `display: block` pe ambele plăci şi pe linia lizibilă, iar `<div class="getapp-barhr">` a devenit `<span>`. Verificat că nu mai există niciun element de tip bloc în interiorul vreunei plăci.
+
+**Lecţia:** un `<span>` cu fundal, umplutură şi colţuri rotunjite arată corect **până pune cineva un bloc în el**. Dacă o placă are dimensiuni, e bloc din prima.
