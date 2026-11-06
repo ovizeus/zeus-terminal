@@ -30,12 +30,34 @@ describe('one list, not two', () => {
     expect(ids).toContain('support')
   })
 
-  it('the sidebar imports the shared list rather than keeping its own', async () => {
+  it('exactly one section list exists in the admin folder', async () => {
+    // [2026-11-06] The sidebar that held the second copy is gone. This keeps
+    // the door shut: the next person who needs the list must import it.
     const fs = await import('node:fs')
     const path = await import('node:path')
-    const src = fs.readFileSync(path.resolve(process.cwd(), 'src/components/admin/AdminSidebar.tsx'), 'utf8')
-    expect(src).toContain("from './adminNav'")
-    expect(src).not.toContain('const NAV: NavItem[] = [')
+    const dir = path.resolve(process.cwd(), 'src/components/admin')
+    const files: string[] = []
+    const walk = (d: string) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, e.name)
+        if (e.isDirectory()) walk(full)
+        else if (/\.tsx?$/.test(e.name)) files.push(full)
+      }
+    }
+    walk(dir)
+    const definers = files.filter((f) => {
+      const src = fs.readFileSync(f, 'utf8')
+      return /(const|let|var)\s+NAV\s*(:|=)/.test(src)
+    })
+    expect(definers.map((f) => path.basename(f))).toEqual(['adminNav.ts'])
+  })
+
+  it('the retired sidebar is really gone, not just unrendered', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    expect(fs.existsSync(path.resolve(process.cwd(), 'src/components/admin/AdminSidebar.tsx'))).toBe(false)
+    const page = fs.readFileSync(path.resolve(process.cwd(), 'src/components/admin/AdminPage.tsx'), 'utf8')
+    expect(page).not.toContain('<AdminSidebar')
   })
 
   it('every nav item belongs to a declared group', () => {

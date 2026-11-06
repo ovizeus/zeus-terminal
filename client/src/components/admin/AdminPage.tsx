@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useAdminStore } from '../../stores/adminStore'
-import { AdminSidebar } from './AdminSidebar'
 import { AdminHome } from './AdminHome'
 import { AdminHeader } from './AdminHeader'
 import { BookSection } from './sections/BookSection'
@@ -60,7 +59,10 @@ export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () 
       </div>
 
       <AdminHeader onClose={onClose} />
-      <AdminSidebar />
+      {/* [2026-11-06] The nav strip is gone. On phones it rendered as a
+          horizontal scroll bar under the header — you had to scroll it before
+          you could see what was in it, which is the complaint the launcher
+          answers. Navigation is now the launcher's tiles plus Back. */}
 
       <main className="zac-main">
         {currentSection === 'home' && <AdminHome />}

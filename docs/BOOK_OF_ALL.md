@@ -12015,3 +12015,45 @@ Suite: **10.417 server + 1.738 client**, verzi.
 ### Notă: un eşec instabil, explicat
 
 La o rulare, shard 2 a picat cu un test; la următoarele două, verde. Logul arată `db locked`. E acelaşi lucru ca descoperirea de mai devreme — **mai multe teste deschid baza de producţie reală** — iar contenţia dintre ele produce exact genul ăsta de eşec intermitent. Nu e cauzat de lucrarea asta, dar e o altă faţă a aceleiaşi probleme.
+
+---
+
+## ⊟ 2026-11-06 — Bara de secţiuni scoasă de tot, şi reload-ul
+
+A zis: plăcile sunt bune, scoate-le pe cele de sus, lasă doar alea de jos.
+
+### Ce era „sus"
+
+Pe telefon, `.zac-side` se transforma într-o **fâşie orizontală derulabilă sub antet** — adăugată pe 14 iunie tocmai ca secţiunile să rămână accesibile când bara verticală era ascunsă. Aia era problema: trebuia s-o derulezi ca să vezi ce e în ea.
+
+**Scoasă complet.** Componenta `AdminSidebar.tsx` **ştearsă**, nu doar nerandată. Grila a trecut de la `"brand header" / "side main"` la `"brand header" / "main main"`, iar pe mobil la două rânduri în loc de trei. Navigarea e acum plăcile plus Back.
+
+**Şi CSS-ul lor.** 1.376 de caractere de `.zac-side` şi `.zac-nav-*` au rămas fără element — le-am şters. CSS mort supravieţuieşte marcajului pentru care a fost scris şi induce în eroare pe următorul cititor, care crede că elementul încă există.
+
+Testul care verifica „bara laterală importă lista comună" n-ar mai fi însemnat nimic. L-am înlocuit cu unul mai tare: **parcurge tot folderul admin şi cere ca exact un singur fişier să definească `NAV`** — `adminNav.ts`. Plus unul care verifică că `AdminSidebar.tsx` chiar nu mai există pe disc.
+
+### Reload-ul
+
+Al doilea al sesiunii, cerut explicit. `version.js` validat înainte (R-OP-6). Reporniri 1154 → 1155.
+
+| | |
+|---|---|
+| `/api/byoi/config` · `/indicators` · `/admin/count` · `/admin/requests` | **401** — există şi sunt păzite |
+| migrările 424 şi 425 | aplicate |
+| `byoi_requests` · `byoi_attachments` · `byoi_indicators` | toate trei |
+| **429-uri Binance** | **zero** — riscul pentru care există regula |
+| landing | 200 |
+
+### ⚠️ Ce am găsit în log şi nu căutam
+
+După reload am văzut avertismente de feed şi am verificat dacă sunt ale mele. **Nu sunt:**
+
+```
+[WARN] [FEED] [ALT_WS_FEEDS] kline poll failed [BTCUSDT 1h]: HTTP 503 (circuit_open)
+```
+
+**19.112 apariţii în log-ul de azi**, prima la `00:00:10`. Un feed alternativ cu întrerupătorul blocat deschis, care latră continuu, toată ziua.
+
+De ce contează: sunt `WARN`, nu `ERROR`. Toată sesiunea am verificat log-urile căutând `error`, iar astea n-au apărut niciodată. **19.000 de linii pe zi sunt exact zgomotul în care se pierde o problemă reală.** N-am atins nimic — e separat de lucrarea asta — dar merită o privire a ei.
+
+Suite: **10.417 server + 1.739 client**, verzi.

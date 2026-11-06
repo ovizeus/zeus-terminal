@@ -35,9 +35,11 @@
   display: grid;
   grid-template-columns: 220px 1fr;
   grid-template-rows: 64px 1fr;
+  /* [2026-11-06] No side column: the nav strip was removed in favour of the
+     launcher, so main runs the full width under the brand and header. */
   grid-template-areas:
     "brand header"
-    "side  main";
+    "main  main";
 }
 
 /* ── Top brand column (above sidebar) ── */
@@ -83,50 +85,9 @@
 .zac-header-actions { display: flex; gap: 8px; align-items: center; }
 
 /* ── Sidebar ── */
-.zac-side {
-  grid-area: side;
-  border-right: 1px solid var(--ac-border);
-  background: var(--ac-bg-2);
-  padding: 14px 0;
-  overflow-y: auto;
-}
-.zac-nav-group { padding: 0 10px; margin-bottom: 14px; }
-.zac-nav-label {
-  font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
-  color: var(--ac-fg-mute); padding: 0 10px 6px; text-transform: uppercase;
-}
-.zac-nav-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px; margin-bottom: 2px;
-  border-radius: 6px; cursor: pointer;
-  font-size: 12px; color: var(--ac-fg-dim);
-  border: 1px solid transparent;
-  transition: all .12s ease;
-  position: relative;
-}
-.zac-nav-item:hover {
-  background: var(--ac-card);
-  color: var(--ac-fg);
-}
-.zac-nav-item.active {
-  background: linear-gradient(90deg, #0a1d30 0%, #0d1520 100%);
-  color: var(--ac-accent);
-  border-color: var(--ac-accent-dim);
-  box-shadow: inset 3px 0 0 var(--ac-accent);
-}
-.zac-nav-item .ico {
-  width: 16px; height: 16px; display: grid; place-items: center;
-  color: currentColor;
-}
-.zac-nav-item .count {
-  margin-left: auto;
-  font-size: 10px; color: var(--ac-fg-mute);
-  background: var(--ac-card); padding: 1px 6px; border-radius: 10px;
-  border: 1px solid var(--ac-border);
-}
-.zac-nav-item.active .count { background: var(--ac-accent-dim); color: var(--ac-accent); border-color: var(--ac-accent-dim); }
-
-/* ── Main content area ── */
+/* [2026-11-06] .zac-side and .zac-nav-* removed with the sidebar they styled.
+   Dead CSS outlives the markup it was written for and misleads the next
+   reader into thinking an element still exists. */
 .zac-main {
   grid-area: main;
   overflow-y: auto;
@@ -452,22 +413,14 @@
 @media (max-width: 900px) {
   .zac {
     grid-template-columns: 1fr;
-    grid-template-rows: 64px auto 1fr;
-    grid-template-areas: "header" "side" "main";
+    grid-template-rows: 64px 1fr;
+    grid-template-areas: "header" "main";
   }
   .zac-brand { display: none; }
-  /* [2026-06-14] On phones the vertical sidebar was display:none, leaving the
-     admin panel stuck on Dashboard with no way to reach Support / Ops (or any
-     other section). Render it as a horizontal scroll strip under the header. */
-  .zac-side {
-    display: flex; flex-direction: row; align-items: center; gap: 6px;
-    padding: 8px 10px; border-right: none;
-    border-bottom: 1px solid var(--ac-border);
-    overflow-x: auto; overflow-y: hidden; white-space: nowrap;
-  }
-  .zac-nav-group { display: flex; flex-direction: row; gap: 6px; padding: 0; margin: 0; }
-  .zac-nav-label { display: none; }
-  .zac-nav-item { white-space: nowrap; flex: 0 0 auto; }
+  /* [2026-06-14 / retired 2026-11-06] This turned the sidebar into a
+     horizontal scroll strip on phones so sections stayed reachable. The
+     launcher replaced it: every section is on one screen now, so there is no
+     strip left to style. */
   .zac-main { padding: 12px; }
 }
 
