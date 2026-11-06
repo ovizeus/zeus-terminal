@@ -279,9 +279,12 @@ export function AutoTradePanel() {
           onClick={() => setCfgOpen(true)}
           style={{ background: 'none', border: '1px solid var(--zi-line)', borderRadius: 3, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, cursor: 'pointer' }}
         >
-          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="var(--zi-lbl)" strokeWidth="1.2" aria-hidden="true">
-            <circle cx="8" cy="8" r="2.2" />
-            <path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3" />
+          {/* [2026-11-06] Was a circle with eight DETACHED rays, which reads as a sun,
+              not a settings control. This is a real cog: 8 teeth joined to the rim
+              (tip r 7, root r 5) around a hub, geometry computed rather than eyeballed. */}
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="var(--zi-lbl)" strokeWidth="1.1" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6.29 3.3L6.66 1.13L9.34 1.13L9.71 3.3L10.11 3.47L11.91 2.2L13.8 4.09L12.53 5.89L12.7 6.29L14.87 6.66L14.87 9.34L12.7 9.71L12.53 10.11L13.8 11.91L11.91 13.8L10.11 12.53L9.71 12.7L9.34 14.87L6.66 14.87L6.29 12.7L5.89 12.53L4.09 13.8L2.2 11.91L3.47 10.11L3.3 9.71L1.13 9.34L1.13 6.66L3.3 6.29L3.47 5.89L2.2 4.09L4.09 2.2L5.89 3.47Z" />
+            <circle cx="8" cy="8" r="2.4" />
           </svg>
         </button>
       }

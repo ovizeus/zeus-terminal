@@ -11751,3 +11751,26 @@ Când am adăugat ramele în degrade, am împachetat ambele coduri în `<span cl
 **Reparat:** `display: block` pe ambele plăci şi pe linia lizibilă, iar `<div class="getapp-barhr">` a devenit `<span>`. Verificat că nu mai există niciun element de tip bloc în interiorul vreunei plăci.
 
 **Lecţia:** un `<span>` cu fundal, umplutură şi colţuri rotunjite arată corect **până pune cineva un bloc în el**. Dacă o placă are dimensiuni, e bloc din prima.
+
+---
+
+## ⚙️ 2026-11-06 — Butonul de setări din Auto Trade era un soare
+
+Mi-a trimis captura: butonul din dreapta-sus al cardului AUTO TRADE arăta ca un soare. Avea dreptate, şi se vedea de ce în sursă:
+
+```jsx
+<circle cx="8" cy="8" r="2.2" />
+<path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3…" />
+```
+
+Un cerc mic şi **opt raze detaşate** de el. Asta e definiţia unui soare. O rotiţă are dinţii **lipiţi de obadă** — exact diferenţa pe care ochiul o citeşte instant.
+
+**Reparat:** rotiţă reală, cu geometria **calculată, nu desenată din ochi** — 8 dinţi, rază la vârf 7, la bază 5, lăţime unghiulară 11° la vârf şi 20° la bază, butuc r=2,4, totul în caseta de 16×16. `strokeLinejoin="round"` ca dinţii să nu iasă ascuţiţi la 15px.
+
+Am verificat întâi dacă icoana mai apare şi altundeva: **nu**, era unicat, un singur buton de configurare în tot clientul.
+
+### Verificat
+
+Construit ca `zeus`. Verificarea s-a făcut **în bundle-ul pe care îl referă `public/app/index.html`** (`index-Ba7nSxa7.js`), nu în sursă: traseul rotiţei prezent (1), traseul soarelui **dispărut** (0), un singur bundle rămas, zero artefacte root în `public/app`. Testele panoului: **22/22** verzi.
+
+**Fără reload** — R-OP-2, schimbare doar de client.
