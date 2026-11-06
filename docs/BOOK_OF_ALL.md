@@ -11714,3 +11714,25 @@ Codul de bare rămâne la 286 de module. Pe desktop (684px) sunt 2,39 px/modul �
 Verificat pe pagina vie: codul de bare decodat din geometria dreptunghiurilor → `"zeus-terminal.com/app"`; traseul QR neatins; `a` 17/17, `div` 168/168, acolade CSS 284/284.
 
 **Lecţia:** am optimizat pentru un scenariu pe care mi-l imaginasem, în loc să las utilizatorul să vadă ce i-am construit. O ascundere „deşteaptă" e tot o ascundere.
+
+---
+
+## 🎨 2026-11-06 — Codurile, colorate şi în chenar
+
+A cerut codul pătrat „frumos în chenar, gen trading, colorat".
+
+**Regula pe care am ţinut-o:** culoarea tare stă în **chenar**, unde nu costă nimic; modulele codului primesc un degrade **închis**. Un verde „de trading" aprins ar fi arătat corect şi s-ar fi scanat prost.
+
+Am măsurat contrastul faţă de placa deschisă (`#e8f1f8`) înainte să aleg:
+
+| culoare | contrast | verdict |
+|---|---|---|
+| `#0b63c8` albastru | 5,06:1 | bun |
+| `#00894f` verde (prima alegere) | **3,92:1** | **respins** |
+| `#00733f` verde închis | 5,21:1 | ales |
+
+Primul verde pe care-l alesesem pica sub pragul de 4:1. L-am închis până a trecut confortabil. Ambele capete ale degradeului sunt acum peste 5:1.
+
+**Chenarul:** inel în degrade cyan → verde → auriu (paleta terminalului, `--cyan`/`--green`/`--yellow`), placă deschisă înăuntru, colţuri de vizor în afară şi o aură dublă. Acelaşi tratament, pe orizontală, la codul de bare.
+
+Verificat pe pagina vie: ambele degradeuri au id-uri unice (`zqg`/`zbg` — două SVG-uri în aceeaşi pagină se calcă altfel pe picioare), QR-ul are traseul de module **neschimbat** (1759 caractere), iar codul de bare decodat din geometrie dă tot `"zeus-terminal.com/app"`.
