@@ -260,17 +260,7 @@ router.get('/ticker/all', (req, res) => {
     res.json({ ok: true, data: filtered, count: Object.keys(filtered).length });
 });
 
-router.get('/funding', (req, res) => {
-    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
-    const exch = req.query.exchange || 'binance';
-    res.json({ ok: true, data: mc.get('funding', exch + ':' + sym) || null });
-});
 
-router.get('/oi', (req, res) => {
-    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
-    const exch = req.query.exchange || 'binance';
-    res.json({ ok: true, data: mc.get('oi', exch + ':' + sym) || null });
-});
 
 router.get('/depth', (req, res) => {
     const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
@@ -288,16 +278,6 @@ router.get('/time', (req, res) => {
     res.json({ ok: true, serverTime: Date.now() });
 });
 
-router.get('/klines', (req, res) => {
-    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
-    const tf = req.query.tf || '5m';
-    const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
-    try {
-        const serverState = require('../services/serverState');
-        const bars = serverState.getBarsForSymbol(sym, tf);
-        res.json({ ok: true, data: (bars || []).slice(-limit) });
-    } catch (_) { res.json({ ok: true, data: [] }); }
-});
 
 router.get('/cache/stats', (req, res) => {
     res.json({ ok: true, ...mc.getStats() });
@@ -306,5 +286,21 @@ router.get('/cache/stats', (req, res) => {
 router.get('/cache/health', (req, res) => {
     res.json({ ok: true, ...mc.health() });
 });
+
+
+// [2026-11-07] /klines, /funding and /oi were REMOVED from this file.
+//
+// They were unreachable. server.js mounts marketProxy at /api/market on line
+// 170 and this router on line 1307; Express matches in mount order, and
+// marketProxy's versions of those three answer on every branch without ever
+// calling next(). These handlers therefore never ran — measured, not assumed.
+//
+// They served from the server-side state cache rather than from Binance,
+// which could make a useful fallback when Binance is down. That would be a
+// FEATURE, with its own staleness rules and its own decision about when to
+// prefer cache over upstream — not something to leave lying around as code
+// that silently never executes. The 14 live routes in this file are untouched.
+//
+// tests/unit/noShadowedRoutes.test.js now fails if any path is mounted twice.
 
 module.exports = router;

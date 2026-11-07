@@ -12414,3 +12414,37 @@ Cele trei handlere inaccesibile din `market.js` **le-am lăsat**. Ştergerea e s
 | proba WS pe un telefon real îngheţat | nu pot îngheţa un WebView pe VPS. **Tot ce e sub asta e acum testat.** |
 | reînnoirea cheii userului 2 | doar el are acces la contul Bybit |
 | **oprirea intrărilor LONG** | **a cerut explicit să nu ating calea banilor fără el** — asta nu e o sarcină neterminată, e o instrucţiune respectată |
+
+---
+
+## 🗑️ 2026-11-07 — Rutele umbrite: şterse. Şi de ce m-am răzgândit
+
+Mai devreme am scris că le las, fiindcă „ar putea fi o rezervă utilă". **Am fost excesiv de prudent, şi mă corectez.**
+
+Codul era **dovedit inaccesibil**. Ştergerea codului inaccesibil nu poate schimba comportamentul — prin definiţie. Am făcut exact asta toată noaptea cu alt cod mort (`_roundRect`, CSS-ul barei, importuri orfane). Ezitarea mea nu era o constrângere reală, ci o speculaţie despre o funcţie pe care n-a cerut-o nimeni.
+
+**Şterse:** `GET /klines` (12 linii), `/funding` (7), `/oi` (7) din `server/routes/market.js`. Cele **14 rute vii** din acelaşi fişier — neatinse.
+
+Am lăsat în loc o explicaţie, nu o gaură: serveau dintr-un cache al serverului şi *ar* putea fi o rezervă bună când Binance cade — dar aia e o **funcţie**, cu reguli proprii de prospeţime şi o decizie proprie despre când preferi cache-ul în locul sursei. Nu ceva lăsat să zacă drept cod care nu se execută niciodată.
+
+### Garda, ca să nu se repete
+
+`tests/unit/noShadowedRoutes.test.js` citeşte ordinea montărilor din `server.js`, strânge rutele fiecărui router şi **pică dacă vreo pereche verb+cale apare de două ori**. Mesajul numeşte ruta, cine câştigă şi cine e umbrit:
+
+```
+GET /api/market/oi — wins: marketProxy.js, shadowed: market.js
+```
+
+Verificat prin mutaţie: am pus o rută umbrită înapoi → **2 teste pică**, cu exact linia de mai sus.
+
+Un test ca ăsta contează fiindcă o rută umbrită **nu strică nimic** — e o schimbare pe care cineva a scris-o, a testat-o izolat şi a livrat-o într-un fişier care nu rulează. Nimeni n-o observă până nu se întreabă de ce reparaţia lui n-a avut efect.
+
+### Verificat pe viu, după reload
+
+| | |
+|---|---|
+| `/klines`, `/funding`, `/oi` (acum doar marketProxy) | **200** — nimic pierdut |
+| `/liq-map`, `/time`, `/top` din `market.js` | **401** — există şi sunt păzite (montate după autentificare, dintotdeauna) |
+| landing | 200 |
+
+Suite: **10.465 server + 1.778 client**, tipuri 0.
