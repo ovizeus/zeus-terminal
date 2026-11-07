@@ -28,6 +28,12 @@ export function ExchangeDetail({ exchangeId, onBack }: Props) {
   const [mode, setMode] = useState<'live' | 'testnet'>('testnet')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  // [2026-11-07] When an account exists the key form was hidden entirely, so a
+  // user whose keys expired saw only RE-VERIFY (which fails again) and
+  // DISCONNECT, and had to work out that disconnecting first was the way back.
+  // The server already updates keys in place — saveExchangeAccount updates the
+  // existing row — so the only thing in the way was this screen.
+  const [replacing, setReplacing] = useState(false)
 
   const label = LABEL_MAP[exchangeId] || exchangeId.toUpperCase()
   const accent = ACCENT_MAP[exchangeId] || '#00d4ff'
@@ -112,7 +118,7 @@ export function ExchangeDetail({ exchangeId, onBack }: Props) {
         Keys are encrypted server-side · Use READ + TRADE only (no withdrawal) · Restrict by IP
       </div>
 
-      {account ? (
+      {account && !replacing ? (
         <div style={{ background: '#0a1018', border: `1px solid ${accent}33`, borderRadius: '6px', padding: '14px', marginBottom: '12px' }}>
           <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'JetBrains Mono, monospace', lineHeight: '1.8' }}>
             <div>Balance &nbsp;<span style={{ color: '#00d97a' }}>${(account.balance || 0).toFixed(2)}</span></div>
@@ -142,7 +148,16 @@ export function ExchangeDetail({ exchangeId, onBack }: Props) {
                 background: '#ff884411', border: '1px solid #ff884433',
                 color: '#ff8844', fontSize: '11px', lineHeight: 1.45,
               }}>
-                ⚠ {notice}. Re-verify, or replace the keys on the exchange.
+                ⚠ {notice}.
+                <button
+                  onClick={() => setReplacing(true)}
+                  style={{
+                    display: 'block', marginTop: '8px', padding: '6px 12px',
+                    background: 'none', border: '1px solid #ff884455', borderRadius: '5px',
+                    color: '#ff8844', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >Enter new keys</button>
               </div>
             )
           })()}

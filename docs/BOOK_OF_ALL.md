@@ -12810,3 +12810,35 @@ expect(detectTimeSkew(now)).toBe(0);   // o cursa cu tictacul milisecundei
 ### Notă
 
 La reload au apărut două `[CLIENT_ERR] Failed to fetch` la 17:45 şi 17:46 — cereri din browser în zbor în momentul repornirii. Tranzitorii, aşteptate.
+
+---
+
+## 🔑 2026-11-07 — Fundătura: userul vedea avertismentul şi n-avea ce face cu el
+
+Ultima bucată din cazul cheii moarte care era **a mea**, nu a lui.
+
+Pusesem avertismentul în aplicaţie şi bannerul în Admin. Dar când userul 2 ar fi dat click, ce găsea?
+
+```jsx
+{account ? ( RE-VERIFY · DISCONNECT ) : ( formularul de chei )}
+```
+
+**Cu un cont existent, formularul de chei nu se afişa deloc.** Singurele butoane erau „RE-VERIFY" — care pe o cheie expirată **eşuează iar** — şi „DISCONNECT". Trebuia să ghicească singur că drumul e să se deconecteze întâi.
+
+Îl trimiteam într-o fundătură cu propriul meu avertisment.
+
+### Ce era de fapt în cale
+
+Doar ecranul. `saveExchangeAccount` **actualizează pe loc** rândul existent — serverul a suportat dintotdeauna înlocuirea cheilor fără deconectare. Interfaţa era singurul obstacol.
+
+### Reparat
+
+Avertismentul are acum un buton **„Enter new keys"** care deschide formularul fără deconectare. Apare **doar** când cheile sunt vechi — când sunt sănătoase, nu e nimic de reparat şi butonul nu există.
+
+Trei teste: formularul e ascuns la început, apare după click, şi nu se oferă deloc pe un cont sănătos. Mutaţia care-l lasă ascuns omoară testul.
+
+### Ce rămâne — şi de ce e cu adevărat al lui
+
+Acum lanţul e întreg: **află** (Telegram + în aplicaţie + banner la operator), **vede adevărul** („last verified 117 days ago", nu „verified"), şi **are unde apăsa** ca să-l repare.
+
+Singurul pas rămas e să genereze o cheie nouă în contul lui Bybit. Nu mai e o gaură în produs — e o acţiune de care numai el are cheile. **La propriu.**
