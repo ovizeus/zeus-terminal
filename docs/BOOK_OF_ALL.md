@@ -12716,3 +12716,47 @@ Era a doua oară azi când eram gata să raportez o defecţiune care era de fapt
 | episodul | tranzitoriu, în amonte, s-a reparat singur |
 
 **Lecţia, pentru data viitoare:** când logul şi tabloul de bord nu sunt de acord, întreabă întâi **ce fereastră de timp acoperă fiecare**. De obicei nu minte niciunul.
+
+---
+
+# 🔎 DESCHIS — protecţia „tilt" după pierderi consecutive **n-a funcţionat niciodată** (2026-11-07)
+
+Am făcut o trecere nouă după export-uri pe care nu le cheamă nimeni — aceeaşi clasă de cod mort găsită de trei ori azi. Nouă candidaţi. **Unul e o protecţie de siguranţă inertă, pe calea banilor.**
+
+## Lanţul, verificat linie cu linie
+
+```
+serverDrawdownGuard.trackEquity()   ← SINGURUL scriitor al _equityCurve
+                                       şi _peakEquity. NU E CHEMAT NICĂIERI.
+         ↓
+getConsecutiveLosses(userId)        ← citeşte _equityCurve; harta e goală
+                                       → `if (!curve) return 0`  ⇒ ÎNTOTDEAUNA 0
+         ↓
+getTiltModifier(userId)             ← 0 pierderi ⇒ ÎNTOTDEAUNA 1.0
+         ↓
+serverBrain.js:2564                 ← `confidence *= _mods.tilt`
+                                       ⇒ înmulţire cu 1.0, fără niciun efect
+```
+
+**Protecţia care trebuia să reducă încrederea după o serie de pierderi n-a tras niciodată.** Scara ei e reală şi gândită — 2 pierderi la rând → ×0,92; 3 → ×0,85; 4 → ×0,80; **5+ → ×0,70** — şi nu s-a aplicat nici măcar o dată.
+
+## De ce contează acum, nu abstract
+
+Rata de nimerire a botului e **sub pragul de rentabilitate**. O protecţie proiectată exact pentru „trage-te înapoi după ce pierzi la rând" a stat stinsă tot timpul. Nu spun că ar fi salvat banii — spun că **n-a avut ocazia**.
+
+## Două pagube, nu una
+
+1. **Semantică:** `_peakEquity` e comentat „highest equity **today**", iar `resetDaily()` — documentat „call on day change" — **nu e chemat nici el**. Dacă s-ar porni colectarea fără reset, vârful ar deveni unul **de-a pururi**, iar userul ar rămâne „în drawdown" permanent după un singur maxim vechi.
+2. **Creştere nemărginită:** `_equityCurve` e o hartă de tablouri la care se adaugă la fiecare eveniment şi nu se curăţă niciodată. Azi e inofensiv fiindcă e goală — **dar devine o scurgere de memorie exact în clipa în care cineva porneşte colectarea.**
+
+Deci reparaţia nu e „cheamă `trackEquity`". E **`trackEquity` la închiderea poziţiei ŞI `resetDaily` la schimbarea zilei**, altfel aprinzi o protecţie care se strică singură în timp.
+
+## N-am reparat-o. Intenţionat.
+
+A o porni înseamnă a schimba `confidence` pe intrările vii — **calea banilor**. Mi-ai spus explicit, şi de două ori în noiembrie mi-am pus judecata peste a ta exact aici. Şi tocmai am retras o recomandare construită pe cifre nedovedite; n-am de gând s-o înlocuiesc cu alta.
+
+**Ce ar trebui făcut, dacă o vrei pornită:** un apel `trackEquity(userId, equity, 'win'|'loss')` pe calea de închidere a poziţiei, plus `resetDaily(userId)` pe schimbarea zilei. Mic şi izolat — dar schimbă comportamentul la intrare, deci e decizia ta.
+
+## Restul candidaţilor
+
+Opt celelalte export-uri fără consumator sunt curăţenie, nu pericol: `stopOrphanSweep`, `stopDepthPolling` (opriri necuplate), `analyzeAllPositions` (ambalaj peste o funcţie care **e** folosită), `getCounts`, `canonicalKey`, `getAllUserIds`, `shouldShadow`, `getMaxDrawdown`. Le las — a şterge ambalaje nefolosite n-ar schimba nimic şi ar mări diferenţa degeaba.
