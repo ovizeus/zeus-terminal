@@ -12231,3 +12231,17 @@ Comanda reală e `-p tsconfig.app.json`, şi raportează **77 de erori**, aproap
 Vite transpilează **fără** să verifice tipurile, deci nimic nu le-a semnalat niciodată. Nu sunt neapărat bug-uri vii, dar **niciunul n-a fost vreodată citit de cineva.**
 
 **Reparaţia ar fi:** comanda corectă în `package.json` ca `npm run typecheck`, apoi curăţarea celor 77 pe loturi. Prima parte e de un minut; a doua e o treabă de sine stătătoare.
+
+---
+
+## 📌 Notă operaţională — 2026-11-07
+
+La verificarea finală, în log:
+
+```
+[WARN] [EXCHANGE] Key health FAIL uid=2 bybit/testnet: Your api key has expired.
+```
+
+**Userul 2 are cheia Bybit testnet expirată.** Nu e un bug — e o cheie care şi-a atins termenul. Dar înseamnă că userul ăla nu poate executa nimic pe Bybit testnet până nu o reînnoieşte. N-am atins nimic; o las aici fiindcă e singurul `WARN` real rămas în log după curăţenia de azi, iar acum, fără cele 19.000 de linii de zgomot, **se vede.**
+
+Care e şi poanta: asta e exact ce ascundea potopul.
