@@ -12338,3 +12338,35 @@ Am încercat să lărgesc semnătura lui `belongsToSymbol` ca să accepte litera
 | baza vie | `md5` neschimbat |
 
 **Nota de onestitate:** la una dintre rulări, un test din shard 1 a picat şi a trecut la următoarele două. Instabil, nu real — dar îl spun, fiindcă „verde" trebuie să însemne verde.
+
+---
+
+## ✅ 2026-11-07 — Dovada care lipsea, şi trei rute moarte găsite pe drum
+
+### Dovada capăt-la-capăt a noului format de log
+
+Când am livrat reparaţia potopului am putut spune doar „zero linii din potopul vechi". Aia dovedea că **n-am stricat nimic**, nu că formatul nou funcţionează — fiindcă întrerupătorul nici nu s-a deschis în minutele alea. Am scris testul care lipsea, cu **poarta şi întrerupătorul adevărate**; doar reţeaua e falsă.
+
+**Rezultatul: 210 interogări printr-un endpoint căzut → exact 2 linii.** Una la deschidere cu motivul (`server_error`), una la revenire cu `refused: 210` şi `openMs`. Plus: fiecare refuz ajunge în telemetrie, cu greutate 0, fiindcă nimic n-a plecat.
+
+**Două greşeli ale mele, pe care le notez fiindcă amândouă ar fi făcut testul să mintă:**
+- cheia de circuit e **ultimul segment** din cale (`klines`), nu calea întreagă — am folosit calea şi testul „trecea" fără să atingă circuitul real;
+- `jest.resetModules()` la mijlocul testului **reconstruia întrerupătorul** şi arunca exact starea pe care o examinam.
+
+Ambele au ieşit la iveală fiindcă testul a picat. Un test care pică pe motivul corect e mai valoros decât unul care trece din întâmplare.
+
+### 🔎 Găsit pe drum: trei rute inaccesibile
+
+Verificând un `400` (care s-a dovedit a fi parametrul meu greşit), am observat **două rute montate pe aceeaşi cale**. Am scanat tot serverul:
+
+| verb + cale | câştigă | umbrită |
+|---|---|---|
+| `GET /api/market/klines` | `marketProxy.js` | `market.js` |
+| `GET /api/market/funding` | `marketProxy.js` | `market.js` |
+| `GET /api/market/oi` | `marketProxy.js` | `market.js` |
+
+`marketProxy` se montează la linia **170**, `market` la **1307**. Express potriveşte în ordine, iar `marketProxy` **răspunde pe toate ramurile** — nu cheamă `next()` niciodată. Deci cele trei handlere din `market.js` **nu se execută nicicând**.
+
+`market.js` are 17 rute; celelalte 14 (`liq-map`, `liq-predict`, `bookmap`, `depth`, `sentiment`…) sunt vii şi importante. **Nu e un fişier mort — sunt trei handlere moarte într-un fişier viu.**
+
+**N-am şters nimic.** Versiunile din `market.js` servesc dintr-un cache de stare al serverului, nu de la Binance. Ar putea fi o rezervă utilă, iar alegerea între „şterge" şi „foloseşte-le ca fallback" e a lui, nu a mea la 3 noaptea.
