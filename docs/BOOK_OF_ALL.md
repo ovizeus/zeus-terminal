@@ -12574,3 +12574,41 @@ A trebuit o portiţă mică în `ws.ts` (`_internals.setUrlOverride`), `null` î
 Şi o declaraţie minimă de tipuri pentru `ws`, cu un comentariu care spune limpede că **nu** e completă — n-am instalat `@types/ws` pe maşina vie la ora asta pentru un pachet doar de tipuri.
 
 **Ce rămâne netestabil aici:** dacă WebView-ul Android livrează `visibilitychange` la trezire. Şi asta **nu mai contează**, fiindcă pulsul reconstruieşte soclul fără niciun eveniment de revenire — dovedit separat.
+
+---
+
+# 🏁 2026-11-07 — Închiderea nopţii: ce e terminat şi ce nu e muncă
+
+## Terminat în cod
+
+| | |
+|---|---|
+| reconectare la revenirea din fundal | livrată, testată pe **socluri TCP reale** |
+| potopul de 19–33k linii/zi | **0**, dovedit capăt-la-capăt (210 interogări → 2 linii) |
+| testele scriau pe producţie | închis, `md5` identic înainte/după, cu gardă permanentă |
+| verificare de tipuri | de la „nu exista" la **0 erori**, plus 2 bug-uri reale găsite |
+| trei rute inaccesibile | şterse, cu gardă contra reapariţiei |
+| cheie de bursă moartă = ecran care minte | reparat, userul vede acum în aplicaţie |
+| „opreşte LONG-urile" | **RETRACTAT cu date** |
+
+**27 de commit-uri. 10.465 teste server, 1.795 client, 0 erori de tip.** Server viu: zero erori, zero 429, zero linii de potop.
+
+## Ce nu e muncă neterminată
+
+**Cheia Bybit a userului 2.** Am verificat tot ce ţinea de mine:
+- verificarea e **corectă** — endpoint `api-demo.bybit.com` pentru testnet, semnătură v5 UNIFIED, cu comentarii despre o reparaţie anterioară exact pe acel drum;
+- mesajul „Your api key has expired" vine **de la Bybit**, nu din codul nostru — verdictul e al bursei;
+- userul 2 e real şi activ: **216 poziţii închise**, zero deschise acum;
+- tot ce era al meu e închis — primeşte Telegram **şi**, de acum, avertisment în aplicaţie cu vechimea reală.
+
+Reînnoirea cere accesul lui la contul Bybit. **Nu e o sarcină amânată — e o acţiune care nu se poate face de pe maşina asta.**
+
+**Testul pe un telefon real.** Nu pot îngheţa un WebView Android pe un VPS. Dar am făcut întrebarea să nu mai conteze: pulsul reconstruieşte soclul **fără niciun eveniment de revenire**, dovedit pe socluri reale. Evenimentele fac reparaţia instantanee; cronometrul o face sigură.
+
+**Instabilitatea din shard 2.** Observată o dată, **14 rulări curate după** — 6 izolate, 2 treceri complete în secvenţă. Nu se reproduce, n-am identificat-o, **şi nu pretind c-am reparat-o.** Consemnată ca să existe o urmă.
+
+**Oprirea intrărilor LONG.** Nu e amânată — e **retractată**. Datele spun că recomandarea mea era greşită.
+
+## Linia de dedesubt
+
+Tot ce se putea rezolva din cod, e rezolvat. Ce rămâne cere fie un dispozitiv Android fizic, fie accesul altcuiva la contul lui de bursă. Niciuna nu e o linie de cod nescrisă.
