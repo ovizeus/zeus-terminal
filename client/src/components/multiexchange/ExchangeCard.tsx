@@ -1,4 +1,5 @@
 import type { ExchangeAccount } from '../../stores/multiExchangeStore'
+import { verificationAge } from './verificationAge'
 
 // [P7a.2] 'switchable' = connected but not the active exchange → offer one-click Switch.
 // 'blocked' retained for back-compat but no longer produced (multi-connect replaced it).
@@ -75,6 +76,16 @@ export function ExchangeCard({ id, label, status, account, blockedMessage, onCli
           {status === 'active' ? '● ' : status === 'switchable' ? '◆ ' : status === 'blocked' ? '🔒 ' : '○ '}
           {statusLabel}
         </span>
+        {/* [2026-11-07] Visible without opening the card. A key whose daily
+            check stopped succeeding looked identical to a healthy one here,
+            and the only warning went to a log and an optional Telegram. */}
+        {account && verificationAge(account.lastVerified).stale && (
+          <span
+            data-testid={`exchange-card-${id}-stale`}
+            title="The daily key check has not succeeded recently — the keys may have expired"
+            style={{ marginLeft: '6px', fontSize: '10px', color: '#ff8844', fontWeight: 700 }}
+          >⚠ KEY</span>
+        )}
       </div>
 
       {(status === 'active' || status === 'switchable') && account && (

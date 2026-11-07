@@ -12501,3 +12501,42 @@ Din **fereastra recentă de 183 de închideri**: LONG −149,52$ pe 65, SHORT +1
 **N-am construit filtrul de direcţie.** Mă pregăteam să-l livrez stins, ca pe poarta BYOI — dar o pârghie justificată de o premisă infirmată n-are ce căuta în mâna cuiva care doarme. Dacă o vrei oricum, din alte motive, se face — dar nu pe argumentul ăsta, fiindcă argumentul nu există.
 
 **Ce rămâne adevărat:** rata generală de nimerire e sub pragul de rentabilitate, iar SHORT e *aparent* mai eficient per tranzacţie. „Aparent" e cuvântul cheie — la `t = 1,09` nu se poate construi nimic pe el.
+
+---
+
+## 🔑 2026-11-07 — Ultimele două „imposibile", duse cât se putea de departe
+
+### Proba WS: am făcut întrebarea despre Android irelevantă
+
+Nu pot îngheţa un WebView pe VPS. Dar mi-am dat seama că **nu trebuie**: pulsul de 15 secunde îngheaţă odată cu aplicaţia şi **reporneşte odată cu ea**. Deci chiar dacă NICIUN eveniment de revenire nu se declanşează — nici `visibilitychange`, nici `focus`, nici `appStateChange` — prima bătaie după trezire găseşte soclul tăcut şi îl reconstruieşte.
+
+Trei teste noi care dovedesc exact asta:
+- **soclu îngheţat, zero evenimente de revenire → reconstruit pe cronometru**
+- cât timp aplicaţia e ascunsă **nu** reconstruieşte (o reconectare în fundal e cum îţi iei interdicţie de la bursă)
+- cronometrul rămâne viu, deci şi un soclu care moare mai târziu e prins
+
+Mutaţia care scoate intervalul omoară **4 teste**.
+
+**Evenimentele de revenire fac reparaţia instantanee. Cronometrul o face sigură.** Comportamentul WebView-ului Android nu mai e o condiţie — e doar o optimizare.
+
+### Cheia userului 2: n-o pot reînnoi, dar am găsit minciuna de lângă ea
+
+Contul lui arăta în bază:
+
+```
+status = 'verified'   last_verified_at = 2026-07-13   is_active = 1
+```
+
+**„Verificat", cu data de acum patru luni**, în timp ce verificarea zilnică eşua pe acea cheie. Calea de eşec scrie un log, un rând de audit şi un Telegram — **dar nu atinge niciodată rândul contului.** Ecranul continua să spună că e în regulă.
+
+**Ce NU am schimbat:** câmpul `status`. Linia 418 din `exchange.js` selectează conturile după `status = 'verified'` — deci el **decide cu ce conturi se tranzacţionează**. Să-l întorc peste noapte ar fi o schimbare pe calea banilor, nu una de afişare.
+
+**Ce am schimbat:** doar ce se vede, şi nu poate atinge tranzacţionarea.
+- în detaliu: „Last Verified **117 days ago**" în portocaliu, plus un avertisment explicit
+- pe card: un marcaj **⚠ KEY**, vizibil fără să deschizi nimic
+
+Pragul e 2 zile — verificarea rulează zilnic, deci asta lasă loc unei rulări ratate.
+
+Nouă teste pe funcţia pură, inclusiv cazul real din bază. Două mutaţii: „nimic nu e vechi" → 3 picate; „o cheie neverificată e veche" → 1 picată.
+
+Un test vechi a trebuit făcut precis: căuta `/RE-VERIFY/i` prin text, iar avertismentul meu **trimite către acel buton folosind exact numele lui** — ceea ce e corect ca limbaj de interfaţă. Am schimbat testul să caute **după rol**, nu după text.

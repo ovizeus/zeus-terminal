@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { verificationAge, staleNotice } from './verificationAge'
 import { useMultiExchangeStore } from '../../stores/multiExchangeStore'
 
 const LABEL_MAP: Record<string, string> = {
@@ -115,10 +116,36 @@ export function ExchangeDetail({ exchangeId, onBack }: Props) {
         <div style={{ background: '#0a1018', border: `1px solid ${accent}33`, borderRadius: '6px', padding: '14px', marginBottom: '12px' }}>
           <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'JetBrains Mono, monospace', lineHeight: '1.8' }}>
             <div>Balance &nbsp;<span style={{ color: '#00d97a' }}>${(account.balance || 0).toFixed(2)}</span></div>
-            {account.lastVerified && (
-              <div>Last Verified &nbsp;<span style={{ color: '#94a3b8' }}>{new Date(account.lastVerified).toLocaleString()}</span></div>
-            )}
+            {account.lastVerified && (() => {
+              // [2026-11-07] A bare timestamp let a four-month-old check read
+              // as current. The age is what tells the story, and when it is
+              // stale the daily check has been failing — which until now was
+              // only ever written to a log the user never sees.
+              const age = verificationAge(account.lastVerified)
+              return (
+                <div>
+                  Last Verified &nbsp;
+                  <span style={{ color: age.stale ? '#ff8844' : '#94a3b8' }}>
+                    {age.label}
+                  </span>
+                  <span style={{ color: '#64748b' }}> &nbsp;({new Date(account.lastVerified).toLocaleString()})</span>
+                </div>
+              )
+            })()}
           </div>
+          {(() => {
+            const notice = staleNotice(verificationAge(account.lastVerified))
+            if (!notice) return null
+            return (
+              <div style={{
+                marginTop: '10px', padding: '8px 10px', borderRadius: '5px',
+                background: '#ff884411', border: '1px solid #ff884433',
+                color: '#ff8844', fontSize: '11px', lineHeight: 1.45,
+              }}>
+                ⚠ {notice}. Re-verify, or replace the keys on the exchange.
+              </div>
+            )
+          })()}
           <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
             <button className="hub-sbtn" style={{ flex: 1 }} onClick={handleVerify}>RE-VERIFY</button>
             <button className="hub-sbtn" style={{ flex: 1, borderColor: '#ff335533', color: '#ff6655' }} onClick={handleDisconnect}>DISCONNECT</button>

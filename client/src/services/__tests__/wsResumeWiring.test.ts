@@ -135,6 +135,56 @@ describe('stopping and starting again', () => {
   })
 })
 
+describe('recovery that needs NO resume event at all', () => {
+  /**
+   * [2026-11-07] The one thing I could not test is whether Android's WebView
+   * delivers visibilitychange or appStateChange on resume. This makes that
+   * question stop mattering.
+   *
+   * The 15s liveness interval is frozen along with the app and resumes with
+   * it. So even if EVERY resume signal is missed, the first tick after the
+   * app wakes finds a socket silent past the limit and rebuilds it. The
+   * resume events make it instant; the timer makes it certain.
+   */
+  it('rebuilds a frozen socket with zero resume events fired', async () => {
+    ws.stopLivenessWatch()
+    vi.useFakeTimers()
+    ws.startLivenessWatch()
+
+    // the app was frozen: the socket still says OPEN and has said nothing for
+    // ten minutes, and NOT ONE visibility, focus, online or appState event
+    // has been dispatched
+    ws._internals.setLastSignalAt(Date.now() - 10 * 60 * 1000)
+    expect(FakeSocket.made).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(16000)   // one tick of the interval
+    expect(FakeSocket.made).toHaveLength(2)    // recovered on the timer alone
+  })
+
+  it('does not rebuild on the timer while the app is still hidden', async () => {
+    ws.stopLivenessWatch()
+    vi.useFakeTimers()
+    ws.startLivenessWatch()
+    visibility = 'hidden'                       // no event, just the state
+    ws._internals.setLastSignalAt(Date.now() - 10 * 60 * 1000)
+    await vi.advanceTimersByTimeAsync(60000)
+    // a hidden app has no reason to hold a socket open, and reconnecting in
+    // the background is how you earn a rate-limit ban
+    expect(FakeSocket.made).toHaveLength(1)
+  })
+
+  it('keeps checking, so a socket that dies later is still caught', async () => {
+    ws.stopLivenessWatch()
+    vi.useFakeTimers()
+    ws.startLivenessWatch()
+    await vi.advanceTimersByTimeAsync(16000)
+    expect(FakeSocket.made).toHaveLength(1)     // healthy, nothing happened
+    ws._internals.setLastSignalAt(Date.now() - 10 * 60 * 1000)
+    await vi.advanceTimersByTimeAsync(16000)
+    expect(FakeSocket.made).toHaveLength(2)     // the interval is still alive
+  })
+})
+
 describe('the server heartbeat is what keeps it honest', () => {
   it('an hb frame counts as a sign of life', () => {
     ws._internals.setLastSignalAt(1)

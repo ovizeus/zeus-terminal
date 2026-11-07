@@ -27,8 +27,32 @@ describe('ExchangeDetail', () => {
     render(<ExchangeDetail exchangeId="binance" onBack={onBack} />)
     expect(screen.getByText(/\*\*\*\*abcd/)).toBeDefined()
     expect(screen.getByText(/\$100\.50/)).toBeDefined()
-    expect(screen.getByText(/RE-VERIFY/i)).toBeDefined()
-    expect(screen.getByText(/DISCONNECT/i)).toBeDefined()
+    // [2026-11-07] By role, not by text. A stale-key warning now also says
+    // "re-verify" — pointing at this very button, which is the right wording —
+    // and a getByText query could not tell the control from the prose about it.
+    expect(screen.getByRole('button', { name: /RE-VERIFY/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /DISCONNECT/i })).toBeDefined()
+  })
+
+  it('warns when the daily key check stopped succeeding', () => {
+    // the real case from the live box: status said verified, the date was months old
+    useMultiExchangeStore.setState({
+      accounts: {
+        binance: { connected: true, active: true, mode: 'testnet', maskedKey: '****abcd', balance: 1, lastVerified: '2026-05-20T20:00:00Z' },
+      },
+    })
+    render(<ExchangeDetail exchangeId="binance" onBack={() => {}} />)
+    expect(screen.getByText(/may have expired/i)).toBeDefined()
+  })
+
+  it('says nothing alarming when the check is current', () => {
+    useMultiExchangeStore.setState({
+      accounts: {
+        binance: { connected: true, active: true, mode: 'testnet', maskedKey: '****abcd', balance: 1, lastVerified: new Date().toISOString() },
+      },
+    })
+    render(<ExchangeDetail exchangeId="binance" onBack={() => {}} />)
+    expect(screen.queryByText(/may have expired/i)).toBeNull()
   })
 
   it('calls saveAccount on VERIFY & SAVE click with form values', async () => {
