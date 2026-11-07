@@ -12448,3 +12448,56 @@ Un test ca ăsta contează fiindcă o rută umbrită **nu strică nimic** — e 
 | landing | 200 |
 
 Suite: **10.465 server + 1.778 client**, tipuri 0.
+
+---
+
+# ⛔ RETRACTARE — „opreşte intrările LONG" era un sfat GREŞIT (2026-11-07)
+
+Ţi-am repetat toată sesiunea că oprirea intrărilor LONG e „singura pârghie care schimbă cifra de la capăt", cu −273,69$ pe 63 de închideri. **Am măsurat din nou, pe tot istoricul, şi recomandarea nu se susţine. O retrag.**
+
+## Ce arată datele întregi
+
+| | închideri | win % | PnL total | medie/tranz. |
+|---|---|---|---|---|
+| **LONG** | 2.078 | 11,7% | **+594,49$** | +0,29$ |
+| **SHORT** | 809 | 30,5% | **+2.520,92$** | +3,12$ |
+
+**LONG e pe PLUS pe tot istoricul.** Nu pe minus.
+
+## Pe luni — şi aici e lovitura
+
+| luna | LONG | SHORT |
+|---|---|---|
+| 2026-11 | 22 închideri, **−113,89$** | 49, +765,26$ |
+| **2026-10** | 80, **+1.394,18$** (41,3% win) | 128, +1.254,90$ |
+| 2026-08 | 8, +541,46$ | 14, +810,88$ |
+| 2026-07 | 32, −7,30$ | 34, −33,19$ |
+| 2026-06 | 269, −926,23$ | 419, +609,11$ |
+| 2026-05 | 21, −927,32$ | 34, −929,44$ |
+| 2026-04 | 649, +633,59$ | — |
+
+**Octombrie LONG a fost cea mai bună găleată din tot setul** — +1.394$, mai mult decât SHORT în aceeaşi lună, la 41,3% rată de nimerire. Dacă opreai LONG-urile, exact aia o pierdeai.
+
+Noiembrie LONG e −113,89$ pe **22 de închideri**. Douăzeci şi două. Mai puţin decât o singură zi proastă.
+
+## Statistica, care închide discuţia
+
+| | n | medie | t | verdict |
+|---|---|---|---|---|
+| LONG | 2.078 | +0,29$ | **0,29** | nedistinct de zero |
+| SHORT | 809 | +3,12$ | **1,30** | nedistinct de zero |
+| **SHORT − LONG** | | **2,83$** | **1,09** | **NEDOVEDITĂ** |
+
+**Nici măcar SHORT nu e dovedit profitabil.** Iar diferenţa dintre ele — temelia întregii recomandări — are `t = 1,09`. Ar fi nevoie de aproximativ **de patru ori mai multe date** (≈8.300 LONG / 3.200 SHORT) ca să ajungă la `t ≥ 2`.
+
+## De unde venea cifra mea
+
+Din **fereastra recentă de 183 de închideri**: LONG −149,52$ pe 65, SHORT +1.262,43$ pe 118. Fereastra spune una, istoricul întreg spune alta.
+
+**Greşeala mea n-a fost aritmetica — a fost că am tratat o fereastră ca pe o concluzie**, şi am repetat-o până a sunat a fapt. E exact clasa de eroare pe care am notat-o pe 24 octombrie, când un filtru pe un anti-pattern a ieşit cu semnul întors şi a trebuit retras.
+
+## Ce am făcut în consecinţă
+
+**N-am construit filtrul de direcţie.** Mă pregăteam să-l livrez stins, ca pe poarta BYOI — dar o pârghie justificată de o premisă infirmată n-are ce căuta în mâna cuiva care doarme. Dacă o vrei oricum, din alte motive, se face — dar nu pe argumentul ăsta, fiindcă argumentul nu există.
+
+**Ce rămâne adevărat:** rata generală de nimerire e sub pragul de rentabilitate, iar SHORT e *aparent* mai eficient per tranzacţie. „Aparent" e cuvântul cheie — la `t = 1,09` nu se poate construi nimic pe el.
