@@ -12652,3 +12652,37 @@ E pe **calea deciziilor de tranzacţionare**, nu undeva periferic.
 **Rezultat: 8+ rulări de shard după reparaţie, jurnalul de eşecuri gol.**
 
 Nu spun „rezolvat" — spun că **am scos din ecuaţie un pericol real şi că următoarea apariţie se înregistrează singură**, cu nume. Diferenţa dintre o instabilitate pe care n-o poţi numi şi una pe care o poţi numi e diferenţa dintre una pe care n-o poţi repara şi una pe care o poţi.
+
+---
+
+## 🔔 2026-11-07 — Cheia moartă: userul o vedea, operatorul nu
+
+Închisesem cazul cheii userului 2 spunând „reînnoirea e a lui". Adevărat — **dar mai era o bucată care era a mea şi n-o făcusem.**
+
+Userul primeşte acum avertisment în aplicaţie şi pe Telegram. **Tu nu vedeai nimic.** O cheie moartă pe contul altcuiva e exact genul de lucru pe care un operator trebuie să-l afle fără să citească un log.
+
+### Ce am adăugat
+
+`GET /api/admin/key-health` — raportează conturile a căror verificare zilnică nu mai reuşeşte, cel mai vechi primul, cu email, bursă şi număr de zile.
+
+În **pagina de pornire din Admin** (cea construită aseară), o bandă de avertisment deasupra cifrelor de acţiune. Pe datele reale de acum arată:
+
+```
+⚠ O cheie de bursă nu mai trece verificarea zilnică:
+  <contul userului 2> · BYBIT · ultima reuşită acum 116 zile
+```
+
+### Ce NU am atins, iar
+
+Câmpul `status`. `exchange.js` selectează conturile după `status = 'verified'` — **el decide cu ce conturi se tranzacţionează.** Raportez, nu schimb. Pentru a treia oară în noaptea asta, linia dintre „spune adevărul" şi „schimbă comportamentul pe calea banilor" rămâne acolo unde e.
+
+### Reguli pe care le respectă
+
+- un cont **deconectat intenţionat** nu e raportat — e o decizie a cuiva, nu o problemă
+- un cont **niciodată verificat** nu e vechi — o cheie nouă n-are încă dată
+- o dată **necitibilă** sau **din viitor** nu se raportează: a ghici e mai rău decât a tăcea
+- endpoint-ul **nu poate dărâma pagina** — pe eroare întoarce listă goală
+
+Nouă teste pe regula pură + patru pe bandă. Două mutaţii: „nimic nu e vechi" → 3 picate; „raportează şi deconectatele" → 1 picată.
+
+Verificat pe serverul viu după reload: ruta e **401 fără sesiune**, iar regula rulată pe datele reale scoate exact un rând — cel aşteptat.

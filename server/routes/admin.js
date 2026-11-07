@@ -491,4 +491,26 @@ router.post('/ml/stage-promote', _requireAuth, _requireAdmin, (req, res) => {
     } catch (e) { return res.status(500).json({ ok: false, error: 'promote failed' }); }
 });
 
+// ─── GET /api/admin/key-health — exchange keys that stopped passing their check ───
+// [2026-11-07] The daily check writes a log line, an audit row and a Telegram
+// message, and the user now sees a warning in the app. The operator saw it
+// nowhere. This reports; it never changes `status`, which decides what the
+// server trades with.
+router.get('/key-health', _requireAuth, _requireAdmin, (req, res) => {
+    try {
+        const _db = require('../services/database');
+        const rows = _db.db.prepare(`
+            SELECT a.user_id, a.exchange, a.mode, a.status, a.is_active, a.last_verified_at, u.email
+            FROM exchange_accounts a
+            LEFT JOIN users u ON u.id = a.user_id
+        `).all();
+        const stale = require('../services/keyStaleness').staleAccounts(rows);
+        res.json({ ok: true, stale, count: stale.length });
+    } catch (e) {
+        // A reporting endpoint must never be the reason an admin page fails
+        // to load; an empty answer is better than a broken launcher.
+        res.json({ ok: true, stale: [], count: 0 });
+    }
+});
+
 module.exports = router;

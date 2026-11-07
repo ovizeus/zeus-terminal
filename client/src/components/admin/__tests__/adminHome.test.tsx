@@ -7,7 +7,7 @@
  * waiting — a badge that is always on is a badge nobody reads.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AdminHome } from '../AdminHome'
 import { NAV, GROUPS, actionCounts } from '../adminNav'
 import { useAdminStore } from '../../../stores/adminStore'
@@ -90,6 +90,46 @@ describe('the launcher renders every section', () => {
     const wip = NAV.filter((n) => n.wip)
     expect(wip.length).toBeGreaterThan(0)
     expect(screen.getAllByText('WIP')).toHaveLength(wip.length)
+  })
+})
+
+describe('exchange keys that stopped passing their check', () => {
+  // [2026-11-07] The real case: an account read "verified" with a date four
+  // months old while the daily check failed the whole time. The user now sees
+  // it on their own screen; the operator saw it nowhere.
+  function stubKeyHealth(stale: unknown[]) {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const json = (b: unknown) => Promise.resolve({ ok: true, json: () => Promise.resolve(b) } as Response)
+      if (String(url).includes('key-health')) return json({ ok: true, stale, count: stale.length })
+      return json({ ok: false })
+    }))
+  }
+
+  it('says nothing when every key is current', async () => {
+    stubKeyHealth([])
+    render(<AdminHome />)
+    await waitFor(() => expect(screen.queryByText(/stopped passing/i)).toBeNull())
+  })
+
+  it('names the user, the exchange and how long it has been failing', async () => {
+    stubKeyHealth([{ userId: 2, email: 'someone@test.invalid', exchange: 'bybit', days: 116 }])
+    render(<AdminHome />)
+    await waitFor(() => expect(screen.getByText(/stopped passing the daily check/i)).toBeTruthy())
+    expect(screen.getByText(/someone@test\.invalid/)).toBeTruthy()
+    expect(screen.getByText(/BYBIT/)).toBeTruthy()
+    expect(screen.getByText(/116 days ago/)).toBeTruthy()
+  })
+
+  it('falls back to the user id when there is no email', async () => {
+    stubKeyHealth([{ userId: 7, email: null, exchange: 'binance', days: 4 }])
+    render(<AdminHome />)
+    await waitFor(() => expect(screen.getByText(/user 7/)).toBeTruthy())
+  })
+
+  it('renders the launcher even when the endpoint is down', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))))
+    render(<AdminHome />)
+    expect(screen.getByText('Users')).toBeTruthy()
   })
 })
 

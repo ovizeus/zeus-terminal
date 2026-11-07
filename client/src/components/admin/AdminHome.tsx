@@ -20,6 +20,10 @@ export function AdminHome() {
   const users = useAdminStore((s) => s.users)
   const supportUnread = useSupportStore((s) => s.adminUnread)
   const [indicatorRequests, setIndicatorRequests] = useState(0)
+  // [2026-11-07] Exchange keys whose daily check stopped succeeding. The user
+  // is warned in their own screen; this is so the operator does not have to
+  // read a log to learn that someone's key died months ago.
+  const [staleKeys, setStaleKeys] = useState<Array<{ userId: number; email: string | null; exchange: string; days: number }>>([])
 
   useEffect(() => {
     let alive = true
@@ -27,6 +31,10 @@ export function AdminHome() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (alive && d && d.ok) setIndicatorRequests(d.count || 0) })
       .catch(() => { /* a missing count must never keep the launcher from rendering */ })
+    fetch('/api/admin/key-health', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && d && d.ok) setStaleKeys(d.stale || []) })
+      .catch(() => { /* same — report nothing rather than break the page */ })
     return () => { alive = false }
   }, [])
 
@@ -36,6 +44,23 @@ export function AdminHome() {
 
   return (
     <div className="zac-section zac-home">
+      {staleKeys.length > 0 && (
+        <div style={{
+          marginBottom: '14px', padding: '10px 12px', borderRadius: '6px',
+          background: '#ff884411', border: '1px solid #ff884433',
+          color: '#ff8844', fontSize: '12px', lineHeight: 1.5,
+        }}>
+          ⚠ {staleKeys.length === 1 ? 'An exchange key has' : `${staleKeys.length} exchange keys have`} stopped passing the daily check:
+          <div style={{ marginTop: '5px', color: '#c0d8ec', fontSize: '11px' }}>
+            {staleKeys.map((k) => (
+              <div key={`${k.userId}-${k.exchange}`}>
+                {k.email || `user ${k.userId}`} · {k.exchange.toUpperCase()} · last succeeded {k.days} days ago
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="zac-home-lead">
         {waiting > 0
           ? <>You have <b>{waiting}</b> thing{waiting === 1 ? '' : 's'} waiting.</>
