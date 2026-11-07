@@ -12842,3 +12842,45 @@ Trei teste: formularul e ascuns la început, apare după click, şi nu se oferă
 Acum lanţul e întreg: **află** (Telegram + în aplicaţie + banner la operator), **vede adevărul** („last verified 117 days ago", nu „verified"), şi **are unde apăsa** ca să-l repare.
 
 Singurul pas rămas e să genereze o cheie nouă în contul lui Bybit. Nu mai e o gaură în produs — e o acţiune de care numai el are cheile. **La propriu.**
+
+---
+
+# 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
+
+## Cele două lucruri care îţi schimbă deciziile
+
+**1. ⛔ Am retras „opreşte intrările LONG".** Ţi-am repetat-o toată sesiunea şi **era greşită.** Pe tot istoricul LONG e **pe plus** (+594$), octombrie LONG a fost **cea mai bună lună din tot setul** (+1.394$ la 41,3%), iar diferenţa LONG/SHORT are **t = 1,09** — nedovedită. Cifra mea venea dintr-o fereastră de 183 de închideri. **Am tratat o fereastră ca pe o concluzie.**
+
+**2. 🎯 Protecţia „tilt" n-a funcţionat niciodată.** `trackEquity` nu era chemat de nicăieri, deci `confidence *= 1.0` la infinit. Scara gândită (2 pierderi ×0,92 … 5+ ×0,70) nu s-a aplicat **nici măcar o dată**, într-un sistem cu rata de nimerire sub pragul de rentabilitate. **Am cuplat-o şi am livrat-o STINSĂ.** Un singur flag o aprinde, când vrei tu.
+
+## Ce ai cerut şi e livrat
+
+QR + cod de bare pe pagina de pornire · Build Your Own Indicator (3 niveluri, poartă de facturare stinsă, privat/public) · Admin cu pagină de plăci în loc de bandă derulabilă · rotiţa de setări care era un soare · butonul Back din jurnal
+
+## Ce am găsit pe drum şi am reparat
+
+| | |
+|---|---|
+| soclul care raporta OPEN fiind mort | reconectare la revenire, dovedită pe **socluri TCP reale** |
+| 19–33 mii de linii de log pe zi | **2 linii per episod**, dovedit capăt-la-capăt |
+| **testele scriau pe baza de PRODUCŢIE** | izolate; `md5` identic înainte/după, cu gardă |
+| verificarea de tipuri nu verifica nimic | **77 → 0**, plus 2 bug-uri reale tăcute de luni |
+| 3 rute inaccesibile | şterse, cu gardă contra reapariţiei |
+| ecranul spunea „verified" despre o cheie moartă de 4 luni | adevărul la user **şi** la tine, cu drum de reparare |
+| instabilitatea din teste | **găsită şi reparată** — o asertare de ceas care cerea exact zero |
+
+## Greşelile mele, pe faţă
+
+Am tratat o fereastră ca pe o concluzie (LONG) · am spus „tsc curat" de mai multe ori când **comanda nu verifica niciun fişier** · am afirmat că o hartă creşte nemărginit **fără s-o verific** (era plafonată la 500) · am lăsat teste care depindeau de ceas · am trimis un user într-o fundătură cu propriul meu avertisment · am amânat de trei ori lucruri pe care le puteam face.
+
+## Ce rămâne, şi de ce
+
+**Cheia Bybit a userului 2.** Produsul îşi face acum treaba: îl anunţă pe trei canale, îi arată adevărul, şi îi dă butonul. Rămâne să genereze o cheie nouă **în contul lui Bybit** — o acţiune de care numai el are cheile.
+
+**Proba pe un telefon real.** Nu pot îngheţa un WebView Android pe un VPS. **Dar nu mai contează:** pulsul reconstruieşte soclul **fără niciun eveniment de revenire**, dovedit pe socluri reale.
+
+**Aprinderea protecţiei „tilt".** E gata, stinsă, aşteaptă un flag. **Decizia ta** — e calea banilor.
+
+## Cifrele
+
+**34 de commit-uri** · server **10.485** teste · client **1.801** · tipuri **0** · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.
