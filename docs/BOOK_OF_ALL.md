@@ -12612,3 +12612,43 @@ Reînnoirea cere accesul lui la contul Bybit. **Nu e o sarcină amânată — e 
 ## Linia de dedesubt
 
 Tot ce se putea rezolva din cod, e rezolvat. Ce rămâne cere fie un dispozitiv Android fizic, fie accesul altcuiva la contul lui de bursă. Niciuna nu e o linie de cod nescrisă.
+
+---
+
+## 🕵️ 2026-11-07 — Instabilitatea: prinsă, numită, şi făcută să se prindă singură data viitoare
+
+Îţi spusesem „au picat 2 teste o dată, n-am putut prinde care". N-am lăsat-o aşa.
+
+### Întâi: am făcut-o să nu se mai piardă
+
+Problema reală nu era instabilitatea, ci că **detaliul dispărea**. O rulare rezumată îţi spune „2 failed" şi atât — iar răspunsul obişnuit, „mai rulează o dată", e exact felul în care un bug adevărat se ascunde luni de zile în spatele cuvântului „flaky".
+
+`tests/flakeReporter.js`: scrie fiecare test picat în `data/logs/jest-failures.log` — dată, shard, fişier, numele complet, prima linie a cauzei. **Nu costă nimic pe verde** (fişierul nici nu se creează). Verificat cu un test care pică intenţionat.
+
+### Şi a prins-o imediat
+
+La prima suită completă de după, a reapărut — şi de data asta e numită:
+
+```
+tests/unit/r1-block-chokepoint.test.js
+„un marcaj gol sau fals NU blocheaza (doar un motiv real blocheaza)"
+Error: expect(received).toBeTruthy()
+```
+
+E pe **calea deciziilor de tranzacţionare**, nu undeva periferic.
+
+### Ce am găsit căutând cauza
+
+**0 eşecuri în 20 de rulări izolate.** Deci are nevoie de contextul shard-ului — iar sub `--runInBand` toate fişierele unui shard rulează **în acelaşi proces**, deci orice modul cu stare la nivel de modul o cară dintr-un fişier în altul.
+
+`server/services/entryDedup.js` e exact aşa: un `Map` de `user:symbol` cu **fereastră de 8 secunde**, iar `serverAT.reset()` **nu-l atinge** — e alt modul. Are un `_reset()`, pe care **nu-l cheamă niciun test.** Şase fişiere cheamă `processBrainDecision`, deci oricare poate arma fereastra pentru altul.
+
+**N-am dovedit că asta e cauza** — la o rată de ~12% nu se poate dovedi nimic prin bisecţie. Dar o fereastră partajată de 8 secunde pe care n-o resetează nimeni e un pericol **indiferent** dacă a tras azi.
+
+### Reparat într-un singur loc, nu în şase
+
+`jest.setupAfterEnv.js` — un `beforeEach` global care curăţă starea partajată. Numai module ieftine şi fără dependenţe au voie acolo: unul care deschide o bază sau porneşte un cronometru ar costa fiecare fişier de test.
+
+**Rezultat: 8+ rulări de shard după reparaţie, jurnalul de eşecuri gol.**
+
+Nu spun „rezolvat" — spun că **am scos din ecuaţie un pericol real şi că următoarea apariţie se înregistrează singură**, cu nume. Diferenţa dintre o instabilitate pe care n-o poţi numi şi una pe care o poţi numi e diferenţa dintre una pe care n-o poţi repara şi una pe care o poţi.
