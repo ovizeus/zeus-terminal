@@ -12198,3 +12198,36 @@ Reload, apoi 3 minute de funcţionare reală: **zero linii** din potopul vechi, 
 ### Un fals alarm, prins înainte de a-l raporta
 
 Verificând feed-ul am primit `400` de la `/api/market/klines` şi era să-l raportez ca defecţiune. Era **parametrul meu**: ruta cere `interval`, eu trimisesem `tf`. Clientul trimite corect. Nimic stricat.
+
+---
+
+# 🔎 DESCHIS — două lucruri găsite pe drum (2026-11-07)
+
+Mi-a zis: dacă mai văd ceva, să scriu în Carte. Astea sunt. **Niciuna nu e atinsă** — le las documentate, nu reparate din proprie iniţiativă.
+
+## 1. Suita de teste scrie pe baza de date de PRODUCŢIE
+
+Descoperit când migrarea 425 a apărut pe baza vie **fără niciun reload** — procesul nu repornise (1154 reporniri, 27 de minute uptime).
+
+Cauza: mai multe teste fac `require('server/services/database')`, iar modulul deschide **fişierul real** din `data/zeus.db` şi **rulează migrările la încărcare**.
+
+De data asta a fost inofensiv: `CREATE TABLE IF NOT EXISTS`, zero rânduri. **Dar o migrare distructivă s-ar aplica pe producţie dintr-o simplă rulare de teste.** Nimeni n-ar observa până nu lipsesc date.
+
+**A doua faţă a aceleiaşi probleme:** un test din shard 2 a picat o dată şi a trecut la următoarele două rulări, cu `db locked` în log. Testele se calcă unele pe altele pe acelaşi fişier. Un eşec instabil într-o suită e mai rău decât unul constant — te învaţă să re-rulezi în loc să citeşti.
+
+**Reparaţia ar fi:** o variabilă de mediu pentru calea bazei, iar suita să ruleze pe o copie temporară. Atinge multe teste, deci nu e o schimbare de făcut la 2 noaptea fără acordul lui.
+
+## 2. Proiectul nu are verificare de tipuri care să funcţioneze
+
+`client/tsconfig.json` are `"files": []` şi doar referinţe. Comanda pe care o foloseam — şi pe care ţi-am raportat-o ca „curat" de mai multe ori — **nu verifica niciun fişier.**
+
+Comanda reală e `-p tsconfig.app.json`, şi raportează **77 de erori**, aproape toate vechi de luni:
+
+- `togInd('ema', e.currentTarget)` în `ChartControls` — funcţia primeşte un argument, e chemată cu două (4 locuri)
+- `bootstrapMisc.ts` — şase accesări pe valori posibil `null`
+- `LiqMapPanel` — doi importuri moarte, un apel cu argumente lipsă
+- fişiere de test cu tipuri incomplete
+
+Vite transpilează **fără** să verifice tipurile, deci nimic nu le-a semnalat niciodată. Nu sunt neapărat bug-uri vii, dar **niciunul n-a fost vreodată citit de cineva.**
+
+**Reparaţia ar fi:** comanda corectă în `package.json` ca `npm run typecheck`, apoi curăţarea celor 77 pe loturi. Prima parte e de un minut; a doua e o treabă de sine stătătoare.
