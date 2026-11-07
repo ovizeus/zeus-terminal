@@ -12057,3 +12057,56 @@ După reload am văzut avertismente de feed şi am verificat dacă sunt ale mele
 De ce contează: sunt `WARN`, nu `ERROR`. Toată sesiunea am verificat log-urile căutând `error`, iar astea n-au apărut niciodată. **19.000 de linii pe zi sunt exact zgomotul în care se pierde o problemă reală.** N-am atins nimic — e separat de lucrarea asta — dar merită o privire a ei.
 
 Suite: **10.417 server + 1.739 client**, verzi.
+
+---
+
+# 🔎 DESCHIS — 19.000 de avertismente pe zi care nu înseamnă ce par (2026-11-07)
+
+Mi-a cerut să mă uit la avertismentele pe care le-am găsit din întâmplare verificând un reload. M-am uitat. **Nu e o pană. E o problemă de jurnalizare — şi e mai gravă decât o pană, fiindcă ascunde panele adevărate.**
+
+## Ce am măsurat
+
+Logurile se rotesc la miezul nopţii, deci numărătoarea se face pe fişiere (numele arhivei e ora rotirii, deci `__2026-11-07` conţine ziua de **6 noiembrie**):
+
+| ziua | linii `circuit_open` |
+|---|---|
+| 2 nov | 3.611 |
+| 3 nov | 8.893 |
+| 4 nov | 8.902 |
+| **5 nov** | **33.227** |
+| 6 nov | 19.112 |
+| **acum (7 nov)** | **0** |
+
+**475 din 1440 de minute** ale zilei de 6 nov au avut cel puţin un avertisment — **33% din zi**.
+
+## Mecanismul, exact
+
+Sunt **21 de pollere** (7 simboluri × 3 timeframe-uri), fiecare scris de **946 ori** într-o zi. Tiparul în log e regulat, nu haotic: **exact 41 de linii, la fiecare 2 minute**.
+
+Cauza: întrerupătorul se deschide pe cheia `exchange:endpoint`. **Toate cele 21 de pollere împart acelaşi endpoint de klines.** Deci:
+
+> **Un singur eşec real în amonte orbeşte simultan toate cele 21 de pollere, iar fiecare îşi scrie propria linie, la fiecare ciclu de interogare.**
+
+Un eveniment devine 21 de linii, repetat până se închide întrerupătorul.
+
+## Impactul real asupra ta: aproape zero
+
+`BASE_BACKOFF_MS = 1000`, iar valorile măsurate în log sunt 1006–1033ms — adică **backoff-ul stă la bază, nu escaladează**. Sondă de reîncercare după 30s. Deci o pauză de ordinul **unei secunde** pe eveniment. Chartul nu simte.
+
+Şi acum, în clipa asta: telemetria arată **462 de apeluri alt-klines, 462 reuşite, 0 erori**, iar logul viu are **0** avertismente. Funcţionează perfect.
+
+## De ce e totuşi o problemă — şi am dovedit-o pe pielea mea
+
+**1. Nu ajung niciodată în telemetrie.** `binanceGateway` sintetizează 503-ul **înainte de fetch**, deci răspunsul nu trece prin învelişul de telemetrie şi `errors5xx` rămâne **0**. b275 (19 oct) a reparat *textul din log* să spună motivul, dar **orbirea telemetriei a rămas.** Tabloul de bord spune „sănătos" în timp ce mii de interogări sunt refuzate.
+
+**2. Logul nu poate deosebi o pâlpâire de o cădere.** Amândouă arată ca mii de linii identice.
+
+**3. Îngroapă semnalele reale.** Am demonstrat-o chiar eu, azi: **toată sesiunea ţi-am raportat „zero erori"**, fiindcă am căutat `error` în log, iar astea sunt `WARN`. Erau 19.000 de linii pe care nu le-am văzut niciodată.
+
+## Ce aş face (NEFĂCUT — aştept decizia lui)
+
+1. **Scrie o linie per TRANZIŢIE a întrerupătorului, nu per poll refuzat.** Întrerupătorul ştie când se deschide şi când se închide; pollerele n-au de ce să povestească fiecare acelaşi lucru.
+2. **La închidere, un rezumat:** „circuitul `binance:klines` a stat deschis 42s, a refuzat 118 interogări". Un rând în loc de o mie, şi mai informativ.
+3. **Trimite 503-urile sintetizate în telemetrie**, ca tabloul de bord să nu mai mintă.
+
+Estimare: mic şi izolat — atinge `binanceGateway` şi `circuitBreaker`, nu calea banilor.
