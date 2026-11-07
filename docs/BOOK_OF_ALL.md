@@ -12158,3 +12158,43 @@ Lecţia, iar: **o mutaţie care supravieţuieşte înseamnă că testul nu apăr
 **Nu pot reproduce pe VPS îngheţarea reală a unui telefon.** Logica e testată serios — 29 de teste noi — dar **proba finală e a lui**: lasă aplicaţia în fundal câteva minute şi revino.
 
 Suite: **10.417 server + 1.768 client**, verzi.
+
+---
+
+## 🔇 2026-11-07 — Potopul de 19.000 de linii: ÎNCHIS
+
+Elementul deschis de mai sus, rezolvat.
+
+### Reparaţia, în trei puncte
+
+**1. O linie per TRANZIŢIE, nu per refuz.** Întrerupătorul ştie când se deschide şi când revine; cele 21 de pollere nu aveau de unde să ştie că sunt 21. Acum scrie o linie la deschidere, cu motivul (`rate_limit`, `server_error`, `timeout`, `ip_ban_418`), şi una la revenire — **cu numărul a ce a refuzat între timp**:
+
+```json
+{"_t":"CIRCUIT","event":"recovered","exchange":"binance","endpoint":"/klines","openMs":42310,"refused":118}
+```
+
+Un episod întreg = **două linii în loc de două mii**, şi spune mai mult.
+
+**2. `marketFeed` nu mai scrie linia per poll** — dar **numai** pentru `circuit_open`. Orice alt eşec se logheaza mai departe, fiindcă orice alt eşec chiar e per-poller.
+
+**3. Refuzurile ajung în telemetrie.** `binanceGateway` sintetiza 503-ul **înainte** de fetch şi returna, deci nu trecea prin învelişul de telemetrie — `errors5xx` rămânea **0** în timp ce mii de interogări erau refuzate. Un tablou de bord orb exact în situaţia pe care există s-o raporteze e mai rău decât niciunul. Acum se înregistrează, cu `refused: 'circuit_open'` sau `'rate_limit'`, greutate **0** (n-a plecat nimic) şi sursa apelantului.
+
+### Mutaţii
+
+| mutaţie | rezultat |
+|---|---|
+| refuzurile nu mai ajung în telemetrie | 3 teste picate |
+| raportez la fiecare refuz, nu la tranziţie | 3 teste picate |
+| nu mai număr refuzurile | 2 teste picate |
+
+17 teste noi. Un test verifică explicit că **o rulare de logare care aruncă nu poate rupe calea cererii**.
+
+### Verificat pe viu
+
+Reload, apoi 3 minute de funcţionare reală: **zero linii** din potopul vechi, feed-ul livrează (147/147 alt-klines, 480/480 altPrice, lumânări proaspete la cerere), zero erori reale.
+
+**Atenţie la citire:** în cele 3 minute întrerupătorul nici nu s-a deschis, deci absenţa liniilor **nu e încă dovada** că noul format funcţionează — e dovada că n-am stricat nimic. Dovada vine la următorul episod real, când trebuie să apară exact două linii `_t:CIRCUIT`.
+
+### Un fals alarm, prins înainte de a-l raporta
+
+Verificând feed-ul am primit `400` de la `/api/market/klines` şi era să-l raportez ca defecţiune. Era **parametrul meu**: ruta cere `interval`, eu trimisesem `tf`. Clientul trimite corect. Nimic stricat.

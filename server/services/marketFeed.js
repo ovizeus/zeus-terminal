@@ -583,9 +583,18 @@ function _altStartKlinePoller(symUpper, tf) {
             }
             if (latest.close > 0) _emit('price', { symbol: symUpper, price: latest.close });
         } catch (err) {
-            // Quiet failure — next tick retries
-            if (err && err.message && !/HTTP 4\d\d/.test(err.message)) {
-                logger.warn('FEED', `[ALT_WS_FEEDS] kline poll failed [${symUpper} ${tf}]: ${err.message}`);
+            // Quiet failure — next tick retries.
+            // [2026-11-07] circuit_open is no longer logged here. All 21
+            // symbol x timeframe pollers share one exchange:endpoint circuit,
+            // so a single upstream failure blinded every one of them and each
+            // wrote its own line every cycle: 19,112 lines on 6 Nov, 33,227 on
+            // 5 Nov, 33% of the day's minutes affected. The breaker now reports
+            // the OPEN and the RECOVERED once, with the count of what it
+            // refused, which is both quieter and more informative. Everything
+            // else still logs, because everything else is genuinely per-poller.
+            const _msg = err && err.message;
+            if (_msg && !/HTTP 4\d\d/.test(_msg) && !/circuit_open/.test(_msg)) {
+                logger.warn('FEED', `[ALT_WS_FEEDS] kline poll failed [${symUpper} ${tf}]: ${_msg}`);
             }
         }
     };

@@ -20,7 +20,14 @@ const HALF_OPEN_AFTER_MS = 30000;   // try probe after 30s
 const BAN_418_HALT_MS = 600000;     // 10 min halt on 418
 const NEGATIVE_CACHE_MS = 5000;     // 5xx → block 5s
 
-const _circuits = new Map(); // 'exchange:endpoint' → { state, failures, lastFailTs, openUntil, backoffMs }
+// [2026-11-07] Each circuit also carries openedAt and refusedCount, so a spell
+// of being open can be reported ONCE, with a number, instead of every refused
+// caller narrating its own rejection. Measured before this change: a single
+// upstream failure blinds all 21 kline pollers at once (they share the
+// exchange:endpoint key) and each logged every poll cycle — 19,112 lines on
+// 6 Nov, 33,227 on 5 Nov. That volume buries real signal; it was WARN, so
+// every health check grepping for "error" missed it entirely.
+const _circuits = new Map(); // 'exchange:endpoint' → { state, failures, lastFailTs, openUntil, backoffMs, openedAt, refusedCount }
 
 function _key(exchange, endpoint) { return `${exchange}:${endpoint || 'default'}`; }
 
@@ -34,12 +41,47 @@ function _getCircuit(exchange, endpoint) {
             openUntil: 0,
             backoffMs: BASE_BACKOFF_MS,
             lastStatus: null,
+            openedAt: 0,
+            refusedCount: 0,
         });
     }
     return _circuits.get(k);
 }
 
 function _jitter() { return Math.floor(Math.random() * JITTER_MAX_MS); }
+
+/**
+ * [2026-11-07] One line when a circuit opens, one when it recovers — with the
+ * count of what was refused in between.
+ *
+ * Before this, nobody logged the transition and every refused caller logged
+ * its own rejection, so one upstream blip produced thousands of identical
+ * lines and a genuine outage looked exactly the same. A caller cannot know it
+ * is one of twenty-one; the breaker can.
+ */
+function _report(exchange, endpoint, event, extra) {
+    try {
+        const line = Object.assign({ _t: 'CIRCUIT', event, exchange, endpoint }, extra || {});
+        console.log(JSON.stringify(line));
+    } catch (_) { /* logging must never break the request path */ }
+}
+
+function _markOpen(c, exchange, endpoint, why, extra) {
+    // Only the TRANSITION is reported. Staying open is not news.
+    if (c.openedAt) return;
+    c.openedAt = Date.now();
+    c.refusedCount = 0;
+    _report(exchange, endpoint, 'open', Object.assign({ why }, extra || {}));
+}
+
+function _markRecovered(c, exchange, endpoint) {
+    if (!c.openedAt) return;
+    const openMs = Date.now() - c.openedAt;
+    const refused = c.refusedCount;
+    c.openedAt = 0;
+    c.refusedCount = 0;
+    _report(exchange, endpoint, 'recovered', { openMs, refused });
+}
 
 function record(exchange, endpoint, httpStatus) {
     const c = _getCircuit(exchange, endpoint);
@@ -50,6 +92,7 @@ function record(exchange, endpoint, httpStatus) {
         c.failures = 0;
         c.backoffMs = BASE_BACKOFF_MS;
         if (c.state === STATES.HALF_OPEN) c.state = STATES.CLOSED;
+        _markRecovered(c, exchange, endpoint);
         return { state: c.state, action: 'success_reset' };
     }
 
@@ -59,7 +102,7 @@ function record(exchange, endpoint, httpStatus) {
         c.openUntil = Date.now() + BAN_418_HALT_MS + _jitter();
         c.failures++;
         c.lastFailTs = Date.now();
-        try { console.log(JSON.stringify({ _t: 'CIRCUIT', event: 'ip_ban_418', exchange, endpoint, haltUntil: new Date(c.openUntil).toISOString() })); } catch (_) {}
+        _markOpen(c, exchange, endpoint, 'ip_ban_418', { haltUntil: new Date(c.openUntil).toISOString() });
         return { state: STATES.OPEN, action: 'ip_ban_halt', haltMs: BAN_418_HALT_MS };
     }
 
@@ -70,6 +113,7 @@ function record(exchange, endpoint, httpStatus) {
         c.openUntil = Date.now() + c.backoffMs + _jitter();
         c.state = STATES.OPEN;
         c.lastFailTs = Date.now();
+        _markOpen(c, exchange, endpoint, 'rate_limit', { backoffMs: c.backoffMs });
         return { state: STATES.OPEN, action: 'rate_limit_backoff', backoffMs: c.backoffMs };
     }
 
@@ -77,7 +121,10 @@ function record(exchange, endpoint, httpStatus) {
         // Server error — negative cache
         c.failures++;
         c.openUntil = Date.now() + NEGATIVE_CACHE_MS;
-        if (c.failures >= FAILURE_THRESHOLD) c.state = STATES.OPEN;
+        if (c.failures >= FAILURE_THRESHOLD) {
+            c.state = STATES.OPEN;
+            _markOpen(c, exchange, endpoint, 'server_error', { failures: c.failures });
+        }
         c.lastFailTs = Date.now();
         return { state: c.state, action: 'server_error', negCacheMs: NEGATIVE_CACHE_MS };
     }
@@ -89,6 +136,7 @@ function record(exchange, endpoint, httpStatus) {
             c.state = STATES.OPEN;
             c.openUntil = Date.now() + c.backoffMs + _jitter();
             c.backoffMs = Math.min(c.backoffMs * 2, MAX_BACKOFF_MS);
+            _markOpen(c, exchange, endpoint, 'timeout', { failures: c.failures });
         }
         c.lastFailTs = Date.now();
         return { state: c.state, action: 'timeout', failures: c.failures };
@@ -108,6 +156,8 @@ function canRequest(exchange, endpoint) {
             c.state = STATES.HALF_OPEN;
             return true; // allow probe
         }
+        // Counted, not logged. The tally is reported once, on recovery.
+        c.refusedCount++;
         return false; // still halted
     }
 

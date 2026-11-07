@@ -56,9 +56,33 @@ async function gatewayFetch(url, opts) {
     const pool = _poolForExchange(exchange);
     const weight = (opts && opts.__weight) || 1;
 
+    /**
+     * [2026-11-07] Both pre-flight refusals below synthesize a 503 and return
+     * WITHOUT calling fetch, which means they never passed through the
+     * telemetry wrapper — so errors5xx stayed at 0 while thousands of polls
+     * were being turned away, and /api/diag/binance-rates reported perfect
+     * health. b275 (19 Oct) made the REASON visible in the log but left this
+     * blindness in place. Recording them here closes it.
+     */
+    function _recordRefusal(reason) {
+        try {
+            const telem = _getTelem();
+            if (!telem || typeof telem.recordCall !== 'function') return;
+            let host = 'unknown', path = '/';
+            try { const u = new URL(url); host = u.host; path = u.pathname; } catch (_) { /* defaults */ }
+            telem.recordCall({
+                host, path,
+                source: (opts && opts.__src) || 'unknown',
+                weight: 0, status: 503, latencyMs: 0,
+                refused: reason,
+            });
+        } catch (_) { /* telemetry must never block the request path */ }
+    }
+
     // Pre-flight: circuit breaker
     if (!circuitBreaker.canRequest(exchange, endpoint)) {
         const backoff = circuitBreaker.getBackoffMs(exchange, endpoint);
+        _recordRefusal('circuit_open');
         return {
             status: 503, ok: false, _stale: true, _reason: 'circuit_open', _backoffMs: backoff,
             headers: { get: () => null },
@@ -68,6 +92,7 @@ async function gatewayFetch(url, opts) {
 
     // Pre-flight: rate limiter
     if (pool && !rateLimiter.canFetch(pool, weight)) {
+        _recordRefusal('rate_limit');
         return {
             status: 503, ok: false, _stale: true, _reason: 'rate_limit',
             headers: { get: () => null },
