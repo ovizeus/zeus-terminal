@@ -2,8 +2,16 @@
 const { db } = require('../../../server/services/database');
 
 describe('A-Z Raid H: voice history', () => {
-  test('ml_voice_log table has data', () => {
-    const count = db.prepare('SELECT COUNT(*) as cnt FROM ml_voice_log').get();
+  // [2026-11-07] "has data" is a check on LIVE rows, not on this code, and it
+  // only ever passed because the suite ran against the production file. The
+  // suite is isolated now, so it asks for production explicitly and
+  // READ-ONLY, and skips where there is none.
+  const prod = require('../../helpers/prodDb').openProdReadOnly();
+  const itProd = prod ? test : test.skip;
+  afterAll(() => { try { if (prod) prod.close(); } catch (_) { /* already closed */ } });
+
+  itProd('ml_voice_log table has data', () => {
+    const count = prod.prepare('SELECT COUNT(*) as cnt FROM ml_voice_log').get();
     expect(count.cnt).toBeGreaterThan(0);
   });
 

@@ -12245,3 +12245,49 @@ La verificarea finală, în log:
 **Userul 2 are cheia Bybit testnet expirată.** Nu e un bug — e o cheie care şi-a atins termenul. Dar înseamnă că userul ăla nu poate executa nimic pe Bybit testnet până nu o reînnoieşte. N-am atins nimic; o las aici fiindcă e singurul `WARN` real rămas în log după curăţenia de azi, iar acum, fără cele 19.000 de linii de zgomot, **se vede.**
 
 Care e şi poanta: asta e exact ce ascundea potopul.
+
+---
+
+## 🔒 2026-11-07 — Suita de teste nu mai scrie pe producţie: ÎNCHIS
+
+Elementul deschis de mai sus, rezolvat în aceeaşi noapte.
+
+### Cum arăta gaura
+
+Mai multe teste fac `require('server/services/database')`, iar modulul deschide `data/zeus.db` şi **rulează toate migrările în clipa încărcării**. Aşa a ajuns migrarea 425 pe producţie **fără niciun reload** — procesul nici nu repornise.
+
+### De ce nu s-a putut cu o copie
+
+**Baza vie are 2,9 GB.** O copie la fiecare rulare e exclusă — timp şi disc.
+
+Dar `ZEUS_DB_PATH` **exista deja** şi era respectat de `database.js` din mai. Nimeni nu-l seta pentru suită. Deci am măsurat ce se rupe cu o bază goală, în care migrările construiesc singure schema:
+
+**9 eşecuri din 10.437.** Toate nouă erau teste care citeau tacit date de producţie.
+
+### Reparaţia
+
+`jest.globalSetup.js` creează o bază temporară şi setează `ZEUS_DB_PATH`; `jest.globalTeardown.js` o şterge — şi **numai** dacă directorul e unul creat de el. Un test care îşi alege singur calea câştigă în continuare.
+
+Cele 9:
+
+- **7 în `globalHaltAlertStorm`** — picau cu `FOREIGN KEY constraint failed`, fiindcă scriau o stare legată de `users` cu id-ul 1, iar pe baza goală nu există user 1. Au funcţionat doar fiindcă fişierul viu îl conţinea. Ajutor nou `tests/helpers/seedUser.js`.
+- **2 verificau date de producţie** — „row counts not lost" şi „ml_voice_log has data". **Alea nu sunt teste unitare**, sunt controale de sănătate pe date vii, şi au valoare reală. Acum cer producţia **explicit şi READ-ONLY** prin `tests/helpers/prodDb.js`, şi se sar curat unde nu există.
+
+### Dovada
+
+| | |
+|---|---|
+| suita, 4 shard-uri | **10.443 teste verzi** |
+| `md5` baza vie, înainte | `aaa6a928…` |
+| `md5` baza vie, după toată suita | **`aaa6a928…` — identic** |
+| directoare temporare rămase | 0 |
+
+Şi o gardă permanentă, `tests/unit/testDbIsolation.test.js`: verifică nu doar că nu e producţia, ci că **nici măcar nu stă în acelaşi director** (un `data/zeus-test.db` ar fi tot în calea unei migrări rătăcite), că modulul chiar a deschis fişierul acela, şi — cel mai tare — că **tabela de sondă scrisă în test NU există în producţie**.
+
+Verificat separat că garda discriminează: respinge calea de producţie şi un vecin din `data/`, acceptă doar una temporară.
+
+**Nota de onestitate:** am vrut să dovedesc garda şi prin mutaţie, scoţând `globalSetup` din config. Acţiunea a fost blocată (modificare de resursă partajată). Am verificat în schimb logica direct, aşa cum e mai sus.
+
+### Al doilea câştig, gratis
+
+Eşecul instabil din shard 2 (`db locked`) avea aceeaşi cauză — teste care se calcă pe acelaşi fişier. Cu fiecare rulare pe baza ei, dispare.

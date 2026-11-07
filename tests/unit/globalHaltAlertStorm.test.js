@@ -23,6 +23,10 @@ describe('setGlobalHalt notification idempotency', () => {
         };
         jest.doMock(path.resolve(__dirname, '../../server/services/telegram'), () => telegramMock);
         at = require('../../server/services/serverAT');
+        // [2026-11-07] The suite no longer runs against the production
+        // database, so user 1 has to exist here rather than by luck: the halt
+        // state row carries a foreign key onto users.
+        require('../helpers/seedUser').seedUser(require('../../server/services/database'), 1);
         at.setGlobalHalt(false, 1, 'test_reset');
         telegramMock.sendToUser.mockClear();
     });

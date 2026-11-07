@@ -66,7 +66,15 @@ describe('Bybit migrations 393 — applied to live schema', () => {
             expect(r).toBeDefined();
         });
 
-        it('row counts not lost on append-only tables (>= baseline at migration time)', () => {
+        // [2026-11-07] This one is a data-loss check, not a schema check, so it
+        // needs the real database. The suite is isolated now, so it asks for
+        // production explicitly and READ-ONLY, and skips where there is none.
+        const prod = require('../helpers/prodDb').openProdReadOnly();
+        const itProd = prod ? it : it.skip;
+        afterAll(() => { try { if (prod) prod.close(); } catch (_) { /* already closed */ } });
+
+        itProd('row counts not lost on append-only tables (>= baseline at migration time)', () => {
+            const db = prod;
             // Baseline captured at migration 393 application (2026-05-21 23:33 UTC):
             //   at_closed=2417, brain_decisions=89922.
             // at_positions is dynamic (positions move to at_closed on close), so its
