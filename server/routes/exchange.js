@@ -546,6 +546,13 @@ async function _runApiKeyHealthCheck() {
                         require('../services/telegram').sendToUser(u.id,
                             `⚠️ Zeus: ${acc.exchange.toUpperCase()} (${acc.mode}) API keys failed daily verification. Check your exchange API keys — they may be revoked or expired.`);
                     } catch (_) { /* Telegram optional */ }
+                    // [2026-11-07] Telegram IS optional, and three accounts on
+                    // this box have none linked — for them the line above goes
+                    // nowhere and a dead key fails silently until an order does
+                    // not place. The support thread is the in-app channel they
+                    // already see. Deduped to one notice per spell of breakage.
+                    require('../services/keyHealthNotice')
+                        .notifyKeyHealthFailure(db, u.id, acc.exchange, acc.mode);
                 }
             }
         }

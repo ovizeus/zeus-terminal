@@ -12370,3 +12370,47 @@ Verificând un `400` (care s-a dovedit a fi parametrul meu greşit), am observat
 `market.js` are 17 rute; celelalte 14 (`liq-map`, `liq-predict`, `bookmap`, `depth`, `sentiment`…) sunt vii şi importante. **Nu e un fişier mort — sunt trei handlere moarte într-un fişier viu.**
 
 **N-am şters nimic.** Versiunile din `market.js` servesc dintr-un cache de stare al serverului, nu de la Binance. Ar putea fi o rezervă utilă, iar alegerea între „şterge" şi „foloseşte-le ca fallback" e a lui, nu a mea la 3 noaptea.
+
+---
+
+## 🔁 2026-11-07 — Ultimele trei: cablajul, cheile moarte şi rutele umbrite
+
+Cele pe care le lăsasem „imposibile". Două se puteau duce mai departe decât credeam.
+
+### 1. Cablajul reconectării — testat, nu doar funcţia
+
+Aveam teste pe `forceReconnect` şi pe aritmetica de viaţă, dar **niciunul care să verifice că un eveniment real de revenire ajunge la ele.** Aia e toată funcţia: o reconstrucţie perfectă pe care n-o declanşează nimeni e exact bug-ul de la care am pornit.
+
+Zece teste noi în jsdom: ascundere → 5 minute → revenire **reconstruieşte** soclul deşi el zice `OPEN`; o privire de 2 secunde **nu costă nimic**; `focus` şi `online` sunt cablate; pulsul de 15s prinde un soclu tăcut **fără nicio revenire**; un cadru `hb` contează ca semn de viaţă.
+
+**Şi a găsit un bug în codul meu.** `stopLivenessWatch()` curăţa intervalul dar **nu reseta `_resumeWired`**, deci un `start` ulterior ieşea devreme şi aplicaţia rămânea **fără puls şi fără tratarea revenirii**. Nimic nu cheamă `stop` azi — de-asta ar fi stat acolo nevăzut până în ziua în care ceva ar fi chemat-o. Acum oprirea desface exact ce a făcut pornirea.
+
+Mutaţia care scoate resetul omoară 2 teste.
+
+**Şi o lecţie despre teste instabile:** versiunea mea a testului de detaşare trecea izolată şi pica în suita completă — depindea de ceas, iar alt fişier lăsase timere false în urmă. L-am rescris **fără niciun ceas**: `online` forţează necondiţionat când e cablat, deci răspunde la „mai ascultă cineva?" fără să atingă timpul. **Un test care are nevoie ca ceasul să fie într-o anumită stare e un test care va minţi într-o zi.**
+
+### 2. Cheia Bybit expirată — nu puteam s-o reînnoiesc, dar puteam verifica dacă omul AFLĂ
+
+Userul 2 **are Telegram legat**, deci chiar primeşte avertismentul. Sistemul şi-a făcut treaba; reînnoirea rămâne a lui.
+
+**Dar alături era o gaură reală.** Telegram e **opţional**, şi am măsurat: **trei conturi de pe maşina asta n-au niciunul legat.** Pentru ei, o cheie moartă eşua **în tăcere** — singurul anunţ pleca undeva unde nu se uită niciodată, iar primul semn ar fi fost un ordin care nu se execută.
+
+Acum, pe lângă Telegram, se scrie şi în **firul de suport** — canalul din aplicaţie pe care îl văd toţi, cu insignă de necitit.
+
+**Dedus o dată per pană, nu zilnic** — aceeaşi lecţie ca la potopul de aseară: verificarea rulează în fiecare zi, deci fără dedup firul ar strânge acelaşi mesaj zi de zi până la înlocuirea cheii, şi ar deveni un fir pe care nu-l mai citeşte nimeni.
+
+Un detaliu care m-a prins: scrisesem `_ts()` să întoarcă `0` pentru o dată necitibilă — ceea ce înseamnă **„foarte vechi"**, exact pe dos faţă de intenţie, şi ar fi produs chiar repetarea zilnică. Testul l-a prins. Acum întoarce `null` şi se citeşte ca **recent**: a repeta un mesaj târziu e un rău mai mic decât a spama pe cineva fiindcă o dată nu s-a putut citi.
+
+14 teste. Două mutaţii: fără dedup → 4 picate; fără deosebirea burselor → 2 picate.
+
+### 3. Rutele umbrite — rămân, şi de ce
+
+Cele trei handlere inaccesibile din `market.js` **le-am lăsat**. Ştergerea e sigură, dar n-am dovezi că e **alegerea corectă**: versiunile alea servesc dintr-un cache al serverului, nu de la Binance, şi ar putea fi o rezervă bună când Binance cade. Între „şterge" şi „leagă-le ca fallback" nu aleg eu — e o decizie de arhitectură pe calea datelor de piaţă.
+
+### Ce rămâne cu adevărat în afara puterii mele
+
+| | |
+|---|---|
+| proba WS pe un telefon real îngheţat | nu pot îngheţa un WebView pe VPS. **Tot ce e sub asta e acum testat.** |
+| reînnoirea cheii userului 2 | doar el are acces la contul Bybit |
+| **oprirea intrărilor LONG** | **a cerut explicit să nu ating calea banilor fără el** — asta nu e o sarcină neterminată, e o instrucţiune respectată |

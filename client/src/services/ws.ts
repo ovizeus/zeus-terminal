@@ -26,6 +26,7 @@ let _lastSignalAt = 0
 let _livenessTimer: ReturnType<typeof setInterval> | null = null
 let _hiddenAt = 0
 let _resumeWired = false
+let _teardown: (() => void) | null = null
 
 function getWsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -169,12 +170,21 @@ export function startLivenessWatch(): void {
     checkLiveness()
   }
   const onHide = () => { _hiddenAt = Date.now() }
+  const onVisibility = () => { if (document.visibilityState === 'visible') onResume(); else onHide() }
+  const onOnline = () => forceReconnect('network came back')
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') onResume(); else onHide()
-  })
+  document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('focus', onResume)
-  window.addEventListener('online', () => forceReconnect('network came back'))
+  window.addEventListener('online', onOnline)
+  // [2026-11-07] Kept so stop can undo exactly what start did. The first
+  // version only cleared the interval and left _resumeWired set, which meant a
+  // stop followed by a start silently left the app with NO heartbeat at all —
+  // found by a test that stopped and restarted the watch.
+  _teardown = () => {
+    document.removeEventListener('visibilitychange', onVisibility)
+    window.removeEventListener('focus', onResume)
+    window.removeEventListener('online', onOnline)
+  }
 
   // Capacitor: more dependable than visibilitychange inside the WebView.
   try {
@@ -193,6 +203,10 @@ export function startLivenessWatch(): void {
 
 export function stopLivenessWatch(): void {
   if (_livenessTimer) { clearInterval(_livenessTimer); _livenessTimer = null }
+  if (_teardown) { try { _teardown() } catch { /* listeners already gone */ } _teardown = null }
+  // Symmetry matters: without clearing this, a later start() returns early and
+  // the app runs on with no heartbeat and no resume handling.
+  _resumeWired = false
 }
 
 export function disconnect() {
