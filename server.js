@@ -2062,6 +2062,16 @@ const _wsPing = setInterval(() => {
     } catch (_) { /* never kick on DB hiccup */ }
     ws.isAlive = false;
     ws.ping();
+    // [2026-11-07] Application-level heartbeat, riding the interval that was
+    // already here. The protocol ping above is answered by the browser itself
+    // and is INVISIBLE to JavaScript, so a client cannot use it to tell a live
+    // socket from a dead one. Without a frame it can actually see, a quiet
+    // market looks exactly like a frozen connection — which is the bug this
+    // serves: after a phone backgrounds the app the socket reports OPEN
+    // forever while nothing arrives. A few bytes per client per 30s.
+    try {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'hb', t: Date.now() }));
+    } catch (_) { /* a failed heartbeat must never take down the sweep */ }
   });
 }, 30000);
 

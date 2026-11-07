@@ -12110,3 +12110,51 @@ Un eveniment devine 21 de linii, repetat până se închide întrerupătorul.
 3. **Trimite 503-urile sintetizate în telemetrie**, ca tabloul de bord să nu mai mintă.
 
 Estimare: mic şi izolat — atinge `binanceGateway` şi `circuitBreaker`, nu calea banilor.
+
+---
+
+## 🔌 2026-11-07 — Revenirea din fundal: soclul zombi
+
+A cerut: las aplicaţia în fundal, mă întorc, e îngheţată şi nu se actualizează până nu dau refresh.
+
+## Cauza, exact
+
+Telefonul îngheaţă WebView-ul. Conexiunea moare — serverul o închide după timeout — dar clientul îngheţat **nu primeşte niciodată cadrul de închidere**. La revenire, browserul raportează în continuare `readyState === OPEN`. De acolo, trei consecinţe:
+
+| | |
+|---|---|
+| reconectarea era doar pe `onclose` | `onclose` nu se declanşează → **nimic nu se reconectează** |
+| `isConnected()` = `readyState === OPEN` | întoarce `true` → **beculeţul verde pe un soclu mort** |
+| `connect()` începe cu `if (_ws && readyState <= OPEN) return` | **o reconectare naivă la revenire n-ar fi făcut nimic** |
+
+Ultima e cea care contează: reparaţia evidentă — „cheamă `connect()` când revii" — **ar fi fost cod mort.**
+
+## Reparaţia, trei părţi
+
+**1. Puls la nivel de aplicaţie, pe server.** Serverul trimitea deja `ping` de protocol la 30s, dar **browserul răspunde singur şi nu-l expune în JavaScript** — clientul nu-l poate folosi. Fără un cadru vizibil, o piaţă liniştită arată exact ca un soclu mort. Acum trimite şi `{type:'hb'}` pe acelaşi interval. Câţiva octeţi per client la 30s.
+
+**2. `forceReconnect()` care chiar reconstruieşte.** Goleşte referinţa **înainte** de `connect()`, ca ieşirea devreme să nu mai vadă un soclu viu, şi **detaşează managerii vechi** — altfel închiderea lui întârziată ar programa o a doua reconectare şi ar alerga două socluri.
+
+**3. Declanşatoarele.** Revenire în prim-plan (`visibilitychange`, `focus`, şi **`appStateChange` din Capacitor**, fiindcă în WebView-ul Android `visibilitychange` nu se livrează sigur), revenirea reţelei, plus o verificare la 15s cât timp eşti în faţă. Sub 10 secunde de absenţă nu se forţează nimic — o privire la o notificare nu merită o reconectare.
+
+Şi **`isConnected()` nu mai minte**: deschis **şi** vorbind, altfel nu.
+
+**4. Ce se re-trage.** Managerul de `reconnect` reîmprospăta deja starea AT, setările, ARES, poziţiile. Lipseau exact cele două pe care le **vezi**: **balanţa live şi lumânările**. Adăugate.
+
+## Mutaţii — şi una care m-a prins
+
+| mutaţie | rezultat |
+|---|---|
+| nu mai detaşez managerii vechi | 1 test picat |
+| `isConnected` întreabă doar `readyState` | 1 test picat |
+| **nu mai golesc referinţa înainte de `connect()`** | **a SUPRAVIEŢUIT** |
+
+A treia a trecut fiindcă fals-soclul meu îşi schimba singur starea la `close()`. **Un zombi adevărat nu face asta** — exact cazul pentru care există apărarea. Am scris testul lipsă, cu un soclu al cărui `close()` nu face nimic. A picat şi pe codul bun — era **bug în testul meu** (constructorul înregistra în clasa de bază, nu în subclasă). Reparat, şi acum mutaţia moare.
+
+Lecţia, iar: **o mutaţie care supravieţuieşte înseamnă că testul nu apăra ce credeam.**
+
+## Ce nu pot promite
+
+**Nu pot reproduce pe VPS îngheţarea reală a unui telefon.** Logica e testată serios — 29 de teste noi — dar **proba finală e a lui**: lasă aplicaţia în fundal câteva minute şi revino.
+
+Suite: **10.417 server + 1.768 client**, verzi.

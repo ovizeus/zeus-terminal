@@ -324,6 +324,19 @@ export function useServerSync(authenticated: boolean) {
             usePositionsStore.getState().setDemoBalance(bal.balance)
           }
         }).catch(() => {})
+        // [2026-11-07] The two the buyer actually SEES as "stale": the live
+        // balance and the candles. Everything above restores invisible truth;
+        // without these the screen still shows yesterday's numbers after a
+        // reconnect, which is what "degraded until I refresh" looked like.
+        try {
+          const _u = useUiStore.getState()
+          _refreshLiveBalanceFor(_u.executionEnv, _u.apiConfigured)
+        } catch { /* balance is best-effort */ }
+        import('../data/marketDataChart').then(({ fetchKlines }) => {
+          const w = window as unknown as { S?: { chartTf?: string } }
+          const tf = w.S && w.S.chartTf
+          if (tf) fetchKlines(tf)
+        }).catch(() => { /* chart keeps its last candles */ })
         // [Phase 8B5] Reset lastSnapshotTs so the first post-reconnect
         // positions.changed is accepted even if the server side's
         // updated_at went backwards (rare but possible after a server

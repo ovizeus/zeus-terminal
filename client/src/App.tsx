@@ -52,6 +52,10 @@ export function App() {
       // [2026-06-24] load the user's flip-header profile once authenticated
       try { useProfileStore.getState().load() } catch (_) {}
       wsService.connect()
+      // [2026-11-07] Watch for the socket the OS froze: forces a rebuild when
+      // the app returns to the foreground, and notices silence while it is in
+      // front. Idempotent, so a remount cannot stack listeners.
+      wsService.startLivenessWatch()
       // [WS-PROXY B.6] Install market bridge listener on /ws/sync
       try { require('./services/wsMarketBridge').install() } catch (_) {}
       // [MIGRATION-F0] settings cross-device sync subscriber (reuses /ws/sync)
