@@ -63,6 +63,14 @@ const DEFAULTS = {
     // Binance is misbehaving; flip OFF when the primary lane recovers. No
     // trading-path change, no DSL/Brain engine change; only the input layer.
     ALT_WS_FEEDS: false,
+    // [2026-11-07] TILT_GUARD_ENABLED — reduce confidence after consecutive
+    // losses (2 → x0.92, 3 → x0.85, 4 → x0.80, 5+ → x0.70). The guard was
+    // written long ago and has NEVER fired: trackEquity, its only data source,
+    // was called nowhere, so getTiltModifier always returned 1.0. The plumbing
+    // is connected now; this flag decides whether it bites. Default OFF —
+    // behaviour identical to every day until today. Flipping it ON changes
+    // entry confidence, so it is the operator's call, not a deploy decision.
+    TILT_GUARD_ENABLED: false,
     // [2026-06-19] CHART_BACKFILL_ENABLED — lazy historical backfill on left-edge
     // scroll (up to 5000 bars/symbol×tf). Default ON (operator-requested feature).
     // Flip OFF for instant rollback: client stops backfilling, _capKlines reverts
@@ -504,6 +512,7 @@ module.exports = {
     get ML_DSL_FULL_CONTROL() { return _ML_DSL_FULL_CONTROL; },
     get R1_ENFORCEMENT_MODE() { return _R1_ENFORCEMENT_MODE; },   // 'advisory' | 'blocking'
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
+    get TILT_GUARD_ENABLED() { return flags.TILT_GUARD_ENABLED; },
     get CHART_BACKFILL_ENABLED() { return flags.CHART_BACKFILL_ENABLED; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.
     get BYBIT_TESTNET_ENABLED() { return flags.BYBIT_TESTNET_ENABLED; },

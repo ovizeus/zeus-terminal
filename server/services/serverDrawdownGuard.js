@@ -20,7 +20,26 @@ const DRAWDOWN_TIERS = [
 // Per-user equity tracking
 const _equityCurve = new Map(); // userId → [{ ts, equity, pnlEvent }]
 const _peakEquity = new Map();  // userId → highest equity today
+const _trackedDay = new Map();  // userId → the UTC day its data belongs to
 const MAX_CURVE_POINTS = 500;
+
+/** The UTC day a timestamp falls in, as YYYY-MM-DD. */
+function _dayOf(ts) { return new Date(ts).toISOString().slice(0, 10); }
+
+/**
+ * [2026-11-07] Is the tilt modifier allowed to do anything?
+ *
+ * Default OFF, so shipping this changes nothing: getTiltModifier keeps
+ * returning 1.0 exactly as it has all along. Flip
+ * TILT_GUARD_ENABLED in data/migration_flags.json to switch the protection on.
+ *
+ * Read through a try/catch because a missing flags module must leave the
+ * guard neutral rather than throw on a path that runs per decision.
+ */
+function _tiltEnabled() {
+    try { return require('../migrationFlags').TILT_GUARD_ENABLED === true; }
+    catch (_) { return false; }
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Drawdown Assessment
@@ -65,6 +84,16 @@ function assessDrawdown(dailyPnL, referenceBalance) {
  * Track equity point for curve visualization.
  */
 function trackEquity(userId, equity, pnlEvent) {
+    // [2026-11-07] The daily reset happens HERE, not through a caller that has
+    // to remember. resetDaily() existed, was documented "call on day change",
+    // and was never called once — which is precisely how this whole guard sat
+    // dormant. A reset somebody must remember is a reset that will not happen.
+    const today = _dayOf(Date.now());
+    if (_trackedDay.get(userId) !== today) {
+        _equityCurve.delete(userId);
+        _peakEquity.delete(userId);
+        _trackedDay.set(userId, today);
+    }
     if (!_equityCurve.has(userId)) _equityCurve.set(userId, []);
     const curve = _equityCurve.get(userId);
     curve.push({ ts: Date.now(), equity, pnlEvent: pnlEvent || null });
@@ -108,6 +137,9 @@ function getConsecutiveLosses(userId) {
  * @returns {number} 0.7-1.0
  */
 function getTiltModifier(userId) {
+    // Neutral while the flag is off — the shipped default, and identical to
+    // the behaviour this had for its entire life before today.
+    if (!_tiltEnabled()) return 1.0;
     const losses = getConsecutiveLosses(userId);
     if (losses >= 5) return 0.70; // 5+ consecutive losses = severe tilt risk
     if (losses >= 4) return 0.80;
@@ -140,6 +172,7 @@ function getDrawdownData(userId, dailyPnL, referenceBalance) {
 function resetDaily(userId) {
     _equityCurve.delete(userId);
     _peakEquity.delete(userId);
+    _trackedDay.delete(userId);
 }
 
 module.exports = {
@@ -151,4 +184,6 @@ module.exports = {
     getDrawdownData,
     resetDaily,
     DRAWDOWN_TIERS,
+    _tiltEnabled,
+    _dayOf,
 };

@@ -35,9 +35,19 @@ describe('R0 Substrate — timeIntegrity', () => {
     });
 
     describe('detectTimeSkew', () => {
-        test('returns 0 when reference equals local time', () => {
+        test('reports no meaningful skew when reference is now', () => {
+            // [2026-11-07] This asserted exactly 0 and was a race against the
+            // millisecond tick: detectTimeSkew is Date.now() - ref, so if the
+            // clock advances between the two reads the answer is 1, not 0.
+            // Under load that happened often enough to fail roughly one full
+            // suite run in eight — the intermittent shard-2 failure chased all
+            // day, caught once a reporter started recording failures by name.
+            //
+            // A raw difference is the right behaviour for a skew detector, so
+            // the TEST was wrong, not the function. A few milliseconds is
+            // still "no skew"; a genuine skew bug shows up in seconds.
             const now = Date.now();
-            expect(detectTimeSkew(now)).toBe(0);
+            expect(Math.abs(detectTimeSkew(now))).toBeLessThan(50);
         });
 
         test('returns positive value when reference is in past', () => {

@@ -2470,6 +2470,28 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
 
     if (pnl !== 0) recordClosedPnL(pnl, 'SERVER_AT', userId);
 
+    // [2026-11-07] Feed the drawdown/tilt guard. This is the single place every
+    // closed position with a PnL passes through, which is why the call belongs
+    // here and nowhere else.
+    //
+    // The guard has existed for months and never once fired: trackEquity, its
+    // only data source, was called from nowhere, so getConsecutiveLosses always
+    // returned 0, getTiltModifier always returned 1.0, and serverBrain's
+    // `confidence *= _mods.tilt` multiplied by one forever.
+    //
+    // Collecting here is inert on its own — the modifier stays neutral until
+    // TILT_GUARD_ENABLED is switched on, so this deploy changes no behaviour.
+    // It means the guard will have real history the moment it is wanted,
+    // instead of starting from nothing.
+    try {
+        if (pnl !== 0) {
+            const _ddg = require('./serverDrawdownGuard');
+            const _us = _uState(userId);
+            const _bal = _us && typeof _us.demoBalance === 'number' ? _us.demoBalance : 0;
+            _ddg.trackEquity(userId, _bal, pnl > 0 ? 'win' : 'loss');
+        }
+    } catch (_) { /* a guard that cannot record must never break a close */ }
+
     pos.live.status = 'CLOSED';
 
     const holdMin = ((pos.closeTs - pos.ts) / 60000).toFixed(1);

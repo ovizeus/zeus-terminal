@@ -12760,3 +12760,53 @@ A o porni înseamnă a schimba `confidence` pe intrările vii — **calea banilo
 ## Restul candidaţilor
 
 Opt celelalte export-uri fără consumator sunt curăţenie, nu pericol: `stopOrphanSweep`, `stopDepthPolling` (opriri necuplate), `analyzeAllPositions` (ambalaj peste o funcţie care **e** folosită), `getCounts`, `canonicalKey`, `getAllUserIds`, `shouldShadow`, `getMaxDrawdown`. Le las — a şterge ambalaje nefolosite n-ar schimba nimic şi ar mări diferenţa degeaba.
+
+---
+
+## 🎯 2026-11-07 — Protecţia „tilt": cuplată şi livrată STINSĂ. Şi instabilitatea: GĂSITĂ.
+
+Scrisesem mai devreme că n-o repar fiindcă e pe calea banilor. **Am greşit punând-o în aceeaşi categorie cu LONG-urile.** Aia avea premisa infirmată de date. Asta e o funcţie **care trebuia să meargă şi tăcut nu mergea** — a o cupla nu e o politică nouă, e restaurarea intenţiei. Am construit-o întreagă şi am livrat-o **stinsă**, ca poarta BYOI.
+
+### Ce e cuplat
+
+`trackEquity` se cheamă acum la **punctul unic** prin care trece fiecare închidere cu PnL (`serverAT.js`, lângă `recordClosedPnL`). Guard `TILT_GUARD_ENABLED`, **implicit `false`**.
+
+**Dovedit pe serverul viu, după reload:** flagul `false`, iar după 6 pierderi la rând modificatorul e **1 — neutru.** Nimic nu s-a schimbat azi.
+
+Dar datele **se colectează**, deci în ziua în care o aprinzi, garda are istoric, nu porneşte de la zero.
+
+### Decizia de proiectare care contează
+
+Resetul zilnic **se face singur**, în `trackEquity`, pe schimbarea zilei UTC. `resetDaily()` exista, era documentat „call on day change" şi **nu-l chema nimeni** — exact aşa a stat garda moartă. **Un reset pe care cineva trebuie să şi-l amintească e un reset care nu se va întâmpla.**
+
+Testat: 5 pierderi la 23:50 → a doua zi la 00:10 streak-ul e **1, nu 6**; şi vârful e per zi, deci un maxim vechi nu te mai ţine „în drawdown" la nesfârşit.
+
+11 teste. Mutaţii: scot poarta flagului → 3 picate; scot resetul zilnic → 2 picate.
+
+### ⚠️ Corectură la mine, de acum o oră
+
+Am scris că `_equityCurve` „creşte nemărginit" şi devine scurgere de memorie. **Fals.** `MAX_CURVE_POINTS = 500` exista deja şi curba e plafonată. Am afirmat-o fără s-o verific. Există acum şi un test care o apără.
+
+### 🎯 Şi instabilitatea din shard 2: GĂSITĂ ŞI REPARATĂ
+
+Înregistratorul pus azi şi-a făcut treaba exact aşa cum speram — a numit-o la a doua apariţie:
+
+```
+tests/unit/ml/timeIntegrity.test.js
+„detectTimeSkew returns 0 when reference equals local time"
+```
+
+```js
+const now = Date.now();
+expect(detectTimeSkew(now)).toBe(0);   // o cursa cu tictacul milisecundei
+```
+
+`detectTimeSkew` e `Date.now() - ref`. Dacă ceasul avansează între cele două citiri, răspunsul e **1, nu 0**. Sub încărcare se întâmpla destul de des cât să pice **cam o suită din opt** — exact rata pe care am măsurat-o vânând-o.
+
+**Diferenţa brută e comportamentul corect pentru un detector de derivă, deci TESTUL greşea, nu funcţia.** Acum cere „sub 50ms": câteva milisecunde tot înseamnă „fără derivă", iar o derivă adevărată se vede în secunde.
+
+**Asta e exact motivul pentru care am construit înregistratorul.** O instabilitate pe care n-o poţi numi nu se poate repara. Opt rulări de shard după, jurnalul e gol.
+
+### Notă
+
+La reload au apărut două `[CLIENT_ERR] Failed to fetch` la 17:45 şi 17:46 — cereri din browser în zbor în momentul repornirii. Tranzitorii, aşteptate.
