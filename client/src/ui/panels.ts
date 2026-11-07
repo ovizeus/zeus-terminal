@@ -1262,7 +1262,7 @@ function _ensureSessionOverlayHost(): HTMLElement | null {
   return host;
 }
 
-function _sessionBlocks(sess: string, klines: any[], cfg: any): { start: number; end: number; high: number; low: number }[] {
+function _sessionBlocks(_sess: string, klines: any[], cfg: any): { start: number; end: number; high: number; low: number }[] {
   // [Pack B+1] Each block now also carries the price-range (high/low)
   // observed across the candles inside that session window. The render
   // step uses this to size the box vertically (priceToCoordinate(high)

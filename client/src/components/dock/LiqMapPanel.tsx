@@ -4,11 +4,11 @@ import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, fmtSpan, L
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
 import { spanStep, spanStepOut, spanLabel, SPAN_FACTOR } from '../../liqmap/scale'
 import {
-    fetchPredict, sideLabel, hitLabel, horizonLabel, strengthBar, targetLabel,
+    fetchPredict, sideLabel, horizonLabel, strengthBar, targetLabel,
     historyLabel, crowdLabel, oiLabel, liftLabel, type PredictSymbol,
 } from '../../liqmap/predict'
 import {
-    fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
+    fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
     yToPrice, zoomStep, zoomStepOut, zoomLabel,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
@@ -820,7 +820,7 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                 <span><i className="zbk-dot" />trades</span>
                 <span><i className="zbk-ring" />liquidations</span>
                 <span>{bandLabel(Number.isFinite(heat.bandPct as number) ? Number(Number(heat.bandPct).toFixed(3)) : band)}</span>
-                <span>{windowLabel(win)} span · {fmtSpan(Math.max(0, (heat.tMax || 0) - (heat.tMin || 0)))} drawn</span>
+                <span>{windowLabel(win)} span · {fmtSpan(heat.tMin || 0, heat.tMax || 0)} drawn</span>
                 {/* Grila e marginita la numarul de instantanee: altfel 20 de
                     cadre in 110 coloane ar desena un pieptene de dungi cu
                     gauri. Dar atunci trebuie SPUS, altfel o harta cu putine

@@ -20,7 +20,7 @@ describe('ExchangeDetail', () => {
   it('renders connected info + RE-VERIFY + DISCONNECT when account exists', () => {
     useMultiExchangeStore.setState({
       accounts: {
-        binance: { connected: true, mode: 'testnet', maskedKey: '****abcd', balance: 100.5, lastVerified: '2026-05-20T20:00:00Z' },
+        binance: { connected: true, active: true, mode: 'testnet', maskedKey: '****abcd', balance: 100.5, lastVerified: '2026-05-20T20:00:00Z' },
       },
     })
     const onBack = vi.fn()

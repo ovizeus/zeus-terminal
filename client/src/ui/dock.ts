@@ -1,4 +1,3 @@
-import { toast } from '../data/marketDataHelpers'
 import { openPageView } from './pageview'
 // Zeus Terminal — ui/dock.ts (ported from ui/dock.js)
 // Icon Dock: module shortcuts grid (Faza A — visual only, no navigation)

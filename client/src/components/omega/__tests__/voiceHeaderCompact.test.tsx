@@ -6,7 +6,7 @@
 // de intervale inca ~44 pe un rand separat. Raman ~198px pentru ganduri, iar un
 // gand ocupa ~100px — deci doi, al doilea taiat. Antetul pe UN singur rand da
 // inapoi acei ~44px, cat trebuie pentru al doilea gand intreg.
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { TheVoice } from '../TheVoice'
 

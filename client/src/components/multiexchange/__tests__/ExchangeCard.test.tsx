@@ -10,7 +10,7 @@ describe('ExchangeCard', () => {
         id="binance"
         label="BINANCE"
         status="active"
-        account={{ connected: true, mode: 'testnet', maskedKey: '****abcd', balance: 1234.56, lastVerified: '2026-05-20T20:00:00Z' }}
+        account={{ connected: true, active: true, mode: 'testnet', maskedKey: '****abcd', balance: 1234.56, lastVerified: '2026-05-20T20:00:00Z' }}
         onClick={onClick}
       />
     )
@@ -45,7 +45,7 @@ describe('ExchangeCard', () => {
         id="binance"
         label="BINANCE"
         status="active"
-        account={{ connected: true, mode: 'testnet', maskedKey: '****x', balance: 0, lastVerified: '' }}
+        account={{ connected: true, active: true, mode: 'testnet', maskedKey: '****x', balance: 0, lastVerified: '' }}
         onClick={onClick}
       />
     )

@@ -33,7 +33,9 @@ describe('normalizeKlines — converteste DOAR ce are nevoie', () => {
   const zeus = (t: number) => ({ open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, time: t })
 
   it('vector proaspat in format Zeus → converteste tot, o singura data', () => {
-    const arr = [zeus(1), zeus(2), zeus(3)]
+    // normalizeKlines REPLACES each element in place with the short-key bar,
+    // so the array no longer holds what its literal said it held
+    const arr: Array<Record<string, number>> = [zeus(1), zeus(2), zeus(3)]
     expect(normalizeKlines(arr)).toBe(3)
     expect(arr[0].o).toBe(1)
   })

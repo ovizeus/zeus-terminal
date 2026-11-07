@@ -13,8 +13,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 // So the fallback may only declare the store loaded when it actually projected
 // something real. With nothing cached and no server, saving stays blocked.
 
-const saveMock = vi.fn(() => Promise.resolve({ ok: true, updated_at: 1 }))
-const fetchMock = vi.fn()
+const saveMock = vi.fn<(...a: unknown[]) => unknown>(() => Promise.resolve({ ok: true, updated_at: 1 }))
+const fetchMock = vi.fn<(...a: unknown[]) => unknown>()
 vi.mock('../../services/api', () => ({
   userSettingsApi: { fetch: (...a: unknown[]) => fetchMock(...a), save: (...a: unknown[]) => saveMock(...a) },
 }))

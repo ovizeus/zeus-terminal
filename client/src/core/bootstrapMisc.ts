@@ -187,12 +187,25 @@ export function _renderBuildInfo(): void {
 
 // ===== WELCOME MODAL =====
 let _wlcShown = false
+
+// [2026-06-24] Welcome splash DISABLED per operator request — it was a cosmetic "Welcome back,
+// Commander" daily-summary panel shown on every app entry (balance/PnL/trades/winrate/positions/
+// AT/brain). The same stats live in the app, so it only added a dismiss step on launch.
+//
+// [2026-11-07] This was a bare `return` at the top of the function, which made
+// the ~100 lines below UNREACHABLE. TypeScript does not narrow types in
+// unreachable code, so every `if (!el) return` guard down there was ignored and
+// the file produced 26 "possibly null" errors — a third of every type error in
+// the client. They were never bugs; they were the signature of dead code.
+//
+// The flag is typed `boolean` rather than left as the literal `false` on
+// purpose: a literal would let TypeScript prove the body unreachable again and
+// the errors would come straight back. Behaviour is identical — the panel stays
+// off — and re-enabling is now flipping this to true instead of deleting a line.
+const WELCOME_MODAL_ENABLED: boolean = false
+
 export async function _showWelcomeModal(): Promise<void> {
-  // [2026-06-24] Welcome splash DISABLED per operator request — it was a cosmetic "Welcome back,
-  // Commander" daily-summary panel shown on every app entry (balance/PnL/trades/winrate/positions/
-  // AT/brain). The same stats live in the app, so it only added a dismiss step on launch. Early
-  // return here kills all triggers (boot + PIN-unlock) at once; remove this line to re-enable.
-  return
+  if (!WELCOME_MODAL_ENABLED) return
   try {
     if (_wlcShown) return; if ((await _pinIsSet()) && !_pinIsUnlocked()) return
     try {

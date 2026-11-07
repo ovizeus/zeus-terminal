@@ -1007,20 +1007,9 @@ const w = window as any
     ctx.fillText(comboText, cx, _comboY)
   }
 
-  // Rounded rect helper
-  function _roundRect(ctx: any, x: number, y: number, _w: number, h: number, r: number) {
-    ctx.beginPath()
-    ctx.moveTo(x + r, y)
-    ctx.lineTo(x + _w - r, y)
-    ctx.quadraticCurveTo(x + _w, y, x + _w, y + r)
-    ctx.lineTo(x + _w, y + h - r)
-    ctx.quadraticCurveTo(x + _w, y + h, x + _w - r, y + h)
-    ctx.lineTo(x + r, y + h)
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-    ctx.lineTo(x, y + r)
-    ctx.quadraticCurveTo(x, y, x + r, y)
-    ctx.closePath()
-  }
+  // [2026-11-07] _roundRect removed — defined, never called. Dead code in a
+  // canvas renderer is worse than elsewhere: the next reader assumes the
+  // shape is drawn somewhere.
 
   // ── Destroy ────────────────────────────────────────────
   function destroy() {

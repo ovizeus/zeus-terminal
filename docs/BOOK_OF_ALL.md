@@ -12291,3 +12291,50 @@ Verificat separat că garda discriminează: respinge calea de producţie şi un 
 ### Al doilea câştig, gratis
 
 Eşecul instabil din shard 2 (`db locked`) avea aceeaşi cauză — teste care se calcă pe acelaşi fişier. Cu fiecare rulare pe baza ei, dispare.
+
+---
+
+## 🧮 2026-11-07 — Verificarea de tipuri: de la „nu exista" la ZERO erori
+
+Al doilea element deschis, rezolvat. Şi a scos la iveală **două bug-uri reale** pe care nimeni nu le vedea.
+
+### Întâi, comanda
+
+`client/tsconfig.json` are `"files": []` şi doar referinţe — comanda pe care o foloseam nu verifica **niciun** fişier. Cea corectă e `-p tsconfig.app.json`, şi acum e în `package.json` ca **`npm run typecheck`**.
+
+### Ce a găsit: 77 de erori. Şi ce erau de fapt
+
+**26 dintr-un singur fişier erau semnătura codului mort.** `_showWelcomeModal` avea un `return` necondiţionat la început, deci ~100 de linii erau **inaccesibile**. TypeScript nu îngustează tipuri în cod inaccesibil, aşa că fiecare `if (!el) return` de acolo era ignorat şi toate apăreau drept „possibly null". **N-au fost niciodată bug-uri.**
+
+Operatorul parcase panoul intenţionat („remove this line to re-enable"), deci nu l-am şters. L-am pus în spatele unui `const WELCOME_MODAL_ENABLED: boolean = false` — tipat **`boolean`**, nu literal, fiindcă un literal i-ar permite lui TS să demonstreze iar inaccesibilitatea şi erorile s-ar întoarce. Comportament identic, iar reactivarea e acum o comutare, nu o ştergere de linie.
+
+### 🐞 Două bug-uri reale, găsite doar fiindcă am pornit verificarea
+
+**1. Eticheta de durată din LIQ MAP era goală.** `fmtSpan(tMin, tMax)` primea **diferenţa** ca prim argument, iar al doilea lipsea. Înăuntru: `Number(undefined)` = NaN → garda returnează **şir gol**. Textul afişa „span · **nimic** drawn". Acum primeşte ambele capete.
+
+**2. Pulsul vizual al monedei nu ajungea niciodată la monedă.** `onNeuronScanUpdate(sym)` era chemat **fără argument**, deşi `sym` era chiar acolo în domeniu. Înăuntru se indexa `_neuroLastScan[undefined]` şi pulsa o monedă inexistentă.
+
+Niciunul nu dădea eroare. Amândouă stăteau tăcute de luni de zile.
+
+### Alte lucruri adevărate, mai mici
+
+- **4 apeluri `togInd('ema', e.currentTarget)`** cu un comentariu care promitea că al doilea argument declanşează o sincronizare imperativă. **Nu o declanşa.** `togInd`-ul din domeniu e cel **local**, cu un singur parametru, care cheamă `togIndFn(key, null)` — pasează `null` **intenţionat**, fiindcă React deţine clasa `act`. Argumentul era aruncat tăcut. Comportament neschimbat; doar minciuna a dispărut.
+- **`ModeBar` se re-randa la fiecare schimbare de poziţie, degeaba** — două abonamente la magazin rămase de la regula de blocare pe care **operatorul a anulat-o pe 18 mai**. `hardDisableForOppositePositions` e constantă `false` de atunci.
+- `_roundRect`, 15 linii într-un randor de canvas, definit şi niciodată chemat. În desen, codul mort e mai rău decât aiurea: următorul cititor presupune că forma se desenează undeva.
+- 10 declaraţii moarte, un import orfan, un câmp lipsă din `LegacyChart`.
+
+### Ce NU am făcut
+
+Am încercat să lărgesc semnătura lui `belongsToSymbol` ca să accepte literalul din test. **A rupt un apel de producţie** — semn că alegerea era greşită. Am dat înapoi şi am reparat testul, care era locul unde stătea de fapt neadevărul: mock-urile se dădeau drept desene, dar omiteau exact câmpul care face unul „vechi".
+
+### Starea finală
+
+| | |
+|---|---|
+| erori de tip | **77 → 0** |
+| `npm run typecheck` | există şi e corect |
+| client | 1.768 teste verzi, build curat |
+| server | 10.443 teste verzi |
+| baza vie | `md5` neschimbat |
+
+**Nota de onestitate:** la una dintre rulări, un test din shard 1 a picat şi a trecut la următoarele două. Instabil, nu real — dar îl spun, fiindcă „verde" trebuie să însemne verde.

@@ -22,7 +22,8 @@ import { describe, it, expect } from 'vitest'
 
 import { belongsToSymbol, forSymbol, serializeLine, serializeLines, mergeForSave, capForSync } from '../drawingScope'
 
-const legacy = { id: 1, type: 'hline', color: '#f0c040', width: 2, style: 0, price: 61234.5 }
+type MockLine = { id: number; type: string; color: string; width: number; style: number; price: number; sym?: string }
+const legacy: MockLine = { id: 1, type: 'hline', color: '#f0c040', width: 2, style: 0, price: 61234.5 }
 const onBtc = { ...legacy, id: 2, sym: 'BTCUSDT' }
 const onEth = { ...legacy, id: 3, sym: 'ETHUSDT' }
 
@@ -97,7 +98,7 @@ describe('saving never re-labels a drawing', () => {
 
   it('drops the live chart objects instead of trying to serialise them', () => {
     const withRefs = { ...onBtc, lwcRef: { fake: true }, handles: [{}], delBtn: {}, cfgBtn: {} }
-    const out = serializeLine(withRefs, 'BTCUSDT') as Record<string, unknown>
+    const out = serializeLine(withRefs, 'BTCUSDT') as unknown as Record<string, unknown>
     for (const k of ['lwcRef', 'lwcSeries', 'handles', 'delBtn', 'cfgBtn']) {
       expect(Object.prototype.hasOwnProperty.call(out, k)).toBe(false)
     }

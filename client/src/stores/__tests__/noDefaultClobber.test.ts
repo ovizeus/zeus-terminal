@@ -33,8 +33,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 // save half is the exact mistake that made the candle type look fixed for
 // three days (see candleTypePersist.test.ts).
 
-const saveMock = vi.fn(() => Promise.resolve({ ok: true, updated_at: 5 }))
-const fetchMock = vi.fn()
+const saveMock = vi.fn<(...a: unknown[]) => unknown>(() => Promise.resolve({ ok: true, updated_at: 5 }))
+const fetchMock = vi.fn<(...a: unknown[]) => unknown>()
 vi.mock('../../services/api', () => ({
   userSettingsApi: { fetch: (...a: unknown[]) => fetchMock(...a), save: (...a: unknown[]) => saveMock(...a) },
 }))
@@ -51,7 +51,7 @@ async function saveAndCapture(): Promise<Record<string, unknown>> {
   useSettingsStore.setState({ loaded: true })
   await useSettingsStore.getState().saveToServer()
   expect(saveMock).toHaveBeenCalled()
-  return saveMock.mock.calls[0][0] as Record<string, unknown>
+  return saveMock.mock.calls[0][0] as unknown as Record<string, unknown>
 }
 
 describe('a save never clobbers keys this store does not own', () => {

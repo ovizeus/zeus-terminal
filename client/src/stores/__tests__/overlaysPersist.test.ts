@@ -7,8 +7,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 // missing feature: togInd does save, and the React wrapper's own comment talks
 // about "the legacy start value was already-true (persisted)".
 
-const saveMock = vi.fn(() => Promise.resolve({ ok: true, updated_at: 5 }))
-const fetchMock = vi.fn()
+const saveMock = vi.fn<(...a: unknown[]) => unknown>(() => Promise.resolve({ ok: true, updated_at: 5 }))
+const fetchMock = vi.fn<(...a: unknown[]) => unknown>()
 vi.mock('../../services/api', () => ({
   userSettingsApi: { fetch: (...a: unknown[]) => fetchMock(...a), save: (...a: unknown[]) => saveMock(...a) },
 }))
@@ -31,7 +31,7 @@ describe('overlay toggles persist', () => {
     useSettingsStore.setState({ loaded: true })
     await useSettingsStore.getState().saveToServer()
     expect(saveMock).toHaveBeenCalled()
-    const payload = saveMock.mock.calls[0][0] as Record<string, unknown>
+    const payload = saveMock.mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload.overlays).toEqual(OV)
   })
 
@@ -40,7 +40,7 @@ describe('overlay toggles persist', () => {
     w.S = { overlays: {}, activeInds: {}, indicators: {} }
     useSettingsStore.setState({ loaded: true })
     await useSettingsStore.getState().saveToServer()
-    const payload = saveMock.mock.calls[0][0] as Record<string, unknown>
+    const payload = saveMock.mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload.overlays).toBeFalsy()   // null from defaults, never an empty map
   })
 

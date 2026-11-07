@@ -6,9 +6,8 @@
  *  [BUG-T3+T7 2026-05-17] Hard-disable button when opposite-mode positions
  *  exist; opposite-mode AT badge surfaces other-engine AT-active state.
  */
-import { useATStore, useUiStore, usePositionsStore } from '../../stores'
+import { useATStore, useUiStore } from '../../stores'
 import { switchGlobalMode } from '../../data/marketDataTrading'
-import { _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
 import { QuotaIndicator } from './QuotaIndicator'
@@ -24,12 +23,12 @@ export function ModeBar() {
   // [BUG-T7 2026-05-17] Opposite-mode AT-active mirror (synced from server
   // state.atActiveDemo/atActiveLive via core/state.ts at_update handler).
   const oppositeModeAtEnabled = useUiStore((s) => s.oppositeModeAtEnabled)
-  // [BUG-T3 2026-05-17] Position counts feed the hard-disable rule.
-  const demoPositions = usePositionsStore((s) => s.demoPositions)
-  const livePositions = usePositionsStore((s) => s.livePositions)
-  const oppositeCount = _countOppositeModeOpenPositions(
-    engineMode as 'demo' | 'live', demoPositions, livePositions,
-  )
+  // [BUG-T3 2026-05-17 / removed 2026-11-07] These fed the opposite-mode
+  // hard-disable rule, which the operator REVERSED on 2026-05-18 in favour of
+  // a soft confirm — demo and live are deliberately independent sandboxes.
+  // hardDisableForOppositePositions has been a constant false ever since, so
+  // the counts had no reader. They were still store subscriptions, which means
+  // this bar re-rendered on every position change for nothing.
   const oppositeModeLabel = engineMode === 'live' ? 'DEMO' : 'LIVE'
 
   const _exchSuffix = activeExchange === 'binance' ? ' · BINANCE' : activeExchange === 'bybit' ? ' · BYBIT' : ''

@@ -66,7 +66,7 @@ export function connectWatchlist(): void {
       if (pe) pe.textContent = msg.price >= 1000 ? '$' + Math.round(msg.price).toLocaleString() : '$' + (+msg.price).toFixed(msg.price >= 1 ? 3 : 4)
       if (ce) { ce.textContent = (msg.chg >= 0 ? '+' : '') + msg.chg.toFixed(2) + '%'; ce.style.color = msg.chg >= 0 ? 'var(--grn)' : 'var(--red)' }
       try { window.dispatchEvent(new CustomEvent('zeus:wlPrice', { detail: { sym, price: msg.price, chg: msg.chg || 0 } })) } catch (_) {}
-      if (typeof onNeuronScanUpdate === 'function') onNeuronScanUpdate()
+      if (typeof onNeuronScanUpdate === 'function') onNeuronScanUpdate(sym)
     })
     console.log('[connectWatchlist] WS_PROXY mode — server handles watchlist stream')
     return

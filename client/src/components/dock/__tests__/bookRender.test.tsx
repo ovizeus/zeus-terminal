@@ -282,7 +282,7 @@ describe('onestitatea despre ce se vede', () => {
 
   it('fara instantanee spune ca ASTEAPTA, nu ca e stricat', async () => {
     mockFetch(mkBook({ heat: { ...mkBook().heat, frames: 0, cells: [] } }))
-    const r = render(<LiqMapPanel />)
+    render(<LiqMapPanel />)
     await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
     fireEvent.click(screen.getByText('BOOK'))
     await waitFor(() => expect(screen.getByText(/Waiting for the first snapshot/)).toBeTruthy())

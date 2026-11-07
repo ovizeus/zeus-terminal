@@ -5,7 +5,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('aducerea istoricului', () => {
   it('o cerere, toate vederile', async () => {
-    const spy = vi.fn(async () => ({ ok: true, json: async () => ({ map: { events: 3 }, heat: { cells: [] }, stats: { events: 3 } }) }))
+    const spy = vi.fn<(...a: unknown[]) => unknown>(async () => ({ ok: true, json: async () => ({ map: { events: 3 }, heat: { cells: [] }, stats: { events: 3 } }) }))
     vi.stubGlobal('fetch', spy)
     const d = await fetchPanel('BTCUSDT', 80000, 90, 90)
     expect(spy).toHaveBeenCalledTimes(1)          // NU trei cereri

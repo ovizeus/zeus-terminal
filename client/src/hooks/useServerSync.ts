@@ -129,10 +129,10 @@ function applyATUpdate(data: ServerATState) {
   // core/state.ts:_applyServerATState. Both writers are idempotent for the
   // same payload. S6-B5 will read these flags to gate the client AT engine
   // for demo users; S6-B4 is pure read-model.
-  if ('serverATDemoEnabled' in (data as Record<string, unknown>)) {
+  if ('serverATDemoEnabled' in (data as unknown as Record<string, unknown>)) {
     (window as any)._serverATDemoEnabled = !!data.serverATDemoEnabled
   }
-  if ('serverBrainDemoEnabled' in (data as Record<string, unknown>)) {
+  if ('serverBrainDemoEnabled' in (data as unknown as Record<string, unknown>)) {
     (window as any)._serverBrainDemoEnabled = !!data.serverBrainDemoEnabled
   }
 }

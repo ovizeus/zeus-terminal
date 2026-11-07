@@ -1285,12 +1285,19 @@ export function ChartControls() {
               "indbtrue" / "indbfalse" instead of "indb act". Adding
               parens around `(activeInds.X ?? indicators.X)` forces
               "is this truthy" → " act" / "" semantics on every button.
-              Also passes `e.currentTarget` to togInd so the imperative
-              class toggle in dom2.ts:235 fires (UI sync robustness). */}
-          <button className={`indb${(activeInds.ema ?? indicators.ema) ? ' act' : ''}`} id="bema" onClick={(e) => togInd('ema', e.currentTarget)}>EMA</button>
-          <button className={`indb${(activeInds.wma ?? indicators.wma) ? ' act' : ''}`} id="bwma" onClick={(e) => togInd('wma', e.currentTarget)}>WMA</button>
-          <button className={`indb${(activeInds.st ?? indicators.st) ? ' act' : ''}`} id="bst" onClick={(e) => togInd('st', e.currentTarget)}>ST</button>
-          <button className={`indb${(activeInds.vp ?? indicators.vp) ? ' act' : ''}`} id="bvp" onClick={(e) => togInd('vp', e.currentTarget)}>VOLP</button>
+              [2026-11-07] These used to pass `e.currentTarget` as a second
+              argument, with a comment saying it made the imperative class
+              toggle in dom2.ts fire. It never did. The `togInd` in scope here
+              is the LOCAL one above, which takes one argument and calls
+              togIndFn(key, null) — passing null for the button deliberately,
+              because React owns the `act` class through the className above.
+              The extra argument was silently dropped, and the comment had been
+              describing a mechanism that does not exist. Behaviour unchanged;
+              only the lie is gone. */}
+          <button className={`indb${(activeInds.ema ?? indicators.ema) ? ' act' : ''}`} id="bema" onClick={() => togInd('ema')}>EMA</button>
+          <button className={`indb${(activeInds.wma ?? indicators.wma) ? ' act' : ''}`} id="bwma" onClick={() => togInd('wma')}>WMA</button>
+          <button className={`indb${(activeInds.st ?? indicators.st) ? ' act' : ''}`} id="bst" onClick={() => togInd('st')}>ST</button>
+          <button className={`indb${(activeInds.vp ?? indicators.vp) ? ' act' : ''}`} id="bvp" onClick={() => togInd('vp')}>VOLP</button>
           <span style={{ width: '8px' }}></span>
           <button className={`ovrb${tsOn ? ' act' : ''}`} id="ts-toggle-btn" title="Time &amp; Sales tape (T)" onClick={toggleTimeSales}>&#128200; T&amp;S</button>
           <span style={{ width: '8px' }}></span>

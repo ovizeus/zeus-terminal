@@ -17,7 +17,9 @@ class FakeSocket {
   onmessage: ((e: MessageEvent) => void) | null = null
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
-  constructor(public url: string) { FakeSocket.made.push(this) }
+  url: string
+  // a parameter property is not erasable syntax, which this project forbids
+  constructor(url: string) { this.url = url; FakeSocket.made.push(this) }
   open() { this.readyState = 1; this.onopen?.() }
   close() { this.closed = true; this.readyState = 3; this.onclose?.() }
   send() { /* noop */ }

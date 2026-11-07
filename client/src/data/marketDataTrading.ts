@@ -128,7 +128,10 @@ export function _buildModeSwitchMessage(
 }
 
 export function switchGlobalMode(mode: any): void {
-  const currentMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
+  // [2026-11-07] AT._serverMode comes from an untyped legacy global and is
+  // always 'demo' or 'live'. Narrowed here, at the source, rather than at each
+  // use: one statement of the constraint instead of several casts.
+  const currentMode: 'demo' | 'live' = ((typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo') === 'live' ? 'live' : 'demo'
   console.log('[BRAIN-SPLIT] switchGlobalMode(' + mode + ') currentMode=' + currentMode)
   if (currentMode === mode) { _toggleManualPanel(); return }
   // [BUG-T3 FIX 2026-05-14] Inject opposite-mode positions count into confirm

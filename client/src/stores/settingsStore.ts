@@ -270,6 +270,9 @@ interface LegacyAutoTrade {
 }
 interface LegacyChart {
   tf?: string
+  // [2026-11-07] Read at the bottom of this file as ch.candleType but never
+  // declared, so the typecheck could not see it. Adding the field, not a cast.
+  candleType?: string
   colors?: Record<string, unknown> | null
   heatmap?: Record<string, unknown> | null
   tz?: number | null

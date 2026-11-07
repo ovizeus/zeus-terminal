@@ -5,7 +5,6 @@
 import { useEffect, useRef } from 'react'
 import { useMarketStore } from '../stores'
 
-const BINANCE_REST = ''
 
 
 export interface Kline {

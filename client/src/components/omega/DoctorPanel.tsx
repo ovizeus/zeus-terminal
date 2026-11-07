@@ -78,7 +78,7 @@ export function DoctorPanel() {
     const [audioPing, setAudioPing] = useState<boolean>(() => {
         try { return localStorage.getItem(AUDIO_PING_LS_KEY) === '1' } catch { return false }
     })
-    const [seenP0Ids, setSeenP0Ids] = useState<Set<string>>(new Set())
+    const [, setSeenP0Ids] = useState<Set<string>>(new Set())
 
     function toggleAudioPing() {
         setAudioPing(v => {

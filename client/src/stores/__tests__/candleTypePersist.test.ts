@@ -16,8 +16,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 // still hold the legacy 'candle' that the code's own comment says could never
 // be applied. Nobody chose it; the save path wrote it.
 
-const saveMock = vi.fn(() => Promise.resolve({ ok: true, updated_at: 5 }))
-const fetchMock = vi.fn()
+const saveMock = vi.fn<(...a: unknown[]) => unknown>(() => Promise.resolve({ ok: true, updated_at: 5 }))
+const fetchMock = vi.fn<(...a: unknown[]) => unknown>()
 vi.mock('../../services/api', () => ({
   userSettingsApi: { fetch: (...a: unknown[]) => fetchMock(...a), save: (...a: unknown[]) => saveMock(...a) },
 }))
@@ -48,7 +48,7 @@ describe('candle type survives a refresh', () => {
     useSettingsStore.setState({ loaded: true })
     useSettingsStore.getState().loadFromLegacy()
     await useSettingsStore.getState().saveToServer()
-    const payload = saveMock.mock.calls[0][0] as Record<string, unknown>
+    const payload = saveMock.mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload.chartType).toBe('heikin')
   })
 
@@ -60,7 +60,7 @@ describe('candle type survives a refresh', () => {
     useSettingsStore.setState({ loaded: true })
     useSettingsStore.getState().loadFromLegacy()
     await useSettingsStore.getState().saveToServer()
-    const payload = saveMock.mock.calls[0][0] as Record<string, unknown>
+    const payload = saveMock.mock.calls[0][0] as unknown as Record<string, unknown>
     expect(payload.chartType).toBe('hollow')
   })
 })
