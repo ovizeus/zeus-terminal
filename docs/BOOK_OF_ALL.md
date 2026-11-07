@@ -12845,6 +12845,63 @@ Singurul pas rămas e să genereze o cheie nouă în contul lui Bybit. Nu mai e 
 
 ---
 
+## 2026-11-07 — Două scurgeri găsite prin măturat, nu prin raportare
+
+### 1. Un mesaj pe care serverul îl trimitea în gol
+
+Am măturat toate tipurile de cadre pe care serverul le emite pe WebSocket şi
+le-am comparat cu cele pe care clientul le ascultă. Două nu erau ascultate.
+`hello.ack` — intenţionat, nu înseamnă nimic pentru interfaţă. Celălalt era
+**al meu**: `byoi.request`, pe care îl adăugasem cu o noapte înainte în
+`server/routes/byoi.js:205` ca să te anunţe când intră o comandă de indicator.
+
+Nimeni nu-l asculta. Serverul îl trimitea cuminte, iar numărul din Admin se
+mişca **doar la reîncărcarea paginii**. O comandă putea sta acolo nevăzută.
+
+Am pus abonatul în `AdminHome.tsx`. Verificarea de tipuri l-a respins imediat:
+`TS2367 — '"byoi.request"' have no overlap`. Tipul nu exista în uniunea
+`WsMessage`. **Exact aşa ar fi trebuit prins şi prima dată** — am adăugat
+`WsByoiRequest` şi `WsHeartbeat` în `client/src/types/sync.ts`.
+
+Două teste păzesc legătura: unul cere ca numărul să fie recitit când cadrul
+soseşte, altul cere ca un `hb` (puls) **să nu** declanşeze nimic. Am rupt
+handlerul în două feluri — să nu reacţioneze, şi să reacţioneze la orice cadru
+— şi fiecare mutaţie omoară un test.
+
+### 2. Suita spunea „1803 trecute" şi ieşea cu eroare
+
+Asta e partea care contează ca metodă. Rulasem suita de client şi raporta
+**1803 passed**. Codul de ieşire era **1**.
+
+Dacă m-aş fi uitat doar la cifre, ţi-aş fi spus că e verde. Nu era.
+
+O rejecţie netratată: `ReferenceError: document is not defined`, din
+`new AppWeb` în `@capacitor/app`. Cablarea de „revenire din fundal" pe care am
+livrat-o ieri făcea `import('@capacitor/app')` **necondiţionat**. Încărcarea
+plugin-ului îi construieşte implementarea **web**, care atinge `document`; când
+importul se rezolva după demontarea mediului de test, arunca **înăuntrul
+promisiunii proprii a lui Capacitor**, unde `.catch`-ul meu nu putea ajunge
+niciodată.
+
+Pe web importul nu aducea oricum nimic: evenimentele DOM plus temporizatorul de
+15 secunde acopereau deja revenirea. Acum e cerut doar acolo unde există —
+`isNativeShell(globalThis)` în `wsLiveness.ts`, cu patru teste: un browser
+simplu nu e coajă nativă, o punte care raportează web nu e, WebView-ul din APK
+este, iar o punte care **aruncă** e tratată ca web, nu ca prăbuşire. Pierderea
+ascultătorului nativ nu costă nimic — temporizatorul vindecă oricum — o
+excepţie la pornire costă.
+
+Suita iese acum cu **0**.
+
+### Lecţia, pe faţă
+
+**Numărul de teste trecute nu e codul de ieşire.** O suită poate raporta mii de
+teste verzi şi tot să eşueze, iar ce eşua era un defect pe care îl livrasem eu
+cu o zi înainte, în chiar calea de reconectare pe care ţi-o promisesem.
+De acum verific codul de ieşire, nu sumarul.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
@@ -12883,4 +12940,4 @@ Am tratat o fereastră ca pe o concluzie (LONG) · am spus „tsc curat" de mai 
 
 ## Cifrele
 
-**34 de commit-uri** · server **10.485** teste · client **1.801** · tipuri **0** · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.
+**35 de commit-uri** · server **10.482** teste trecute (3 sărite) · client **1.807** · tipuri **0** · suita de client iese cu **0**, verificat pe codul de ieşire · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.

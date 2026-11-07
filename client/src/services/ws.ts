@@ -6,8 +6,7 @@
 import type { WsMessage } from '../types'
 import {
   needsReconnect, looksConnected, shouldForceOnResume,
-  LIVENESS_CHECK_MS, RESUME_FORCE_AFTER_MS,
-} from './wsLiveness'
+  LIVENESS_CHECK_MS, RESUME_FORCE_AFTER_MS, isNativeShell } from './wsLiveness'
 
 type WsListener = (msg: WsMessage) => void
 
@@ -192,9 +191,11 @@ export function startLivenessWatch(): void {
     window.removeEventListener('online', onOnline)
   }
 
-  // Capacitor: more dependable than visibilitychange inside the WebView.
+  // Capacitor: more dependable than visibilitychange inside the WebView. Asked
+  // for ONLY there — see isNativeShell: loading the plugin on the web throws
+  // inside Capacitor's own promise, out of reach of the catch below.
   try {
-    import('@capacitor/app').then(({ App }) => {
+    if (isNativeShell(globalThis)) import('@capacitor/app').then(({ App }) => {
       App.addListener('appStateChange', ({ isActive }) => { if (isActive) onResume(); else onHide() })
     }).catch(() => { /* web build has no native layer — the DOM events cover it */ })
   } catch { /* ignore */ }

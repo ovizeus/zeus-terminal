@@ -12,6 +12,20 @@ import { AdminHome } from '../AdminHome'
 import { NAV, GROUPS, actionCounts } from '../adminNav'
 import { useAdminStore } from '../../../stores/adminStore'
 import { useSupportStore } from '../../../stores/supportStore'
+import { act } from '@testing-library/react'
+
+/**
+ * The socket itself is not under test here - the wiring is. We capture whatever
+ * AdminHome subscribes and hand it frames, which is what the real socket does.
+ */
+const _frameSinks = new Set<(m: unknown) => void>()
+function pushFrame(m: unknown) { for (const f of _frameSinks) f(m) }
+vi.mock('../../../services/ws', () => ({
+  wsService: {
+    subscribe: (fn: (m: unknown) => void) => { _frameSinks.add(fn); return () => _frameSinks.delete(fn) },
+    connect: () => {}, disconnect: () => {}, send: () => false, isConnected: () => true,
+  },
+}))
 
 beforeEach(() => {
   vi.restoreAllMocks()
@@ -130,6 +144,43 @@ describe('exchange keys that stopped passing their check', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))))
     render(<AdminHome />)
     expect(screen.getByText('Users')).toBeTruthy()
+  })
+})
+
+describe('the live push actually arrives', () => {
+  // [2026-11-07] The server pushed `byoi.request` to admins for a day with no
+  // listener and no type declaration, so it went nowhere and the count only
+  // moved on a page load. This holds the wire together.
+  it('re-reads the count when an order is pushed', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const u = String(url)
+      const json = (b: unknown) => Promise.resolve({ ok: true, json: () => Promise.resolve(b) } as Response)
+      if (u.includes('byoi/admin/count')) { calls++; return json({ ok: true, count: calls }) }
+      return json({ ok: true, stale: [], count: 0 })
+    }))
+    render(<AdminHome />)
+    await waitFor(() => expect(calls).toBe(1))      // the mount read
+
+    // the server pushes; the page must notice without a reload
+    const before = calls
+    await act(async () => { pushFrame({ type: 'byoi.request', data: { id: 1, tier: 'custom', title: 'x' } }) })
+    await waitFor(() => expect(calls).toBeGreaterThan(before))
+  })
+
+  it('ignores frames that are not an order', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const u = String(url)
+      const json = (b: unknown) => Promise.resolve({ ok: true, json: () => Promise.resolve(b) } as Response)
+      if (u.includes('byoi/admin/count')) { calls++; return json({ ok: true, count: calls }) }
+      return json({ ok: true, stale: [], count: 0 })
+    }))
+    render(<AdminHome />)
+    await waitFor(() => expect(calls).toBe(1))
+    await act(async () => { pushFrame({ type: 'hb', t: Date.now() }) })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(calls).toBe(1)                            // a heartbeat is not news
   })
 })
 

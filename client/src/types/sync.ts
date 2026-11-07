@@ -5,7 +5,34 @@ import type { SupportMsg } from './support'
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar | WsMarketRadarSnapshot | WsExchangeChanged | WsSupportMessage
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar | WsMarketRadarSnapshot | WsExchangeChanged | WsSupportMessage | WsByoiRequest | WsHeartbeat
+
+/**
+ * [2026-11-07] A Build Your Own Indicator order has just been sent. Pushed to
+ * admins only, from server/routes/byoi.js.
+ *
+ * It was emitted for a day with no declaration here and no listener anywhere,
+ * so the push went nowhere and the Admin count only moved on a page load.
+ * Found by sweeping which frame types the server emits that the client never
+ * touches — and the moment the type was missing, the typecheck refused the
+ * handler, which is exactly how it should have been caught the first time.
+ */
+export interface WsByoiRequest {
+  type: 'byoi.request'
+  data: { id: number; tier: string; title: string }
+}
+
+/**
+ * [2026-11-07] Application-level heartbeat, every 30s from server.js.
+ *
+ * Nothing needs to handle it: its whole job is to be a frame the client can
+ * SEE, so services/ws.ts can tell a live socket from one the OS froze.
+ * Protocol pings are answered by the browser and never reach JavaScript.
+ */
+export interface WsHeartbeat {
+  type: 'hb'
+  t: number
+}
 
 export interface WsSupportMessage {
   type: 'support.message'

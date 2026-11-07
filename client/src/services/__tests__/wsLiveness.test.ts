@@ -3,6 +3,7 @@ import {
   isZombie, needsReconnect, looksConnected, shouldForceOnResume, silentFor,
   SILENCE_LIMIT_MS, RESUME_FORCE_AFTER_MS,
   WS_CONNECTING, WS_OPEN, WS_CLOSING, WS_CLOSED,
+  isNativeShell,
 } from '../wsLiveness'
 
 const NOW = 1_000_000
@@ -96,5 +97,37 @@ describe('the limits are deliberate', () => {
   })
   it('does not punish a quick glance away', () => {
     expect(RESUME_FORCE_AFTER_MS).toBeGreaterThanOrEqual(5000)
+  })
+})
+
+/**
+ * [2026-11-07] Found by the suite's exit code, not by a failing test: the full
+ * run reported 1803 passed AND exited 1 on an unhandled rejection.
+ *
+ * The resume wiring did `import('@capacitor/app')` unconditionally. Loading the
+ * plugin constructs its WEB implementation, which touches `document`; when that
+ * import resolved after the test environment was torn down it threw inside
+ * Capacitor's own promise, where our `.catch` could never reach it. On a browser
+ * the import buys nothing anyway - the DOM events and the 15s timer cover it.
+ */
+describe('the native bridge is asked for only when it exists', () => {
+  it('a plain browser is not a native shell', () => {
+    expect(isNativeShell({})).toBe(false)
+    expect(isNativeShell({ Capacitor: {} })).toBe(false)
+    expect(isNativeShell(undefined)).toBe(false)
+    expect(isNativeShell(null)).toBe(false)
+  })
+
+  it('a bridge that reports web is not a native shell', () => {
+    expect(isNativeShell({ Capacitor: { isNativePlatform: () => false } })).toBe(false)
+  })
+
+  it('the WebView inside the APK is', () => {
+    expect(isNativeShell({ Capacitor: { isNativePlatform: () => true } })).toBe(true)
+  })
+
+  it('a bridge that throws is treated as web, not as a crash', () => {
+    // fail-safe: losing the native listener costs nothing, the timer still heals
+    expect(isNativeShell({ Capacitor: { isNativePlatform: () => { throw new Error('x') } } })).toBe(false)
   })
 })

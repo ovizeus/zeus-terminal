@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { wsService } from '../../services/ws'
 import { useAdminStore } from '../../stores/adminStore'
 import { useSupportStore } from '../../stores/supportStore'
 import { NAV, GROUPS, actionCounts } from './adminNav'
@@ -24,6 +25,22 @@ export function AdminHome() {
   // is warned in their own screen; this is so the operator does not have to
   // read a log to learn that someone's key died months ago.
   const [staleKeys, setStaleKeys] = useState<Array<{ userId: number; email: string | null; exchange: string; days: number }>>([])
+
+  // [2026-11-07] The server pushes `byoi.request` to admins the moment an order
+  // is sent — and nobody was listening, so the push I shipped last night went
+  // nowhere and the count only moved on a page load. Found by sweeping which
+  // WS frame types the server emits that the client never touches.
+  useEffect(() => {
+    const off = wsService.subscribe((msg) => {
+      if (msg && msg.type === 'byoi.request') {
+        fetch('/api/byoi/admin/count', { credentials: 'same-origin' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d && d.ok) setIndicatorRequests(d.count || 0) })
+          .catch(() => { /* the badge is best-effort */ })
+      }
+    })
+    return off
+  }, [])
 
   useEffect(() => {
     let alive = true

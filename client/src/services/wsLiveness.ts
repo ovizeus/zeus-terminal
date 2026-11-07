@@ -93,3 +93,23 @@ export function shouldForceOnResume(hiddenSinceMs: number, thresholdMs: number =
   if (!Number.isFinite(hiddenSinceMs) || hiddenSinceMs < 0) return false
   return hiddenSinceMs >= thresholdMs
 }
+
+/**
+ * [2026-11-07] True only inside the Capacitor WebView.
+ *
+ * Guards the `@capacitor/app` import. Loading that plugin in a browser builds
+ * its web implementation, which touches `document` — and it does so inside
+ * Capacitor's own promise, so a failure there escapes any `.catch` we attach.
+ * On the web the import buys nothing: the DOM visibility/focus events and the
+ * 15s liveness timer already cover resume. Anything it cannot prove is native
+ * counts as web, because losing the native listener is harmless while an
+ * exception at startup is not.
+ */
+export function isNativeShell(g: unknown): boolean {
+  try {
+    const cap = (g as { Capacitor?: { isNativePlatform?: () => boolean } } | null | undefined)?.Capacitor
+    return typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform() === true
+  } catch {
+    return false
+  }
+}
