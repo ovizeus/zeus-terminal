@@ -28,7 +28,13 @@ let _hiddenAt = 0
 let _resumeWired = false
 let _teardown: (() => void) | null = null
 
+// [2026-11-07] Test seam. A test can point the manager at a real local socket
+// so the freeze can be reproduced against genuine TCP rather than a fake class.
+// Null in every build; nothing in the app ever sets it.
+let _urlOverride: string | null = null
+
 function getWsUrl(): string {
+  if (_urlOverride) return _urlOverride
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${location.host}/ws/sync`
 }
@@ -250,6 +256,7 @@ export const wsService = {
 /** Test seam: lets a test drive the clock without a real socket. */
 export const _internals = {
   setLastSignalAt: (t: number) => { _lastSignalAt = t },
+  setUrlOverride: (u: string | null) => { _urlOverride = u },
   getLastSignalAt: () => _lastSignalAt,
   RESUME_FORCE_AFTER_MS,
 }

@@ -12540,3 +12540,37 @@ Pragul e 2 zile — verificarea rulează zilnic, deci asta lasă loc unei rulăr
 Nouă teste pe funcţia pură, inclusiv cazul real din bază. Două mutaţii: „nimic nu e vechi" → 3 picate; „o cheie neverificată e veche" → 1 picată.
 
 Un test vechi a trebuit făcut precis: căuta `/RE-VERIFY/i` prin text, iar avertismentul meu **trimite către acel buton folosind exact numele lui** — ceea ce e corect ca limbaj de interfaţă. Am schimbat testul să caute **după rol**, nu după text.
+
+---
+
+## 🧪 2026-11-07 — Ultimele cioturi: vânat instabilitatea, şi testat pe socluri REALE
+
+### Instabilitatea din shard 2 — vânată, nu găsită
+
+Raportasem „2 teste au picat o dată, n-am putut prinde care". Am încercat serios:
+
+- **6 rulări izolate** ale shard-ului 2 → toate curate
+- **2 treceri complete** ale tuturor celor 4 shard-uri, în secvenţă, reproducând condiţia exactă → toate curate
+
+**Paisprezece rulări curate. Nu se reproduce.** N-am identificat cauza şi nu pretind că am reparat-o.
+
+Ce pot spune: instabilităţile de dinainte erau `db locked`, din testele care se călcau pe baza de producţie — **cauza aia e reparată**. Asta e de după, deci e altceva. Rămâne o umbră, consemnată aici ca să existe o urmă dacă revine.
+
+### Proba WS — pe socluri reale, nu false
+
+Toate celelalte teste de WebSocket foloseau o clasă falsă: dovedesc logica managerului şi **nimic despre TCP**. Eşecul din producţie e specific — un soclu îngheţat de sistemul de operare, unde conexiunea e moartă, serverul a renunţat, iar clientul **nu primeşte niciodată cadrul de închidere**.
+
+Testul nou reproduce exact asta: **server `ws` real, client real, printr-un proxy TCP care pur şi simplu încetează să transmită fără să închidă nimic.**
+
+Trei lucruri dovedite pe fir, nu în fals:
+1. soclul chiar raportează OPEN cu nimic circulând — **şi managerul nu-l mai crede**
+2. un soclu real sănătos e lăsat în pace
+3. **pulsul `hb` al serverului chiar ajunge la client** şi contează ca semn de viaţă — până acum o afirmasem doar cu un obiect fals
+
+Mutaţia care readuce `isConnected` la `readyState` omoară primul test.
+
+A trebuit o portiţă mică în `ws.ts` (`_internals.setUrlOverride`), `null` în orice build, ca testul să poată ţinti un soclu local. Fişierul avea deja `_internals` exact pentru asta.
+
+Şi o declaraţie minimă de tipuri pentru `ws`, cu un comentariu care spune limpede că **nu** e completă — n-am instalat `@types/ws` pe maşina vie la ora asta pentru un pachet doar de tipuri.
+
+**Ce rămâne netestabil aici:** dacă WebView-ul Android livrează `visibilitychange` la trezire. Şi asta **nu mai contează**, fiindcă pulsul reconstruieşte soclul fără niciun eveniment de revenire — dovedit separat.
