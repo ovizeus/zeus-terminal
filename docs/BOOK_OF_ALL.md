@@ -12686,3 +12686,33 @@ Câmpul `status`. `exchange.js` selectează conturile după `status = 'verified'
 Nouă teste pe regula pură + patru pe bandă. Două mutaţii: „nimic nu e vechi" → 3 picate; „raportează şi deconectatele" → 1 picată.
 
 Verificat pe serverul viu după reload: ruta e **401 fără sesiune**, iar regula rulată pe datele reale scoate exact un rând — cel aşteptat.
+
+---
+
+## ✅ 2026-11-07, după-amiază — Prima confirmare în viaţa reală a reparaţiei de loguri
+
+La verificarea finală am văzut **289 de linii** `kline poll failed` în log şi era să raportez o regresie. Nu era.
+
+### Ce s-a întâmplat de fapt
+
+Între **10:48 şi 13:50**, `BTCUSDT 5m` a eşuat de **287 de ori** — `HTTP 503` **fără motiv în paranteze**, adică **503-uri adevărate de la Binance**, nu refuzuri sintetizate de întrerupător.
+
+**Asta e exact comportamentul proiectat:** zgomotul `circuit_open` e tăcut, iar eşecurile reale în amonte **trec mai departe**. Înainte, cele 287 ar fi fost îngropate sub 19.000 de linii şi nimeni nu le-ar fi văzut.
+
+### Şi o capcană în care era să cad
+
+Telemetria arăta `2520 apeluri, 2520 OK, 0 erori` — părea că minte faţă de log. Am verificat **toate** coloanele înainte să acuz: `blockedByPressure 0`, `rejectedByScheduler 0`, `errors5xx 0`. Curate.
+
+Explicaţia: **inelul de telemetrie ţine o oră, logul ţine toată ziua.** Ultimul eşec a fost la 13:50; verificam la 17:20. **Comparam două ferestre diferite** — amândouă corecte.
+
+Era a doua oară azi când eram gata să raportez o defecţiune care era de fapt interogarea mea (prima: `400` de la `/klines`, unde trimisesem `tf` în loc de `interval`).
+
+### Starea acum
+
+| | |
+|---|---|
+| eşecuri în ultima oră | **0** |
+| feed-ul | ultima lumânare acum **39 de secunde** |
+| episodul | tranzitoriu, în amonte, s-a reparat singur |
+
+**Lecţia, pentru data viitoare:** când logul şi tabloul de bord nu sunt de acord, întreabă întâi **ce fereastră de timp acoperă fiecare**. De obicei nu minte niciunul.
