@@ -13729,6 +13729,25 @@ atLive=false`.
 De unde am plecat azi-dimineaţă: **un singur cont** primea decizii, iar ceilalţi
 şapte se dezarmau tăcut la fiecare repornire — de 1162 de ori.
 
+### Măsurătoarea finală — şi ceva mai bun decât căutam
+
+| cont | decizii / 3 min | stare | poziţii |
+|---|---|---|---|
+| 1 | 42 | armat | 2 |
+| 2 | 24 | armat | **3** |
+| **5** | **42** | armat | **3** |
+| 11, 12, 13, 14, 15 | 42 | armat | 4 fiecare |
+
+**Toate cele 8 conturi: armate, primesc decizii, au poziţii deschise.** Contul 5
+avea 0 poziţii la 20 de minute după armare; acum are 3. Nu doar „intră în
+buclă" — tranzacţionează.
+
+Şi partea care contează cel mai mult: **nu era niciun client conectat.** Zero
+linii `Client connected` de la ultima repornire. Toate cele 8 conturi
+tranzacţionau **cu telefoanele închise** — exact proprietatea pentru care există
+partea server-side din Zeus, şi dovada cea mai tare că „merge pentru toţi cei
+care se conectează" nu depinde de cineva care ţine aplicaţia deschisă.
+
 ### Ruta normală de armare, verificată şi ea
 
 Contul 5 a fost armat printr-o scriere în baza de date, fiindcă
