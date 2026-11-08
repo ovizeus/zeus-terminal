@@ -117,3 +117,37 @@ describe('a message never breaks the screen it appears on', () => {
     expect(() => toast({} as never)).not.toThrow()
   })
 })
+
+describe('a heading and a detail, not one glued sentence', () => {
+  it('shows the alert title in the accent and the detail underneath', () => {
+    toast('BTCUSDT 4h · 3,511 · 4.2× the usual', { title: 'VOLUME SPIKE' })
+    const b = boxes()[0]
+    expect(b.textContent).toContain('VOLUME SPIKE')
+    expect(b.textContent).toContain('4.2× the usual')
+    const head = b.querySelector('span') as HTMLElement
+    expect(head.textContent).toBe('VOLUME SPIKE')
+    expect(head.style.color).toBe(rgb(toastTheme('info').accent))
+  })
+
+  it('stamps the time on the heading row', () => {
+    toast('detail here', { title: 'BID WALL' })
+    expect(boxes()[0].textContent).toMatch(/\d{2}:\d{2}:\d{2}/)
+  })
+
+  it('a plain message still gets its time, on its single line', () => {
+    toast('Alert settings saved')
+    expect(boxes()[0].textContent).toContain('Alert settings saved')
+    expect(boxes()[0].textContent).toMatch(/\d{2}:\d{2}:\d{2}/)
+  })
+
+  it('an error with no title of its own still says it is an error', () => {
+    toast('Modify failed: timeout')
+    expect(boxes()[0].textContent).toMatch(/Error/)
+  })
+
+  it('sits under the header, using the app\'s own height variable', () => {
+    toast('anything')
+    expect(host()!.style.top).toContain('--zt-content-top')
+    expect(host()!.style.bottom).toBe('')
+  })
+})

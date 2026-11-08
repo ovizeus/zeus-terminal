@@ -17,10 +17,21 @@ describe('volume spike', () => {
 
   // The control says "Threshold (BTC per candle)", so the DECISION is absolute
   // volume. The ratio against the average is still measured, for the alert text.
-  it('fires at or above the volume the user typed', () => {
-    expect(shouldVolAlert(500, 500)).toBe(true)
-    expect(shouldVolAlert(812, 500)).toBe(true)
-    expect(shouldVolAlert(499, 500)).toBe(false)
+  it('needs BOTH the size floor and a real jump above the average', () => {
+    expect(shouldVolAlert(812, 500, 3)).toBe(true)     // big enough AND a spike
+    expect(shouldVolAlert(499, 500, 9)).toBe(false)    // a spike, but under the floor
+    expect(shouldVolAlert(812, 500, 1.2)).toBe(false)  // big, but an ordinary bar
+  })
+
+  it('REGRESSION: the one that shipped — 0.2x the usual is not a spike', () => {
+    // Seen live on BTCUSDT 4h: "VOLUME SPIKE: 3,511 · 0.2× the usual".
+    // The floor alone fired because every 4h candle there is thousands.
+    expect(shouldVolAlert(3511, 500, 0.2)).toBe(false)
+  })
+
+  it('says nothing when there is no average to judge against', () => {
+    // claiming "spike" is the louder, worse mistake
+    expect(shouldVolAlert(9999, 500, null)).toBe(false)
   })
 
   it('a bar in line with the average still measures as 1x', () => {
@@ -40,15 +51,15 @@ describe('volume spike', () => {
     expect(volumeSpikeRatio([100, 200])).toBeNull()
     expect(volumeSpikeRatio([])).toBeNull()
     expect(volumeSpikeRatio([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5])).toBeNull() // no average to compare to
-    expect(shouldVolAlert(null, 500)).toBe(false)
-    expect(shouldVolAlert(0, 500)).toBe(false)
+    expect(shouldVolAlert(null, 500, 9)).toBe(false)
+    expect(shouldVolAlert(0, 500, 9)).toBe(false)
   })
 
   it('a missing or silly threshold falls back to the default, not to zero', () => {
     // a 0 threshold would alert on every single bar, so it is a missing value
-    expect(shouldVolAlert(200, 0)).toBe(false)
-    expect(shouldVolAlert(600, undefined)).toBe(true)
-    expect(shouldVolAlert(200, undefined)).toBe(false)
+    expect(shouldVolAlert(200, 0, 9)).toBe(false)
+    expect(shouldVolAlert(600, undefined, 9)).toBe(true)
+    expect(shouldVolAlert(200, undefined, 9)).toBe(false)
   })
 })
 

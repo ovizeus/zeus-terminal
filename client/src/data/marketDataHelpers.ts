@@ -64,7 +64,7 @@ export function fmtNow(sec?: any): string {
  *
  * The signature is unchanged, so none of those 189 calls had to be touched.
  */
-export interface ToastOpts { dur?: number; icon?: any; level?: ToastLevel }
+export interface ToastOpts { dur?: number; icon?: any; level?: ToastLevel; title?: string }
 
 /** HH:MM:SS in the user's own timezone, which is the one on their clock. */
 function _toastClock(): string {
@@ -81,8 +81,13 @@ function _toastHost(): HTMLElement {
   if (host) return host
   host = document.createElement('div')
   host.id = 'zeus-toasts'
+  // Top, under the header. The offset is the app's OWN header-height variable
+  // (--zt-content-top, 120px desktop / 80px phone), not a number guessed from
+  // a screenshot — so it stays correct when the header changes.
   host.style.cssText = [
-    'position:fixed', 'left:50%', 'bottom:58px', 'transform:translateX(-50%)',
+    'position:fixed', 'left:50%',
+    'top:calc(var(--zt-content-top, 120px) + env(safe-area-inset-top, 0px) + 8px)',
+    'transform:translateX(-50%)',
     'z-index:9999', 'pointer-events:none', 'display:flex',
     'flex-direction:column', 'align-items:center', 'gap:8px',
     'max-width:min(92vw,460px)', 'width:max-content',
@@ -109,8 +114,9 @@ export function toast(msg: string, dur: number | ToastOpts = 3000, icon?: any, l
     box.setAttribute('role', lvl === 'error' ? 'alert' : 'status')
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
     box.style.cssText = [
-      'display:flex', 'align-items:center', 'gap:9px',
-      'padding:8px 12px 8px 10px',
+      'display:flex', 'align-items:flex-start', 'gap:9px',
+      'padding:8px 13px 9px 11px',
+      'min-width:min(86vw,260px)',
       'background:' + th.bg,
       'border:1px solid ' + th.border,
       'border-radius:3px',
@@ -132,37 +138,55 @@ export function toast(msg: string, dur: number | ToastOpts = 3000, icon?: any, l
     box.style.borderLeftStyle = 'solid'
     box.style.borderLeftColor = th.accent
 
-    const mark = document.createElement('span')
-    mark.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;color:' + th.accent
-    if (opts.icon) mark.innerHTML = opts.icon
-    else mark.innerHTML = '<span style="display:block;width:5px;height:5px;background:' + th.accent + '"></span>'
-    box.appendChild(mark)
+    // The body is a column: a heading line, then the detail. The alerts
+    // already carry a title and a body separately — they used to be glued
+    // into one sentence, which is what made an alert read like any other
+    // line of text.
+    const col = document.createElement('div')
+    col.style.cssText = 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px'
 
-    // A label only where it earns its place. Tagging every routine message
-    // "INFO" is noise pretending to be rigour.
-    const tag = toastLabel(lvl)
-    if (tag) {
-      const chip = document.createElement('span')
-      chip.textContent = tag
-      chip.style.cssText = [
-        'flex:0 0 auto', 'font-size:9px', 'font-weight:700',
-        'letter-spacing:1.4px', 'text-transform:uppercase',
-        'color:' + th.accent, 'opacity:0.95',
+    const headline = String(opts.title || toastLabel(lvl) || '').trim()
+    if (headline) {
+      const head = document.createElement('div')
+      head.style.cssText = 'display:flex;align-items:baseline;gap:10px;justify-content:space-between'
+
+      const ttl = document.createElement('span')
+      ttl.textContent = headline
+      ttl.style.cssText = [
+        'font-size:10px', 'font-weight:700', 'letter-spacing:1.3px',
+        'text-transform:uppercase', 'color:' + th.accent,
+        'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
       ].join(';')
-      box.appendChild(chip)
+      head.appendChild(ttl)
+
+      const stamp = document.createElement('span')
+      stamp.textContent = _toastClock()
+      stamp.style.cssText = 'flex:0 0 auto;font-size:9px;letter-spacing:0.6px;color:#5c7a90;font-variant-numeric:tabular-nums'
+      head.appendChild(stamp)
+      col.appendChild(head)
     }
 
-    const text = document.createElement('span')
-    text.textContent = String(msg == null ? '' : msg)
-    text.style.cssText = 'flex:1 1 auto;min-width:0'
-    box.appendChild(text)
+    const detail = document.createElement('div')
+    detail.textContent = String(msg == null ? '' : msg)
+    detail.style.cssText = 'min-width:0;overflow-wrap:anywhere'
+    col.appendChild(detail)
 
-    // The time it fired. On a trading desk that is not decoration: it is how
-    // you tell a message you have already read from one that just arrived.
-    const stamp = document.createElement('span')
-    stamp.textContent = _toastClock()
-    stamp.style.cssText = 'flex:0 0 auto;font-size:9px;letter-spacing:0.6px;color:#5c7a90;opacity:0.85;font-variant-numeric:tabular-nums'
-    box.appendChild(stamp)
+    // With no headline there is no row to hang the clock on, so it joins the
+    // single line instead of being dropped.
+    if (!headline) {
+      const stamp = document.createElement('span')
+      stamp.textContent = ' · ' + _toastClock()
+      stamp.style.cssText = 'font-size:9px;letter-spacing:0.6px;color:#5c7a90;font-variant-numeric:tabular-nums'
+      detail.appendChild(stamp)
+    }
+
+    if (opts.icon) {
+      const mark = document.createElement('span')
+      mark.style.cssText = 'flex:0 0 auto;display:flex;align-items:center;align-self:flex-start;margin-top:1px;color:' + th.accent
+      mark.innerHTML = opts.icon
+      box.appendChild(mark)
+    }
+    box.appendChild(col)
 
     host.appendChild(box)
     // Next frame, so the entrance actually animates instead of snapping.

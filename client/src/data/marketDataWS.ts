@@ -641,7 +641,9 @@ export function sendAlert(title: string, body: string, tag = 'zt'): void {
   if (!w.S.alerts.enabled) return
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({ type: 'NOTIFY', title, body, tag }) }
   else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') { try { const n = new Notification(title, { body, tag, icon: '', badge: '', vibrate: [200, 100, 200], requireInteraction: false, silent: false } as any); setTimeout(() => n.close(), 8000) } catch (_) { } }
-  toast(title + ': ' + body)
+  // [2026-11-08] Title and body kept apart so the message renders as a
+  // heading plus a detail. Glued together they read like any other line.
+  toast(body, { title })
   if (typeof w.ncAdd === 'function') w.ncAdd('info', 'alert', title + (body ? ': ' + body : ''))
 }
 

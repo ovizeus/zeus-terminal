@@ -66,18 +66,36 @@ export function volumeSpikeRatio(volumes: Array<number | null | undefined>, look
 }
 
 /**
- * Fires when a candle's volume reaches the threshold the user typed.
+ * How far above its own average a bar must be before it is a SPIKE.
  *
- * "Threshold" is a minimum, so reaching it exactly counts. A zero or negative
- * threshold would alert on every single bar, which is nobody's intention - it
- * is a missing value, so the default stands in.
+ * [2026-11-08, found live] The first version fired on the absolute threshold
+ * alone, because the control is labelled "Threshold (BTC per candle)". On
+ * BTCUSDT 4h, where every candle is thousands, that fired constantly - and the
+ * alert text said so out loud: "3,511 - 0.2x the usual". A fifth of normal
+ * volume announced as a spike.
+ *
+ * The label is still honoured as a FLOOR, which is what a minimum size is for:
+ * it keeps thin markets quiet. But a thing called a spike has to actually be
+ * one, so it must also stand above its own recent average. Both conditions, or
+ * the word on the alert is a lie.
  */
-export function shouldVolAlert(volume: number | null | undefined, threshold?: number | null): boolean {
+export const SPIKE_RATIO = 2
+
+export function shouldVolAlert(
+  volume: number | null | undefined,
+  threshold?: number | null,
+  ratio?: number | null,
+): boolean {
   const v = _num(volume)
   if (v === null || v <= 0) return false
   let t = _num(threshold)
   if (t === null || t <= 0) t = DEFAULT_VOL_THRESHOLD
-  return v >= t
+  if (v < t) return false
+  const r = _num(ratio)
+  // No average yet (a fresh symbol, too little history) means no claim either
+  // way - and claiming "spike" is the louder, worse mistake.
+  if (r === null) return false
+  return r >= SPIKE_RATIO
 }
 
 // ───────────────────────────────────────────────────────────────── divergences

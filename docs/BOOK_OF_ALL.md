@@ -13352,10 +13352,41 @@ Puneam `border` şi apoi `border-left` în acelaşi `cssText` — o scurtătură
 se bate cu o proprietate lungă, şi care supravieţuieşte depinde de parser.
 Accentul, adică **tot semnalul**, se putea pierde. Acum e setat separat, explicit.
 
+### Aspectul final, ales de el
+
+Am ghicit o dată şi i-am arătat trei variante cu schiţe. A ales **două
+rânduri** — titlul alertei cu majuscule în culoarea de accent, detaliul dedesubt
+neutru — şi **sus, sub antet**, nu jos peste chart.
+
+Titlul şi corpul **existau deja separat** în `sendAlert`, dar erau lipite cu
+`title + ': ' + body`. Exact lipirea aia făcea ca o alertă să arate ca orice alt
+rând de text. Acum se trimit separat.
+
+Poziţia foloseşte variabila proprie a aplicaţiei, `--zt-content-top` (120px
+desktop / 80px telefon), **nu un număr ghicit dintr-o captură** — deci rămâne
+corectă dacă antetul se schimbă.
+
+### 🔴 Un bug al meu, prins de el într-o captură
+
+> `VOLUME SPIKE: BTCUSDT 4h: 3,511 · 0.2× the usual`
+
+**O cincime din volumul obişnuit, anunţată ca spike.** Pragul era absolut, iar
+pe BTCUSDT pe 4h fiecare lumânare are mii — deci trăgea tot timpul. Textul
+alertei chiar o spunea, cu cifra mea: „0.2× the usual".
+
+Eu scrisesem regula **literal după eticheta de pe ecran** („Threshold (BTC per
+candle)"), şi aveam dreptate că eticheta e ce setează el — dar un lucru numit
+*spike* trebuie să fie **chiar** un spike. Acum cere **ambele**: pragul de
+mărime (care ţine pieţele subţiri liniştite) **şi** cel puţin 2× media proprie
+a pieţei. Fără medie nu se pronunţă deloc — a striga „spike" e greşeala mai
+zgomotoasă şi mai proastă.
+
+Cazul real din captură e acum fixat ca test de regresie, cu cifrele lui.
+
 ### Dovezi
 
-Client **1949** teste, **exit 0**. Tipuri **0**. **+25 teste** (11 pe temă, 14 pe
-randare), inclusiv că textul rămâne neutru la toate nivelurile, că stiva scoate
+Client **1958** teste, **exit 0**. Tipuri **0**. **+34 teste** (11 pe temă, 19 pe
+randare, plus regresiile de volum), inclusiv că textul rămâne neutru la toate nivelurile, că stiva scoate
 cel mai vechi, că `dur = 0` rămâne pe ecran (mai mulţi apelanţi se bazează pe
 asta) şi că un mesaj nu randează markup primit din afară. Stilul vechi
 (`#1a2530` + `#f0c04044`) **nu mai există în bundle-ul servit**.

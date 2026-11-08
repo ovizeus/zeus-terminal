@@ -93,15 +93,15 @@ export function checkBarAlerts(deps: BarAlertDeps): string[] {
     const vols = _col(klines, 5).slice(0, closedCount)
     if (closes.length < 8) return fired
 
-    // ── Volume. The threshold is absolute, as the control says ("BTC per
-    // candle"); the ratio against the average goes in the text, because that
-    // is the part that tells him whether to care.
+    // ── Volume. Two conditions, not one: the size floor the control asks for
+    // AND a genuine jump above this market's own average. Shipping only the
+    // floor fired "VOLUME SPIKE … 0.2× the usual" on BTCUSDT 4h, which is a
+    // fifth of normal volume announced as a spike.
     if (alerts.volSpike !== false) {
       const lastVol = vols[vols.length - 1]
-      if (shouldVolAlert(lastVol, alerts.volThreshold as number) && canFire(last, 'vol_' + tf, now, COOLDOWN.vol)) {
-        const ratio = volumeSpikeRatio(vols)
-        const extra = ratio !== null ? ` · ${(Math.round(ratio * 10) / 10)}× the usual` : ''
-        send('VOLUME SPIKE', `${pre}: ${_fmt(lastVol)}${extra}`, 'vol')
+      const ratio = volumeSpikeRatio(vols)
+      if (shouldVolAlert(lastVol, alerts.volThreshold as number, ratio) && canFire(last, 'vol_' + tf, now, COOLDOWN.vol)) {
+        send('VOLUME SPIKE', `${pre}: ${_fmt(lastVol)} · ${(Math.round((ratio as number) * 10) / 10)}× the usual`, 'vol')
         fired.push('vol')
       }
     }

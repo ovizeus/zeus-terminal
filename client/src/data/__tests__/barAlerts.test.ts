@@ -58,6 +58,22 @@ describe('volume', () => {
     expect(run(bars(calm()), { enabled: true, volSpike: true, volThreshold: 500 })).not.toContain('vol')
   })
 
+  it('REGRESSION: a big-but-ordinary candle is not a spike', () => {
+    // Shipped and seen live on BTCUSDT 4h: every candle there is thousands, so
+    // the size floor alone fired "VOLUME SPIKE … 0.2× the usual".
+    const busy = bars([...calm(40, 100, 20000), { h: 101, l: 99, c: 100, v: 4000 }, { h: 101, l: 99, c: 100 }])
+    const fired = run(busy, { enabled: true, volSpike: true, volThreshold: 500 })
+    expect(fired).not.toContain('vol')
+  })
+
+  it('and the text never has to apologise for the headline', () => {
+    const k = bars([...calm(), { h: 101, l: 99, c: 100, v: 9000 }, { h: 101, l: 99, c: 100, v: 1 }])
+    run(k, { enabled: true, volSpike: true, volThreshold: 500 })
+    const msg = sent.find((s) => s.tag === 'vol')!
+    const mult = parseFloat((msg.body.match(/([\d.]+)× the usual/) || [])[1] || '0')
+    expect(mult).toBeGreaterThanOrEqual(2)
+  })
+
   it('ignores the bar still forming — it is not closed yet', () => {
     // the huge volume is in the LAST row, which is the live candle
     const k = bars([...calm(), { h: 101, l: 99, c: 100, v: 9000 }])
