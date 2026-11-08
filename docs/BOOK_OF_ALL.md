@@ -13729,6 +13729,26 @@ atLive=false`.
 De unde am plecat azi-dimineaţă: **un singur cont** primea decizii, iar ceilalţi
 şapte se dezarmau tăcut la fiecare repornire — de 1162 de ori.
 
+### Ruta normală de armare, verificată şi ea
+
+Contul 5 a fost armat printr-o scriere în baza de date, fiindcă
+`/api/at/toggle` acţionează **doar asupra contului logat** şi sesiuni nu fabric.
+Asta lăsa ruta obişnuită neverificată, aşa că am fixat-o separat.
+
+Proprietatea care contează acolo nu e „merge", ci **al cui cont atinge**:
+handlerul ia id-ul din **sesiunea autentificată**, niciodată din corpul cererii.
+O rută care ar accepta un `userId` din body ar lăsa pe oricine să armeze pe
+oricine — pe un sistem care tranzacţionează bani.
+
+Cinci teste o ţin pe loc: refuză fără sesiune; armează **utilizatorul
+autentificat**; cere un boolean adevărat (`"active": "false"` e un şir
+adevărat — coerciţia ar arma un cont care a cerut să fie oprit); acceptă doar
+cele două moduri care există; şi întoarce decizia motorului în loc s-o
+presupună.
+
+Viu, acum: `POST /api/at/toggle` fără sesiune → **403** (garda CSRF loveşte
+prima).
+
 ### De reţinut
 
 ⚠️ **`max@alphamax.pro` (contul 15) are `atActiveLive = 1` salvat.** E pe demo,
