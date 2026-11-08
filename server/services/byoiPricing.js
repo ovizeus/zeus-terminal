@@ -1,5 +1,7 @@
 'use strict';
 
+const { FIELD_BY_KEY } = require('./byoiSpec');
+
 /**
  * Build Your Own Indicator — pricing, states and the billing gate.
  *
@@ -99,16 +101,105 @@ function priceCentsFor(tierId) {
 }
 
 /**
+ * [2026-11-07] Which options cost more than the cheapest tier.
+ *
+ * Signature ($29) is "your name and your colours on an existing engine". Until
+ * this map existed, `evaluateSubmission` saw nothing from the spec, so that
+ * price also bought order book + higher timeframes + liquidations + a readout
+ * table — Custom work, sold at a fifth of its price, silently, every time.
+ *
+ * Alerts and sound are here because they need infrastructure that does not
+ * exist yet: a ticked box is a promise to be honoured when that indicator is
+ * built, and a promise that needs new plumbing is not a $29 promise.
+ *
+ * Keyed `field:option`, so a field name alone can never gate by accident.
+ */
+const OPTION_TIER = Object.freeze({
+    'sources:oi': 'custom',
+    'sources:funding': 'custom',
+    'sources:liq': 'custom',
+    'sources:book': 'custom',
+    'sources:mtf': 'custom',
+    'visuals:table': 'custom',
+    'signals:alert': 'custom',
+    'signals:sound': 'custom',
+    'signalLogic:divergence': 'custom',
+    'signalLogic:state': 'custom',
+    'visibility:public_request': 'custom',
+});
+
+/** Cheapest first. Only used to compare, never shown to anyone. */
+const _TIER_RANK = Object.freeze({ signature: 0, custom: 1, bespoke: 2 });
+
+function _rank(tierId) {
+    return Object.prototype.hasOwnProperty.call(_TIER_RANK, tierId) ? _TIER_RANK[tierId] : 0;
+}
+
+/**
+ * Every `field:option` the spec actually claims.
+ *
+ * A claim is read only in the shape its own field declares: a multi-choice
+ * field from an ARRAY, a single-choice field from a STRING. Reading both
+ * shapes from either field is how `{ sources: 'book' }` - a malformed field,
+ * not an order for order-book work - would have silently become a $149 demand.
+ * A field whose value has the wrong type claims nothing, which is safe in both
+ * directions: the floor is already the cheapest tier, so nothing is given away
+ * either.
+ */
+function _claims(spec) {
+    const out = [];
+    if (!spec || typeof spec !== 'object') return out;
+    for (const [key, val] of Object.entries(spec)) {
+        const f = FIELD_BY_KEY[key];
+        if (!f) continue;
+        if (f.type === 'multi') {
+            if (!Array.isArray(val)) continue;
+            for (const v of val) if (typeof v === 'string') out.push(key + ':' + v);
+        } else if (f.type === 'select') {
+            if (typeof val === 'string' && val) out.push(key + ':' + val);
+        }
+    }
+    return out;
+}
+
+/**
+ * The lowest tier that can honestly carry this scope. Never throws, and the
+ * floor is the cheapest tier: this decides whether to ASK for more money, so a
+ * confused answer must not invent a charge.
+ */
+function requiredTierFor(spec) {
+    let needed = 'signature';
+    for (const claim of _claims(spec)) {
+        const t = OPTION_TIER[claim];
+        if (t && _rank(t) > _rank(needed)) needed = t;
+    }
+    return needed;
+}
+
+/** True when `tier` can carry what the spec asks for. */
+function tierCovers(tier, spec) {
+    return _rank(tier) >= _rank(requiredTierFor(spec));
+}
+
+/**
  * The gate. Returns { allowed, reason, status, paymentRef } and NEVER throws:
  * a thrown error here would be a 500 on a money path.
  */
-function evaluateSubmission({ tier, mode, isAdmin, paymentRef }) {
+function evaluateSubmission({ tier, mode, isAdmin, paymentRef, spec }) {
     if (!TIERS[tier]) {
         return { allowed: false, reason: 'unknown_tier' };
     }
     // A bespoke order is quoted by hand, so it is never charged up front.
     if (TIERS[tier].quote_only) {
         return { allowed: true, reason: 'quote_only', status: STATUS.PAID, paymentRef: null };
+    }
+    // [2026-11-07] Scope before money: checked BEFORE the payment branch so a
+    // buyer is told to move the order up instead of paying first and being
+    // refused after. Skipped for the operator, who walks his own form.
+    // Paying for MORE than the scope needs is always allowed - an upsell
+    // nobody needs is just a lost sale.
+    if (!isAdmin && !tierCovers(tier, spec)) {
+        return { allowed: false, reason: 'tier_too_low', needsTier: requiredTierFor(spec) };
     }
     if (mode === 'live') {
         if (typeof paymentRef === 'string' && paymentRef.trim().length > 0) {
@@ -142,4 +233,5 @@ module.exports = {
     BILLING_MODES, DEFAULT_BILLING_MODE, billingMode,
     STATUS, TRANSITIONS, canTransition, isEditable, refundOwed,
     priceCentsFor, evaluateSubmission, isBypass, formatPrice,
+    OPTION_TIER, requiredTierFor, tierCovers,
 };

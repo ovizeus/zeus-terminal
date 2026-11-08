@@ -13,6 +13,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../services/database');
 const P = require('../services/byoiPricing');
+const { renderBrief } = require('../services/byoiBrief');
 const SPEC = require('../services/byoiSpec');
 
 function _requireAuth(req, res, next) {
@@ -54,6 +55,11 @@ router.get('/config', _requireAuth, (req, res) => {
         fields: SPEC.FIELDS,
         tiers: P.TIER_IDS.map((id) => ({ ...P.TIERS[id], price: P.formatPrice(P.TIERS[id].price_cents) })),
         currency: P.CURRENCY,
+        // [2026-11-07] Which options cost more than the cheapest tier. Sent so
+        // the screen can say so BEFORE he pays and offer the upgrade. The
+        // server still refuses an under-tiered order on its own: this is a
+        // courtesy, never the rule.
+        optionTier: P.OPTION_TIER,
         billingMode: mode,
         // The client must not infer this from the mode: the rule is one place.
         canSubmit: P.evaluateSubmission({ tier: 'custom', mode, isAdmin, paymentRef: null }).allowed,
@@ -321,6 +327,26 @@ router.post('/admin/request/:id/deliver', _requireAuth, _requireAdmin, (req, res
 
     const saved = db.byoiSetStatus(id, P.STATUS.DELIVERED, { adminNote: b.adminNote });
     res.json({ ok: true, request: { ..._publicRow(saved), email: saved.email || null }, indicator: created });
+});
+
+/**
+ * [2026-11-07] The copy-paste build brief — the operator's own design.
+ *
+ * Nothing is built automatically: he copies this one block of text and hands it
+ * to whoever builds the indicator. Rendered on the server so the labels can
+ * never drift from the questions the buyer was actually asked.
+ */
+router.get('/admin/request/:id/brief', _requireAuth, _requireAdmin, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ ok: false, error: 'bad_id' });
+    const row = db.byoiGetForAdmin(id);
+    if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
+    let spec = {};
+    try { spec = JSON.parse(row.spec_json || '{}') || {}; } catch { spec = {}; }
+    const attachmentCount = (() => {
+        try { return (db.byoiListAttachments(id) || []).length; } catch { return 0; }
+    })();
+    res.json({ ok: true, brief: renderBrief({ row, spec, attachmentCount }) });
 });
 
 router.get('/admin/indicators', _requireAuth, _requireAdmin, (req, res) => {

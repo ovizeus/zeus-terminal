@@ -13,10 +13,13 @@ import { ModalOverlay, ModalHeader } from './ModalOverlay'
 type FieldType = 'text' | 'textarea' | 'select' | 'multi' | 'color' | 'bool' | 'rows'
 interface Option { v: string; l: string }
 interface Column { key: string; label: string; max: number }
+import { visibleFields, requiredTier, gatingOptions, tierTooLow, tierRank } from './byoiFormRules'
+
 interface Field {
   key: string; type: FieldType; label: string; required?: boolean
   max?: number; min?: number; maxRows?: number; def?: string; hint?: string
   options?: Option[]; columns?: Column[]
+  showIf?: { key: string; in?: string[]; has?: string }
 }
 interface Tier { id: string; label: string; price_cents: number; price: string; quote_only: boolean; blurb: string }
 interface Attachment { id: number; filename: string; mime: string; bytes: number }
@@ -26,6 +29,7 @@ interface Req {
   updatedAt: number; attachments: Attachment[]
 }
 interface Config {
+  optionTier?: Record<string, string>
   fields: Field[]; tiers: Tier[]; billingMode: string; canSubmit: boolean
   maxAttachments: number; maxAttachmentBytes: number; allowedMime: string[]
 }
@@ -156,6 +160,25 @@ export function BuildIndicatorModal({ visible, onClose }: { visible: boolean; on
 
   const activeTier = cfg?.tiers.find((t) => t.id === tier)
 
+  // What the ticked options actually require, and which ones forced it.
+  const optionTier = cfg?.optionTier || {}
+  const tooLow = cfg ? tierTooLow(optionTier, cfg.fields, spec, tier) : false
+  const needsTier = tooLow ? requiredTier(optionTier, cfg!.fields, spec) : ''
+  const needsTierLabel = cfg?.tiers.find((t) => t.id === needsTier)?.label || needsTier
+  const needsTierPrice = cfg?.tiers.find((t) => t.id === needsTier)?.price || ''
+  const gatingLabels = cfg && tooLow ? gatingOptions(optionTier, cfg.fields, spec, tier) : []
+
+  /**
+   * The price tag on an option that costs more than the tier in hand. Shown
+   * before it is ticked, so nobody picks something and finds out at checkout.
+   * Nothing is shown once the order already carries that tier.
+   */
+  function gatedLabel(key: string, value: string): string {
+    const need = (cfg?.optionTier || {})[`${key}:${value}`]
+    if (!need || tierRank(need) <= tierRank(tier)) return ''
+    return cfg?.tiers.find((t) => t.id === need)?.price || ''
+  }
+
   function renderField(f: Field) {
     const err = errors[f.key]
     const v = spec[f.key]
@@ -193,6 +216,11 @@ export function BuildIndicatorModal({ visible, onClose }: { visible: boolean; on
                   background: on ? 'rgba(0,175,255,0.08)' : 'none',
                 }}>
                 {on ? '✓ ' : ''}{o.l}
+                {gatedLabel(f.key, o.v) && (
+                  <span style={{ marginLeft: 5, fontSize: 10, color: '#f0c040', opacity: 0.9 }}>
+                    {gatedLabel(f.key, o.v)}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -325,7 +353,28 @@ export function BuildIndicatorModal({ visible, onClose }: { visible: boolean; on
               ))}
             </div>
 
-            {cfg.fields.map(renderField)}
+            {/* [2026-11-07] Said BEFORE he pays, and it offers the upgrade
+                instead of blocking him: a lost sale is worse than an upsell.
+                The server refuses an under-tiered order on its own regardless. */}
+            {needsTier && (
+              <div style={{
+                marginBottom: 16, padding: '10px 12px', borderRadius: 8,
+                border: '1px solid #3a3420', background: 'rgba(240,192,64,0.07)',
+                fontSize: 12, color: '#f0c040', lineHeight: 1.6,
+              }}>
+                <div>
+                  {gatingLabels.length === 1
+                    ? `"${gatingLabels[0]}" needs the ${needsTierLabel} tier.`
+                    : `${gatingLabels.slice(0, 3).join(', ')} need the ${needsTierLabel} tier.`}
+                </div>
+                <button type="button" onClick={() => setTier(needsTier)}
+                  style={{ ...BTN, marginTop: 8, borderColor: '#f0c040', color: '#f0c040', fontSize: 12 }}>
+                  Move this order to {needsTierLabel}{needsTierPrice ? ` — ${needsTierPrice}` : ''}
+                </button>
+              </div>
+            )}
+
+            {visibleFields(cfg.fields, spec).map((f) => renderField(f as Field))}
 
             <div style={{ marginBottom: 16 }}>
               <label style={L}>Screenshots or sketches</label>

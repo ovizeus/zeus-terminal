@@ -54,6 +54,85 @@ const FIELDS = Object.freeze([
           { v: 'alert', l: 'Alerts' }, { v: 'sound', l: 'Sound' },
       ] },
 
+    // ── How it CALCULATES. [2026-11-07] The form said what an indicator draws
+    // and what it reads, and left the expensive part — how it decides — to free
+    // text. That is exactly where a fixed price turns into a negotiation.
+    { key: 'smoothing', type: 'select', label: 'Smoothing', required: false, def: 'none',
+      options: [
+          { v: 'none', l: 'None — raw value' }, { v: 'sma', l: 'SMA' }, { v: 'ema', l: 'EMA' },
+          { v: 'wma', l: 'WMA' }, { v: 'hma', l: 'HMA' }, { v: 'rma', l: 'RMA (Wilder)' },
+      ] },
+
+    { key: 'normalize', type: 'select', label: 'How the value is scaled', required: false, def: 'raw',
+      options: [
+          { v: 'raw', l: 'Raw value' }, { v: 'pct', l: '0 to 100' },
+          { v: 'zscore', l: 'Z-score' }, { v: 'percentile', l: 'Percentile rank' },
+      ] },
+
+    { key: 'signalLogic', type: 'multi', label: 'What makes a signal', required: false,
+      options: [
+          { v: 'cross', l: 'Two lines cross' }, { v: 'threshold', l: 'A level is crossed' },
+          { v: 'divergence', l: 'Divergence against price' }, { v: 'slope', l: 'The slope flips' },
+          { v: 'breakout', l: 'A level breaks' }, { v: 'state', l: 'The regime changes' },
+      ],
+      hint: 'Tick every rule that applies. This is the part that decides what you actually see.' },
+
+    { key: 'conditions', type: 'rows', label: 'Exact conditions', required: false, maxRows: 6,
+      columns: [
+          { key: 'when', label: 'When', max: 40 },
+          { key: 'op', label: 'is', max: 20 },
+          { key: 'then', label: 'then show', max: 40 },
+      ],
+      hint: 'One rule per row, in your own words — "RSI / above 70 / red zone".' },
+
+    // The single biggest source of argument over a paid indicator. Settled
+    // before the build instead of after: a buyer watching arrows move will
+    // call it broken, and he is not wrong to.
+    { key: 'confirmOn', type: 'select', label: 'When a signal counts', required: false, def: 'close',
+      options: [
+          { v: 'close', l: 'Only when the bar closes — never repaints' },
+          { v: 'live', l: 'Live inside the bar — can appear and vanish' },
+      ],
+      hint: 'Bar close is the honest one. A live signal can show up mid-candle and be gone by the close.' },
+
+    { key: 'levels', type: 'rows', label: 'Reference lines', required: false, maxRows: 6,
+      columns: [{ key: 'value', label: 'Value', max: 12 }, { key: 'label', label: 'Label', max: 20 }],
+      hint: 'Horizontal guides — 0, 50, 70/30, or anything you watch.' },
+
+    { key: 'scale', type: 'select', label: 'Scale of its pane', required: false, def: 'own',
+      showIf: { key: 'placement', in: ['pane', 'both'] },
+      options: [
+          { v: 'own', l: 'Fits itself' }, { v: 'fixed100', l: 'Fixed, 0 to 100' },
+          { v: 'price', l: 'Same as price' },
+      ] },
+
+    { key: 'barColoring', type: 'bool', label: 'Colour the candles by its state', required: false },
+
+    { key: 'symbols', type: 'select', label: 'Markets it must work on', required: false, def: 'all',
+      options: [{ v: 'all', l: 'Every market' }, { v: 'some', l: 'Only the ones I list' }] },
+
+    { key: 'symbolList', type: 'text', label: 'Which markets', required: false, max: 120,
+      showIf: { key: 'symbols', in: ['some'] }, hint: 'For example: BTCUSDT, ETHUSDT' },
+
+    { key: 'defaultOn', type: 'bool', label: 'Switched on by default in my list', required: false },
+
+    { key: 'likeExisting', type: 'text', label: 'Closest existing indicator', required: false, max: 40,
+      hint: '"Like X, but…" says more in four words than four paragraphs. Leave it blank if it is like nothing.' },
+
+    { key: 'acceptance', type: 'text', label: 'I will consider it correct if', required: false, max: 200,
+      hint: 'One sentence. This is what the finished build gets measured against — by both of us.' },
+
+    { key: 'alertWhere', type: 'multi', label: 'Where alerts arrive', required: false,
+      showIf: { key: 'signals', has: 'alert' },
+      options: [{ v: 'app', l: 'In the app' }, { v: 'telegram', l: 'Telegram' }] },
+
+    { key: 'alertText', type: 'text', label: 'What the alert says', required: false, max: 160,
+      showIf: { key: 'signals', has: 'alert' } },
+
+    { key: 'alertRate', type: 'select', label: 'How often it may fire', required: false, def: 'bar',
+      showIf: { key: 'signals', has: 'alert' },
+      options: [{ v: 'bar', l: 'Once per bar' }, { v: 'signal', l: 'Every signal' }] },
+
     { key: 'colorUp', type: 'color', label: 'Bullish colour', required: false, def: '#00ff88' },
     { key: 'colorDown', type: 'color', label: 'Bearish colour', required: false, def: '#ff4455' },
     { key: 'colorNeutral', type: 'color', label: 'Neutral colour', required: false, def: '#00afff' },
@@ -82,6 +161,10 @@ const FIELDS = Object.freeze([
       ],
       hint: 'Private is yours alone. Public puts it in every trader\'s list with your name on it, if we agree it is ready — same price either way.' },
 
+    { key: 'creditLine', type: 'text', label: 'The credit line everyone sees', required: false, max: 40,
+      showIf: { key: 'visibility', in: ['public_request'] },
+      hint: 'Your name, spelled the way you want it shown on every chart.' },
+
     { key: 'notes', type: 'textarea', label: 'Describe it in your own words', required: true, max: 4000,
       hint: 'What should it tell you, and when? The more precisely you say it, the closer the build lands.' },
 ]);
@@ -94,6 +177,27 @@ const ALLOWED_MIME = Object.freeze(['image/png', 'image/jpeg', 'image/webp', 'im
 function _str(v) { return typeof v === 'string' ? v.trim() : ''; }
 
 /**
+ * [2026-11-07] Is this field even on screen?
+ *
+ * `showIf` keeps nonsense combinations out of the order — a pane scale when
+ * nothing draws in a pane, a credit line on a private build. A hidden field is
+ * dropped rather than trusted: it never reaches `clean`, so it can neither be
+ * stored nor priced. A field the buyer could not see must not cost him money.
+ */
+function _visible(f, src) {
+    const cond = f && f.showIf;
+    if (!cond) return true;
+    const v = src ? src[cond.key] : undefined;
+    if (typeof cond.has === 'string') return Array.isArray(v) && v.indexOf(cond.has) !== -1;
+    if (Array.isArray(cond.in)) {
+        const s = typeof v === 'string' && v ? v : (FIELD_BY_KEY[cond.key] && FIELD_BY_KEY[cond.key].def) || '';
+        return cond.in.indexOf(s) !== -1;
+    }
+    return true;
+}
+
+
+/**
  * Validates a submitted spec. Returns { ok, errors: {key: message}, clean }.
  * `draft` relaxes required-ness: a half-filled draft must still be savable,
  * because the whole point of drafts is thinking out loud.
@@ -104,6 +208,8 @@ function validateSpec(raw, { draft = false } = {}) {
     const src = (raw && typeof raw === 'object') ? raw : {};
 
     for (const f of FIELDS) {
+        // Hidden means absent. Not defaulted, not kept, not charged for.
+        if (!_visible(f, src)) continue;
         const v = src[f.key];
         switch (f.type) {
             case 'text':
@@ -171,6 +277,6 @@ function validateSpec(raw, { draft = false } = {}) {
 }
 
 module.exports = {
-    FIELDS, FIELD_BY_KEY, validateSpec,
+    FIELDS, FIELD_BY_KEY, validateSpec, isFieldVisible: _visible,
     MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, ALLOWED_MIME,
 };

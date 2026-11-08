@@ -255,3 +255,58 @@ describe('/api/byoi/admin — status moves', () => {
         expect(db.byoiListForAdmin).toHaveBeenCalled();
     });
 });
+
+describe('the copy-paste build brief', () => {
+    // [2026-11-07] The operator copies ONE block of text and hands it to
+    // whoever builds the order. Nothing is built automatically.
+    const row = {
+        id: 42, user_id: 5, tier: 'custom', title: 'Ovi Wave', status: 'paid',
+        price_cents: 14900, currency: 'USD', payment_ref: 'pay_secret',
+        spec_json: JSON.stringify({ title: 'Ovi Wave', placement: 'pane', visuals: ['line'],
+            sources: ['price'], timeframes: ['1h'], notes: 'draws a wave when the trend turns',
+            acceptance: 'it turns where I turn' }),
+        created_at: 1, updated_at: 2, submitted_at: Date.UTC(2026, 10, 7),
+    };
+
+    it('is never handed to a plain user — it carries another buyer\'s order', async () => {
+        const app = build(makeDb({ byoiGetForAdmin: jest.fn(() => row) }));
+        const r = await supertest(app).get('/api/byoi/admin/request/42/brief').set('x-test-uid', '5');
+        expect(r.status).toBe(403);
+    });
+
+    it('gives the operator one block of plain text', async () => {
+        const app = build(makeDb({ byoiGetForAdmin: jest.fn(() => row) }));
+        const r = await supertest(app).get('/api/byoi/admin/request/42/brief')
+            .set('x-test-uid', '1').set('x-test-role', 'admin');
+        expect(r.status).toBe(200);
+        expect(r.body.ok).toBe(true);
+        expect(r.body.brief).toContain('Ovi Wave');
+        expect(r.body.brief).toContain('it turns where I turn');
+        expect(r.body.brief).toMatch(/never repaints/i);
+    });
+
+    it('leaves the payment reference out of what gets pasted around', async () => {
+        const app = build(makeDb({ byoiGetForAdmin: jest.fn(() => row) }));
+        const r = await supertest(app).get('/api/byoi/admin/request/42/brief')
+            .set('x-test-uid', '1').set('x-test-role', 'admin');
+        expect(r.body.brief).not.toContain('pay_secret');
+    });
+
+    it('says 404 for an order that is not there, and 400 for a nonsense id', async () => {
+        const app = build(makeDb());
+        const miss = await supertest(app).get('/api/byoi/admin/request/9/brief')
+            .set('x-test-uid', '1').set('x-test-role', 'admin');
+        expect(miss.status).toBe(404);
+        const bad = await supertest(app).get('/api/byoi/admin/request/abc/brief')
+            .set('x-test-uid', '1').set('x-test-role', 'admin');
+        expect(bad.status).toBe(400);
+    });
+
+    it('survives a spec that is not valid JSON rather than 500ing the page', async () => {
+        const app = build(makeDb({ byoiGetForAdmin: jest.fn(() => ({ ...row, spec_json: '{broken' })) }));
+        const r = await supertest(app).get('/api/byoi/admin/request/42/brief')
+            .set('x-test-uid', '1').set('x-test-role', 'admin');
+        expect(r.status).toBe(200);
+        expect(typeof r.body.brief).toBe('string');
+    });
+});

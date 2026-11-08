@@ -12902,6 +12902,110 @@ De acum verific codul de ieşire, nu sumarul.
 
 ---
 
+## 2026-11-07 — BYOI: formularul spune acum CUM se calculează, iar preţul depinde de ce bifează
+
+Ai cerut să mă uit dacă lipseşte ceva din setările indicatorilor — „cu cât ai mai
+multe opţiuni de bifat, cu atât eşti mai bătrân de făcut". Am găsit două găuri
+înainte să ajung la bifări noi.
+
+### Gaura 1 — formularul nu întreba niciodată CUM calculează
+
+Spunea ce **desenează** şi ce **citeşte**. Partea scumpă — cum decide — era
+lăsată integral textului liber. Exact acolo o comandă cu preţ fix se transformă
+în negociere.
+
+Am adăugat 18 câmpuri noi, de la 12 la 30. Cele care contează cel mai mult nu
+sunt despre desen:
+
+- **„Când contează un semnal"** — pe închiderea barei (nu redesenează niciodată)
+  sau live în bară. Asta e **sursa numărul unu de certuri** la un indicator
+  plătit: cumpărătorul vede săgeţile mutându-se şi zice că e stricat, şi nu
+  greşeşte. Acum se stabileşte înainte de construcţie, nu după.
+- **„Îl consider corect dacă ___"** — un rând. Cea mai ieftină protecţie care
+  există, pentru amândoi.
+- **„Cel mai apropiat indicator existent"** — „ca X, dar…" spune în patru
+  cuvinte mai mult decât patru paragrafe.
+
+Plus logica propriu-zisă: netezire (SMA/EMA/WMA/HMA/RMA), scalarea valorii
+(brut / 0–100 / z-score / rang percentil), ce face un semnal (încrucişare, prag,
+divergenţă, pantă, rupere, schimbare de regim) şi rânduri de condiţii exacte.
+Şi afişarea: niveluri de referinţă, scara panoului, colorarea lumânărilor,
+simboluri, pornit implicit, linia de credit.
+
+**`showIf`** ţine prostiile afară: scara panoului apare doar dacă ceva desenează
+într-un panou, linia de credit doar la o cerere publică, detaliile de alertă doar
+dacă s-au bifat alerte. Un câmp ascuns e **şters** din comandă, nu păstrat: nu
+poate fi nici stocat, nici facturat. **Un câmp pe care cumpărătorul nu l-a văzut
+nu are voie să-l coste.**
+
+### Gaura 2 — preţul nu depindea de nimic din ce bifa omul
+
+`evaluateSubmission` primea doar `{tier, mode, isAdmin, paymentRef}`. Nimic din
+spec. Nivelul **Signature (29$)** promite „numele şi culorile tale pe un motor
+existent", dar nimic nu împiedica pe cineva să bifeze la 29$ order book + higher
+timeframes + lichidări + tabel de citire. Aia e muncă de **149$** vândută la 29$,
+în linişte, de fiecare dată.
+
+Acum există o hartă opţiune → nivel minim, lângă preţuri. Serverul **refuză** o
+comandă sub nivel şi spune de ce nivel are nevoie. Ecranul o spune **înainte de
+plată** şi oferă trecerea la nivelul corect, cu un buton — nu blochează. O vânzare
+pierdută e mai rea decât un upsell.
+
+Pe drum am închis şi o capcană de tipuri pe care o scrisesem chiar eu: prima
+versiune citea o revendicare din orice formă, deci `{ sources: 'book' }` — un
+câmp stricat, nu o comandă de order book — devenea tăcut o cerinţă de 149$. Acum
+o revendicare se citeşte **doar în forma pe care câmpul o declară**.
+
+### Alertele — o greşeală de raţionament a mea, corectată
+
+Am crezut că „Alerts" şi „Sound" sunt promisiuni fără acoperire, fiindcă nu
+există nicio infrastructură de alerte pe indicatoare. **Greşit.** BYOI e un
+**formular de comandă**: o bifă e o specificaţie de onorat **când se construieşte
+indicatorul ăla**, după plată — nu o funcţie care trebuie să existe deja.
+Reparaţia cinstită nu era să le scot, ci să le **preţuiesc**. Amândouă cer acum
+nivelul Custom, pentru că au nevoie de infrastructură care nu există.
+
+### Ce ai cerut în timpul lucrului: textul de copiat
+
+> „tot ce ai zis ca o comandă copy paste de la mine când face plata şi eu îţi dau
+> pasteul tie şi tu îl faci — adică nu se face automat"
+
+Fiecare comandă are acum un buton **„Build brief"** în Admin care produce un
+singur bloc de text, complet: numărul comenzii, nivelul, ce s-a plătit, fiecare
+răspuns sub întrebarea lui, politica de redesenare spusă răspicat, criteriul de
+acceptanţă, cuvintele lui, şi câte imagini au venit. Îl copiezi şi mi-l dai.
+**Nimic nu se construieşte automat** — decizia rămâne a ta.
+
+Textul se randează pe **server**, din aceleaşi definiţii de câmpuri din care se
+randează formularul, ca o etichetă să nu se poată desincroniza niciodată de
+întrebarea care i s-a pus de fapt. Nu include referinţa de plată: briefingul
+ajunge la cine construieşte, iar un id de plată nu e al lui. Şi dacă clipboard-ul
+refuză — se întâmplă în WebView — textul se **afişează** oricum, ca să-l poţi
+selecta. Un buton de copiere care nu face nimic în tăcere e mai rău decât niciun
+buton.
+
+### Două greşeli ale mele, din timpul lucrului
+
+**Primul test pe poarta de preţ cerea ca adminul să treacă pe `live` fără
+plată.** Ar fi slăbit regula „fail-closed" ca să-mi convină testul. Am reparat
+testul, nu producţia.
+
+**Trei teste de interfaţă picau cu „pagina e goală".** Chemam `render` şi
+`findByText` **înăuntrul** lui `act()`, care nu golise încă efectele. Eşecul se
+citea ca un bug în pagină, deşi era greşeala mea din test.
+
+### Dovezi
+
+Server **10.537** teste trecute, 4 shard-uri, fiecare **exit 0**. Client **1.824**,
+**exit 0**. Tipuri **0**. Poarta de preţ: ambele mutaţii (poarta scoasă, capcana
+de tipuri reintrodusă) **omoară** teste. Calea de rezervă a clipboard-ului:
+mutaţia **omoară** două teste. Ruta nouă răspunde **401** fără sesiune. Server
+viu, zero erori după reload.
+
+Specificaţia completă e în `docs/superpowers/specs/2026-11-07-byoi-spec-expansion-design.md`.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
@@ -12940,4 +13044,4 @@ Am tratat o fereastră ca pe o concluzie (LONG) · am spus „tsc curat" de mai 
 
 ## Cifrele
 
-**35 de commit-uri** · server **10.482** teste trecute (3 sărite) · client **1.807** · tipuri **0** · suita de client iese cu **0**, verificat pe codul de ieşire · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.
+**36 de commit-uri** · server **10.537** teste trecute · client **1.824** · tipuri **0** · suita de client iese cu **0**, verificat pe codul de ieşire · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.

@@ -99,6 +99,37 @@ export function IndicatorRequestsSection() {
     setNote(''); load()
   }
 
+  /**
+   * [2026-11-07] The copy-paste build brief — the operator's own design.
+   *
+   * Nothing is built automatically: he copies ONE block of text out of here
+   * and hands it to whoever builds the indicator. The text is rendered on the
+   * server, from the same field definitions the buyer's form was rendered
+   * from, so a label can never drift from the question actually asked.
+   *
+   * The clipboard API fails in plenty of real places - an insecure context, a
+   * WebView that denies it, a browser that wants a fresh gesture - so the text
+   * is always shown as well. A copy button that silently does nothing is
+   * worse than no copy button.
+   */
+  const [brief, setBrief] = useState<{ id: number; text: string; copied: boolean } | null>(null)
+
+  async function showBrief(id: number) {
+    if (brief && brief.id === id) { setBrief(null); return }
+    const res = await api(`/api/byoi/admin/request/${id}/brief`)
+    if (!res.body.ok || typeof res.body.brief !== 'string') {
+      alert(res.body.error || 'Could not build the brief')
+      return
+    }
+    const text = res.body.brief as string
+    let copied = false
+    try {
+      await navigator.clipboard.writeText(text)
+      copied = true
+    } catch { /* shown below instead - see the comment above */ }
+    setBrief({ id, text, copied })
+  }
+
   const pending = rows.filter((r) => r.status === 'paid' || r.status === 'in_progress').length
 
   return (
@@ -150,6 +181,29 @@ export function IndicatorRequestsSection() {
                   </div>
 
                   <AttachmentStrip requestId={r.id} />
+
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '10px 0' }}>
+                    <button onClick={() => showBrief(r.id)}
+                      style={{ background: 'none', border: '1px solid #00afff', color: '#00afff', borderRadius: 6, fontSize: 12, padding: '7px 12px', cursor: 'pointer', fontFamily: 'var(--ff)' }}>
+                      {brief && brief.id === r.id ? 'Hide build brief' : 'Build brief'}
+                    </button>
+                    {brief && brief.id === r.id && (
+                      <span style={{ fontSize: 11, color: brief.copied ? '#00ff88' : '#f0c040' }}>
+                        {brief.copied ? 'Copied to the clipboard' : 'Select the text below and copy it'}
+                      </span>
+                    )}
+                  </div>
+
+                  {brief && brief.id === r.id && (
+                    <textarea readOnly value={brief.text}
+                      onFocus={(e) => e.currentTarget.select()}
+                      style={{
+                        width: '100%', minHeight: 220, resize: 'vertical', marginBottom: 12,
+                        background: '#0a1119', border: '1px solid #12253a', borderRadius: 6,
+                        color: '#c0d8ec', fontSize: 12, lineHeight: 1.6, padding: 10,
+                        fontFamily: 'var(--ff)', whiteSpace: 'pre',
+                      }} />
+                  )}
 
                   {r.declineReason && (
                     <div style={{ fontSize: 12, color: '#ff4455', marginBottom: 10 }}>Declined: {r.declineReason}</div>
