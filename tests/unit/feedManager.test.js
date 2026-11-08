@@ -210,3 +210,68 @@ describe('feedManager', () => {
         });
     });
 });
+
+/**
+ * [2026-11-08] Feeds used to start ONLY when somebody switched exchange during
+ * that process's life — nothing read the active accounts at boot. His wife is
+ * on bybit, so after every restart her exchange had no data at all: zero ready
+ * symbols, and the brain skipped her even while autotrade was armed. 2410
+ * brain lines on binance that day, zero on bybit.
+ *
+ * A user's exchange must be fed because the user exists, not because somebody
+ * happened to press a button.
+ */
+describe('priming the feeds from the accounts that exist', () => {
+    beforeEach(() => {
+        fm._resetForTest();
+        mockBinanceFeed.start.mockClear();
+        mockBybitFeed.start.mockClear();
+    });
+
+    const rows = (list) => ({ all: () => list });
+
+    it('starts a feed for every exchange somebody is actually on', () => {
+        const started = fm.primeFromActiveAccounts({
+            prepare: () => rows([
+                { user_id: 1, exchange: 'binance' },
+                { user_id: 2, exchange: 'bybit' },
+            ]),
+        });
+        expect(started.sort()).toEqual(['binance', 'bybit']);
+        expect(mockBinanceFeed.start).toHaveBeenCalled();
+        expect(mockBybitFeed.start).toHaveBeenCalled();
+    });
+
+    it('remembers which exchange each user is on', () => {
+        fm.primeFromActiveAccounts({ prepare: () => rows([{ user_id: 2, exchange: 'bybit' }]) });
+        expect(fm.getUserExchange(2)).toBe('bybit');
+    });
+
+    it('starts nothing when nobody has an active account', () => {
+        expect(fm.primeFromActiveAccounts({ prepare: () => rows([]) })).toEqual([]);
+        expect(mockBybitFeed.start).not.toHaveBeenCalled();
+    });
+
+    it('ignores an exchange it does not know instead of throwing', () => {
+        const started = fm.primeFromActiveAccounts({
+            prepare: () => rows([
+                { user_id: 3, exchange: 'kraken' },
+                { user_id: 2, exchange: 'bybit' },
+            ]),
+        });
+        expect(started).toEqual(['bybit']);
+    });
+
+    it('is safe to run twice — a second boot pass must not double-count', () => {
+        const dbStub = { prepare: () => rows([{ user_id: 2, exchange: 'bybit' }]) };
+        fm.primeFromActiveAccounts(dbStub);
+        const before = fm.getRefcount('bybit');
+        fm.primeFromActiveAccounts(dbStub);
+        expect(fm.getRefcount('bybit')).toBe(before);
+    });
+
+    it('never lets a database problem stop the boot', () => {
+        expect(() => fm.primeFromActiveAccounts({ prepare: () => { throw new Error('db gone'); } })).not.toThrow();
+        expect(fm.primeFromActiveAccounts(null)).toEqual([]);
+    });
+});

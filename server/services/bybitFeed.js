@@ -29,6 +29,7 @@ const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 60_000;
 
 const SYMBOLS = Object.freeze(['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT']);
+let _seeded = false;   // [2026-11-08] REST backfill done for this run
 const TIMEFRAMES_BYBIT = Object.freeze({ '5m': '5', '1h': '60', '4h': '240' });
 
 const _emitter = new EventEmitter();
@@ -389,11 +390,31 @@ function start() {
     _running = true;
     _closing = false;
     _connect();
+    // [2026-11-08] Backfill the candles over REST, independently of the socket.
+    // Without this a bybit symbol takes ~4 hours of live 5m candles to reach
+    // the 50 bars that make it usable, so on a server that restarts more often
+    // than that its users are skipped by the brain forever.
+    if (!_seeded) {
+        _seeded = true;
+        const tfs = Object.keys(TIMEFRAMES_BYBIT);
+        seedHistory({
+            symbols: SYMBOLS,
+            timeframes: tfs,
+            limit: SEED_LIMIT,
+            attempts: SEED_RETRY_MS.length + 1,
+            sleep: (ms) => new Promise((r) => { const t = setTimeout(r, ms); if (t.unref) t.unref(); }),
+            fetchKlines: (sym, tf, lim) => require('./bybitRest').fetchKlines(sym, tf, lim),
+            emit: (ev, data) => _emit(ev, data),
+        }).then((r) => {
+            try { require('./logger').info('BYBIT_FEED', `history seeded: ${r.bars} bars over ${r.seeded} symbol/timeframe pairs`); } catch (_) {}
+        }).catch(() => { /* the live feed runs regardless */ });
+    }
 }
 
 function stop() {
     _closing = true;
     _running = false;
+    _seeded = false;   // a fresh start backfills again
     _clearTimers();
     if (_ws) {
         try { _ws.close(); } catch (_) {}
@@ -444,11 +465,101 @@ function _resetForTest() {
     _failedTopics.clear();
 }
 
+/**
+ * [2026-11-08] Fetch candle history over REST, the way the binance feed does.
+ *
+ * A symbol is only usable once it holds 50+ bars. The binance feed fetches its
+ * history the moment it subscribes; this one only ever opened the live stream,
+ * so a bybit symbol needed about four hours of live 5m candles before the
+ * brain would look at it — on a server that restarts far more often than that,
+ * which means never. An account on bybit could be armed, connected, and still
+ * skipped every cycle for want of bars.
+ *
+ * Emits the SAME per-bar `kline` event the live stream emits, oldest first, so
+ * the consumer in serverState needs no special case: seeded bars and streamed
+ * bars take exactly the same path.
+ *
+ * Dependencies are injected so this is testable without a network, and it
+ * never throws — a failed backfill must leave the live feed running.
+ */
+const SEED_LIMIT = 200;   // comfortably past the 50-bar readiness line
+/** Backoff between seed attempts, long enough to outlast the boot warm gate. */
+const SEED_RETRY_MS = Object.freeze([20_000, 45_000, 90_000, 180_000]);
+
+async function seedHistory(opts) {
+    const o = opts || {};
+    // [2026-11-08] The scheduler answers early-boot market-data calls with a
+    // synthetic 503 (reason=warm_class_b) to protect the Binance weight
+    // budget. The first attempt lands inside that window and comes back
+    // empty — which is exactly how the first version of this shipped,
+    // logging "history seeded: 0 bars". So: retry with a backoff rather
+    // than bypass a protection that exists for a reason.
+    const attempts = Number.isFinite(o.attempts) ? Math.max(1, o.attempts) : 1;
+    const sleep = typeof o.sleep === 'function' ? o.sleep : null;
+    if (attempts > 1 && sleep) {
+        for (let i = 0; i < attempts; i++) {
+            const r = await seedHistory(Object.assign({}, o, { attempts: 1, sleep: null }));
+            if (r.bars > 0 || i === attempts - 1) return r;
+            await sleep(SEED_RETRY_MS[Math.min(i, SEED_RETRY_MS.length - 1)]);
+        }
+    }
+    const symbols = Array.isArray(o.symbols) ? o.symbols : [];
+    const timeframes = Array.isArray(o.timeframes) ? o.timeframes : [];
+    const limit = Number.isFinite(o.limit) ? o.limit : SEED_LIMIT;
+    const emit = typeof o.emit === 'function' ? o.emit : null;
+    const fetchKlines = typeof o.fetchKlines === 'function' ? o.fetchKlines : null;
+    let bars = 0, seeded = 0;
+    if (!emit || !fetchKlines || symbols.length === 0 || timeframes.length === 0) {
+        return { seeded, bars };
+    }
+
+    for (const symbol of symbols) {
+        for (const tf of timeframes) {
+            let rows;
+            try { rows = await fetchKlines(symbol, tf, limit); }
+            catch (_) { rows = null; }               // one bad symbol must not stop the rest
+            if (!Array.isArray(rows) || rows.length === 0) continue;
+
+            const clean = [];
+            for (const k of rows) {
+                if (!Array.isArray(k) || k.length < 6) continue;
+                const ts = Number(k[0]);
+                const open = parseFloat(k[1]);
+                const high = parseFloat(k[2]);
+                const low = parseFloat(k[3]);
+                const close = parseFloat(k[4]);
+                const volume = parseFloat(k[5]);
+                if (!Number.isFinite(ts) || !Number.isFinite(open) || !Number.isFinite(close)) continue;
+                clean.push({ ts, open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 });
+            }
+            if (clean.length === 0) continue;
+            // Bybit hands history back newest-first; bars are APPENDED by the
+            // consumer, so they have to arrive in the order they happened.
+            clean.sort((a, b) => a.ts - b.ts);
+
+            for (const b of clean) {
+                try {
+                    emit('kline', {
+                        symbol, tf,
+                        open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
+                        ts: b.ts,
+                        confirmed: true,             // seeded bars are closed candles
+                        rawExchange: 'bybit',
+                    });
+                    bars++;
+                } catch (_) { /* a bad listener must not abort the seed */ }
+            }
+            seeded++;
+        }
+    }
+    return { seeded, bars };
+}
+
 module.exports = {
     start, stop,
     on, off,
     getConnectionState,
-    SYMBOLS, TIMEFRAMES_BYBIT,
+    SYMBOLS, TIMEFRAMES_BYBIT, seedHistory, SEED_LIMIT, SEED_RETRY_MS,
     _resetForTest,
     _dispatchMessage,
     _sendSubscribeBatches,

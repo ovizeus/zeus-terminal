@@ -183,8 +183,51 @@ function _resetForTest() {
     for (const ex of Object.keys(_graceTimers)) _cancelGrace(ex);
 }
 
+/**
+ * [2026-11-08] Start a feed for every exchange somebody is actually on.
+ *
+ * Feeds were refcounted and only ever started by `activateForUser`, which runs
+ * when a user SWITCHES exchange. Nothing read the accounts at boot, so after a
+ * restart a secondary exchange had no data at all until someone happened to
+ * press the switch. His wife is on bybit: her account was skipped by the brain
+ * every cycle — zero ready symbols — even with autotrade armed.
+ *
+ * Takes the database handle as an argument so it can be tested without one,
+ * and never throws: a feed that fails to prime must not stop the boot.
+ * Idempotent, because `activateForUser` returns early when the user is already
+ * on that exchange.
+ *
+ * Returns the exchanges it primed.
+ */
+function primeFromActiveAccounts(dbHandle) {
+    const primed = new Set();
+    try {
+        if (!dbHandle || typeof dbHandle.prepare !== 'function') return [];
+        const rows = dbHandle.prepare(
+            "SELECT user_id, exchange FROM exchange_accounts WHERE is_active=1 AND exchange IS NOT NULL"
+        ).all() || [];
+        for (const row of rows) {
+            const uid = Number(row && row.user_id);
+            const ex = row && row.exchange;
+            if (!Number.isFinite(uid) || uid <= 0 || !ex) continue;
+            if (!Object.prototype.hasOwnProperty.call(_refcounts, ex)) {
+                // An exchange this build does not know is not a reason to fail.
+                try { require('./logger').warn('FEED_MANAGER', `prime skipped unknown exchange ${ex} (uid=${uid})`); } catch (_) {}
+                continue;
+            }
+            try { activateForUser(uid, ex); primed.add(ex); } catch (_) { /* keep going */ }
+        }
+        if (primed.size > 0) {
+            try { require('./logger').info('FEED_MANAGER', `primed feeds from active accounts: ${[...primed].join(', ')}`); } catch (_) {}
+        }
+    } catch (e) {
+        try { require('./logger').warn('FEED_MANAGER', 'prime failed: ' + (e && e.message)); } catch (_) {}
+    }
+    return [...primed];
+}
+
 module.exports = {
-    activateForUser, deactivateForUser,
+    activateForUser, deactivateForUser, primeFromActiveAccounts,
     markPositionOpen, markPositionClosed, isManaged,
     getFeedForUser, getUserExchange, getRefcount, getActiveExchanges,
     stopAll,

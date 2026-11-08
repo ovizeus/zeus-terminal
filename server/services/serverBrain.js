@@ -154,6 +154,13 @@ function _getVoiceLogger() {
     }
     return _voiceLogger || null;
 }
+// [2026-11-08] Watches for accounts that are ARMED but never get a decision.
+// His wife's account sat like that for a month and nothing said so, because a
+// skipped user produces no output at all. Edge-triggered: one line when it
+// goes quiet, one when it comes back — the circuit_open flood taught that a
+// true statement repeated every tick is a statement nobody reads.
+const _starveWatch = require('./atStarvationWatch').create({});
+
 const _lastThoughtTs = new Map(); // key="userId:symbol:kind" → lastMs
 const _lastRegime = new Map();    // key="userId:symbol" → last regime
 const THOUGHT_THROTTLE_MS = 60 * 1000; // default 1/min per (user, symbol, kind)
@@ -529,6 +536,18 @@ function start() {
     // 15-min Telegram dedup.
     _restoreRegimeBaseline();
     _restoreRegimeTgThrottle();
+    // [2026-11-08] Start a feed for every exchange somebody is actually on.
+    // Feeds only ever started when a user SWITCHED exchange during the life of
+    // the process, so after a restart a secondary exchange had no data at all
+    // and its users were skipped every cycle — zero ready symbols — even with
+    // autotrade armed. Primed here, where the rest of the boot restore lives.
+    try {
+        const _fm = require('./feedManager');
+        const _xdb = require('./database').db;
+        _fm.primeFromActiveAccounts(_xdb);
+    } catch (e) {
+        logger.warn('BRAIN', 'feed prime skipped: ' + (e && e.message));
+    }
     // [BRAIN-V2] Start liquidity depth polling + order flow tracking —
     // required inputs for both the main cycle and the parity shadow cycle.
     serverLiquidity.startDepthPolling(serverState.getConfiguredSymbols());
@@ -922,6 +941,12 @@ function _runCycle() {
             const readySymbols = userState.getReadySymbols();
             if (readySymbols.length === 0) {
                 _logDecision('SKIP', 'DATA_NOT_READY', null, { reason: `No symbols have sufficient data for uid=${userId} (${userExchange})` });
+                try {
+                    const hit = _starveWatch.onArmedSkip(userId, `DATA_NOT_READY@${userExchange}`, Date.now());
+                    if (hit) {
+                        logger.warn('BRAIN', `uid=${hit.userId} is ARMED but has had no decision for ${Math.round(hit.silentMs / 60000)} min — ${hit.reason}`, { userId: hit.userId });
+                    }
+                } catch (_) { /* a watch must never break the cycle */ }
                 continue;
             }
 
@@ -1119,6 +1144,10 @@ function _runCycle() {
                             const scaleEntry = serverAT.processBrainDecision(scaleDec, scaleStc, userId, _userIntentSI);
                             if (scaleEntry) {
                                 serverMultiEntry.recordScaleIn(userId, symbol, snap.price, scaleStc.size);
+                                try {
+                                    const back = _starveWatch.onDecision(userId, Date.now());
+                                    if (back) logger.info('BRAIN', `uid=${back.userId} is receiving decisions again after ${Math.round(back.silentMs / 60000)} min`, { userId: back.userId });
+                                } catch (_) { /* never break the cycle */ }
                                 try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
                                     sourcePath: 'scale_in', finalAction: 'entry',
                                     finalConfidence: confluence.score, finalDir: existingPos.side,

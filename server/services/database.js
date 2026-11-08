@@ -10708,6 +10708,11 @@ const _stmts = {
     atDeletePos: db.prepare('DELETE FROM at_positions WHERE seq = ?'),
     atLoadOpenPosByUser: db.prepare("SELECT seq, data FROM at_positions WHERE status = 'OPEN' AND user_id = ?"),
     atGetOpenUserIds: db.prepare("SELECT DISTINCT user_id FROM at_positions WHERE status = 'OPEN' AND user_id IS NOT NULL"),
+    // [2026-11-08] Users that have engine state saved, whether or not they are
+    // currently in the market. Restoring only the ones with open positions is
+    // why every other account was silently disarmed on every restart: you
+    // could not be armed unless you were already in a trade.
+    atGetEngineUserIds: db.prepare("SELECT DISTINCT user_id FROM at_state WHERE key LIKE 'engine:%' AND user_id IS NOT NULL"),
     atInsertClosed: db.prepare('INSERT OR REPLACE INTO at_closed (seq, data, user_id) VALUES (?, ?, ?)'),
     atGetState: db.prepare('SELECT value FROM at_state WHERE key = ?'),
     atSetState: db.prepare('INSERT OR REPLACE INTO at_state (key, value, user_id) VALUES (?, ?, ?)'),
@@ -11227,6 +11232,12 @@ function atLoadOpenPositions(userId) {
 
 function atGetOpenUserIds() {
     return _stmts.atGetOpenUserIds.all().map(r => r.user_id);
+}
+
+/** Every user with saved engine state — the set the boot restore must use. */
+function atGetEngineUserIds() {
+    try { return _stmts.atGetEngineUserIds.all().map(r => r.user_id); }
+    catch (_) { return []; }   // never let a restore query stop the boot
 }
 
 function atGetState(key) {
@@ -12168,6 +12179,7 @@ function byoiCountForAdmin() {
 module.exports = {
     db,
     byoiInsertDraft, byoiUpdateDraft, byoiGetOwned, byoiListForUser, byoiDeleteDraft,
+    atGetEngineUserIds,
     byoiMarkSubmitted, byoiAddAttachment, byoiListAttachments, byoiGetAttachment,
     byoiDeleteAttachment, byoiListForAdmin, byoiGetForAdmin, byoiSetStatus, byoiCountForAdmin,
     byoiIndicatorsForUser, byoiCreateIndicator, byoiSetIndicatorVisibility,

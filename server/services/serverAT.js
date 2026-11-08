@@ -745,9 +745,25 @@ function _restoreFromDb() {
         } catch (e) { logger.error('AT_DB', 'Startup ghost cleanup failed: ' + e.message); }
 
         // [A3] Per-user restore — query distinct user IDs first, then load per-user
-        const knownUserIds = db.atGetOpenUserIds();
-        // Always include user 1 for engine state restore (legacy + primary)
-        const userIds = new Set(knownUserIds);
+        //
+        // [2026-11-08] The set now starts from users that have SAVED ENGINE
+        // STATE, not only from users holding an open position.
+        //
+        // It used to be open positions plus uid=1 by hand, which meant you
+        // could not be armed unless you were already in a trade: once a user's
+        // last position closed, their state was never read again, `_uState()`
+        // handed back the default `atActiveDemo: false`, and the engine — which
+        // reads memory, not the database — treated them as switched off while
+        // the database still said armed. Of 8 users with saved state exactly
+        // one had open positions, so every restart silently disarmed 7 of 8,
+        // and the one survivor was the one written into the source by hand.
+        // His wife's account last traded on 5 October and had not received a
+        // single decision since the 7th.
+        const userIds = new Set(db.atGetEngineUserIds());
+        // Open positions still count: a position must be restored even if its
+        // engine row were somehow missing.
+        for (const uid of db.atGetOpenUserIds()) userIds.add(uid);
+        // uid=1 stays, so a brand-new install with no saved state still boots.
         userIds.add(1);
 
         let restoredCount = 0;

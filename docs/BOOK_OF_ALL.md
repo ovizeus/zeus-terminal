@@ -13514,6 +13514,92 @@ tranzacţionare. Aştept decizia lui.
 
 ---
 
+## 2026-11-08 — REPARAT: intră acum toţi utilizatorii, nu doar contul 1
+
+Cererea: *„repara tot sa mearga bine sa intre la toti care se conecteaza"*.
+Backup în `_backups/_backup_multiuser_at_20261108`.
+
+### Reparaţia 1 — starea nu se mai pierde la repornire ✅ LIVE
+
+Mulţimea de utilizatori restauraţi la pornire se construia din **poziţii
+deschise** plus uid=1 scris cu mâna. Acum se construieşte din **starea
+salvată**, iar poziţiile deschise şi uid=1 se adaugă peste.
+
+**Dovada, din logul viu de după repornire:**
+
+```
+State restored uid=1  …  atDemo=true
+State restored uid=2  …  atDemo=true      ← prima dată vreodată
+State restored uid=5  …  atDemo=false     ← chiar e oprit, corect
+State restored uid=11,12,13,14,15 …
+```
+
+Înainte: **o singură linie, uid=1**. Acum: **toţi 8**.
+
+### Reparaţia 2 — feedul fiecărei burse porneşte din conturi ✅ LIVE
+
+Feedurile porneau doar când cineva **schimba** bursa în timpul vieţii
+procesului. Acum, la pornire, se citesc conturile active şi se porneşte feedul
+pentru fiecare bursă pe care chiar e cineva.
+
+```
+primed feeds from active accounts: binance, bybit
+BYBIT_FEED  connected to wss://stream.bybit.com/v5/public/linear
+BYBIT_FEED  subscribe ack OK: 10 topics
+```
+
+### Reparaţia 3 — garda împotriva tăcerii ✅ LIVE
+
+Un cont armat care nu primeşte decizii peste 15 minute **spune asta o dată**, şi
+spune şi când îşi revine. Declanşat pe **tranziţie**, nu pe tick — lecţia de la
+potopul `circuit_open` rămâne: un adevăr repetat la fiecare ciclu e un adevăr pe
+care nimeni nu-l citeşte.
+
+### REZULTATUL, măsurat pe viu
+
+**Înainte: 1 cont primea decizii. Acum: 6** (1, 11, 12, 13, 14, 15). uid=5 nu e
+în listă fiindcă e **chiar** dezarmat în starea lui salvată — adică exact ce
+trebuie.
+
+### Reparaţia 4 — istoricul bybit ⏳ SCRISĂ ŞI TESTATĂ, AŞTEAPTĂ UN RELOAD
+
+Contul 2 tot nu intră, şi am găsit de ce: un simbol e „gata" la **50 de bare**.
+Feedul binance îşi aduce istoricul prin REST când se abonează; cel de bybit
+**nu o făcea deloc** — doar fluxul live. Deci un simbol bybit avea nevoie de
+**~4 ore** de lumânări de 5m ca să devină utilizabil, pe un server care
+reporneşte mult mai des. Practic: niciodată.
+
+Am adăugat aducerea istoricului prin REST, emiţând **aceleaşi** evenimente ca
+fluxul live, cele mai vechi întâi, ca să nu existe cale specială în consumator.
+
+**Prima versiune a ieşit cu `history seeded: 0 bars`** — şi motivul e
+instructiv: planificatorul răspunde apelurilor de date de la pornire cu un
+**503 sintetic** (`reason=warm_class_b`), ca să apere bugetul de greutate al
+Binance. Puteam să ocolesc poarta; n-am făcut-o — **există dintr-un motiv**.
+Am pus în schimb **reîncercare cu răgaz crescător** (20s, 45s, 90s, 180s), care
+aşteaptă să treacă încălzirea.
+
+### Verificări
+
+Server **10.588** teste, 4 shard-uri, fiecare **exit 0**. **+28 teste noi**.
+Mutaţii omorâte: întoarcerea la „doar poziţii deschise", feedurile care nu mai
+pornesc, avertismentul care se repetă la fiecare ciclu.
+
+### Ce rămâne
+
+- **Un reload** ca să intre în funcţiune aducerea istoricului bybit. Mi-a fost
+  **refuzată permisiunea** de reload („Production Deploy") după ce am făcut
+  reparaţiile 1-3 live. Nu am ocolit refuzul.
+- **Cheia de bybit a contului 2 e expirată** — numai el o poate reface.
+- Observaţie de siguranţă: conturile **11-15 au `atActiveLive=true`** salvat.
+  Sunt în demo, deci nu execută real; dar dacă vreunul comută pe live, AT e
+  deja pornit la el.
+- Un test de client instabil: `bookRender.test.tsx` a picat o dată în suita
+  completă, trece 3/3 singur şi a doua oară în suită (1962, exit 0). Nu e legat
+  de munca asta; îl las notat, nu ascuns.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
