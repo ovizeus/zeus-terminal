@@ -13729,6 +13729,34 @@ atLive=false`.
 De unde am plecat azi-dimineaţă: **un singur cont** primea decizii, iar ceilalţi
 şapte se dezarmau tăcut la fiecare repornire — de 1162 de ori.
 
+### Audit: alte locuri care presupun contul 1
+
+Bugul central al zilei a fost un `userIds.add(1)` scris de mână. Am căutat
+celelalte presupuneri de acelaşi fel pe server. Două reale:
+
+**1. Scurgere între conturi în OMEGA — REPARAT.**
+`chatResponder.js` avea `const uid = userId || 1`, chiar în faţa unei
+interogări `brain_decisions WHERE user_id = ?` al cărei rezultat devine
+descrierea pe care OMEGA o dă despre cum merge tranzacţionarea. Chemat fără
+userId **nu refuza** — citea tranzacţionarea **contului 1** şi o povestea ca
+fiind a celui care întreabă. Citea şi starea motorului pentru acelaşi id.
+
+Lecţia era deja scrisă în cod, în `serverAT`:
+*„[C5] Reject positions without userId — do NOT default to user 1 (prevents
+cross-user leak)"*. **Un id lipsă nu e contul 1; e un id lipsă.** Acum
+întoarce neutrul pe care funcţia îl avea oricum ca rezervă. Trei teste.
+
+**2. Gândurile de „scanare" se scriu toate pe contul 1 — DE DECIS DE EL.**
+`serverBrain.js:1045` scrie, în bucla pe utilizatori, `userId: 1` cu
+comentariul propriu: *„uses uid=1 (admin) as default carrier for now"*. Deci
+gândul fiecărui utilizator se depune în fluxul contului 1.
+
+**Reparaţia mea de azi tocmai a amplificat asta de opt ori** — înainte bucla
+avea un singur utilizator, acum are opt. Corect ar fi `userId` real, dar atunci
+limitarea (una la 3 minute per simbol) nu mai colapsează şi volumul creşte de
+opt ori: ~1100 rânduri/oră în loc de ~140. **N-am schimbat-o** — e o decizie de
+volum pe o bază vie, iar asta e a lui.
+
 ### Cine s-a conectat azi, de fapt
 
 ```

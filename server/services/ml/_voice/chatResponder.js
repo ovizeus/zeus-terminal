@@ -1302,8 +1302,15 @@ function _currentMood(userId) {
     // cai, cu starea scrisa de mana. Un asistent care spune CALM in timp ce
     // cartea pierde a optsprezecea oara la rand nu e calm, e orb.
     try {
+        // [2026-11-08] This used to fall back to the admin account when no
+        // user was given. It then read THAT account's trading and narrated it
+        // as the asker's own — one person's results described to another. The same lesson is already written into
+        // serverAT: "[C5] Reject positions without userId — do NOT default to
+        // user 1 (prevents cross-user leak)". A missing user id is not user 1;
+        // it is a missing user id, and the honest answer is the neutral one.
+        if (!userId || !Number.isFinite(Number(userId))) return 'CALM';
         const since5m = Date.now() - 5 * 60 * 1000;
-        const uid = userId || 1;
+        const uid = Number(userId);
         const rows = db.prepare(`
             SELECT final_action AS action, COUNT(*) AS n
             FROM brain_decisions
