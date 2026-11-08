@@ -13418,6 +13418,102 @@ Notification"** din panoul de alerte arată exact cum e.
 
 ---
 
+## 2026-11-08 — DE CE nu intră conturile celorlalţi pe trade (contul Mrr, uid=2)
+
+Întrebarea lui: armează autotrade pe contul soţiei, nu intră, iar după un timp
+e dezarmat. **Trei cauze independente, fiecare suficientă singură.** Toate
+verificate pe baza vie şi pe logul viu, read-only.
+
+### Cronologia, din date
+
+- ultima tranzacţie închisă: **2026-10-05 03:59:54** (ETHUSDT LONG, **+205,23**)
+- ultima decizie a creierului pentru ea: **2026-10-07 17:56:24** — după aia,
+  **nimic**, zero zile cu decizii
+- total: **216 închideri**, rată de reuşită **50,8%** pe 191 evaluate
+- armat azi la **18:47:20**, iar logul spune `AT toggled uid=2 mode=demo:
+  false → true` — adică **în memorie era OPRIT**, deşi în baza de date scria
+  `atActive: true`
+- de la armare şi până acum: **tot zero decizii**
+
+### Cauza 1 — fiecare repornire o dezarmează în tăcere
+
+La pornire, starea motorului se restaurează doar pentru utilizatorii cu
+**poziţii DESCHISE**, plus uid=1 adăugat cu mâna:
+
+```js
+const knownUserIds = db.atGetOpenUserIds();
+const userIds = new Set(knownUserIds);
+userIds.add(1);
+```
+
+Ea n-a mai avut poziţie deschisă după 5 octombrie. De la prima repornire de
+după (7 octombrie) starea ei nu s-a mai citit niciodată din baza de date, iar
+`_uState()` îi dă valoarea implicită: **`atActiveDemo: false`**. Baza zice
+armat, memoria zice oprit, iar motorul citeşte memoria.
+
+**Logul confirmă:** la fiecare pornire apare doar `State restored uid=1`.
+Serverul s-a repornit de **1162 de ori**.
+
+**Cât de larg:** din 8 utilizatori cu stare salvată, **doar unul (uid=1) are
+poziţii deschise**. Deci la fiecare repornire **7 din 8 sunt dezarmaţi tăcut** —
+singurul care supravieţuieşte e cel scris cu mâna în cod.
+
+> Nu „se dezarmează când ieşi tu". **Se dezarmează când repornesc eu serverul.**
+> De asta pare legat de plecarea ta: reload-urile cad în sesiunile de lucru.
+
+### Cauza 2 — feedul bursei ei nu porneşte niciodată singur
+
+Ea e pe **bybit** (`exchange_accounts`: uid=2 → bybit activ). Creierul rezolvă
+bursa fiecărui utilizator şi cere simbolurile gata de pe ea. Dar feedurile sunt
+numărate pe referinţe şi pornesc **doar când cineva schimbă bursa** în timpul
+vieţii procesului:
+
+```js
+const _refcounts = { binance: 0, bybit: 0 };   // la pornire: zero
+```
+
+Nimeni nu citeşte `exchange_accounts` la boot ca să pornească feedurile. Deci
+după fiecare repornire **bybit e mort** până când cineva apasă efectiv
+comutatorul de bursă. Fără date → zero simboluri gata → e sărită din ciclu chiar
+şi armată.
+
+**Dovada:** în logul de azi, **2410** linii de creier `@binance` şi **0**
+`@bybit`.
+
+### Cauza 3 — cheia ei de bybit e expirată
+
+`Key health FAIL uid=2 bybit/testnet: Your api key has expired.` — se repetă de
+zile întregi. E exact lucrul semnalat ieri în audit. Nu blochează modul demo,
+dar blochează orice execuţie reală.
+
+### Ce înseamnă, pe scurt
+
+**Contul ei nu intră pe trade, şi n-are cum, în starea actuală.** Chiar dacă îl
+armezi, e sărit din ciclu fiindcă bursa lui n-are date; iar dacă vreodată ar
+avea, următoarea repornire îl dezarmează oricum.
+
+Acelaşi lucru e valabil pentru **toţi ceilalţi utilizatori**, nu doar pentru ea.
+uid=5 n-a mai tranzacţionat din **28 aprilie**.
+
+### Reparaţiile, aşa cum le văd
+
+1. **Restaurează starea motorului pentru toţi utilizatorii care au un rând
+   `engine:N`**, nu doar pentru cei cu poziţii deschise. Cauza reală e că
+   mulţimea de utilizatori e construită din poziţii, nu din stare — şi atunci
+   nu poţi fi armat decât dacă eşti deja în piaţă.
+2. **Porneşte la boot feedul fiecărei burse care are măcar un cont activ**,
+   citind `exchange_accounts` — altfel bursa secundară trăieşte doar din
+   accident.
+3. **Cheie nouă de bybit** pentru contul ei — asta numai el o poate face.
+4. Şi o gardă: dacă un utilizator e armat dar e sărit din ciclu, **să se vadă**.
+   Un cont armat care nu primeşte nicio decizie o lună întreagă n-ar trebui să
+   tacă.
+
+Nimic schimbat încă — e calea banilor, iar primele două atinge motorul de
+tranzacţionare. Aştept decizia lui.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
