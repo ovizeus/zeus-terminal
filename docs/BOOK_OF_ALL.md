@@ -13618,8 +13618,25 @@ uid=2  ETHUSDT  pending_created  conf=89  SHORT     ← a intrat
 **De la 1 cont care primea decizii, la 7.** Zero erori după reload.
 
 **La 20 de minute după:** contul 2 avea **2 poziţii deschise**, iar celelalte
-câte 3. Şapte conturi din opt tranzacţionează. Al optulea (uid=5) nu primeşte
-nimic fiindcă e **chiar** dezarmat în starea lui salvată — adică exact ce trebuie.
+câte 3. Şapte conturi din opt tranzacţionează.
+
+**Al optulea (uid=5) — dovedit, nu presupus.** Prima dată am *afirmat* că e
+dezarmat; apoi am verificat:
+
+```
+engine:5   atActive=false  atActiveDemo=false  atActiveLive=false  killActive=false
+bursă      niciun rând în exchange_accounts  →  binance (care e gata)
+stc:5      există  →  e în bucla creierului
+```
+
+Deci **e oprit de proprietarul lui**, nu blocat de sistem: are config, e pe bursa
+care merge, n-are kill switch. E la o apăsare de a intra, iar în clipa în care
+armează, trece prin exact acelaşi lanţ ca celelalte şapte.
+
+**Nu l-am armat eu.** Să pornesc autotrade pe un cont pe care cineva l-a oprit ar
+fi o acţiune cu bani luată din iniţiativă proprie — exact ce nu fac. Un sistem
+care armează singur conturi dezarmate ar fi un bug mult mai grav decât cel
+reparat azi.
 
 ### Testul care ţine tot lanţul pe loc
 
