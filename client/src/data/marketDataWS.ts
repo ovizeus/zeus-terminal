@@ -3,6 +3,7 @@
 // WS connections, liq processing, symbol switch, order book, feed,
 // modals, alerts, cloud, chart settings, sound
 
+import { readAlertControls, alertControlValues } from './alertFields'
 import { getTPObject } from '../services/stateAccessors'
 import { updateHecate, updateThanatos, updateNotos } from '../engine/indicators'
 import { BM, BRAIN as BR } from '../core/config'
@@ -612,7 +613,43 @@ export function registerServiceWorker(): void { if (!('serviceWorker' in navigat
 
 export function checkLiqAlert(usd: number, qty: number, side: string, sym: string): void { if (!w.S.alerts.liqAlerts) return; if (qty < w.S.alerts.liqMinBtc) return; if (!(checkLiqAlert as any)._last || Date.now() - (checkLiqAlert as any)._last > 5000) { (checkLiqAlert as any)._last = Date.now(); sendAlert(`${sym} LIQUIDATION`, `$${fmt(usd)} ${side}`, 'liq') } }
 export function testNotification(): void { sendAlert('ZeuS Terminal', 'Test alert working!', 'test') }
-export function saveAlerts(): void { w.S.alerts.liqAlerts = el('aLiqEn')?.checked !== false; w.S.alerts.rsiAlerts = el('aDivEn')?.checked !== false; const liqMin = el('aLiqMin'); if (liqMin) w.S.alerts.liqMinBtc = +liqMin.value || 0; toast('Alert settings saved'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+/**
+ * [2026-11-08] Saves EVERY alert control, each into its own setting.
+ *
+ * It used to save three keys out of twenty, and one of those from the wrong
+ * control: it read the Divergence checkbox and wrote `rsiAlerts`, so pressing
+ * Save overwrote whatever the dedicated RSI checkbox said. The id-to-key map
+ * is shared with the hydrate, so neither can forget a control the other knows.
+ *
+ * The master switch is not saved here: it goes through `toggleAlerts`, which
+ * also asks the browser for notification permission.
+ */
+export function saveAlerts(): void {
+  if (!w.S.alerts) w.S.alerts = {}
+  const vals = readAlertControls((id) => el(id) as { checked?: boolean; value?: string } | null)
+  Object.assign(w.S.alerts, vals)
+  toast('Alert settings saved')
+  if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
+}
+
+/**
+ * Puts the SAVED values into the full Alerts panel.
+ *
+ * The panel had no hydration at all: ~20 checkboxes hardcoded to checked, so
+ * it always claimed everything was on. Turn something off, reopen, and it said
+ * on — exactly what the standing rule about settings surviving a refresh is
+ * there to prevent.
+ */
+export function populateAlerts(): void {
+  for (const v of alertControlValues(w.S.alerts)) {
+    const node = el(v.id)
+    if (!node) continue
+    if (v.kind === 'bool') node.checked = v.value as boolean
+    else node.value = String(v.value)
+  }
+  const master = el('alertMaster')
+  if (master) master.checked = w.S.alerts?.enabled === true
+}
 export function applySR(): void { const en = el('srEn')?.checked !== false; w.S.overlays.sr = en; clearSR(); if (en) renderSROverlay(); const btn = el('bsr'); if (btn) btn.classList.toggle('act', en); toast('S/R settings applied') }
 
 // ===== MISC (cloud, inject, filters, supremus) =====

@@ -4,7 +4,7 @@ import { useUiStore } from '../../stores'
 import { useSupportStore } from '../../stores/supportStore'
 import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
-import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
+import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, hubToggleDev, devClearLog, devExportLog, hubPopulate, setAlertsEnabled } from '../../utils/dev'
 import { zeusApplyTheme, zeusGetTheme } from '../../ui/theme'
 import { OmegaMemorySection } from '../settings/OmegaMemorySection'
 import { SupportChat } from './SupportChat'
@@ -73,6 +73,23 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('general')
   const supportUnread = useSupportStore((s) => s.userUnread)
   const openModal = useUiStore((s) => s.openModal)
+
+  /**
+   * [2026-11-08] Show the SAVED values when the panel opens.
+   *
+   * This modal never called hubPopulate, so every switch in it showed its JSX
+   * default instead of the truth: alerts read as off while they were on,
+   * Developer Mode read as off while it was on, and pressing SAVE ALL then
+   * persisted that fiction over the real settings.
+   *
+   * The timeout lets React finish painting the inputs before they are filled —
+   * the same reason the PIN sync below waits.
+   */
+  useEffect(() => {
+    if (!visible) return
+    const t = setTimeout(() => { try { hubPopulate() } catch { /* never block opening */ } }, 30)
+    return () => clearTimeout(t)
+  }, [visible])
 
   // [BATCH3-S] When Security tab opens, sync PIN UI (show/hide Current PIN field).
   useEffect(() => {
@@ -177,7 +194,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <button className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff6655'}} onClick={() => hubCloudClear?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear</button>
         </div>
         <div className="msec">NOTIFICATIONS</div>
-        <label className="mchk"><input type="checkbox" id="hubNotifyEnabled" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.enabled = e.target.checked }} /> Enable alerts &amp; notifications</label>
+        <label className="mchk"><input type="checkbox" id="hubNotifyEnabled" onChange={(e) => setAlertsEnabled(e.target.checked)} /> Enable alerts &amp; notifications</label>
         <div className="msec">DEVELOPER MODE</div>
         <label className="mchk"><input type="checkbox" id="hubDevEnabled" onChange={(e) => hubToggleDev(e.target.checked)} /> Enable Developer Mode panel</label>
         <div className="hub-disabled-notice">Developer panel appears in Market Intelligence when enabled.</div>
@@ -287,7 +304,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           </button>
         </div>
         <div className="msec">ALERT TRIGGERS</div>
-        <label className="mchk"><input type="checkbox" id="hubAlertMaster" onChange={(e) => { if (w.S?.alerts) w.S.alerts.enabled = e.target.checked }} /> Master: enable all alerts</label>
+        <label className="mchk"><input type="checkbox" id="hubAlertMaster" onChange={(e) => setAlertsEnabled(e.target.checked)} /> Master: enable all alerts</label>
         <label className="mchk"><input type="checkbox" id="hubAlertVol" onChange={(e) => { if (w.S?.alerts) w.S.alerts.volSpike = e.target.checked }} /> Volume spikes</label>
         <label className="mchk"><input type="checkbox" id="hubAlertWhale" onChange={(e) => { if (w.S?.alerts) w.S.alerts.whaleOrders = e.target.checked }} /> Whale orders</label>
         <label className="mchk"><input type="checkbox" id="hubAlertLiq" onChange={(e) => { if (w.S?.alerts) w.S.alerts.liqAlerts = e.target.checked }} /> Liquidation alerts</label>

@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
 import { toggleAlerts } from '../../ui/dom2'
-import { injectFakeWhale, toggleSnd, saveAlerts, testNotification, _syncSndIcon } from '../../data/marketDataWS'
+import { injectFakeWhale, toggleSnd, saveAlerts, testNotification, _syncSndIcon, populateAlerts } from '../../data/marketDataWS'
 
 const w = window as any
 
@@ -13,6 +13,17 @@ export function AlertsModal({ visible, onClose }: Props) {
   const openModal = useUiStore((s) => s.openModal)
   const modalReturnTo = useUiStore((s) => s.modalReturnTo)
   const symbol = useMarketStore((s) => s.market.symbol)
+
+  /**
+   * [2026-11-08] Show the SAVED values. This panel had no hydration at all —
+   * every checkbox was hardcoded checked, so it always claimed every alert was
+   * on. Turn one off, reopen, and it said on again.
+   */
+  useEffect(() => {
+    if (!visible) return
+    const t = setTimeout(() => { try { populateAlerts() } catch { /* never block opening */ } }, 30)
+    return () => clearTimeout(t)
+  }, [visible])
 
   // [BUG7] Sync the Sound Notifications button icon with the BUG5 master mute
   // flag every time the modal opens, so the button never lies about state.
@@ -102,7 +113,7 @@ export function AlertsModal({ visible, onClose }: Props) {
         {/* Volume Alerts */}
         <div style={{ background: '#0d1018', border: '1px solid #333', borderRadius: 6, padding: 10, marginBottom: 8 }}>
           <div style={{ color: 'var(--gold)', fontSize: 10, fontWeight: 700, marginBottom: 8 }}>Volume Alerts</div>
-          <label className="mchk"><input type="checkbox" id="aVolSpike" defaultChecked
+          <label className="mchk"><input type="checkbox" id="aVolSpike"
             onChange={(e) => { if (w.S?.alerts) w.S.alerts.volSpike = e.target.checked }} /> Enable Volume Spike Alerts</label>
           <div className="mrow"><span className="mlbl">Threshold (BTC per candle)</span></div>
           <input type="number" id="aVolThresh" defaultValue={500} min={10} max={10000} style={{ width: 120, margin: '4px 0' }}
@@ -117,7 +128,7 @@ export function AlertsModal({ visible, onClose }: Props) {
               <path d="M2 8c0-3 3-5 6-5s4 1 5 3c1-1 2 0 2 1s-1 2-3 2H5c-2 0-3-1-3-1" />
             </svg> Whale Order Alerts
           </div>
-          <label className="mchk"><input type="checkbox" id="aWhaleOrders" defaultChecked
+          <label className="mchk"><input type="checkbox" id="aWhaleOrders"
             onChange={(e) => { if (w.S?.alerts) w.S.alerts.whaleOrders = e.target.checked }} /> Enable Whale Order Alerts</label>
           <div className="mrow"><span className="mlbl">Min Size (BTC)</span></div>
           <select id="aWhaleMin" defaultValue="100" style={{ margin: '4px 0', minWidth: 120 }}
@@ -129,11 +140,11 @@ export function AlertsModal({ visible, onClose }: Props) {
           </select>
           <div style={{ marginTop: 6, fontSize: 8, color: 'var(--dim)' }}>
             Alert When:<br />
-            <label className="mchk" style={{ margin: '3px 0' }}><input type="checkbox" id="aWhaleBid" defaultChecked
+            <label className="mchk" style={{ margin: '3px 0' }}><input type="checkbox" id="aWhaleBid"
               onChange={(e) => { if (w.S?.alerts) w.S.alerts.whaleBid = e.target.checked }} /> <span className="z-dot z-dot--grn"></span> Large BIDs Added (Bullish)</label>
-            <label className="mchk" style={{ margin: '3px 0' }}><input type="checkbox" id="aWhaleAsk" defaultChecked
+            <label className="mchk" style={{ margin: '3px 0' }}><input type="checkbox" id="aWhaleAsk"
               onChange={(e) => { if (w.S?.alerts) w.S.alerts.whaleAsk = e.target.checked }} /> <span className="z-dot z-dot--red"></span> Large ASKs Added (Bearish)</label>
-            <label className="mchk" style={{ margin: '3px 0' }}><input type="checkbox" id="aWhaleRem" defaultChecked
+            <label className="mchk" style={{ margin: '3px 0' }}><input type="checkbox" id="aWhaleRem"
               onChange={(e) => { if (w.S?.alerts) w.S.alerts.whaleRem = e.target.checked }}>
             </input>
               <svg className="z-i" viewBox="0 0 16 16"><path d="M5 2c-2 1-3 3-3 5v5l2-1 2 1 2-1 2 1v-5c0-2-1-4-3-5m1 4h.01m4 0h.01" /></svg>
@@ -155,7 +166,7 @@ export function AlertsModal({ visible, onClose }: Props) {
         {/* Liquidation Alerts */}
         <div style={{ background: '#0d1018', border: '1px solid #333', borderRadius: 6, padding: 10, marginBottom: 8 }}>
           <div style={{ color: 'var(--gold)', fontSize: 10, fontWeight: 700, marginBottom: 8 }}>Liquidation Alerts</div>
-          <label className="mchk"><input type="checkbox" id="aLiqEn" defaultChecked
+          <label className="mchk"><input type="checkbox" id="aLiqEn"
             onChange={(e) => { if (w.S?.alerts) w.S.alerts.liqAlerts = e.target.checked }} /> Enable Liquidation Alerts</label>
           <div className="mrow"><span className="mlbl">Minimum Size (BTC)</span></div>
           <select id="aLiqMin" defaultValue="1" style={{ margin: '4px 0', minWidth: 120 }}
@@ -171,14 +182,14 @@ export function AlertsModal({ visible, onClose }: Props) {
         {/* Divergence Alerts */}
         <div style={{ background: '#0d1018', border: '1px solid #333', borderRadius: 6, padding: 10, marginBottom: 8 }}>
           <div style={{ color: 'var(--gold)', fontSize: 10, fontWeight: 700, marginBottom: 8 }}>↗↘ Divergence Alerts</div>
-          <label className="mchk"><input type="checkbox" id="aDivEn" defaultChecked
+          <label className="mchk"><input type="checkbox" id="aDivEn"
             onChange={(e) => { if (w.S?.alerts) w.S.alerts.divergence = e.target.checked }} /> Enable Divergence Alerts</label>
           <div style={{ fontSize: 8, color: 'var(--dim)', margin: '4px 0' }}>Indicators:</div>
-          <label className="mchk"><input type="checkbox" id="aDivRSI" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.divRSI = e.target.checked }} /> RSI Divergences</label>
-          <label className="mchk"><input type="checkbox" id="aDivMACD" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.divMACD = e.target.checked }} /> MACD Divergences</label>
+          <label className="mchk"><input type="checkbox" id="aDivRSI" onChange={(e) => { if (w.S?.alerts) w.S.alerts.divRSI = e.target.checked }} /> RSI Divergences</label>
+          <label className="mchk"><input type="checkbox" id="aDivMACD" onChange={(e) => { if (w.S?.alerts) w.S.alerts.divMACD = e.target.checked }} /> MACD Divergences</label>
           <div style={{ fontSize: 8, color: 'var(--dim)', margin: '4px 0' }}>Types:</div>
-          <label className="mchk"><input type="checkbox" id="aDivBull" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.divBull = e.target.checked }} /> Bullish (price LL + indicator HL)</label>
-          <label className="mchk"><input type="checkbox" id="aDivBear" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.divBear = e.target.checked }} /> Bearish (price HH + indicator LH)</label>
+          <label className="mchk"><input type="checkbox" id="aDivBull" onChange={(e) => { if (w.S?.alerts) w.S.alerts.divBull = e.target.checked }} /> Bullish (price LL + indicator HL)</label>
+          <label className="mchk"><input type="checkbox" id="aDivBear" onChange={(e) => { if (w.S?.alerts) w.S.alerts.divBear = e.target.checked }} /> Bearish (price HH + indicator LH)</label>
           <label className="mchk"><input type="checkbox" id="aDivHid" onChange={(e) => { if (w.S?.alerts) w.S.alerts.divHidden = e.target.checked }} /> Hidden Divergences</label>
         </div>
 
@@ -192,10 +203,10 @@ export function AlertsModal({ visible, onClose }: Props) {
         {/* RSI Alerts */}
         <div style={{ background: '#0d1018', border: '1px solid #333', borderRadius: 6, padding: 10, marginBottom: 8 }}>
           <div style={{ color: 'var(--gold)', fontSize: 10, fontWeight: 700, marginBottom: 8 }}>RSI Alerts</div>
-          <label className="mchk"><input type="checkbox" id="aRSIEn" defaultChecked
+          <label className="mchk"><input type="checkbox" id="aRSIEn"
             onChange={(e) => { if (w.S?.alerts) w.S.alerts.rsiAlerts = e.target.checked }} /> Enable RSI Alerts</label>
-          <label className="mchk"><input type="checkbox" id="aRSIOB" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.rsiOB = e.target.checked }} /> Alert when RSI &gt; 70 (Overbought)</label>
-          <label className="mchk"><input type="checkbox" id="aRSIOS" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.rsiOS = e.target.checked }} /> Alert when RSI &lt; 30 (Oversold)</label>
+          <label className="mchk"><input type="checkbox" id="aRSIOB" onChange={(e) => { if (w.S?.alerts) w.S.alerts.rsiOB = e.target.checked }} /> Alert when RSI &gt; 70 (Overbought)</label>
+          <label className="mchk"><input type="checkbox" id="aRSIOS" onChange={(e) => { if (w.S?.alerts) w.S.alerts.rsiOS = e.target.checked }} /> Alert when RSI &lt; 30 (Oversold)</label>
         </div>
 
         {/* Save / Close */}

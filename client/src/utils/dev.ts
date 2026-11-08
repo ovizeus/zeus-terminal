@@ -9,6 +9,7 @@ import { fmt, fP } from '../utils/format'
 import { el } from './dom'
 import { _ZI } from '../constants/icons'
 import { updLiqStats, renderFeed, cloudSave, cloudClear, cloudLoad, checkLiqAlert, injectFakeWhale } from '../data/marketDataWS'
+import { toggleAlerts } from '../ui/dom2'
 import { resetProtectMode } from '../engine/brain'
 import { triggerKillSwitch , atLog } from '../trading/autotrade'
 import { zeusGetTheme } from '../ui/theme'
@@ -560,6 +561,54 @@ export function _devEnsureVisible(): void {
 // SETTINGS HUB
 // ════════════════════════════════════════════════════════════════
 
+/**
+ * [2026-11-08] Is the form on screen RIGHT NOW holding the saved values?
+ *
+ * `hubSaveAll` reads the DOM. The modals stay mounted (`display:none`), so the
+ * inputs exist from the first render with nothing in them — and a save then
+ * wrote `false` over every alert the user had turned on.
+ *
+ * The mark lives on the input itself, not in a module variable. A module flag
+ * only says "something was hydrated once": React re-creates these nodes, so
+ * the flag would still read true over a brand-new, empty form — which is the
+ * same wipe wearing a different hat. A fresh node has no attribute, so it is
+ * correctly treated as unhydrated. A test caught this; the first version of
+ * the fix used the flag.
+ */
+const _HYD_ATTR = 'data-zeus-hydrated'
+
+function _hubIsHydrated(): boolean {
+  const m = document.getElementById('hubAlertMaster')
+  return !!m && m.getAttribute(_HYD_ATTR) === '1'
+}
+
+/**
+ * The ONE place that turns alerts on or off.
+ *
+ * Four different places used to write `S.alerts.enabled`, and only one of them
+ * asked the browser for notification permission — so enabling alerts from
+ * Settings left the user with in-app toasts and nothing else. Routed through
+ * `toggleAlerts`, which asks for permission and updates the bell, and only
+ * when the value actually CHANGES, so a plain save does not toast or play a
+ * sound at someone who changed nothing.
+ */
+export function setAlertsEnabled(on: boolean): void {
+  const cur = (w.S && w.S.alerts) ? w.S.alerts.enabled : undefined
+  if (cur === on) return
+  try {
+    toggleAlerts(on)
+  } catch (e) {
+    // Never let a visual helper lose the setting itself.
+    if (w.S) { if (!w.S.alerts) w.S.alerts = {}; w.S.alerts.enabled = on }
+    console.warn('[Hub] toggleAlerts failed, value still applied:', e)
+  }
+  // Keep both checkboxes that show this one value in agreement.
+  for (const id of ['hubNotifyEnabled', 'hubAlertMaster']) {
+    const elc = document.getElementById(id) as HTMLInputElement | null
+    if (elc) elc.checked = on
+  }
+}
+
 export function hubPopulate(): void {
   try {
     // ── General ─────────────────────────────────────────────────
@@ -596,6 +645,8 @@ export function hubPopulate(): void {
     _setC('hubAlertRsi', al.rsiAlerts)
     _setV('hubWhaleMin', al.whaleMinBtc !== undefined ? al.whaleMinBtc : 100)
     _setV('hubLiqMin', al.liqMinBtc !== undefined ? al.liqMinBtc : 1)
+    // From here on a save is reading real values, not an empty form.
+    document.getElementById('hubAlertMaster')?.setAttribute(_HYD_ATTR, '1')
 
     // ── Auto Trade (populate AT panel toggles) ──────────────────
     const ss = useSettingsStore.getState()
@@ -618,9 +669,11 @@ export function hubPopulate(): void {
 
 export function hubSaveAll(): void {
   try {
-    // ── General ─────────────────────────────────────────────────
-    const notEl = document.getElementById('hubNotifyEnabled') as HTMLInputElement | null
-    if (notEl && w.S && w.S.alerts) w.S.alerts.enabled = notEl.checked
+    // [2026-11-08] A save must never read a form nobody filled in. Pressing
+    // SAVE ALL on a freshly opened panel used to persist `false` over every
+    // alert setting, because the inputs exist (display:none) but held nothing.
+    // Hydrating first makes that save a no-op instead of a wipe.
+    if (!_hubIsHydrated()) hubPopulate()
 
     // ── Alerts ───────────────────────────────────────────────────
     if (w.S) {
@@ -629,7 +682,10 @@ export function hubSaveAll(): void {
         const elc = document.getElementById(id) as HTMLInputElement | null
         return elc ? elc.checked : def
       }
-      w.S.alerts.enabled = _getC('hubAlertMaster', true)
+      // ONE writer. It used to be written twice in this function — from the
+      // General checkbox and then from the Alerts master — so the second one
+      // always won and the first was decoration.
+      setAlertsEnabled(_getC('hubAlertMaster', w.S.alerts.enabled !== false))
       w.S.alerts.volSpike = _getC('hubAlertVol', true)
       w.S.alerts.whaleOrders = _getC('hubAlertWhale', true)
       w.S.alerts.liqAlerts = _getC('hubAlertLiq', true)
