@@ -13192,6 +13192,108 @@ server. Nu te urmează pe alt telefon.
 
 ---
 
+## 2026-11-08 — Setările REPARATE: de la 16 comutatoare moarte la zero
+
+Cererea: *„fa backup iale pe rand de la cap la coada si fale sa mearga dupa
+regulile noastre totul full functional"*. Backup în
+`_backups/_backup_settings_audit_20261108`, apoi trei faze, cu teste şi
+checkpoint la fiecare.
+
+### Faza A — stricăciunile (commit `5423a3d4`)
+
+**1. Hidratarea.** Niciun panou de setări nu încărca vreodată valorile
+salvate. `SettingsHubModal` nu chema `hubPopulate` (singurul lui efect era
+pentru PIN), iar `AlertsModal` n-avea hidratare deloc — ~20 de casete fixate pe
+„bifat". Acum amândouă se hidratează la deschidere.
+
+**2. „SAVE ALL" nu mai şterge.** Citea DOM-ul; modalele rămân montate
+(`display:none`), deci câmpurile existau goale, şi o apăsare persista `false`
+peste toate alertele. Acum refuză să citească un formular nehidratat şi îl
+hidratează întâi, deci apăsarea devine inofensivă.
+
+Marcajul de hidratare stă **pe nodul din DOM**, nu într-un fanion de modul:
+React recreează nodurile, deci fanionul ar fi rămas `true` peste un formular
+nou şi gol — aceeaşi ştergere cu altă pălărie. **Un test a prins asta; prima
+mea reparaţie folosea fanionul.**
+
+**3. Încrucişarea.** `saveAlerts()` scria `rsiAlerts` din caseta de
+**divergenţă** şi salva 3 chei din 20. Acum există **o singură hartă îngheţată
+id→cheie** (`data/alertFields.ts`), folosită şi de salvare şi de hidratare, deci
+nu pot uita un control sau devia una de la alta. Un control care nu e pe ecran e
+**lăsat afară**, nu citit ca `true` — vechiul `?.checked !== false` lăsa un
+panou închis să aprindă lucruri singur.
+
+**4. Permisiunea, pe toate căile.** Patru locuri scriau `alerts.enabled` şi doar
+unul cerea permisiunea de notificări. Toate trec acum prin `setAlertsEnabled`,
+care cheamă `toggleAlerts` (cere permisiunea, mută clopoţelul) **doar când
+valoarea se schimbă**, şi ţine cele două casete în acord. `enabled` era scris şi
+de două ori în aceeaşi funcţie, deci al doilea scriitor câştiga mereu.
+
+### Faza B — cele 16 comutatoare moarte, acum reale
+
+Regulile stau pure în `data/alertRules.ts`, iar cablarea în
+`data/barAlerts.ts` şi `data/whaleAlerts.ts`, cu dependenţele injectate —
+inclusiv ceasul. Motivul e simplu: **o regulă îngropată într-un handler de
+websocket e o regulă pe care nimeni n-o poate verifica, şi exact aşa au ajuns
+originalele legate de nimic.**
+
+- **Volum.** Eticheta de pe ecran spune „Threshold (BTC per candle)", deci
+  decizia e pe **volum absolut**. Prima mea versiune compara cu media —
+  eticheta e ce setează omul, deci eticheta câştigă. Media intră totuşi în
+  **textul** alertei („3,2× cât de obicei"), partea care-ţi spune dacă să-ţi
+  pese.
+- **Divergenţe** faţă de RSI şi/sau MACD, regulate şi ascunse, filtrate pe
+  direcţie. MACD-ul e scris pur aici, nu importat din motorul de indicatoare:
+  acela coboară înapoi în stratul de date, şi un ciclu de importuri ar fi fost
+  mult mai rău decât douăsprezece linii de EMA.
+- **RSI extrem**, fiecare capăt pe comutatorul lui (înainte ambele se dădeau
+  indiferent de cele două casete).
+- **Pivoţi traversaţi**, confirmaţi pe închidere.
+- **Balene**: pereţi care apar sau dispar din carte, pe bid/ask, cu mărime
+  minimă, şi „retras" separat.
+
+Trei capcane tratate explicit:
+1. **Primul instantaneu al cărţii nu se anunţă niciodată.** Fiecare perete din
+   el e „nou" doar fiindcă noi am ajuns acum; fără garda asta, deschiderea
+   aplicaţiei ar fi tras o rafală despre pereţi care stau acolo de ore.
+2. **Bara vie e aruncată** înainte de orice decizie. O divergenţă sau o
+   traversare judecată la mijloc de bară apare şi dispare, iar o alertă care se
+   de-întâmplă e mai rea decât niciuna.
+3. **Poarta globală a balenelor e per ACTUALIZARE, nu per alertă.** Pusă în
+   buclă, bloca al doilea eveniment din acelaşi tick şi făcea din limita de
+   două o minciună — **un test a prins-o**.
+
+### Faza C — resturile
+
+`marketStore.alerts` **şters** (11 câmpuri, zero cititori, a doua sursă de
+adevăr). Scos şi din tipul `MarketState`, împreună cu `pivotCross` — panoul
+scrie `pivotAlerts`, iar un nume aproape-dar-nu-chiar identic e exact felul în
+care un cititor ajunge să se uite la câmpul greşit. `zlog-stats` **şters**: un
+`<span>` fără niciun scriitor în tot codul. Eticheta „CLOUD SYNC" → **„LOCAL
+SETTINGS SNAPSHOT"**, cu o linie care spune pe şleau că rămâne pe telefonul
+acesta — fiindcă scrie în `localStorage`, nu pe server.
+
+### Inventarul, refăcut
+
+**Înainte: 20 de chei, 16 fără niciun cititor. Acum: 20 vii, 0 moarte.**
+
+Şi aici m-am corectat: prima refacere a inventarului raporta 10 moarte, dar
+**greşeala era în verificarea mea** — regexul socotea `=== false` drept
+atribuire, iar citirile noi se fac prin `flags.X`, nu `alerts.X`. Codul era în
+regulă; numărătoarea nu.
+
+### Greşelile mele, din timpul lucrului
+
+- Am inserat un `useEffect` **înăuntrul** altuia în `AlertsModal` — un hook
+  într-un callback. Typecheck-ul a trecut, fiindcă e valid sintactic. L-am
+  prins citind fişierul după editare, nu din teste.
+- Forma de test pentru divergenţă n-a produs nimic de două ori: o dată fiindcă
+  RSI-ul era `NaN` la primul pivot (perioada de 14 bare), o dată fiindcă
+  aruncarea barei vii făcea ca vârful să nu mai fie pivot confirmat. Testul a
+  fost scris să **strige** când forma nu produce nimic, în loc să treacă tăcut.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile

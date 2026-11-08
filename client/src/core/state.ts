@@ -1799,7 +1799,20 @@ export const S: any = {
   symbol: (() => { try { const s = localStorage.getItem('zeus_chart_symbol'); return (s && /^[A-Z0-9]{2,20}USDT$/.test(s)) ? s : 'BTCUSDT' } catch { return 'BTCUSDT' } })(), tz: 'Europe/Bucharest',
   magnetBias: 'neut',
   cloudEmail: '',
-  alerts: { enabled: false, volSpike: true, volThreshold: 500, pivotCross: false, divergence: true, rsiAlerts: true, whaleOrders: true, whaleMinBtc: 100, liqAlerts: true, liqMinBtc: 1 },
+  // [2026-11-08] Every one of these now has a reader. `pivotCross` left: the
+  // panel writes `pivotAlerts`, and a near-identical name is how a reader ends
+  // up watching a field nobody writes. The two that default OFF are the two
+  // whose checkboxes were drawn unticked — hidden divergences and walls being
+  // pulled — so the stored value matches what the panel always showed.
+  alerts: {
+    enabled: false,
+    volSpike: true, volThreshold: 500,
+    divergence: true, divRSI: true, divMACD: true, divBull: true, divBear: true, divHidden: false,
+    rsiAlerts: true, rsiOB: true, rsiOS: true,
+    pivotAlerts: false,
+    whaleOrders: true, whaleMinBtc: 100, whaleBid: true, whaleAsk: true, whaleRem: false,
+    liqAlerts: true, liqMinBtc: 1,
+  },
   heatmapPockets: [],
   heatmapSettings: { lookback: 400, pivotWidth: 1, atrLen: 121, atrBandPct: 0.05, extendUnhit: 30, keepTouched: true, heatContrast: 0.3, minWeight: 0, longCol: '#01c4fe', shortCol: '#ffe400' },
   scenario: { primary: null, alternate: null, failure: null, updated: 0 },

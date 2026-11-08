@@ -3,6 +3,7 @@
 // TF picker, fullscreen, price display, API fetches, metrics, RSI display, SR table
 
 import { getTPObject } from '../services/stateAccessors'
+import { checkBarAlerts } from './barAlerts'
 import { fmtTime, fmtDate, calcRSI, _calcATRSeries } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
@@ -295,7 +296,14 @@ export async function fetchRSI(tf: string): Promise<void> {
     if (!w.S.rsiData) w.S.rsiData = {}
     w.S.rsiData[tf] = rsi
     renderRSI()
-    if (rsi !== null) checkRSIAlerts(rsi, tf)
+    // [2026-11-08] The same 50 bars now answer four questions instead of one:
+    // volume, divergences, RSI extremes and pivot crossings. One request, four
+    // answers, nothing extra asked of the gateway. Each group obeys its own
+    // switch — until now sixteen of those switches did nothing at all.
+    checkBarAlerts({
+      klines: d, tf, symbol: sym, alerts: w.S.alerts || {},
+      send: sendAlert, last: _barAlertLast,
+    })
   } catch (e: any) { console.warn('[fetchRSI]', tf, e.message) }
 }
 
@@ -497,13 +505,8 @@ export function calcSRTable(): void {
   })
 }
 
-// ===== RSI ALERT CHECK =====
-function checkRSIAlerts(rsi: number, tf: string): void {
-  if (!w.S.alerts.rsiAlerts) return
-  const key = 'rsi_' + tf
-  if (!(checkRSIAlerts as any)._last) (checkRSIAlerts as any)._last = {}
-  if ((checkRSIAlerts as any)._last[key] && Date.now() - (checkRSIAlerts as any)._last[key] < 300000) return
-  if (rsi > 70) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERBOUGHT', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
-  if (rsi < 30) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERSOLD', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
-}
-(checkRSIAlerts as any)._last = {}
+// [2026-11-08] checkRSIAlerts lived here and fired 70/30 regardless of the
+// two checkboxes meant to control each end. It moved into data/barAlerts.ts,
+// where it is one of four groups judged on closed bars and covered by tests.
+/** Cooldown memory for the bar-close alerts; keyed per group and timeframe. */
+const _barAlertLast: Record<string, number> = {}

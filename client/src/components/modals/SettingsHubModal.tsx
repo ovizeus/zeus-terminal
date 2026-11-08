@@ -186,10 +186,17 @@ export function SettingsHubModal({ visible, onClose }: Props) {
 
       {/* ══ GENERAL ══ */}
       <div className={`mbody${tab==='general'?' act':''}`} id="set-general" style={{display:tab==='general'?'block':'none'}}>
-        <div className="msec">CLOUD SYNC</div>
+        <div className="msec">LOCAL SETTINGS SNAPSHOT</div>
         <div className="mrow"><span className="mlbl">Email</span><input type="email" id="hubCloudEmail" placeholder="your@email.com" style={inp} /></div>
+        {/* [2026-11-08] Called "Cloud Sync" until the audit: it writes to
+            localStorage on THIS device, never to a server, so it does not
+            follow you to another phone. The automatic server-side sync is a
+            different thing entirely. Renamed rather than left lying. */}
+        <div style={{fontSize:'8px',color:'#667d93',lineHeight:1.6,marginTop:'4px'}}>
+          Kept on this device only — it does not travel to another phone.
+        </div>
         <div style={{display:'flex',gap:'4px',marginTop:'6px'}}>
-          <button className="hub-sbtn pri" onClick={() => hubCloudSave?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> Save to Cloud</button>
+          <button className="hub-sbtn pri" onClick={() => hubCloudSave?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> Save snapshot</button>
           <button className="hub-sbtn" onClick={() => hubCloudLoad?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> Load</button>
           <button className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff6655'}} onClick={() => hubCloudClear?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear</button>
         </div>
@@ -351,7 +358,10 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className="msec">ZLOG — CENTRAL LOG (v90)</div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px',padding:'4px 0'}}>
           <span id="zlog-counter" style={{fontSize:'7px',color:'#6a9080',letterSpacing:'1px',fontFamily:'var(--ff)'}}>ZLOG: 0 / 400</span>
-          <span id="zlog-stats" style={{fontSize:'6px',color:'#445566'}}></span>
+          {/* [2026-11-08] An empty <span id="zlog-stats"> sat here with no
+              writer anywhere in the codebase — a readout that could never
+              read anything. Removed rather than filled: the counter beside it
+              already says what there is to say. */}
         </div>
         <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
           <button className="hub-sbtn" onClick={() => w.ZLOG?.copyCSV?.()}>Copy CSV</button>

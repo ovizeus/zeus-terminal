@@ -801,8 +801,13 @@ export function hubResetDefaults(): void {
         pivot: false, rsi14: false, mfi: false, cci: false
       }
       w.S.alerts = {
-        enabled: true, volSpike: true, whaleOrders: true, liqAlerts: true,
-        divergence: true, rsiAlerts: true, whaleMinBtc: 100, liqMinBtc: 1
+        enabled: true,
+        volSpike: true, volThreshold: 500,
+        divergence: true, divRSI: true, divMACD: true, divBull: true, divBear: true, divHidden: false,
+        rsiAlerts: true, rsiOB: true, rsiOS: true,
+        pivotAlerts: false,
+        whaleOrders: true, whaleMinBtc: 100, whaleBid: true, whaleAsk: true, whaleRem: false,
+        liqAlerts: true, liqMinBtc: 1
       }
       w.S.rsiPeriod = 14; w.S.macdFast = 12; w.S.macdSlow = 26; w.S.macdSig = 9
     }

@@ -4,6 +4,8 @@
 // modals, alerts, cloud, chart settings, sound
 
 import { readAlertControls, alertControlValues } from './alertFields'
+import { checkWhaleAlerts } from './whaleAlerts'
+import type { BookLevel } from './alertRules'
 import { getTPObject } from '../services/stateAccessors'
 import { updateHecate, updateThanatos, updateNotos } from '../engine/indicators'
 import { BM, BRAIN as BR } from '../core/config'
@@ -88,7 +90,7 @@ function _connectBNBProxy(): void {
   }))
   _proxyUnsubs.push(on('market.depth', (msg: any) => {
     if (msg.symbol !== sym) return
-    w.S.bids = msg.bids || []; w.S.asks = msg.asks || []
+    _applyBook(msg.bids || [], msg.asks || [])
     renderOB()
     _flowTick('hecate')
   }))
@@ -174,8 +176,10 @@ export function connectBNB(): void {
             }
           }
         } else if (st.includes('depth20')) {
-          w.S.bids = (d.b || []).map(([p, q]: any) => ({ p: +p, q: +q }))
-          w.S.asks = (d.a || []).map(([p, q]: any) => ({ p: +p, q: +q }))
+          _applyBook(
+            (d.b || []).map(([p, q]: any) => ({ p: +p, q: +q })),
+            (d.a || []).map(([p, q]: any) => ({ p: +p, q: +q })),
+          )
           renderOB()
           _flowTick('hecate')
         } else if (st.includes('forceOrder')) {
@@ -601,6 +605,38 @@ export function setTZ(tz: string, btn: any): void { w.S.tz = tz; document.queryS
 export function applyHeatmapSettings(): void { const hs = w.S.heatmapSettings; const gv = (id: string) => +(el(id)?.value ?? '') || 0; hs.lookback = gv('hmLookback') || 400; hs.pivotWidth = gv('hmPivotW') || 1; hs.atrLen = gv('hmAtrLen') || 121; hs.atrBandPct = gv('hmAtrBand') || 0.05; hs.extendUnhit = gv('hmExtend') || 30; hs.heatContrast = gv('hmContrast') || 0.3; hs.minWeight = 0; hs.keepTouched = el('hmKeepTouched')?.checked !== false; hs.longCol = el('hmLongCol')?.value || '#01c4fe'; hs.shortCol = el('hmShortCol')?.value || '#ffe400'; if (w.S.overlays.liq) renderHeatmapOverlay(); closeM('mcharts'); toast('Heatmap updated'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 
 // ===== ALERTS =====
+/**
+ * [2026-11-08] The ONE place the order book is stored.
+ *
+ * There are two feeds that deliver it (the proxy and the direct depth stream),
+ * and the whale-alert check needs the previous snapshot. Putting that in both
+ * places would be two copies of the same rule waiting to drift apart — the
+ * exact shape of bug this session has been clearing out. The first book is
+ * stored without alerting: every wall in it is "new" only because we just
+ * arrived.
+ */
+let _prevBids: BookLevel[] = []
+let _prevAsks: BookLevel[] = []
+let _bookSeeded = false
+const _whaleLast: Record<string, number> = {}
+
+function _applyBook(bids: BookLevel[], asks: BookLevel[]): void {
+  const prevB = _prevBids, prevA = _prevAsks
+  w.S.bids = bids
+  w.S.asks = asks
+  _prevBids = Array.isArray(bids) ? bids : []
+  _prevAsks = Array.isArray(asks) ? asks : []
+  try {
+    checkWhaleAlerts({
+      prevBids: prevB, bids, prevAsks: prevA, asks,
+      alerts: w.S.alerts || {}, symbol: w.S.symbol, send: sendAlert,
+      last: _whaleLast, seeded: _bookSeeded,
+    })
+  } finally {
+    _bookSeeded = true
+  }
+}
+
 export function sendAlert(title: string, body: string, tag = 'zt'): void {
   if (!w.S.alerts.enabled) return
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({ type: 'NOTIFY', title, body, tag }) }

@@ -68,18 +68,10 @@ const defaultMarket: MarketState = {
     showLabels: true,
     labelMode: 'compact',
   },
-  alerts: {
-    enabled: false,
-    volSpike: true,
-    volThreshold: 500,
-    pivotCross: false,
-    divergence: true,
-    rsiAlerts: true,
-    whaleOrders: true,
-    whaleMinBtc: 100,
-    liqAlerts: true,
-    liqMinBtc: 1,
-  },
+  // [2026-11-08] The duplicate `alerts` object was deleted here. It mirrored
+  // core/state.ts field for field and had ZERO readers — a second source of
+  // truth that could only ever disagree with the first. The live settings are
+  // S.alerts, written and read through data/alertFields.ts.
   heatmapSettings: {
     lookback: 400,
     pivotWidth: 1,

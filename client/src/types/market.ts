@@ -34,16 +34,35 @@ export interface LlvSettings {
   labelMode: string
 }
 
-/** Alert configuration */
+/**
+ * Alert configuration.
+ *
+ * [2026-11-08] Kept as a type, but no longer part of MarketState: the store
+ * held a duplicate `alerts` object with no readers at all. The live settings
+ * are `S.alerts`, whose controls are mapped once in data/alertFields.ts.
+ * `pivotCross` is gone from here — the setting the panel actually writes is
+ * `pivotAlerts`, and a field named almost-but-not-quite the same is how a
+ * reader ends up watching the wrong one.
+ */
 export interface AlertSettings {
   enabled: boolean
   volSpike: boolean
   volThreshold: number
-  pivotCross: boolean
   divergence: boolean
+  divRSI?: boolean
+  divMACD?: boolean
+  divBull?: boolean
+  divBear?: boolean
+  divHidden?: boolean
   rsiAlerts: boolean
+  rsiOB?: boolean
+  rsiOS?: boolean
+  pivotAlerts?: boolean
   whaleOrders: boolean
   whaleMinBtc: number
+  whaleBid?: boolean
+  whaleAsk?: boolean
+  whaleRem?: boolean
   liqAlerts: boolean
   liqMinBtc: number
 }
@@ -151,7 +170,8 @@ export interface MarketState {
   indicators: IndicatorToggles
   overlays: OverlayToggles
   llvSettings: LlvSettings
-  alerts: AlertSettings
+  // [2026-11-08] `alerts` left MarketState with the duplicate object it typed:
+  // it had zero readers and could only ever disagree with core/state.ts.
   heatmapSettings: HeatmapSettings
   heatmapPockets: unknown[]
 
