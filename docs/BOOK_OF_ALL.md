@@ -13617,6 +13617,30 @@ uid=2  ETHUSDT  pending_created  conf=89  SHORT     ← a intrat
 
 **De la 1 cont care primea decizii, la 7.** Zero erori după reload.
 
+**La 20 de minute după:** contul 2 avea **2 poziţii deschise**, iar celelalte
+câte 3. Şapte conturi din opt tranzacţionează. Al optulea (uid=5) nu primeşte
+nimic fiindcă e **chiar** dezarmat în starea lui salvată — adică exact ce trebuie.
+
+### Testul care ţine tot lanţul pe loc
+
+Verificarea pe date reale a fost făcută o singură dată, cu mâna. Am transformat-o
+în test permanent care conduce **consumatorul real** (ascultătorul pe care îl
+înregistrează `serverState`), nu o copie: REST → `seedHistory` → consumator →
+bare în ordine → indicatori → simbol gata.
+
+Trei lucruri pe care le-a scos la iveală chiar testul, şi care nu se vedeau altfel:
+
+1. **Istoricul singur NU face un simbol utilizabil.** Pentru un utilizator de pe
+   bursă secundară, „gata" înseamnă **preţ viu ŞI bare** — iar klinele nu poartă
+   preţ. Deci seed-ul REST şi socketul viu sunt **amândouă** portante.
+2. **ADX nu se calculează din 30 de bare.** Recalcularea e limitată la una la 2
+   secunde, iar un backfill de 200 de bare soseşte în milisecunde — deci se
+   calculează **o singură dată, pe primele 30**. În piaţă bara următoare vine
+   peste minute; în test, aşteptarea limitei şi o bară în plus sunt acelaşi lucru.
+3. Prima versiune a testului a dat vina pe feed, apoi pe indicator, apoi pe
+   limită. **Datele mele de test erau prea cuminţi** ca să producă ADX.
+
+
 ### Ce rămâne
 - **Cheia de bybit a contului 2 e expirată** — numai el o poate reface. În demo
   nu contează (tocmai a intrat), dar pentru execuţie reală e obligatorie.
