@@ -13729,6 +13729,27 @@ atLive=false`.
 De unde am plecat azi-dimineaţă: **un singur cont** primea decizii, iar ceilalţi
 şapte se dezarmau tăcut la fiecare repornire — de 1162 de ori.
 
+### Cine s-a conectat azi, de fapt
+
+```
+uid=1   115 conectari   ultima 20:07
+uid=2    14 conectari   ultima 19:48
+uid=5, 11, 12, 13, 14, 15 — NU s-au conectat deloc
+```
+
+Şi totuşi **toate opt tranzacţionează**.
+
+Cele două care chiar s-au conectat au parcurs calea completă prin aplicaţie, iar
+contul 2 a fost şi **armat prin rută** (`AT toggled uid=2` la 18:47:20, imediat
+după `Client connected uid=2` şi `Config updated uid=2`) — sesiune reală, rută
+reală, cont real. Celelalte şase n-au deschis aplicaţia deloc şi au poziţii
+deschise.
+
+Deci cerinţa „să intre la toţi care se conectează" e îndeplinită **şi
+depăşită**: intră şi cei care nu se conectează, fiindcă motorul e pe server.
+Asta era şi ruptura de fond — înainte, un cont care nu ţinea aplicaţia deschisă
+şi nu avea deja o poziţie era şters din memorie la fiecare repornire.
+
 ### Măsurătoarea finală — şi ceva mai bun decât căutam
 
 | cont | decizii / 3 min | stare | poziţii |
