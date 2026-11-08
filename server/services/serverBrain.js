@@ -1037,12 +1037,21 @@ function _runCycle() {
                 _persistRegimeBaseline();
 
                 // ── Per-user gate check + fusion + AT execution ──
-                // [Day 29.6] Write a global "watching" thought for this user
-                // before per-user AT gate. Throttled per symbol — 1 every
-                // 3min — uses uid=1 (admin) as default carrier for now.
+                // [Day 29.6] Write a "watching" thought for this user before
+                // the per-user AT gate. Throttled per user+symbol — 1 every 3min.
+                //
+                // [2026-11-08] Was `userId: 1` — "uses uid=1 (admin) as default
+                // carrier for now", by its own admission. Until today the loop
+                // held ONE user, so it never showed. Fixing the boot restore put
+                // eight in it, which turned the admin's thought stream into the
+                // dump for everyone else's scanning while those accounts got
+                // none of their own. Decided by the operator with the volume
+                // trade-off in front of him: the throttle no longer collapses
+                // eight users into one, so rows rise ~8x — bounded by the
+                // 90-day retention on ml_voice_log.
                 try {
                     _writeThought({
-                        userId: 1, symbol: symbol, kind: 'neutral_watch', mood: 'CALM',
+                        userId, symbol: symbol, kind: 'neutral_watch', mood: 'CALM',
                         text: `scanning ${symbol} — regime ${regime.regime}, confluence ${(confluence.score || 0).toFixed(0)}.`,
                         contextJson: JSON.stringify({ regime: regime.regime, score: confluence.score || 0 })
                     });

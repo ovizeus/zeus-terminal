@@ -17,6 +17,7 @@
  * miss a degradation event. Recovery transition (back to green) silent.
  */
 import { useEffect, useState, useRef } from 'react'
+import { initialState, onPoll } from './backpressureAlert'
 import { api } from '../../services/api'
 import { toast } from '../../data/marketDataHelpers'
 
@@ -49,8 +50,10 @@ function _classify(pressurePct: number, blockPct: number): 'green' | 'amber' | '
 export function QuotaIndicator() {
   const [snap, setSnap] = useState<DiagSnapshot | null>(null)
   const lastLevel = useRef<string>('green')
-  const lastSchedRejected = useRef<number>(0)
-  const schedSeeded = useRef<boolean>(false)
+  /** [2026-11-08] Edge-trigger state for the throttling notice. Replaces the
+   *  raw counter + seed flag, which together produced one toast per poll for
+   *  the whole duration of a ban. */
+  const backpressure = useRef(initialState())
 
   useEffect(() => {
     let cancelled = false
@@ -94,15 +97,21 @@ export function QuotaIndicator() {
           // [2026-06-24 bug#11] Seed on the first poll so the backpressure that already
           // exists at cold-start boot doesn't fire an (annoying, non-actionable) toast.
           // After seeding, re-alert on ANY genuine new increase (not only the 0→N edge).
-          if (!schedSeeded.current) {
-            schedSeeded.current = true
-          } else if (totalRejected > lastSchedRejected.current) {
-            const delta = totalRejected - lastSchedRejected.current
+          // [2026-11-08] Was: toast on ANY increase, every poll. Fine for a
+          // one-off hiccup, awful during a sustained Binance IP ban, where
+          // rejections climb on every single poll — one toast per cycle for
+          // as long as the ban lasts, all saying the same thing nobody can
+          // act on. Same lesson as the circuit_open flood: speak on the
+          // TRANSITION, stay quiet while it lasts, say so once when it ends.
+          const d = onPoll(backpressure.current, totalRejected, Date.now())
+          if (d.kind === 'started' || d.kind === 'ongoing') {
             const reasons = sched.byReason || {}
             const reasonStr = Object.entries(reasons).map(([k, v]) => `${k}:${v}`).join(' ')
-            toast(`Scheduler backpressure: +${delta} rejected (${reasonStr})`, 4000)
+            toast(`Market data throttled — the exchange is rate-limiting us (${reasonStr})`,
+              6000, undefined, 'warn')
+          } else if (d.kind === 'cleared') {
+            toast('Market data flowing again', 4000, undefined, 'ok')
           }
-          lastSchedRejected.current = totalRejected
         }
       } catch (_) {
         // silent — diag endpoint failures shouldn't show user errors
