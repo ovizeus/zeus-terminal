@@ -29,26 +29,26 @@ export interface ToastTheme {
 }
 
 const NEUTRAL_TEXT = '#d8eaf8'
-const PANEL_BG = 'rgba(12, 17, 25, 0.97)'
+const PANEL_BG = 'rgba(12, 17, 25, 0.93)'
 
 const THEMES: Readonly<Record<ToastLevel, ToastTheme>> = Object.freeze({
   info: Object.freeze({
     accent: '#00afff', bg: PANEL_BG, border: '#1b2a3a', text: NEUTRAL_TEXT,
-    shadow: '0 10px 30px rgba(0,0,0,0.55)',
+    shadow: '0 6px 20px rgba(0,0,0,0.45)',
   }),
   ok: Object.freeze({
     accent: '#00d97a', bg: PANEL_BG, border: '#17322a', text: NEUTRAL_TEXT,
-    shadow: '0 10px 30px rgba(0,0,0,0.55)',
+    shadow: '0 6px 20px rgba(0,0,0,0.45)',
   }),
   warn: Object.freeze({
     accent: '#f0c040', bg: PANEL_BG, border: '#3a3320', text: NEUTRAL_TEXT,
-    shadow: '0 10px 30px rgba(0,0,0,0.55)',
+    shadow: '0 6px 20px rgba(0,0,0,0.45)',
   }),
   error: Object.freeze({
     accent: '#ff3355', bg: PANEL_BG, border: '#3a1d24', text: NEUTRAL_TEXT,
     // The only one that gets a tinted glow: it is the only one worth
     // interrupting someone for.
-    shadow: '0 10px 30px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,51,85,0.12)',
+    shadow: '0 6px 22px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,51,85,0.12)',
   }),
 })
 

@@ -24,6 +24,7 @@ beforeEach(() => {
   vi.useFakeTimers()
   // jsdom has no rAF timing; run the entrance immediately.
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0 })
+  vi.stubGlobal('matchMedia', (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }))
 })
 
 describe('it shows the message', () => {
@@ -64,7 +65,7 @@ describe('several messages, not one overwriting the next', () => {
   it('clears itself after its time is up', () => {
     toast('bye', 1000)
     expect(boxes()).toHaveLength(1)
-    vi.advanceTimersByTime(1300)
+    vi.advanceTimersByTime(1000 + 600) // its time, then the fade back into the blur
     expect(boxes()).toHaveLength(0)
   })
 
@@ -149,5 +150,44 @@ describe('a heading and a detail, not one glued sentence', () => {
     toast('anything')
     expect(host()!.style.top).toContain('--zt-content-top')
     expect(host()!.style.bottom).toBe('')
+  })
+})
+
+describe('it arrives out of the mist and leaves the same way', () => {
+  it('starts blurred and clears once on screen', () => {
+    // rAF is stubbed to run immediately, so by here the entrance has applied
+    toast('anything')
+    const b = boxes()[0]
+    expect(b.style.filter).toBe('blur(0px)')
+    expect(b.style.transform).toContain('translateY(0)')
+    expect(b.style.transition).toContain('filter')
+  })
+
+  it('goes back into the blur rather than being snatched away', () => {
+    toast('bye', 1000)
+    const b = boxes()[0]
+    vi.advanceTimersByTime(1050)
+    expect(b.style.filter).toBe('blur(7px)')
+    expect(b.style.opacity).toBe('0')
+    // and only then is it gone
+    expect(boxes()).toHaveLength(1)
+    vi.advanceTimersByTime(600)
+    expect(boxes()).toHaveLength(0)
+  })
+
+  it('drops the blur entirely for someone who asked for reduced motion', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} }))
+    toast('quiet please')
+    const b = boxes()[0]
+    expect(b.style.filter).toBe('')
+    expect(b.style.transition).not.toContain('filter')
+    expect(b.style.opacity).toBe('1')
+  })
+
+  it('stays small — this is meant not to get in the way', () => {
+    toast('x', { title: 'BID WALL' })
+    const b = boxes()[0]
+    expect(parseFloat(b.style.fontSize)).toBeLessThanOrEqual(10)
+    expect(b.style.borderLeftWidth).toBe('2px')
   })
 })

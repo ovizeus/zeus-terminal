@@ -13383,9 +13383,31 @@ zgomotoasă şi mai proastă.
 
 Cazul real din captură e acum fixat ca test de regresie, cu cifrele lui.
 
+### Mic, şi „din ceaţă"
+
+Cererea lui: *„sa fie ceva micut asa sa nu deranjeze scris mic sa apara ca din
+ceata si sa dispara la fel"*.
+
+Text 10px, titlu 9px, accent 2px, umbre mai discrete, panoul puţin mai
+transparent. Intrarea şi ieşirea se fac printr-o **estompare care se limpezeşte**
+(`blur(7px) → 0`), nu doar din opacitate: opacitatea singură se citeşte ca o
+clipire, estomparea e cea care-l face să se ivească încet. Iese la fel, puţin
+mai lent, ca să se stingă din atenţie, nu să fie smuls. Pentru cine a cerut
+„reduced motion", estomparea dispare complet — acolo tocmai limpezirea bruscă ar
+fi partea agresivă.
+
+### 🔎 Ce a scos la iveală testul despre ceaţă
+
+Testele au arătat că **tot blocul de `cssText` era respins în jsdom**, deci
+elementul se randa complet nestilizat acolo. Aceeaşi clasă de problemă ca
+scurtătura de `border` de dimineaţă: **o singură declaraţie pe care parserul n-o
+înghite duce tot blocul cu ea.** Acum stilul se pune **proprietate cu
+proprietate** — o proprietate, un rezultat — ceea ce a şi dat testelor acoperire
+reală pe aspect, nu doar pe text.
+
 ### Dovezi
 
-Client **1958** teste, **exit 0**. Tipuri **0**. **+34 teste** (11 pe temă, 19 pe
+Client **1962** teste, **exit 0**. Tipuri **0**. **+38 teste** (11 pe temă, 19 pe
 randare, plus regresiile de volum), inclusiv că textul rămâne neutru la toate nivelurile, că stiva scoate
 cel mai vechi, că `dur = 0` rămâne pe ecran (mai mulţi apelanţi se bazează pe
 asta) şi că un mesaj nu randează markup primit din afară. Stilul vechi

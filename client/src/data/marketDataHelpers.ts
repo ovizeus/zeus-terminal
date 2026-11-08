@@ -89,8 +89,8 @@ function _toastHost(): HTMLElement {
     'top:calc(var(--zt-content-top, 120px) + env(safe-area-inset-top, 0px) + 8px)',
     'transform:translateX(-50%)',
     'z-index:9999', 'pointer-events:none', 'display:flex',
-    'flex-direction:column', 'align-items:center', 'gap:8px',
-    'max-width:min(92vw,460px)', 'width:max-content',
+    'flex-direction:column', 'align-items:center', 'gap:6px',
+    'max-width:min(88vw,380px)', 'width:max-content',
   ].join(';')
   document.body.appendChild(host)
   return host
@@ -112,36 +112,52 @@ export function toast(msg: string, dur: number | ToastOpts = 3000, icon?: any, l
     const box = document.createElement('div')
     box.className = 'zeus-toast'
     box.setAttribute('role', lvl === 'error' ? 'alert' : 'status')
-    const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
-    box.style.cssText = [
-      'display:flex', 'align-items:flex-start', 'gap:9px',
-      'padding:8px 13px 9px 11px',
-      'min-width:min(86vw,260px)',
-      'background:' + th.bg,
-      'border:1px solid ' + th.border,
-      'border-radius:3px',
-      'box-shadow:' + th.shadow,
-      'color:' + th.text,
-      'font-family:var(--ff)', 'font-size:11px', 'line-height:1.5',
-      'letter-spacing:0.3px',
-      'backdrop-filter:blur(7px)', '-webkit-backdrop-filter:blur(7px)',
-      'pointer-events:none', 'max-width:100%',
-      'opacity:0',
-      reduced ? 'transition:opacity .14s ease' : 'transform:translateY(6px);transition:opacity .16s ease,transform .16s ease',
-    ].join(';')
+    const reduced = typeof matchMedia === 'function' && !!matchMedia('(prefers-reduced-motion: reduce)').matches
 
-    // Set apart from the cssText above on purpose: `border` followed by
-    // `border-left` inside one cssText is a shorthand fighting a longhand, and
-    // which one survives is up to the parser. This one must never be lost —
-    // it is the whole signal.
-    box.style.borderLeftWidth = '3px'
-    box.style.borderLeftStyle = 'solid'
-    box.style.borderLeftColor = th.accent
+    // [2026-11-08] Assigned property by property, NOT through one cssText.
+    // A single declaration the parser dislikes takes the whole block down with
+    // it — jsdom dropped the lot and the element rendered unstyled, which is
+    // also how the accent border was lost earlier today. One property, one
+    // outcome.
+    const st = box.style
+    st.display = 'flex'
+    st.alignItems = 'flex-start'
+    st.gap = '7px'
+    st.padding = '6px 11px 7px 9px'
+    st.minWidth = 'min(78vw,190px)'
+    st.maxWidth = '100%'
+    st.background = th.bg
+    st.border = '1px solid ' + th.border
+    st.borderRadius = '3px'
+    st.boxShadow = th.shadow
+    st.color = th.text
+    st.fontFamily = 'var(--ff)'
+    st.fontSize = '10px'
+    st.lineHeight = '1.45'
+    st.letterSpacing = '0.25px'
+    st.pointerEvents = 'none'
+    st.opacity = '0'
+    st.backdropFilter = 'blur(7px)'
+    ;(st as unknown as Record<string, string>).webkitBackdropFilter = 'blur(7px)'
 
-    // The body is a column: a heading line, then the detail. The alerts
-    // already carry a title and a body separately — they used to be glued
-    // into one sentence, which is what made an alert read like any other
-    // line of text.
+    // Set apart from the rest on purpose: `border` followed by `border-left`
+    // is a shorthand fighting a longhand, and which one survives is up to the
+    // parser. This must never be lost — it is the whole signal.
+    st.borderLeftWidth = '2px'
+    st.borderLeftStyle = 'solid'
+    st.borderLeftColor = th.accent
+
+    // "Sa apara ca din ceata si sa dispara la fel" — a blur that clears, not a
+    // box that pops. Opacity alone reads as a flash; the blur is what makes it
+    // arrive softly. Dropped for anyone who asked for reduced motion.
+    if (reduced) {
+      st.transition = 'opacity .22s ease'
+    } else {
+      st.filter = 'blur(7px)'
+      st.transform = 'translateY(-5px) scale(0.985)'
+      st.transition = 'opacity .34s cubic-bezier(.2,.6,.2,1), filter .34s cubic-bezier(.2,.6,.2,1), transform .34s cubic-bezier(.2,.6,.2,1)'
+    }
+
     const col = document.createElement('div')
     col.style.cssText = 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px'
 
@@ -153,7 +169,7 @@ export function toast(msg: string, dur: number | ToastOpts = 3000, icon?: any, l
       const ttl = document.createElement('span')
       ttl.textContent = headline
       ttl.style.cssText = [
-        'font-size:10px', 'font-weight:700', 'letter-spacing:1.3px',
+        'font-size:9px', 'font-weight:700', 'letter-spacing:1.2px',
         'text-transform:uppercase', 'color:' + th.accent,
         'white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis',
       ].join(';')
@@ -161,7 +177,7 @@ export function toast(msg: string, dur: number | ToastOpts = 3000, icon?: any, l
 
       const stamp = document.createElement('span')
       stamp.textContent = _toastClock()
-      stamp.style.cssText = 'flex:0 0 auto;font-size:9px;letter-spacing:0.6px;color:#5c7a90;font-variant-numeric:tabular-nums'
+      stamp.style.cssText = 'flex:0 0 auto;font-size:8px;letter-spacing:0.5px;color:#54707f;font-variant-numeric:tabular-nums'
       head.appendChild(stamp)
       col.appendChild(head)
     }
@@ -176,7 +192,7 @@ export function toast(msg: string, dur: number | ToastOpts = 3000, icon?: any, l
     if (!headline) {
       const stamp = document.createElement('span')
       stamp.textContent = ' · ' + _toastClock()
-      stamp.style.cssText = 'font-size:9px;letter-spacing:0.6px;color:#5c7a90;font-variant-numeric:tabular-nums'
+      stamp.style.cssText = 'font-size:8px;letter-spacing:0.5px;color:#54707f;font-variant-numeric:tabular-nums'
       detail.appendChild(stamp)
     }
 
@@ -190,15 +206,24 @@ export function toast(msg: string, dur: number | ToastOpts = 3000, icon?: any, l
 
     host.appendChild(box)
     // Next frame, so the entrance actually animates instead of snapping.
-    requestAnimationFrame(() => { box.style.opacity = '1'; box.style.transform = 'translateY(0)' })
+    requestAnimationFrame(() => {
+      box.style.opacity = '1'
+      if (!reduced) { box.style.filter = 'blur(0px)'; box.style.transform = 'translateY(0) scale(1)' }
+    })
 
     // dur <= 0 means "stay until something replaces it" — several callers
     // rely on that for blocking conditions, so it must keep working.
     if (ms > 0) {
       setTimeout(() => {
+        // Leaves the way it came: back into the blur, a touch slower, so it
+        // fades out of attention instead of being snatched away.
         box.style.opacity = '0'
-        if (!reduced) box.style.transform = 'translateY(6px)'
-        setTimeout(() => box.remove(), 220)
+        if (!reduced) {
+          box.style.filter = 'blur(7px)'
+          box.style.transform = 'translateY(-4px) scale(0.985)'
+          box.style.transitionDuration = '.46s'
+        }
+        setTimeout(() => box.remove(), reduced ? 260 : 520)
       }, ms)
     }
   } catch (e) {
