@@ -13081,6 +13081,117 @@ Un reload şi apare tot.
 
 ---
 
+## 2026-11-08 — AUDIT: setările Alerts / General / Developer / Omega
+
+Metoda, aceeaşi care a scos găurile din Quant: pentru fiecare setare caut
+**scriitorul** (comutator → stare → DB) şi **cititorul** (cine o consultă la
+rulare). O setare fără cititor e un buton care nu face nimic. Nimic reparat
+încă — raport cerut de el întâi.
+
+### Inventar exact, numărat programatic
+
+Din **20** de chei `S.alerts.*` scrise de interfaţă, **16 nu au niciun
+cititor**. Funcţionează patru: `enabled`, `liqAlerts`, `liqMinBtc`, `rsiAlerts`.
+
+Moarte: `volSpike`, `volThreshold`, `whaleOrders`, `whaleMinBtc`, `whaleBid`,
+`whaleAsk`, `whaleRem`, `divergence`, `divRSI`, `divMACD`, `divBull`, `divBear`,
+`divHidden`, `rsiOB`, `rsiOS`, `pivotAlerts`.
+
+### 🔴 1. „SAVE ALL" stinge toate alertele
+
+`hubSaveAll` citeşte casetele hub-ului cu `_getC(id, true)`, care întoarce
+`elc.checked` când elementul există. Modalele rămân în DOM (`display:none`),
+deci elementele **există** — dar nimeni nu le hidratează, deci sunt
+**nebifate**. Rezultat: o apăsare pe SAVE ALL scrie
+`enabled=false, volSpike=false, whaleOrders=false, liqAlerts=false,
+divergence=false, rsiAlerts=false` şi persistă prin `_usSave()`.
+
+**Apeşi butonul evident de salvare şi îţi stingi alertele, în linişte.**
+
+În plus, `enabled` e scris de două ori în aceeaşi funcţie: întâi din
+`hubNotifyEnabled` (care are `defaultChecked`, deci true), apoi suprascris din
+`hubAlertMaster` (nebifat, deci false). Al doilea scriitor câştigă mereu.
+
+### 🔴 2. Panoul nu se hidratează niciodată
+
+`hubPopulate()` există şi face treaba corect — dar e chemat **doar** din
+`hubLoadAll` şi `hubResetDefaults`. `SettingsHubModal` e un component React care
+**nu îl cheamă niciodată**; singurul lui `useEffect` e pentru PIN. Deci la
+deschidere tot panoul arată valorile din JSX, nu starea reală:
+
+- Alerts: toate casetele **nebifate**, chiar când alertele sunt pornite;
+- General, „Enable alerts & notifications": **mereu bifat**, chiar când e oprit;
+- General, „Enable Developer Mode": **mereu nebifat**, chiar când e pornit;
+- Theme: singurul hidratat corect (`defaultValue={zeusGetTheme()}`).
+
+`AlertsModal` (panoul mare) e şi mai rău: **zero hidratare**, ~20 de casete cu
+`defaultChecked` fix pe true. Opreşti ceva, redeschizi, scrie că e pornit.
+Asta încalcă direct regula ta: *setările TREBUIE să persiste la refresh*.
+
+### 🔴 3. O încrucişare: caseta „Divergence" comandă alertele RSI
+
+`saveAlerts()` face `w.S.alerts.rsiAlerts = el('aDivEn')?.checked !== false` —
+`aDivEn` e caseta **Divergence**. Iar `aRSIEn`, caseta dedicată RSI, scrie
+aceeaşi cheie la `onChange`. Deci apăsarea pe SAVE în panoul mare
+**suprascrie** alegerea RSI cu starea casetei de divergenţă.
+
+`saveAlerts` salvează, în total, trei chei din vreo douăzeci: `liqAlerts`,
+`rsiAlerts`, `liqMinBtc`. Restul nu sunt salvate de butonul de salvare.
+
+### 🟠 4. Permisiunea de notificări se cere doar pe o cale
+
+Singurul loc care cheamă `Notification.requestPermission()` e `toggleAlerts()`,
+adică marele comutator din `AlertsModal`. Dacă aprinzi alertele din
+**Settings → General**, permisiunea nu se cere niciodată: rămâi cu toast-uri în
+aplicaţie, fără notificări de sistem. Patru scriitori pentru `alerts.enabled`,
+şi doar unul cere permisiunea.
+
+### 🟠 5. Al doilea obiect de alerte, fără cititori
+
+`stores/marketStore.ts` are un obiect `alerts` complet (11 câmpuri), duplicat
+după `core/state.ts`. **Zero cititori.** A doua sursă de adevăr, exact clasa pe
+care am mai curăţat-o la dock şi la snapshotul de sync.
+
+### 🟢 Ce funcţionează
+
+**OMEGA — complet cablat.** Toate cele patru rute există pe server:
+`GET/DELETE /api/omega/chat/history`, `GET /api/omega/memory`,
+`DELETE /api/omega/memory/:id`, `GET /api/omega/memory/health`. Încărcare la
+montare, ştergere per-fapt cu confirmare. Nimic de reparat.
+
+**DEVELOPER — aproape tot.** `devClearLog`, `devExportLog`, şi toate cele cinci
+metode ZLOG (`copyCSV`, `copyJSON`, `exportCSV`, `exportJSON`, `clear`) există
+şi sunt reale. Contorul `zlog-counter` e actualizat de `dev.ts:132`. Singurul
+mort e `zlog-stats` — un `<span>` fără niciun scriitor, mereu gol. `w.BUILD`
+există; textul de rezervă hardcodat (`v1.7.164`) e vechi, dar e doar rezervă.
+
+**Alertele care chiar merg:** lichidări (`checkLiqAlert`, cu pragul în BTC),
+RSI extrem (`checkRSIAlerts`, 70/30, cu răcire de 5 minute), comutatorul
+general (citit de autotrade ×3, de feed şi de indicatoare), iar `sendAlert`
+e real: service worker, `Notification`, toast şi centrul de notificări.
+
+**Cloud sync din General funcţionează** — şi aici m-am corectat la timp. Era să
+raportez că e rupt, pe motiv că `hubCloudSave` scrie în `#cloudEmail`, un
+element din **alt** modal. Am verificat înainte să afirm: `ModalOverlay` doar
+ascunde cu `display:none`, iar `CloudSyncModal` e montat permanent în
+`PanelShell`, deci elementul există. Butonul merge. **Dar „Cloud" e o etichetă
+înşelătoare**: `cloudSave` scrie în `localStorage` (`zt_cloud_<hash>`), nu pe
+server. Nu te urmează pe alt telefon.
+
+### Ce trebuie legat — în ordinea în care conteaza
+
+1. Hidratarea panoului (`hubPopulate` la deschidere + hidratare reală în
+   `AlertsModal`). Fără ea, orice altceva minte.
+2. `hubSaveAll` să nu mai poată stinge ce nu a citit niciodată.
+3. Încrucişarea `aDivEn` → `rsiAlerts`.
+4. Permisiunea cerută pe toate căile care aprind alertele.
+5. Cele 16 comutatoare moarte: **de construit sau de scos**. A le lăsa pe ecran
+   e cel mai rău din trei variante.
+6. `marketStore.alerts` de şters; `zlog-stats` de umplut sau de scos;
+   „Save to Cloud" de rebotezat sau de dus pe server.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
