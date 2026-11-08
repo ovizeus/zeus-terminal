@@ -75,11 +75,14 @@ export function QuotaIndicator() {
         const level = _classify(worstPct, thr.blockPublicPct)
         if (level !== lastLevel.current) {
           if (level === 'amber' && lastLevel.current === 'green') {
-            toast(`Binance quota rising: ${worstHost} ${worstPct.toFixed(0)}%`, 3000)
+            // [2026-11-08] Levels stated outright rather than guessed from the
+            // wording: these three are a ladder, and the top of it is the one
+            // that must not look like the other two.
+            toast(`Binance quota rising: ${worstHost} ${worstPct.toFixed(0)}%`, 3000, undefined, 'warn')
           } else if (level === 'red' && lastLevel.current !== 'red' && lastLevel.current !== 'block') {
-            toast(`Binance quota high: ${worstHost} ${worstPct.toFixed(0)}% — gate may fire soon`, 4000)
+            toast(`Binance quota high: ${worstHost} ${worstPct.toFixed(0)}% — gate may fire soon`, 4000, undefined, 'warn')
           } else if (level === 'block') {
-            toast(`Binance quota at gate threshold: ${worstHost} ${worstPct.toFixed(0)}% — preemptive 429 active`, 5000)
+            toast(`Binance quota at gate threshold: ${worstHost} ${worstPct.toFixed(0)}% — preemptive 429 active`, 5000, undefined, 'error')
           }
           lastLevel.current = level
         }

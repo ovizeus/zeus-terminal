@@ -13300,6 +13300,71 @@ regulă; numărătoarea nu.
 
 ---
 
+## 2026-11-08 — Mesajele de pe ecran: instituţionale, nu galbene
+
+Cererea, din captură: *„ala care scrie zeus terminal test alert working… fale
+altfel mai pro… mai institutional"*.
+
+### Ce era
+
+**Un singur stil, hardcodat, pentru tot:** text chihlimbariu `#f0c040` pe o
+casetă `#1a2530`, 10px — indiferent ce spunea mesajul. Un „saved" de rutină şi
+un ordin eşuat arătau identic, iar galbenul făcea totul să pară un avertisment
+pe care nu trebuie să acţionezi. **Exact aşa înveţi pe cineva să ignore şi
+mesajul care contează.**
+
+Şi mai era ceva, mai grav decât culoarea: era **un singur element, refolosit**.
+Al doilea mesaj îl ştergea în tăcere pe primul — iar cu regulile noi de alerte,
+care se dau mai des, o lichidare putea şterge o alertă de balenă apărută cu o
+clipă înainte.
+
+### Ce e acum
+
+**Textul rămâne neutru la orice nivel**, iar înţelesul e purtat de o muchie
+subţire colorată şi un punct. Colorarea propoziţiilor întregi era partea
+amatoricească; un panou liniştit cu o singură margine colorată e ce folosesc
+birourile de tranzacţionare. **Chihlimbariul înseamnă din nou avertisment
+adevărat.**
+
+- colţuri drepte (3px), nu bule de notificare de telefon
+- etichetă în majuscule **doar** unde o merită — `Error`, `Warning`. A pune
+  „INFO" pe fiecare linie de rutină e zgomot care se preface a fi rigoare, şi ar
+  eticheta inutil alerte care deja îşi spun numele („BID WALL", „RSI OVERBOUGHT")
+- **ora la care s-a dat**, în dreapta. Pe un birou de tranzacţionare asta nu e
+  decoraţiune: aşa deosebeşti un mesaj pe care l-ai citit acum un minut de unul
+  care tocmai a sosit
+- **până la 3 mesaje deodată**, cel vechi iese primul
+- respectă „reduced motion"
+
+Nivelul se ghiceşte din cuvinte **doar când apelantul nu-l spune**, şi
+**îngust**: 189 de locuri cheamă `toast` fără nivel, iar a ghici în direcţia
+zgomotoasă ar transforma iar totul în avertisment — chiar lucrul care se repară.
+Scara de cote Binance pe care ai pomenit-o are acum nivelul **spus explicit**:
+„rising" şi „high" sunt avertismente, iar „at gate threshold" e eroare — e vârful
+scării şi nu are voie să arate ca celelalte două.
+
+**Semnătura funcţiei a rămas neschimbată**, deci niciunul dintre cele 189 de
+apeluri n-a trebuit atins.
+
+### Un bug real găsit de teste
+
+Puneam `border` şi apoi `border-left` în acelaşi `cssText` — o scurtătură care
+se bate cu o proprietate lungă, şi care supravieţuieşte depinde de parser.
+Accentul, adică **tot semnalul**, se putea pierde. Acum e setat separat, explicit.
+
+### Dovezi
+
+Client **1949** teste, **exit 0**. Tipuri **0**. **+25 teste** (11 pe temă, 14 pe
+randare), inclusiv că textul rămâne neutru la toate nivelurile, că stiva scoate
+cel mai vechi, că `dur = 0` rămâne pe ecran (mai mulţi apelanţi se bazează pe
+asta) şi că un mesaj nu randează markup primit din afară. Stilul vechi
+(`#1a2530` + `#f0c04044`) **nu mai există în bundle-ul servit**.
+
+Doar client, deci **fără reload** — se vede la refresh. Butonul **„Test
+Notification"** din panoul de alerte arată exact cum e.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
