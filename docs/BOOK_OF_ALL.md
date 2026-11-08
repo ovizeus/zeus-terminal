@@ -13638,6 +13638,24 @@ fi o acţiune cu bani luată din iniţiativă proprie — exact ce nu fac. Un si
 care armează singur conturi dezarmate ar fi un bug mult mai grav decât cel
 reparat azi.
 
+Aşa că întrebarea rămasă — *un cont dezarmat chiar intră când armează?* — am
+răspuns-o cu un **test permanent pe poarta reală**, pe un id care nu aparţine
+nimănui, nu cu un experiment pe contul cuiva. Testul fixează: porneşte
+**dezarmat** (nimeni nu e armat din greşeală), armarea deschide chiar poarta pe
+care creierul o verifică prima (`isATActive`), dezarmarea o închide, iar armarea
+unui cont **nu armează altul**.
+
+Şi a scos la iveală ceva mai bun decât aşteptam. Presupusesem că trecerea pe
+„live" reuşeşte şi doar nu moşteneşte steagul din demo. De fapt e **refuzată din
+start**, fără credenţiale: *„Cannot switch to live — no exchange credentials
+configured."* Adică un cont **nu poate ajunge la bani reali** printr-o simplă
+comutare de mod. Am schimbat aserţiunea ca să fixeze garanţia asta, mai tare.
+
+**O instabilitate de test, consemnată nu ascunsă:** `mlDslBanditEpoch.test.js` a
+picat o dată în shard 1 şi a trecut la reluare (2588, exit 0), iar testul meu nou
+rulează alături de el fără probleme. A fost prins automat de înregistratorul de
+eşecuri construit azi-dimineaţă — `data/logs/jest-failures.log`.
+
 ### Testul care ţine tot lanţul pe loc
 
 Verificarea pe date reale a fost făcută o singură dată, cu mâna. Am transformat-o
