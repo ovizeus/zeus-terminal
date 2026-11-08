@@ -154,3 +154,44 @@ describe('it waits out the boot gate instead of giving up', () => {
         expect(calls).toBe(1);
     });
 });
+
+describe('a seed that delivers nothing must not look like a quiet market', () => {
+    /**
+     * [2026-11-08] This shipped and ran in production: the wiring called
+     * `_emit(...)`, which does not exist in that module, so every single bar
+     * threw — and the per-bar catch swallowed it. The log said
+     * "history seeded: 0 bars over 12 symbol/timeframe pairs", which reads
+     * like an empty market rather than a typo. 2400 silent failures.
+     */
+    it('counts the rejected bars and keeps the first error', async () => {
+        const res = await seedHistory({
+            symbols: ['BTCUSDT'], timeframes: ['5m'], limit: 2,
+            fetchKlines: async () => [[1000, '1', '2', '0.5', '1.5', '10'], [2000, '1', '2', '0.5', '1.5', '10']],
+            emit: () => { throw new ReferenceError('_emit is not defined'); },
+        });
+        expect(res.bars).toBe(0);
+        expect(res.seeded).toBe(1);        // data DID arrive
+        expect(res.failed).toBe(2);        // and none of it survived
+        expect(res.firstError).toMatch(/_emit is not defined/);
+    });
+
+    it('reports nothing rejected on a clean run', async () => {
+        const res = await seedHistory({
+            symbols: ['BTCUSDT'], timeframes: ['5m'], limit: 1,
+            fetchKlines: async () => [[1000, '1', '2', '0.5', '1.5', '10']],
+            emit: () => {},
+        });
+        expect(res.failed).toBe(0);
+        expect(res.firstError).toBeNull();
+    });
+
+    it('an empty market is distinguishable from a broken seed', async () => {
+        // nothing came back at all: seeded 0, failed 0 — not the same thing
+        const res = await seedHistory({
+            symbols: ['BTCUSDT'], timeframes: ['5m'],
+            fetchKlines: async () => [], emit: () => {},
+        });
+        expect(res.seeded).toBe(0);
+        expect(res.failed).toBe(0);
+    });
+});

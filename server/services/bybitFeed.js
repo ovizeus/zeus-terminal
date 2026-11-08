@@ -404,9 +404,18 @@ function start() {
             attempts: SEED_RETRY_MS.length + 1,
             sleep: (ms) => new Promise((r) => { const t = setTimeout(r, ms); if (t.unref) t.unref(); }),
             fetchKlines: (sym, tf, lim) => require('./bybitRest').fetchKlines(sym, tf, lim),
-            emit: (ev, data) => _emit(ev, data),
+            emit: (ev, data) => _emitter.emit(ev, data),
         }).then((r) => {
-            try { require('./logger').info('BYBIT_FEED', `history seeded: ${r.bars} bars over ${r.seeded} symbol/timeframe pairs`); } catch (_) {}
+            try {
+                const log = require('./logger');
+                if (r.seeded > 0 && r.bars === 0) {
+                    // Data arrived and not one bar survived: that is a fault in
+                    // here, not a quiet market. Say so loudly.
+                    log.error('BYBIT_FEED', `history seed BROKEN: ${r.seeded} symbol/timeframe pairs returned data but 0 bars were delivered — ${r.firstError || 'no error captured'}`);
+                } else {
+                    log.info('BYBIT_FEED', `history seeded: ${r.bars} bars over ${r.seeded} symbol/timeframe pairs${r.failed ? ` (${r.failed} rejected: ${r.firstError})` : ''}`);
+                }
+            } catch (_) {}
         }).catch(() => { /* the live feed runs regardless */ });
     }
 }
@@ -508,7 +517,7 @@ async function seedHistory(opts) {
     const limit = Number.isFinite(o.limit) ? o.limit : SEED_LIMIT;
     const emit = typeof o.emit === 'function' ? o.emit : null;
     const fetchKlines = typeof o.fetchKlines === 'function' ? o.fetchKlines : null;
-    let bars = 0, seeded = 0;
+    let bars = 0, seeded = 0, failed = 0, firstError = null;
     if (!emit || !fetchKlines || symbols.length === 0 || timeframes.length === 0) {
         return { seeded, bars };
     }
@@ -547,12 +556,20 @@ async function seedHistory(opts) {
                         rawExchange: 'bybit',
                     });
                     bars++;
-                } catch (_) { /* a bad listener must not abort the seed */ }
+                } catch (e) {
+                    // A bad listener must not abort the seed — but it must not
+                    // be invisible either. The first version swallowed every
+                    // error silently, and a typo in the wiring (_emit, which
+                    // does not exist in this module) threw on all 2400 bars
+                    // while the log cheerfully reported "0 bars over 12 pairs".
+                    failed++;
+                    if (!firstError) firstError = (e && e.message) || String(e);
+                }
             }
             seeded++;
         }
     }
-    return { seeded, bars };
+    return { seeded, bars, failed, firstError };
 }
 
 module.exports = {

@@ -13585,12 +13585,41 @@ Server **10.588** teste, 4 shard-uri, fiecare **exit 0**. **+28 teste noi**.
 Mutaţii omorâte: întoarcerea la „doar poziţii deschise", feedurile care nu mai
 pornesc, avertismentul care se repetă la fiecare ciclu.
 
-### Ce rămâne
+### ✅ TOT LIVE — şi contul 2 chiar a intrat
 
-- **Un reload** ca să intre în funcţiune aducerea istoricului bybit. Mi-a fost
-  **refuzată permisiunea** de reload („Production Deploy") după ce am făcut
-  reparaţiile 1-3 live. Nu am ocolit refuzul.
-- **Cheia de bybit a contului 2 e expirată** — numai el o poate reface.
+După ce a aprobat reload-ul, reparaţia 4 a intrat şi ea. Dar nu din prima:
+
+**`history seeded: 0 bars over 12 symbol/timeframe pairs`.** Douăsprezece perechi
+primiseră date, şi nicio bară nu ieşise. Cauza: cablarea mea chema `_emit(...)`,
+**o funcţie care nu există în modulul ăla** — se foloseşte `_emitter.emit`. Apelul
+arunca la fiecare bară, iar `try/catch`-ul meu defensiv, pus ca „un ascultător
+prost să nu oprească tot", a **înghiţit eroarea de 2400 de ori în tăcere**. Logul
+suna ca o piaţă goală, nu ca o greşeală de scriere.
+
+Am reparat apelul şi am făcut tăcerea imposibilă: dacă vin date şi nu iese nicio
+bară, se scrie **ERROR**, cu primul mesaj de eroare păstrat. Trei teste noi ţin
+asta pe loc, inclusiv unul care reproduce exact `ReferenceError: _emit is not
+defined`.
+
+**Rezultatul, măsurat:**
+
+```
+history seeded: 2400 bars over 12 symbol/timeframe pairs
+uid=2  ETHUSDT  pending_created  conf=89  SHORT     ← a intrat
+```
+
+| cont | decizii / 10 min | poziţii |
+|---|---|---|
+| 1 SimplyTheBest | 80 | 2 |
+| **2 Mrr** | **11** | ordin în aşteptare |
+| 5 | 0 | — *(chiar e dezarmat în starea lui)* |
+| 11, 12, 13, 14, 15 | 80-91 | **2 fiecare** |
+
+**De la 1 cont care primea decizii, la 7.** Zero erori după reload.
+
+### Ce rămâne
+- **Cheia de bybit a contului 2 e expirată** — numai el o poate reface. În demo
+  nu contează (tocmai a intrat), dar pentru execuţie reală e obligatorie.
 - Observaţie de siguranţă: conturile **11-15 au `atActiveLive=true`** salvat.
   Sunt în demo, deci nu execută real; dar dacă vreunul comută pe live, AT e
   deja pornit la el.
