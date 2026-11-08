@@ -13749,6 +13749,21 @@ presupună.
 Viu, acum: `POST /api/at/toggle` fără sesiune → **403** (garda CSRF loveşte
 prima).
 
+**Şi calea întreagă e observată pe viu, pe un cont real** — nu pe un id fantomă.
+Din logul de azi:
+
+```
+18:47:19  Client connected uid=2                        ← sesiune reală
+18:47:19  Config updated uid=2
+18:47:20  AT toggled uid=2 mode=demo: false → true      ← /api/at/toggle
+  ...
+20:4x     uid=2 → decizii → 2 poziţii deschise
+```
+
+Aplicaţie → sesiune → rută de armare → motor armat → decizii → poziţii. Singurul
+cont armat prin scriere directă e uid=5, şi numai fiindcă ruta lucrează pe contul
+**logat** iar sesiuni nu fabric; mecanismul în sine e dovedit de contul 2.
+
 ### De reţinut
 
 ✅ **`max@alphamax.pro` (contul 15), `atActiveLive = 1` — ÎNCHIS, DECIS DE EL:
