@@ -95,6 +95,46 @@ const FIELDS = Object.freeze([
       ],
       hint: 'Bar close is the honest one. A live signal can show up mid-candle and be gone by the close.' },
 
+    // ── [2026-11-08] What the Custom tier actually buys.
+    //
+    // The operator wanted the $149 tier to be visibly worth it rather than
+    // just "the same thing, bigger". These are the options that are genuinely
+    // out of reach of "your name on an existing engine", so they are priced
+    // there — and every one of them is listed on the tier card, because a
+    // buyer cannot want what he cannot see.
+    { key: 'strength', type: 'select', label: 'How a signal is reported', required: false, def: 'onoff',
+      options: [
+          { v: 'onoff', l: 'On or off' },
+          { v: 'score', l: 'A strength score, 0 to 100' },
+      ],
+      hint: 'A score tells you how strong the setup is, not just that there is one.' },
+
+    { key: 'multiSymbol', type: 'select', label: 'What it watches', required: false, def: 'chart',
+      options: [
+          { v: 'chart', l: 'The chart I am looking at' },
+          { v: 'watchlist', l: 'My whole watchlist' },
+          { v: 'top', l: 'The most active markets' },
+      ],
+      hint: 'Beyond the open chart it becomes a scanner: it tells you WHERE the setup is, not just whether it is here.' },
+
+    { key: 'serverSide', type: 'bool', label: 'Keeps working with the app closed', required: false,
+      hint: 'Evaluated on the server instead of in your browser, so it still watches — and can still alert you — while your phone is in your pocket.' },
+
+    { key: 'signalHistory', type: 'bool', label: 'Keep every signal it ever gave', required: false,
+      hint: 'Stored on the server so you can look back and judge it on its record instead of your memory.' },
+
+    { key: 'autoLevels', type: 'bool', label: 'Find its own levels', required: false,
+      hint: 'Levels taken from real pivots in the price instead of numbers you type in by hand.' },
+
+    { key: 'presets', type: 'bool', label: 'Save several setting profiles', required: false,
+      hint: 'One set of settings for scalping, another for swings, switched in one tap.' },
+
+    { key: 'customIcon', type: 'bool', label: 'Its own icon in the indicator list', required: false,
+      hint: 'A drawn glyph of your own, not a letter — it sits next to the built-in indicators as an equal.' },
+
+    { key: 'exportData', type: 'bool', label: 'Export what it measured', required: false,
+      hint: 'Take its values and its signals out as a file, for your own records or your own spreadsheet.' },
+
     { key: 'levels', type: 'rows', label: 'Reference lines', required: false, maxRows: 6,
       columns: [{ key: 'value', label: 'Value', max: 12 }, { key: 'label', label: 'Label', max: 20 }],
       hint: 'Horizontal guides — 0, 50, 70/30, or anything you watch.' },

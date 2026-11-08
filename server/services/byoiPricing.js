@@ -25,6 +25,15 @@ const TIERS = Object.freeze({
         price_cents: 2900,
         quote_only: false,
         blurb: 'Your name and your colours on an existing engine.',
+        // [2026-11-08] Shown on the card. A buyer cannot want what he cannot
+        // see, and until now the card showed a price and nothing else.
+        includes: Object.freeze([
+            'An existing engine, renamed and recoloured as yours',
+            'Your own adjustable inputs and reference lines',
+            'Any timeframe, drawn on the price or in its own pane',
+            'Yours alone, private to your account',
+            'One round of adjustments after delivery',
+        ]),
     }),
     custom: Object.freeze({
         id: 'custom',
@@ -32,6 +41,23 @@ const TIERS = Object.freeze({
         price_cents: 14900,
         quote_only: false,
         blurb: 'A new indicator built from your spec, within a bounded scope.',
+        includes: Object.freeze([
+            'A new indicator built from your own rules, not a reskin',
+            'Open interest, funding, liquidations and the order book',
+            'Higher-timeframe confirmation',
+            'A strength score, 0 to 100, instead of just on or off',
+            'Keeps working with the app closed - evaluated on the server',
+            'Alerts to Telegram, worded by you',
+            'Every signal kept, so you can judge it on its record',
+            'Watches your whole watchlist, not just the open chart',
+            'Finds its own levels from real pivots',
+            'A readout table on the chart',
+            'Several saved setting profiles',
+            'Its own drawn icon in the indicator list',
+            'Export of everything it measured',
+            'Can be published to every trader, credited to you',
+            'Two rounds of adjustments after delivery',
+        ]),
     }),
     bespoke: Object.freeze({
         id: 'bespoke',
@@ -39,6 +65,11 @@ const TIERS = Object.freeze({
         price_cents: 0,
         quote_only: true,
         blurb: 'Anything larger. You describe it, we quote it, you decide.',
+        includes: Object.freeze([
+            'Everything in Custom, with no bounded scope',
+            'Built to a spec we agree on together first',
+            'Quoted by hand before anything is charged',
+        ]),
     }),
 });
 const TIER_IDS = Object.freeze(Object.keys(TIERS));
@@ -126,6 +157,16 @@ const OPTION_TIER = Object.freeze({
     'signalLogic:divergence': 'custom',
     'signalLogic:state': 'custom',
     'visibility:public_request': 'custom',
+    // [2026-11-08] The options that make the Custom tier worth its price.
+    'strength:score': 'custom',
+    'multiSymbol:watchlist': 'custom',
+    'multiSymbol:top': 'custom',
+    'serverSide:true': 'custom',
+    'signalHistory:true': 'custom',
+    'autoLevels:true': 'custom',
+    'presets:true': 'custom',
+    'customIcon:true': 'custom',
+    'exportData:true': 'custom',
 });
 
 /** Cheapest first. Only used to compare, never shown to anyone. */
@@ -157,6 +198,11 @@ function _claims(spec) {
             for (const v of val) if (typeof v === 'string') out.push(key + ':' + v);
         } else if (f.type === 'select') {
             if (typeof val === 'string' && val) out.push(key + ':' + val);
+        } else if (f.type === 'bool') {
+            // [2026-11-08] Without this a gated checkbox would price as free:
+            // the map would name it and nothing would ever read it. Only TRUE
+            // claims anything - an unticked box asks for nothing.
+            if (val === true) out.push(key + ':true');
         }
     }
     return out;

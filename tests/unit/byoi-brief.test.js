@@ -123,3 +123,47 @@ describe('it cannot throw on a damaged row', () => {
         expect(B.renderBrief({ row, spec: full, attachmentCount: 0 })).not.toContain('pay_abc');
     });
 });
+
+describe('what the Custom tier bought is spelled out', () => {
+    // [2026-11-08] Each of these lines is work that has to actually be done.
+    // An option that never reaches this text is an option nobody builds, and
+    // the buyer paid for it.
+    const premium = validateSpec({
+        title: 'Pro', placement: 'pane', visuals: ['line'], sources: ['price'],
+        timeframes: ['5m'], notes: 'n', strength: 'score', serverSide: true,
+        signalHistory: true, multiSymbol: 'watchlist', autoLevels: true,
+        presets: true, customIcon: true, exportData: true,
+    }).clean;
+    const text = B.renderBrief({ row: { id: 7, tier: 'custom', price_cents: 14900 }, spec: premium });
+
+    it('names every premium option that was ticked', () => {
+        for (const needle of [
+            'Strength score', 'SERVER-SIDE', 'stored and reviewable',
+            'watchlist', 'own levels', 'setting profiles', 'glyph', 'Export',
+        ]) {
+            expect(text).toContain(needle);
+        }
+    });
+
+    it('says outright that server-side means working with the app closed', () => {
+        expect(text).toMatch(/app closed/i);
+    });
+
+    it('and says nothing about them when none was ticked', () => {
+        const plain = validateSpec({
+            title: 'Plain', placement: 'overlay', visuals: ['line'], sources: ['price'],
+            timeframes: ['5m'], notes: 'n',
+        }).clean;
+        const t = B.renderBrief({ row: { id: 8, tier: 'signature', price_cents: 2900 }, spec: plain });
+        expect(t).not.toMatch(/INCLUDED AT THIS TIER/);
+        expect(t).not.toMatch(/SERVER-SIDE/);
+    });
+
+    it('an unticked box is never read as ticked', () => {
+        const off = validateSpec({
+            title: 'Off', placement: 'overlay', visuals: ['line'], sources: ['price'],
+            timeframes: ['5m'], notes: 'n', serverSide: false, signalHistory: false,
+        }).clean;
+        expect(B.renderBrief({ row: { id: 9, tier: 'signature' }, spec: off })).not.toMatch(/INCLUDED AT THIS TIER/);
+    });
+});

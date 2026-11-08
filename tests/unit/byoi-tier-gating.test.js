@@ -116,3 +116,77 @@ describe('the map itself is honest', () => {
         expect(Object.isFrozen(P.OPTION_TIER)).toBe(true);
     });
 });
+
+/**
+ * [2026-11-08] Making the $149 tier visibly worth it.
+ *
+ * The operator's words: "sa ia ochii, sa zica mama fac la 149 ca am si aia si
+ * aia". Two halves to that, and only one of them is options: a buyer cannot
+ * want what he cannot see, so each tier now carries the list of what it
+ * includes, and the card shows it. These tests hold BOTH halves - the new
+ * premium options being Custom-only, and the lists existing and staying honest.
+ */
+describe('what the Custom tier gets you, and only it', () => {
+    const cheap = () => validateSpec({
+        title: 'Mine', placement: 'overlay', visuals: ['line'], sources: ['price'],
+        timeframes: ['5m'], notes: 'a line',
+    }).clean;
+
+    it.each([
+        ['a strength score instead of on/off', { strength: 'score' }],
+        ['signals kept and reviewable', { signalHistory: true }],
+        ['more than the open chart', { multiSymbol: 'watchlist' }],
+        ['evaluated on the server, app closed', { serverSide: true }],
+        ['levels found from real pivots', { autoLevels: true }],
+        ['its own icon in the list', { customIcon: true }],
+        ['saved setting profiles', { presets: true }],
+        ['exporting what it measured', { exportData: true }],
+    ])('%s requires Custom', (_label, extra) => {
+        const spec = validateSpec({ ...cheap(), ...extra }).clean;
+        expect(P.requiredTierFor(spec)).toBe('custom');
+        expect(P.evaluateSubmission({ tier: 'signature', spec, mode: 'live', paymentRef: 'p' }).allowed).toBe(false);
+        expect(P.evaluateSubmission({ tier: 'custom', spec, mode: 'live', paymentRef: 'p' }).allowed).toBe(true);
+    });
+
+    it('and none of them is switched on by accident on a plain order', () => {
+        expect(P.requiredTierFor(cheap())).toBe('signature');
+    });
+});
+
+describe('every tier says what it includes', () => {
+    it('each tier carries a non-empty list', () => {
+        for (const id of P.TIER_IDS) {
+            expect(Array.isArray(P.TIERS[id].includes)).toBe(true);
+            expect(P.TIERS[id].includes.length).toBeGreaterThan(0);
+        }
+    });
+
+    it('the lists are frozen, like the prices', () => {
+        for (const id of P.TIER_IDS) {
+            expect(Object.isFrozen(P.TIERS[id].includes)).toBe(true);
+        }
+    });
+
+    it('Custom visibly offers more than Signature — that is the whole point', () => {
+        expect(P.TIERS.custom.includes.length).toBeGreaterThan(P.TIERS.signature.includes.length);
+    });
+
+    it('no line promises something the cheapest tier already has', () => {
+        // a "benefit" both tiers share belongs in neither list as a selling point
+        const sig = P.TIERS.signature.includes.map((s) => s.toLowerCase());
+        for (const line of P.TIERS.custom.includes) {
+            expect(sig).not.toContain(line.toLowerCase());
+        }
+    });
+
+    it('every gated option is actually mentioned somewhere in the Custom list', () => {
+        // otherwise we charge for something the buyer was never told he gets
+        const text = P.TIERS.custom.includes.join(' ').toLowerCase();
+        // Matched against the SELLING line, not the field name: "every signal
+        // kept" is better copy than "signal history", and the test should not
+        // push the wording back towards the schema.
+        for (const needle of ['alert', 'server', 'signal kept', 'watchlist', 'strength', 'icon', 'export', 'pivots', 'profiles']) {
+            expect(text).toContain(needle);
+        }
+    });
+});

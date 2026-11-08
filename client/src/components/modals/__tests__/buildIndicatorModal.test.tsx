@@ -20,8 +20,10 @@ const CONFIG = {
     { key: 'notes', type: 'textarea', label: 'Describe it in your own words', required: true, max: 4000 },
   ],
   tiers: [
-    { id: 'signature', label: 'Signature', price_cents: 2900, price: '$29', quote_only: false, blurb: 'Your name and your colours.' },
-    { id: 'custom', label: 'Custom', price_cents: 14900, price: '$149', quote_only: false, blurb: 'A new indicator.' },
+    { id: 'signature', label: 'Signature', price_cents: 2900, price: '$29', quote_only: false, blurb: 'Your name and your colours.',
+      includes: ['An existing engine, renamed and recoloured as yours', 'Yours alone, private to your account'] },
+    { id: 'custom', label: 'Custom', price_cents: 14900, price: '$149', quote_only: false, blurb: 'A new indicator.',
+      includes: ['A new indicator built from your own rules, not a reskin', 'Keeps working with the app closed', 'Alerts to Telegram, worded by you', 'Its own drawn icon in the indicator list'] },
     { id: 'bespoke', label: 'Bespoke', price_cents: 0, price: '$0', quote_only: true, blurb: 'Anything larger.' },
   ],
   billingMode: 'disabled', canSubmit: false,
@@ -128,5 +130,35 @@ describe('BYOI — pre-launch', () => {
     mockApi()
     render(<BuildIndicatorModal visible={false} onClose={() => {}} />)
     expect((globalThis.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0)
+  })
+})
+
+describe('the buyer can see what the money buys', () => {
+  // [2026-11-08] The card showed a price and nothing else, so the work a
+  // higher tier actually buys was invisible. Nobody wants what he cannot see.
+  it('lists what the selected tier includes', async () => {
+    await openEditor()
+    expect(await screen.findByText('What Signature includes')).toBeTruthy()
+    expect(screen.getByText('Yours alone, private to your account')).toBeTruthy()
+  })
+
+  it('offers the next tier up, and says how much more it is', async () => {
+    await openEditor()
+    expect(await screen.findByText(/Custom adds 4 more/)).toBeTruthy()
+    expect(screen.getByText('See Custom — $149')).toBeTruthy()
+  })
+
+  it('switching to it shows ITS list instead', async () => {
+    await openEditor()
+    fireEvent.click(await screen.findByText('See Custom — $149'))
+    expect(await screen.findByText('What Custom includes')).toBeTruthy()
+    expect(screen.getByText('Alerts to Telegram, worded by you')).toBeTruthy()
+  })
+
+  it('does not nag once the top priced tier is chosen', async () => {
+    await openEditor()
+    fireEvent.click(await screen.findByText('See Custom — $149'))
+    await screen.findByText('What Custom includes')
+    expect(screen.queryByText(/adds \d+ more/)).toBeNull()
   })
 })

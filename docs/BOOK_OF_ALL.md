@@ -13006,6 +13006,81 @@ Specificaţia completă e în `docs/superpowers/specs/2026-11-07-byoi-spec-expan
 
 ---
 
+## 2026-11-08 — Nivelul de 149$ arată acum ce cumperi
+
+Ai cerut: *„la 149 usd sa adaugi mai multe functii ca sa ia ochii sa zica mama
+fac la 149 ca am si aia si aia"*.
+
+Lucrul care face pe cineva să zică asta nu e în primul rând o bifă în plus.
+**Cardul arăta un preţ şi nimic altceva** — munca pe care nivelul de sus o
+cumpăra de fapt era invizibilă. Nimeni nu vrea ce nu vede. Am făcut ambele
+jumătăţi.
+
+### Opt opţiuni noi, exclusive nivelului Custom
+
+Fiecare e ceva ce „numele tău pe un motor existent" nu poate fi:
+
+- **Scor de forţă 0–100** în loc de pornit/oprit — îţi spune cât de tare e
+  configuraţia, nu doar că există una.
+- **Merge cu aplicaţia închisă** — evaluat pe server, nu în browser. Asta e
+  adevăratul diferenţiator al lui Zeus şi singurul mod în care o alertă te
+  găseşte cu telefonul în buzunar.
+- **Ţine fiecare semnal pe care l-a dat** — pe server, ca să-l judeci după
+  istoricul lui, nu după memoria ta.
+- **Urmăreşte toată lista de simboluri**, nu doar chartul deschis — devine
+  scaner: îţi spune **unde** e configuraţia, nu doar dacă e aici.
+- **Îşi găseşte singur nivelurile** din pivoţi reali, nu numere tastate de mână.
+- **Mai multe profile de setări** salvate — unul pentru scalping, altul pentru
+  swing, schimbate dintr-o apăsare.
+- **Iconiţa lui proprie** în lista de indicatoare — un glyph desenat, nu o
+  literă; stă lângă cele native ca un egal.
+- **Export** al valorilor şi semnalelor.
+
+### Cardul spune acum ce include fiecare nivel
+
+Fiecare nivel îşi duce propria listă (`includes`, îngheţată, pe server), iar
+cardul o afişează bifată. **Signature: 5 linii. Custom: 15.** Şi când e selectat
+nivelul ieftin, extra-urile care-i lipsesc apar dedesubt ca ofertă — „Custom
+adaugă încă 10, printre care…" cu buton — nu ca un perete de text. Pe nivelul de
+sus nu mai insistă: să împingi un upgrade la cineva care a ales deja maximul e
+doar zgomot.
+
+Am pus şi două reguli în teste, ca lista să nu devină reclamă:
+- nicio linie din Custom nu are voie să promită ceva ce Signature are deja;
+- **fiecare opţiune pe care o taxez trebuie să fie menţionată în listă** —
+  altfel iau bani pentru ceva ce cumpărătorului nu i s-a spus niciodată că
+  primeşte.
+
+Şi fiecare opţiune bifată ajunge în briefingul de copiat, sub „INCLUDED AT THIS
+TIER", pentru că **o opţiune care nu ajunge în text e o opţiune pe care nimeni
+nu o construieşte** — deşi a fost plătită.
+
+### Un bug prins de mine, nu de teste
+
+Poarta de preţ citea revendicări doar din câmpuri `multi` şi `select`. Şase din
+opt opţiuni noi sunt **bife simple** (`bool`). Le-aş fi pus în hartă, harta le-ar
+fi numit, şi **nimic nu le-ar fi citit niciodată** — adică s-ar fi vândut
+gratis, în linişte. Exact clasa de bug „consumator fără producător" din care am
+mai scos câteva în sesiunea asta. `_claims` citeşte acum şi bifele, şi doar
+`true` revendică ceva. Mutaţia care scoate ramura omoară 6 teste.
+
+### Dovezi
+
+Server **10.555** teste trecute, 4 shard-uri, fiecare **exit 0**. Client **1.828**,
+**exit 0**. Tipuri **0**. Mutaţii omorâte: poarta fără bife (6 teste), upsell-ul
+scos (3), upsell-ul care insistă pe nivelul de sus (1).
+
+### ⚠️ Ce aşteaptă un reload
+
+Partea de server — câmpurile noi, listele de pe card şi liniile din briefing —
+**se vede abia după un `pm2 reload`**. Regula ta e un singur reload pe sesiune şi
+l-am folosit deja acum 16 minute, aşa că nu l-am făcut pe al doilea din
+iniţiativa mea. **Până atunci BYOI arată exact ca înainte** — cardul e ascuns
+dacă serverul nu trimite lista, deci nu e nimic stricat, doar nu e încă vizibil.
+Un reload şi apare tot.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
@@ -13044,4 +13119,4 @@ Am tratat o fereastră ca pe o concluzie (LONG) · am spus „tsc curat" de mai 
 
 ## Cifrele
 
-**36 de commit-uri** · server **10.537** teste trecute · client **1.824** · tipuri **0** · suita de client iese cu **0**, verificat pe codul de ieşire · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.
+**37 de commit-uri** · server **10.555** teste trecute · client **1.828** · tipuri **0** · suita de client iese cu **0**, verificat pe codul de ieşire · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.

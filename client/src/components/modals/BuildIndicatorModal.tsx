@@ -21,7 +21,7 @@ interface Field {
   options?: Option[]; columns?: Column[]
   showIf?: { key: string; in?: string[]; has?: string }
 }
-interface Tier { id: string; label: string; price_cents: number; price: string; quote_only: boolean; blurb: string }
+interface Tier { id: string; label: string; price_cents: number; price: string; quote_only: boolean; blurb: string; includes?: string[] }
 interface Attachment { id: number; filename: string; mime: string; bytes: number }
 interface Req {
   id: number; tier: string; title: string; spec: Record<string, unknown>; notes: string
@@ -167,6 +167,20 @@ export function BuildIndicatorModal({ visible, onClose }: { visible: boolean; on
   const needsTierLabel = cfg?.tiers.find((t) => t.id === needsTier)?.label || needsTier
   const needsTierPrice = cfg?.tiers.find((t) => t.id === needsTier)?.price || ''
   const gatingLabels = cfg && tooLow ? gatingOptions(optionTier, cfg.fields, spec, tier) : []
+
+  /**
+   * The next tier up that is actually priced, and what it adds over the one in
+   * hand. Offered only while something cheaper is selected: pushing an upgrade
+   * at a buyer who already picked the top tier is noise.
+   */
+  const upsell = (() => {
+    if (!cfg || !activeTier) return null
+    const next = cfg.tiers.find((t) => !t.quote_only && tierRank(t.id) > tierRank(tier))
+    if (!next?.includes?.length) return null
+    const have = new Set((activeTier.includes || []).map((l) => l.toLowerCase()))
+    const extras = next.includes.filter((l) => !have.has(l.toLowerCase()))
+    return extras.length > 0 ? { tier: next, extras } : null
+  })()
 
   /**
    * The price tag on an option that costs more than the tier in hand. Shown
@@ -352,6 +366,40 @@ export function BuildIndicatorModal({ visible, onClose }: { visible: boolean; on
                 </button>
               ))}
             </div>
+
+            {/* [2026-11-08] What the chosen tier includes.
+                The card used to show a price and nothing else, so the work the
+                higher tier actually buys was invisible — and nobody wants what
+                he cannot see. When the cheapest tier is selected, the extras it
+                is missing are shown too, as an offer rather than a wall. */}
+            {activeTier?.includes && activeTier.includes.length > 0 && (
+              <div style={{
+                marginBottom: 16, padding: '11px 13px', borderRadius: 8,
+                border: '1px solid #12253a', background: '#0a1119',
+              }}>
+                <div style={{ fontSize: 9, letterSpacing: 1.2, textTransform: 'uppercase', color: '#667d93', marginBottom: 7 }}>
+                  What {activeTier.label} includes
+                </div>
+                {activeTier.includes.map((line) => (
+                  <div key={line} style={{ display: 'flex', gap: 7, fontSize: 12, color: '#c0d8ec', lineHeight: 1.65 }}>
+                    <span style={{ color: '#00ff88', flexShrink: 0 }}>✓</span>
+                    <span>{line}</span>
+                  </div>
+                ))}
+                {upsell && (
+                  <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid #12253a' }}>
+                    <div style={{ fontSize: 11, color: '#8aa8c4', lineHeight: 1.6, marginBottom: 7 }}>
+                      {upsell.tier.label} adds {upsell.extras.length} more, including{' '}
+                      {upsell.extras.slice(0, 3).map((e) => e.replace(/^A |^An /, '').toLowerCase()).join('; ')}.
+                    </div>
+                    <button type="button" onClick={() => setTier(upsell.tier.id)}
+                      style={{ ...BTN, fontSize: 12, borderColor: '#00ff88', color: '#00ff88' }}>
+                      See {upsell.tier.label} — {upsell.tier.price}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* [2026-11-07] Said BEFORE he pays, and it offers the upgrade
                 instead of blocking him: a lost sale is worse than an upsell.

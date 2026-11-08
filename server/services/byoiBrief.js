@@ -135,6 +135,25 @@ function renderBrief({ row, spec, attachmentCount } = {}) {
         _rowsBlock(look, _title('inputs'), s.inputs, ['name', 'def']);
         if (look.length) { out.push('HOW IT LOOKS'); out.push(...look); out.push(''); }
 
+        // ── [2026-11-08] What the Custom tier bought. Listed outright,
+        // because each line is work that has to actually be done, and an
+        // option that does not reach this text is an option nobody builds.
+        const prem = [];
+        if (_str(s.strength) === 'score') prem.push('Strength score 0-100 instead of on/off');
+        if (s.serverSide === true) prem.push('Evaluated SERVER-SIDE — must keep working with the app closed');
+        if (s.signalHistory === true) prem.push('Every signal stored and reviewable');
+        const ms = _str(s.multiSymbol);
+        if (ms && ms !== 'chart') prem.push('Watches ' + _optionLabel('multiSymbol', ms).toLowerCase() + ' — a scanner, not just the open chart');
+        if (s.autoLevels === true) prem.push('Finds its own levels from real pivots');
+        if (s.presets === true) prem.push('Several saved setting profiles');
+        if (s.customIcon === true) prem.push('Its own drawn glyph in the indicator list');
+        if (s.exportData === true) prem.push('Export of its values and signals');
+        if (prem.length) {
+            out.push('INCLUDED AT THIS TIER');
+            for (const line of prem) out.push('- ' + line);
+            out.push('');
+        }
+
         // ── Alerts, only if asked for. They need plumbing that does not exist
         // yet, which is why they are priced at the Custom tier.
         const alerts = [];
