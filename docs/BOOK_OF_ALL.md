@@ -13688,6 +13688,58 @@ Trei lucruri pe care le-a scos la iveală chiar testul, şi care nu se vedeau al
 
 ---
 
+## 2026-11-08 — ÎNCHIS: 8 din 8 conturi intră
+
+Ultimul cont (uid=5, `wsov2@protonmail.com`, al lui) era dezarmat din **28
+aprilie**. Nu l-am armat de capul meu: la întrebare a răspuns „dă-mi
+permisiunea, fă-o tu", şi abia atunci am scris.
+
+**Cum s-a făcut, şi de ce aşa:** ruta `/api/at/toggle` acţionează **doar asupra
+contului logat** — nu există cale de admin spre alt cont — iar sesiuni nu
+fabric. Deci singura cale a fost o scriere chirurgicală în `at_state`, peste
+regula „baza vie e read-only din consolă", **cu autorizarea lui explicită** şi cu
+backup înainte (`_backups/_backup_at_state_20261108/engine_rows_before.tsv`).
+
+Două câmpuri schimbate, şi doar două:
+
+```
+atActive      false → true
+atActiveDemo  false → true
+atActiveLive  NEATINS (false)
+```
+
+`atActiveLive` a rămas pe zero **dinadins**: cererea era „pe demo". Un cont care
+ajunge armat pe bani reali fiindcă cineva a cerut demo ar fi exact genul de
+greşeală care nu se repară cu un commit.
+
+După reload: `State restored uid=5: mode=demo atActive=true atDemo=true
+atLive=false`.
+
+### Rezultatul final, măsurat
+
+| cont | decizii / 5 min | poziţii |
+|---|---|---|
+| 1 SimplyTheBest | 54 | 2 |
+| 2 Mrr | 8 | 2 |
+| **5 wsov2** | **27** | 0 *(tocmai armat)* |
+| 11, 12, 13, 14, 15 | 54-56 | 4 fiecare |
+
+**8 din 8 conturi primesc decizii. Zero erori.**
+
+De unde am plecat azi-dimineaţă: **un singur cont** primea decizii, iar ceilalţi
+şapte se dezarmau tăcut la fiecare repornire — de 1162 de ori.
+
+### De reţinut
+
+⚠️ **`max@alphamax.pro` (contul 15) are `atActiveLive = 1` salvat.** E pe demo,
+deci nu execută real, dar la o comutare pe live autotrade e deja pornit acolo.
+I-am semnalat-o de două ori.
+
+⚠️ **Cheia Bybit a contului 2 e expirată.** Nu blochează demo — contul
+tranzacţionează. Contează doar pentru bani reali, şi doar el o poate reface.
+
+---
+
 # 📋 2026-11-06/07 — Rezumatul sesiunii. Citeşte asta întâi.
 
 ## Cele două lucruri care îţi schimbă deciziile
