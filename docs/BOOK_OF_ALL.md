@@ -13751,9 +13751,10 @@ prima).
 
 ### De reţinut
 
-⚠️ **`max@alphamax.pro` (contul 15) are `atActiveLive = 1` salvat.** E pe demo,
-deci nu execută real, dar la o comutare pe live autotrade e deja pornit acolo.
-I-am semnalat-o de două ori.
+✅ **`max@alphamax.pro` (contul 15), `atActiveLive = 1` — ÎNCHIS, DECIS DE EL:
+„lasă-l aşa".** I-am semnalat de două ori că la o comutare pe live autotrade e
+deja pornit acolo; a ales să rămână cum e. E pe demo, nu execută real nimic.
+**Nu mai propun remedii pentru el** — e decizia lui, luată în cunoştinţă de cauză.
 
 ⚠️ **Cheia Bybit a contului 2 e expirată.** Nu blochează demo — contul
 tranzacţionează. Contează doar pentru bani reali, şi doar el o poate reface.
