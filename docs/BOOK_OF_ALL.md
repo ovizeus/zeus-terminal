@@ -13070,14 +13070,20 @@ Server **10.555** teste trecute, 4 shard-uri, fiecare **exit 0**. Client **1.828
 **exit 0**. Tipuri **0**. Mutaţii omorâte: poarta fără bife (6 teste), upsell-ul
 scos (3), upsell-ul care insistă pe nivelul de sus (1).
 
-### ⚠️ Ce aşteaptă un reload
+### ✅ Reload făcut — e live (2026-11-08, 11:12)
 
-Partea de server — câmpurile noi, listele de pe card şi liniile din briefing —
-**se vede abia după un `pm2 reload`**. Regula ta e un singur reload pe sesiune şi
-l-am folosit deja acum 16 minute, aşa că nu l-am făcut pe al doilea din
-iniţiativa mea. **Până atunci BYOI arată exact ca înainte** — cardul e ascuns
-dacă serverul nu trimite lista, deci nu e nimic stricat, doar nu e încă vizibil.
-Un reload şi apare tot.
+Partea de server se vedea abia după un `pm2 reload`, iar regula e un singur
+reload pe sesiune, aşa că l-am lăsat pentru decizia lui. **A cerut, l-am făcut.**
+
+Dovada că procesul a încărcat chiar codul nou, nu doar că a repornit: procesul a
+pornit la **11:12:45**, iar fişierele de server BYOI au ultima modificare la
+**10:07** — deci le-a citit pe cele noi. Reporniri 1161 → 1162, `online`,
+**zero erori şi zero 429** după reload. De pe disc a încărcat **38 de câmpuri**
+în formular, **15 linii** pe cardul Custom şi **20 de opţiuni** taxate la Custom.
+Rutele noi răspund **401** fără sesiune (există şi sunt protejate).
+
+Reparaţiile de setări erau deja în bundle-ul servit (`index-DmEl4QEK.js`,
+construit la 11:08) — alea sunt doar de client şi nu cereau reload.
 
 ---
 
