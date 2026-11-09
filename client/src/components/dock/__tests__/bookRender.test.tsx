@@ -104,6 +104,11 @@ beforeEach(() => {
     return {
       setTransform() {}, clearRect() {}, setLineDash() {},
       fillRect(x: number, y: number, w: number, h: number) { rec.fills++; rec.rects.push([x, y, w, h]) },
+      // [2026-11-09] Lipseau si astea doua, iar cifrele de pe profilul COB le
+      // folosesc — deci componenta arunca si TOATE testele de randare cadeau
+      // din nou. A doua oara mock-ul, nu codul.
+      measureText(t: string) { return { width: String(t).length * 5 } },
+      fillText(t: string, x: number, y: number) { rec.texts = rec.texts || []; rec.texts.push([String(t), x, y]) },
       beginPath() { rec.ops.push('begin') },
       moveTo(x: number, y: number) { rec.pts.push([x, y]) },
       lineTo(x: number, y: number) { rec.pts.push([x, y]) },
@@ -758,5 +763,47 @@ describe('NEREUS: iesirea din zoom', () => {
     fireEvent.click(container.querySelector('.zbk-out') as HTMLElement)
     await waitFor(() => expect(lastBookUrl).not.toMatch(/focus=/))
     expect(container.querySelector('.zbk-out')).toBeNull()
+  })
+})
+
+describe('⛔ CIFRA de la capatul fiecarei liniute COB', () => {
+  // „poti pune cantitatea la capatul fiecarei liniute portocalii si albastre…
+  //  fara a schimba harta sau designul doar cifrele care apartin fiecarei linii"
+  //
+  // Lungimea barei spune CARE e mai mare; cifra spune CAT. Ambele conditii
+  // sunt testate: ca scrie, si ca desenul de dedesubt a ramas neatins.
+  it('scrie cifre pe pânza', async () => {
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.texts || []).length).toBeGreaterThan(0))
+  })
+
+  it('cifrele sunt in dolari, compact — aceeasi unitate ca restul panoului', async () => {
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.texts || []).length).toBeGreaterThan(0))
+    const txt = drawn.flatMap((d: any) => d.texts || []).map((t: any) => t[0])
+    // 2.4M / 850K — niciodata un numar brut de genul 2370000
+    for (const t of txt) expect(t).toMatch(/^\d+(\.\d)?[KM]$/)
+  })
+
+  it('stau DUPA bara, nu peste ea', async () => {
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.texts || []).length).toBeGreaterThan(0))
+    const texts = drawn.flatMap((d: any) => d.texts || [])
+    const rects = drawn.flatMap((d: any) => d.rects || [])
+    for (const [, tx] of texts) {
+      // exista cel putin o bara care se termina inaintea textului
+      expect(rects.some((r: any) => r[0] + r[2] <= tx)).toBe(true)
+    }
+  })
+
+  it('HARTA NU S-A SCHIMBAT — se adauga doar text', async () => {
+    // Daca desenul de dedesubt s-ar fi atins, numarul de dreptunghiuri sau
+    // cercuri s-ar fi modificat. Cererea a fost explicita: doar cifrele.
+    await openBook()
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.rects || []).length).toBeGreaterThan(10))
+    const rects = drawn.flatMap((d: any) => d.rects || []).length
+    const arcs = drawn.flatMap((d: any) => d.arcs || []).length
+    expect(rects).toBeGreaterThan(10)
+    expect(arcs).toBeGreaterThanOrEqual(3)
   })
 })

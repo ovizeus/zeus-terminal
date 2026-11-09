@@ -3,8 +3,7 @@ import {
     bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
-    yToPrice, zoomStep, zoomLabel, FOCUS_MIN_PCT, zoomStepOut,
-} from '../book'
+    yToPrice, zoomStep, zoomLabel, FOCUS_MIN_PCT, zoomStepOut, cobLabelText, cobLabelFits, pickCobLabels, cobLabelPlacement } from '../book'
 
 describe('intensitatea e LOGARITMICA — raportul max/median masurat e 427x', () => {
     it('zero rameane zero', () => {
@@ -436,5 +435,93 @@ describe('zoomStepOut: un pas inapoi pe carte', () => {
         while (p !== null && pasi < 50) { p = zoomStepOut(p, 0.2); pasi++ }
         expect(p).toBeNull()
         expect(pasi).toBeLessThan(15)
+    })
+})
+
+describe('cifra de la capătul fiecărei liniuţe COB', () => {
+    it('scrie în aceeaşi unitate ca restul panoului — dolari, compact', () => {
+        expect(cobLabelText(2_370_000)).toBe('2.4M')
+        expect(cobLabelText(850_000)).toBe('850K')
+        expect(cobLabelText(12_400_000)).toBe('12M')
+    })
+
+    it('tace pe nivelurile mărunte — o bară invizibilă nu merită o cifră', () => {
+        expect(cobLabelText(49_999)).toBe('')
+        expect(cobLabelText(0)).toBe('')
+        expect(cobLabelText(NaN)).toBe('')
+        expect(cobLabelText(null as never)).toBe('')
+    })
+
+    it('nu scrie în afara pânzei', () => {
+        expect(cobLabelFits(401, 400)).toBe(false)
+        expect(cobLabelFits(400, 400)).toBe(true)
+        expect(cobLabelFits(NaN, 400)).toBe(false)
+    })
+
+    it('pune cifra DUPĂ bară când încape', () => {
+        const p = cobLabelPlacement(100, 20, 20, 400)
+        expect(p).toEqual({ x: 123, inside: false })
+    })
+
+    it('o pune ÎN bară când nu mai e loc după ea', () => {
+        // bara cea mai groasa umple tot profilul — acolo nu exista „dupa",
+        // si tocmai ea e cea pentru care s-a cerut cifra
+        const p = cobLabelPlacement(278, 42, 20, 320)
+        expect(p?.inside).toBe(true)
+        expect(p!.x).toBeGreaterThanOrEqual(278)
+        expect(p!.x + 20).toBeLessThanOrEqual(320)
+    })
+
+    it('renunţă doar când nu încape nicăieri', () => {
+        expect(cobLabelPlacement(300, 5, 40, 320)).toBeNull()
+        expect(cobLabelPlacement(NaN, 5, 10, 320)).toBeNull()
+    })
+})
+
+describe('CARE rânduri primesc cifra — pânza are 300px si zeci de rânduri', () => {
+    // 5-6px pe rând: o cifră pe fiecare s-ar călca pe vecina ei. Se scrie doar
+    // pe nivelurile groase, si destul de depărtate ca textul să se citească.
+    const y = (row: number) => row * 5.4          // exact geometria reala
+    const mk = (row: number, usd: number, side: 'bid' | 'ask' = 'ask') =>
+        ({ row, bidUsd: side === 'bid' ? usd : 0, askUsd: side === 'ask' ? usd : 0 })
+
+    it('scrie pe peretele mare', () => {
+        const got = pickCobLabels([mk(0, 2_000_000)], 2_000_000, y)
+        expect(got).toHaveLength(1)
+        expect(got[0].usd).toBe(2_000_000)
+    })
+
+    it('sare peste nivelurile mărunte — ele se văd din lungimea barei', () => {
+        const got = pickCobLabels([mk(0, 2_000_000), mk(20, 100_000)], 2_000_000, y)
+        expect(got.map((g) => g.row)).toEqual([0])
+    })
+
+    it('nu pune două cifre una peste alta', () => {
+        // randuri vecine => 5.4px distanta, sub pragul de 9
+        const got = pickCobLabels([mk(10, 2_000_000), mk(11, 1_900_000)], 2_000_000, y)
+        expect(got).toHaveLength(1)
+        expect(got[0].row).toBe(10)        // cel mai gros castiga spatiul
+    })
+
+    it('le pune pe amândouă când sunt destul de depărtate', () => {
+        const got = pickCobLabels([mk(0, 2_000_000), mk(5, 1_900_000)], 2_000_000, y)
+        expect(got.map((g) => g.row)).toEqual([0, 5])
+    })
+
+    it('ştie de care parte e nivelul', () => {
+        const got = pickCobLabels([mk(0, 2_000_000, 'bid')], 2_000_000, y)
+        expect(got[0].side).toBe('bid')
+    })
+
+    it('le întoarce de sus în jos, ca desenul', () => {
+        const got = pickCobLabels([mk(20, 1_000_000), mk(0, 2_000_000), mk(10, 1_500_000)], 2_000_000, y)
+        expect(got.map((g) => g.row)).toEqual([0, 10, 20])
+    })
+
+    it('nu aruncă pe date lipsă', () => {
+        expect(pickCobLabels([], 1, y)).toEqual([])
+        expect(pickCobLabels(null as never, 1, y)).toEqual([])
+        expect(pickCobLabels([mk(0, 1_000_000)], 0, y)).toEqual([])
+        expect(pickCobLabels([mk(0, 1_000_000)], 1_000_000, () => NaN)).toEqual([])
     })
 })

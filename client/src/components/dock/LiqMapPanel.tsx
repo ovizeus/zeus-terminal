@@ -12,6 +12,7 @@ import {
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
     yToPrice, zoomStep, zoomStepOut, zoomLabel,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
+    cobLabelText, cobLabelPlacement, pickCobLabels,
     type Trade, type Liq,
 } from '../../bookmap/book'
 
@@ -738,7 +739,38 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                 ctx.fillStyle = bookColor('ask', 0.85)
                 ctx.fillRect(cx, y, Math.max(1, aw), Math.max(1, ch))
             }
+
         }
+
+        // [2026-11-09] Cifra la capatul liniutei: lungimea barei spune CARE e
+        // mai mare, cifra spune CAT.
+        //
+        // Intr-o trecere separata, dupa ce barele sunt desenate, fiindca
+        // alegerea randurilor se face pe TOT profilul: panza are 300px si zeci
+        // de randuri, adica ~5px pe rand, deci o cifra pe fiecare s-ar calca pe
+        // vecina ei. Se scriu doar nivelurile groase, destul de departate ca
+        // textul sa se citeasca.
+        //
+        // Harta nu se atinge — se adauga doar text, dupa bara. Si daca panza nu
+        // stie sa masoare text, desenul ramane intreg fara cifre.
+        try {
+            ctx.font = '8px monospace'
+            ctx.textBaseline = 'middle'
+            const byRow = new Map(cob.map((c) => [c.row, c]))
+            for (const L of pickCobLabels(cob, cobMax, (row) => rowToY(row, rows, h))) {
+                const txt = cobLabelText(L.usd)
+                const src = byRow.get(L.row)
+                if (!txt || !src) continue
+                const usd = L.side === 'ask' ? src.askUsd : src.bidUsd
+                const barW = (usd / cobMax) * cobW
+                const place = cobLabelPlacement(cx, barW, ctx.measureText(txt).width, w)
+                if (!place) continue
+                // In interiorul barei textul trebuie sa se vada PE culoare,
+                // deci negru; dupa bara, in culoarea ei.
+                ctx.fillStyle = place.inside ? 'rgba(0,0,0,0.85)' : bookColor(L.side, 0.75)
+                ctx.fillText(txt, place.x, rowToY(L.row, rows, h) + ch / 2)
+            }
+        } catch { /* fara cifre, dar cu harta intreaga */ }
     }, [heat, data])
 
     if (!data) return <Empty what="The order book" />

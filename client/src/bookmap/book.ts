@@ -365,3 +365,107 @@ export function zoomStepOut(
     const next = c * ZOOM_FACTOR
     return next >= lim ? null : next
 }
+
+// ── ETICHETE PE PROFILUL COB — 2026-11-09 ───────────────────────────────────
+// „poti pune cantitatea la capatul fiecarei liniute portocalii si albastre…
+//  fara a schimba harta sau designul doar cifrele care apartin fiecarei linii
+//  scris mic dupa fiecare sa vad cat e"
+//
+// Lungimea barei spune deja CARE e mai mare; cifra spune CÂT. Scrisă la capăt,
+// mică, în aceeaşi unitate ca restul panoului (dolari) — nu BTC, ca să nu ai
+// două unităţi pe acelaşi ecran.
+
+/** Pragul de la care un rând e destul de înalt ca o cifră să încapă lizibil. */
+export const COB_LABEL_MIN_ROW_PX = 7
+/** Sub atâţia dolari eticheta e zgomot: bara e oricum invizibilă. */
+export const COB_LABEL_MIN_USD = 50_000
+
+/**
+ * Cifra de la capătul unei liniuţe. Compactă, fiindcă spaţiul e de câteva zeci
+ * de pixeli: `2.4M`, `850K`. Întoarce '' pentru ce nu merită scris — apelantul
+ * nu trebuie să ştie regulile, doar să nu deseneze un şir gol.
+ */
+export function cobLabelText(usd: number): string {
+    const v = Number(usd)
+    if (!Number.isFinite(v) || v < COB_LABEL_MIN_USD) return ''
+    if (v >= 1_000_000) {
+        const m = v / 1_000_000
+        return (m >= 10 ? Math.round(m).toString() : m.toFixed(1)) + 'M'
+    }
+    return Math.round(v / 1000) + 'K'
+}
+
+/** Textul nu poate ieşi din pânză. */
+export function cobLabelFits(textRightEdge: number, canvasW: number): boolean {
+    const x = Number(textRightEdge), w = Number(canvasW)
+    if (!Number.isFinite(x) || !Number.isFinite(w)) return false
+    return x <= w
+}
+
+/**
+ * UNDE se pune cifra: după bară dacă încape, altfel în interiorul ei, lipită
+ * de capăt.
+ *
+ * Bara cea mai groasă umple toată lăţimea profilului — acolo nu există „după".
+ * Prima versiune sărea exact nivelurile cele mai importante, adică fix pe cele
+ * pentru care s-a cerut cifra. Întoarce `null` doar când nu încape nicăieri.
+ */
+export function cobLabelPlacement(
+    barStartX: number, barW: number, textW: number, canvasW: number,
+): { x: number; inside: boolean } | null {
+    const x0 = Number(barStartX), bw = Number(barW), tw = Number(textW), w = Number(canvasW)
+    if (![x0, bw, tw, w].every(Number.isFinite)) return null
+    const after = x0 + Math.max(1, bw) + 3
+    if (after + tw <= w) return { x: after, inside: false }
+    const inside = x0 + Math.max(1, bw) - tw - 3
+    if (inside >= x0) return { x: inside, inside: true }
+    return null
+}
+
+/** Cât de gros trebuie să fie un nivel, faţă de cel mai gros, ca să merite cifra. */
+export const COB_LABEL_MIN_SHARE = 0.25
+/** Distanţa minimă pe verticală între două cifre, în pixeli de pânză. */
+export const COB_LABEL_MIN_GAP_PX = 9
+
+/**
+ * CARE rânduri primesc cifra.
+ *
+ * Pânza are 300px şi harta are zeci de rânduri — adică 5-6px pe rând. O cifră
+ * pe fiecare s-ar călca pe vecina ei şi ar face exact pasta pe care desenul o
+ * evită. Aşa că se scrie doar pe nivelurile care contează: cele groase, şi
+ * destul de depărtate între ele ca textul să se citească.
+ *
+ * Întoarce rândurile de etichetat, de sus în jos.
+ */
+export function pickCobLabels(
+    rows: { row: number; bidUsd: number; askUsd: number }[],
+    cobMax: number,
+    rowToYPx: (row: number) => number,
+    minGapPx: number = COB_LABEL_MIN_GAP_PX,
+): { row: number; usd: number; side: 'bid' | 'ask' }[] {
+    if (!Array.isArray(rows) || rows.length === 0) return []
+    const max = Number(cobMax)
+    if (!Number.isFinite(max) || max <= 0) return []
+    const gap = Number.isFinite(minGapPx) ? minGapPx : COB_LABEL_MIN_GAP_PX
+
+    const candidates = rows
+        .map((r) => {
+            const bid = Number(r.bidUsd) || 0
+            const ask = Number(r.askUsd) || 0
+            const side: 'bid' | 'ask' = ask >= bid ? 'ask' : 'bid'
+            return { row: r.row, usd: Math.max(bid, ask), side }
+        })
+        .filter((c) => c.usd >= max * COB_LABEL_MIN_SHARE && cobLabelText(c.usd) !== '')
+        .sort((a, b) => b.usd - a.usd)   // cele mai groase au prioritate la spaţiu
+
+    const taken: number[] = []
+    const out: { row: number; usd: number; side: 'bid' | 'ask' }[] = []
+    for (const c of candidates) {
+        const y = Number(rowToYPx(c.row))
+        if (!Number.isFinite(y)) continue
+        if (taken.some((t) => Math.abs(t - y) < gap)) continue
+        taken.push(y)
+        out.push(c)
+    }
+    return out.sort((a, b) => a.row - b.row)
+}

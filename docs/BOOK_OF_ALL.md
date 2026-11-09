@@ -13844,6 +13844,50 @@ tranzacţionează. Contează doar pentru bani reali, şi doar el o poate reface.
 
 ---
 
+## 2026-11-09 — Cifra la capătul fiecărei liniuţe din profilul cărţii
+
+Cererea lui, cu captura din panoul de lichidări: *„poti pune cantitatea la
+capatul fiecarei liniute portocalii si albastre… fara a schimba harta sau
+designul doar cifrele care apartin fiecarei linii scris mic dupa fiecare sa vad
+cat e"*.
+
+Lungimea barei spunea deja **care** nivel e mai mare. Cifra spune **cât**.
+
+### Ce s-a schimbat: nimic din desen
+
+Barele, culorile, grila, bulele, zoom-ul — neatinse. Cifrele se scriu într-o
+**trecere separată**, după ce barele sunt desenate. Un test verifică explicit
+că numărul de dreptunghiuri şi de cercuri a rămas acelaşi.
+
+### Trei lucruri pe care le-am aflat abia calculând
+
+**1. Nu încap cifre pe fiecare rând.** Pânza are **300px** şi harta zeci de
+rânduri — ~5px pe rând. O cifră pe fiecare s-ar călca pe vecina ei şi ar face
+exact pasta pe care desenul o evită. Aşa că se scriu doar nivelurile **groase**
+(peste un sfert din cel mai mare) şi destul de **depărtate** (9px) ca textul să
+se citească; la egalitate de spaţiu, câştigă bara mai groasă.
+
+**2. Primul prag a fost greşit.** Pusesem „scrie doar pe rânduri de peste 7px".
+La geometria reală (300px / ~56 rânduri = 5,4px) **nu s-ar fi scris nicio
+cifră**, niciodată. Aritmetica a prins-o, nu testul.
+
+**3. Pe bara cea mai groasă nu există „după".** Bara maximă umple toată lăţimea
+profilului, deci textul cădea în afara pânzei şi era sărit — adică exact
+nivelul pentru care s-a cerut cifra. Acum, când nu încape după, se scrie **în
+interiorul barei**, cu negru ca să se vadă pe culoare.
+
+### Şi o lecţie care s-a repetat
+
+Testele de randare au căzut toate, din nou — mock-ului de canvas îi lipseau
+`measureText` şi `fillText`. **A doua oară mock-ul, nu codul**; în fişier era
+deja scrisă aceeaşi notă din octombrie, pentru `arc` şi `fill`. Am completat
+mock-ul şi am pus în producţie o gardă: dacă pânza nu ştie să măsoare text,
+**harta rămâne întreagă fără cifre**. O etichetă n-are voie să doboare desenul.
+
+Client **1987** teste, **exit 0**. **+15 teste** pe reguli şi randare.
+
+---
+
 # ⚠️ 2026-11-09, dimineaţa — CITEŞTE ASTA PRIMA
 
 ## Ce trebuie să faci: **nimic obligatoriu**
