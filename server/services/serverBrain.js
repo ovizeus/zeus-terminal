@@ -548,6 +548,16 @@ function start() {
     } catch (e) {
         logger.warn('BRAIN', 'feed prime skipped: ' + (e && e.message));
     }
+    // [2026-11-09] Watch for candle history that never arrived. A restart
+    // during an exchange IP ban logs "0 initial candles" for every symbol, and
+    // nothing ever noticed: the live poller takes only the newest two candles,
+    // so a symbol that starts empty stays unusable for hours. Seven accounts
+    // went a night without a single entry because of exactly that.
+    try {
+        require('./marketFeed').startSelfHeal();
+    } catch (e) {
+        logger.warn('BRAIN', 'kline self-heal not started: ' + (e && e.message));
+    }
     // [BRAIN-V2] Start liquidity depth polling + order flow tracking —
     // required inputs for both the main cycle and the parity shadow cycle.
     serverLiquidity.startDepthPolling(serverState.getConfiguredSymbols());

@@ -851,6 +851,67 @@ function getPollerStats() {
     };
 }
 
+/**
+ * [2026-11-09] Re-fetch history that never arrived.
+ *
+ * The initial fetch happens once, at subscribe, and nothing ever checked
+ * whether it worked. A restart during an exchange IP ban logs "0 initial
+ * candles" for every symbol, and the live poller only takes the newest two
+ * candles — so a symbol that starts empty needs about four hours to become
+ * usable again, and the next restart resets it. Seven accounts went a whole
+ * night without a single new entry because of exactly that.
+ *
+ * This watchdog notices and repairs it. Deliberately slow and capped: a boot
+ * during a ban leaves EVERY pair empty, and asking for all of them at once is
+ * the burst that earns the next ban.
+ */
+const SELF_HEAL_INTERVAL_MS = 5 * 60_000;
+const SELF_HEAL_MAX_PER_PASS = 3;
+let _selfHealTimer = null;
+
+async function _selfHealPass() {
+    try {
+        const { pickReseedTargets } = require('./klineSelfHeal');
+        const serverState = require('./serverState');
+
+        // Current bar counts, per symbol and timeframe, from the store the
+        // readiness check actually reads.
+        const store = {};
+        for (const sym of _activeSymbols) {
+            store[sym] = {};
+            for (const tf of _timeframes) {
+                store[sym][tf] = serverState.getBarsForSymbol(sym, tf) || [];
+            }
+        }
+
+        const targets = pickReseedTargets(store, SELF_HEAL_MAX_PER_PASS);
+        if (targets.length === 0) return;
+
+        for (const t of targets) {
+            const bars = await fetchKlines(t.symbol, t.tf, KLINE_HISTORY);
+            if (bars && bars.length > 0) {
+                _emit('kline', { symbol: t.symbol, timeframe: t.tf, bars, initial: true });
+                logger.info('FEED', `self-heal: refilled ${t.symbol} ${t.tf} with ${bars.length} candles`);
+            } else {
+                // Still refused (ban, warm, throttle). Next pass tries again.
+                logger.warn('FEED', `self-heal: ${t.symbol} ${t.tf} still empty — will retry`);
+            }
+        }
+    } catch (e) {
+        logger.warn('FEED', 'self-heal pass failed: ' + (e && e.message));
+    }
+}
+
+function startSelfHeal() {
+    if (_selfHealTimer) return;
+    _selfHealTimer = setInterval(_selfHealPass, SELF_HEAL_INTERVAL_MS);
+    if (_selfHealTimer.unref) _selfHealTimer.unref();
+}
+
+function stopSelfHeal() {
+    if (_selfHealTimer) { clearInterval(_selfHealTimer); _selfHealTimer = null; }
+}
+
 module.exports = {
     _parseTickerPrice, // [LAG-FIX 2026-05-31] exposed for unit test
     _altFetchKlinesLatest, // [ALT-503-REASON 2026-10-19] exposed for unit test
@@ -864,6 +925,7 @@ module.exports = {
     _sweepOrphanRefs,  // [BIN-TELEM Phase B 2026-05-19]
     unsubscribeAll,
     fetchKlines,
+    startSelfHeal, stopSelfHeal, _selfHealPass,
     fetchFundingRate,
     fetchOpenInterest,
     on,
