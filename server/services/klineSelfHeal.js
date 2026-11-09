@@ -47,4 +47,27 @@ function pickReseedTargets(klineStore, max) {
     return out;
 }
 
-module.exports = { needsReseed, pickReseedTargets, RESEED_MIN_BARS };
+/**
+ * Should the boot history fetch run at all?
+ *
+ * [2026-11-09] Last night the process restarted DURING an IP ban. The boot
+ * fetch has no idea a ban is in force: it fired twenty-one requests into a
+ * wall, burned them, logged "0 initial candles" for every symbol, and left
+ * the feed blind for five hours. The state it needed was in the database the
+ * whole time.
+ *
+ * Fails OPEN. If the state cannot be read, seed anyway: a few wasted requests
+ * are a far smaller problem than a feed that stays dark because one query
+ * misbehaved.
+ */
+function shouldSeedAtBoot(state, now) {
+    const t = Number.isFinite(now) ? now : Date.now();
+    if (!state || typeof state !== 'object') return { seed: true };
+    const banned = Number(state.banned_until);
+    const warm = Number(state.warm_until);
+    if (Number.isFinite(banned) && banned > t) return { seed: false, reason: 'banned' };
+    if (Number.isFinite(warm) && warm > t) return { seed: false, reason: 'warming' };
+    return { seed: true };
+}
+
+module.exports = { needsReseed, pickReseedTargets, shouldSeedAtBoot, RESEED_MIN_BARS };

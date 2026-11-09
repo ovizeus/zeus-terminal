@@ -13896,6 +13896,31 @@ care creierul are nevoie — iar orice repornire îl duce înapoi la zero.
 bybit.** Lovea şi binance, şi nimeni n-o văzuse fiindcă până ieri o pornire în
 timpul unui ban nu se întâmplase.
 
+## Prevenţia, nu doar reparaţia
+
+Avaria a fost **reparată**, dar la fel de important e că **nu se mai poate
+întâmpla la fel**. Cascada de aseară, în ordine:
+
+```
+patru reload-uri → ban IP → repornire ÎN TIMPUL banului →
+„0 initial candles" la toate simbolurile → creierul nu vede nimic →
+şapte conturi, cinci ore fără nicio intrare
+```
+
+**Fiecare pas după primul era evitabil.** Aducerea istoricului la pornire
+habar n-avea că există un ban: a tras 21 de cereri într-un zid, le-a ars,
+a scris zerouri şi a lăsat feedul orb — iar starea de care avea nevoie era
+în baza de date tot timpul.
+
+Acum, la pornire, dacă starea spune „banat" sau „în încălzire", **nu se mai
+cere istoricul deloc**: se scrie o linie care explică de ce, şi supraveghetorul
+îl aduce după ce trece fereastra. Mai puţine cereri într-un ban înseamnă şi mai
+puţine şanse să-l prelungeşti.
+
+Garda **eşuează deschis**: dacă starea nu poate fi citită, se cere istoricul
+oricum — câteva cereri irosite sunt o problemă mult mai mică decât un feed
+care rămâne orb fiindcă o interogare a dat rateu. 6 teste.
+
 ## Ce am reparat în cod (gata, testat, aşteaptă reload-ul)
 
 **1. Supraveghetor de istoric.** La fiecare 5 minute verifică dacă vreun

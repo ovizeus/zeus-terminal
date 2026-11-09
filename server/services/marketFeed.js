@@ -633,6 +633,23 @@ async function subscribe(symbol, timeframes) {
 
     logger.info('FEED', `Subscribing to ${symUpper} [${_timeframes.join(',')}]`);
 
+    // [2026-11-09] Do not fire the boot fetch into an active ban.
+    //
+    // Last night the process restarted DURING an IP ban: twenty-one requests
+    // went into a wall, every symbol logged "0 initial candles", and the feed
+    // stayed blind for five hours. The state was in the database all along.
+    // Skipping here costs nothing — the self-heal watchdog fills the history
+    // in once the window clears — and it stops the restart from feeding the
+    // very ban that is blocking it.
+    try {
+        const { shouldSeedAtBoot } = require('./klineSelfHeal');
+        const d = shouldSeedAtBoot(require('./binanceRateState').load(), Date.now());
+        if (!d.seed) {
+            logger.warn('FEED', `${symUpper}: skipping initial candle fetch — ${d.reason}. The self-heal watchdog will fill it in.`);
+            return;
+        }
+    } catch (_) { /* fail open: a bad read must not leave the feed dark */ }
+
     // 1) Fetch initial kline history for each timeframe
     const klinePromises = _timeframes.map(async (tf) => {
         const bars = await fetchKlines(symUpper, tf, KLINE_HISTORY);
