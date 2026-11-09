@@ -13846,14 +13846,20 @@ tranzacţionează. Contează doar pentru bani reali, şi doar el o poate reface.
 
 # ⚠️ 2026-11-09, dimineaţa — CITEŞTE ASTA PRIMA
 
-## Ce trebuie să faci: **un singur reload**
+## Ce trebuie să faci: **nimic obligatoriu**
+
+Scrisesem aici, la 01:03, că e nevoie de un reload. **M-am înşelat** —
+sistemul şi-a revenit singur, fără el. Las corectura la vedere în loc s-o
+şterg, fiindcă ai fi citit dimineaţa o instrucţiune care nu mai era valabilă.
 
 ```
-pm2 reload zeus --update-env
+01:45:25  primul cont de pe binance (uid=13) a primit iar decizii
 ```
 
-Atât. Mie mi-a fost refuzată permisiunea de reload (clasificatorul de
-siguranţă), de aceea a rămas pentru tine.
+Simbolurile adună lumânări din fluxul viu şi trec pragul de 50 pe rând. Un
+`pm2 reload zeus --update-env` doar **grăbeşte** revenirea şi porneşte
+supraveghetorul de istoric scris azi-noapte — dar nu mai e obligatoriu. Şi
+acum e sigur: dacă încărcarea eşuează, supraveghetorul reîncearcă singur.
 
 ## Ce s-a întâmplat aseară — şi e vina mea
 
