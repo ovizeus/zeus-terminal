@@ -13910,7 +13910,21 @@ captură. Acum: o dată la început, tăcere cât ţine, o reamintire după 10
 minute, o dată la final. Şi scrie pe înţeles: *„Market data throttled — the
 exchange is rate-limiting us"*. 8 teste. **Deja livrat** (doar client).
 
-## Starea acum (01:03)
+## ✅ REVENIRE COMPLETĂ, SINGUR — 02:21:46
+
+```
+1:13   2:21   5:13   11:13   12:13   13:18   14:13   15:13
+```
+
+**Toate cele 8 conturi primesc iar decizii. Zero erori. Fără niciun reload.**
+
+Avaria a ţinut de la **21:16 la 02:21** — cinci ore. Nu s-a pierdut nimic:
+poziţiile deschise s-au închis singure, pe profit (**+4.521,61** după ora
+21:00), fiindcă gestionarea lor merge pe preţul de WebSocket, nu pe REST.
+Ce s-a oprit au fost doar intrările noi pe conturile de binance şi afişarea
+preţurilor de sus.
+
+## Starea intermediară (01:03) — păstrată ca jurnal
 
 ```
 conturi cu decizii:  1   (doar contul 2, pe bybit — neafectat de banul Binance)
