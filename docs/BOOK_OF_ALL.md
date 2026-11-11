@@ -14188,3 +14188,22 @@ Nginx: 242 de cereri `/api/market/klines` cu 502, 7 cu 200 (după 21:29:19).
 **Greşeala mea:** am ales reload-ul în timpul banului fără să văd că golesc rezerva graficului. Am cântărit doar riscul faţă de Binance.
 
 **Deschis:** `_bybitKlineFallback` are `catch (_) { return null }` — a treia eroare înghiţită găsită azi (după `bookFeed._fetchDeep` şi `bybitFeed._emit`). Nereparat încă.
+
+## Decizia operatorului (11 nov, 23:40 ora lui): AŞTEPTĂM, verificăm dimineaţa
+
+Am propus etichetarea manuală a banului curent în baza vie (o scriere pe un rând). **A ales să aştepte.** Nu se atinge baza.
+
+**Limită cunoscută a b380, găsită după livrare:** banul activ la reload e fără etichetă. Regula „un ban nou nu îngustează unul vechi" face ca un ban de testnet venit în fereastra WARM a celui vechi să moştenească „se aplică tuturor". Lanţul se rupe la primul ban care pică în afara unei ferestre WARM; de acolo rămâne corect.
+
+**De verificat dimineaţa (12 nov), doar citire:**
+
+```
+sqlite3 -readonly data/zeus.db "SELECT id, datetime(ts/1000,'unixepoch'), substr(event_json,1,160) FROM binance_rate_state_log WHERE id>2673 ORDER BY id;"
+grep -a "BINANCE_RATE.*HTTP 4" data/logs/pm2-error*.log | grep -oE "from [a-z0-9.-]+" | sort | uniq -c
+```
+
+- `reason` începe cu `[family:testnet]` → reparaţia lucrează; în acele ferestre BOOK-ul trebuie să fi rămas plin.
+- `reason` fără etichetă pe toate rândurile → lanţul nu s-a rupt peste noapte; atunci se discută din nou eticheta manuală sau regula de îmbinare.
+- câmpul `witness` există pe rândurile SUPPRESSED → martorul scrie.
+
+**Nepornit încă (aşteaptă un reload):** `0875c228`, refuzul propriei porţi nu mai deschide disjunctorul.
