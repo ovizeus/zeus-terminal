@@ -31,6 +31,7 @@ const _IP_CB_FALLBACK_MS = 60000;  // cap on fallback ban window (Binance min ba
 const _IP_CB_JITTER_MS = 500;      // small post-deadline buffer
 let _ipBannedUntil = 0;
 let _ipBanReason = '';
+let _ipBanFamily = null;   // 'testnet' | 'mainnet' | null = toti
 
 // [V6 Binance defense 2026-05-20] Lazy-load persistent rate state — survives PM2 reloads.
 // On first call, loads banned_until from DB so the new process inherits any
@@ -45,6 +46,7 @@ function _ensureRateStateLoaded() {
     if (s.banned_until > Date.now()) {
       _ipBannedUntil = s.banned_until;
       _ipBanReason = s.ban_reason || 'persisted ban (loaded from DB)';
+      _ipBanFamily = rateState.banFamilyOf(s);
       const remainingS = Math.ceil((_ipBannedUntil - Date.now()) / 1000);
       console.warn(`[BINANCE IP-CB] Loaded persisted ban from DB — suppressing for ~${remainingS}s. Reason: ${_ipBanReason}`);
     }
@@ -57,11 +59,27 @@ function _isIpBanned() {
   _ensureRateStateLoaded();
   return _ipBannedUntil > Date.now();
 }
-function _setIpBan(untilMs, reason) {
+/**
+ * Banul opreste cererile semnate catre ACEEASI familie de host care l-a dat.
+ * Familie necunoscuta (a banului sau a cererii) = oprit, ca inainte.
+ */
+function _isIpBannedFor(baseUrl) {
+  if (!_isIpBanned()) return false;
+  if (!_ipBanFamily) return true;
+  let reqFam = null;
+  try { reqFam = require('./binanceRateState').hostFamily(baseUrl); } catch (_) { return true; }
+  if (!reqFam) return true;
+  return reqFam === _ipBanFamily;
+}
+function _setIpBan(untilMs, reason, hostOrUrl) {
   _ensureRateStateLoaded();
+  let _fam = null;
+  try { _fam = require('./binanceRateState').hostFamily(hostOrUrl); } catch (_) { _fam = null; }
   // Never shrink an existing ban; only extend.
   const target = Math.max(_ipBannedUntil, untilMs + _IP_CB_JITTER_MS);
   if (target > _ipBannedUntil) {
+    // Nu ingustam un ban deja activ pe alta familie: rezultatul e "toti".
+    _ipBanFamily = (_isIpBanned() && _ipBanFamily !== _fam) ? null : _fam;
     _ipBannedUntil = target;
     _ipBanReason = reason || _ipBanReason || 'IP rate-limit';
     const remainingS = Math.ceil((target - Date.now()) / 1000);
@@ -70,7 +88,12 @@ function _setIpBan(untilMs, reason) {
     // [V6] Persist to DB so PM2 reload doesn't lose ban state.
     try {
       const rateState = require('./binanceRateState');
-      rateState.recordBan({ bannedUntil: target, reason: _ipBanReason, now: Date.now() });
+      rateState.recordBan({ bannedUntil: target, reason: _ipBanReason, now: Date.now(), family: _ipBanFamily });
+      // Baza are ultimul cuvant: ea stie si de fereastra WARM a altei familii.
+      // In try propriu: daca recitirea pica, banul TOT se jurnalizeaza, iar
+      // familia cade pe "toti" (fail-closed), nu ramane pe o valoare ghicita.
+      try { _ipBanFamily = rateState.banFamilyOf(rateState.load()); }
+      catch (_f) { _ipBanFamily = null; }
       // MARTORUL: cine cerea in clipa banului. Fara el stiam cand, niciodata
       // cine (11 nov 2026: opt banuri intr-o zi, sursa necunoscuta). Se scrie
       // in jurnalul din baza, ca sa supravietuiasca rotirii logurilor.
@@ -100,7 +123,7 @@ function _parseBanUntil(msg) {
   return ts;
 }
 function getIpCbStatus() {
-  return { banned: _isIpBanned(), bannedUntil: _ipBannedUntil, reason: _ipBanReason };
+  return { banned: _isIpBanned(), bannedUntil: _ipBannedUntil, reason: _ipBanReason, family: _ipBanFamily };
 }
 
 function _getCb(key) {
@@ -172,7 +195,7 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
   const _cbKey = creds.userId ? String(creds.userId) : creds.apiKey;
 
   // [Fix 2] IP-level gate — refuse instantly during active ban so we don't extend it.
-  if (_isIpBanned()) {
+  if (_isIpBannedFor(creds.baseUrl)) {
     const remainingS = Math.ceil((_ipBannedUntil - Date.now()) / 1000);
     const err = new Error(`Binance IP rate-limit — paused for ~${remainingS}s (${_ipBanReason})`);
     err.status = 503;
@@ -297,7 +320,7 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
       if (res.status === 418 || res.status === 429) {
         const parsedTs = _parseBanUntil(data.msg);
         const untilMs = parsedTs != null ? parsedTs : Date.now() + _IP_CB_FALLBACK_MS;
-        _setIpBan(untilMs, `HTTP ${res.status}: ${data.msg || res.statusText}`);
+        _setIpBan(untilMs, `HTTP ${res.status}: ${data.msg || res.statusText}`, baseUrl);
       }
       _cbRecordFailure(_cbKey);
       const err = new Error(`Binance API error: ${data.msg || res.statusText}`);
@@ -316,4 +339,4 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
   }
 }
 
-module.exports = { signParams, sendSignedRequest, getIpCbStatus, _setIpBan };
+module.exports = { signParams, sendSignedRequest, getIpCbStatus, _setIpBan, _isIpBannedFor };

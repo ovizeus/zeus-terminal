@@ -63,6 +63,10 @@ function pickReseedTargets(klineStore, max) {
 function shouldSeedAtBoot(state, now) {
     const t = Number.isFinite(now) ? now : Date.now();
     if (!state || typeof state !== 'object') return { seed: true };
+    // Istoricul vine de pe MAINNET. Un ban dat de testnet nu-l priveste.
+    try {
+        if (!require('./binanceRateState').banAppliesTo(state, 'fapi.binance.com')) return { seed: true };
+    } catch (_) { /* nu pot citi familia: judec ca inainte */ }
     const banned = Number(state.banned_until);
     const warm = Number(state.warm_until);
     if (Number.isFinite(banned) && banned > t) return { seed: false, reason: 'banned' };

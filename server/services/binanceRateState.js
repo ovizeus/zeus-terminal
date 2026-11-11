@@ -134,6 +134,54 @@ function computeCurrentMode(s, now) {
   return 'NORMAL';
 }
 
+// ─── Familia de host a banului ─────────────────────────────────────────────
+//
+// 11 nov 2026: 41 din 41 de raspunsuri 418/429 veneau de la
+// testnet.binancefuture.com (usedWeight=0, IP raportat care nu e al nostru),
+// zero de la fapi.binance.com. Starea fiind una singura, banul de TESTNET
+// stingea datele publice de pe MAINNET: klines, cartea, randul de preturi.
+//
+// Familia calatoreste in `ban_reason`, ca eticheta de inceput. Fara migratie
+// de schema, si orice motiv fara eticheta (ban vechi, scriitor necunoscut) se
+// aplica TUTUROR — adica exact comportamentul de dinainte.
+const FAMILY_TAG_RE = /^\[family:(testnet|mainnet)\]\s?/;
+
+/** 'testnet' | 'mainnet' | null (necunoscut — nu ghicim). Primeste host sau URL. */
+function hostFamily(hostOrUrl) {
+  if (!hostOrUrl || typeof hostOrUrl !== 'string') return null;
+  const host = hostOrUrl.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').split(/[/?#:]/)[0];
+  if (!/(^|\.)binance(future)?\.com$/.test(host)) return null;
+  return /testnet/.test(host) ? 'testnet' : 'mainnet';
+}
+
+function tagReason(family, reason) {
+  const bare = typeof reason === 'string' ? reason.replace(FAMILY_TAG_RE, '') : reason;
+  if (family !== 'testnet' && family !== 'mainnet') return bare == null ? null : bare;
+  return `[family:${family}] ${bare == null ? '' : bare}`.trim();
+}
+
+function banFamilyOf(state) {
+  const r = state && state.ban_reason;
+  if (typeof r !== 'string') return null;
+  const m = r.match(FAMILY_TAG_RE);
+  return m ? m[1] : null;
+}
+
+/**
+ * Se aplica starea de ban/warm unei cereri catre `host`?
+ * Fail-closed: familie de ban necunoscuta, host necunoscut sau stare stricata
+ * inseamna DA.
+ */
+function banAppliesTo(state, host) {
+  try {
+    const fam = banFamilyOf(state);
+    if (!fam) return true;
+    const reqFam = hostFamily(host);
+    if (!reqFam) return true;
+    return fam === reqFam;
+  } catch (_) { return true; }
+}
+
 // ─── Exponential cooldown with anti-pattern jitter ────────────────────────
 
 const WARM_DURATION_BASE_MS = Object.freeze([
@@ -175,9 +223,15 @@ const STRIKE_RESET_AFTER_MS = 4 * 3600 * 1000; // 4h clean window resets strikes
  * @param {string} opts.reason
  * @param {number} opts.now
  */
-function recordBan({ bannedUntil, reason, now }) {
+function recordBan({ bannedUntil, reason, now, family }) {
   const current = load();
   const newBannedUntil = Math.max(current.banned_until, bannedUntil);
+
+  // Familia de host care a dat banul. Daca deja e ceva activ pe ALTA familie
+  // (sau pe una necunoscuta), rezultatul e "toti" — nu ingustam niciodata un
+  // ban existent.
+  let fam = (family === 'testnet' || family === 'mainnet') ? family : null;
+  if (computeCurrentMode(current, now) !== 'NORMAL' && banFamilyOf(current) !== fam) fam = null;
 
   let strikes;
   if (current.last_ban_at && (now - current.last_ban_at) < STRIKE_RESET_AFTER_MS) {
@@ -188,7 +242,7 @@ function recordBan({ bannedUntil, reason, now }) {
 
   save({
     banned_until: newBannedUntil,
-    ban_reason: reason,
+    ban_reason: tagReason(fam, reason),
     consecutive_ban_count: strikes,
     last_ban_at: now,
   });
@@ -305,8 +359,8 @@ function startWarmResume({ now }) {
  *
  * @param {object} opts — { bannedUntil, reason, now }
  */
-function abortWarmResume({ bannedUntil, reason, now }) {
-  recordBan({ bannedUntil, reason, now });
+function abortWarmResume({ bannedUntil, reason, now, family }) {
+  recordBan({ bannedUntil, reason, now, family });
   const current = load();
   save({
     warm_until: 0, // clear warm immediately
@@ -460,6 +514,7 @@ function resetOnCleanBoot({ now }) {
 }
 
 module.exports = {
+  hostFamily, tagReason, banFamilyOf, banAppliesTo,
   DEFAULT_STATE,
   WARM_DURATION_BASE_MS,
   WARM_JITTER_MAX_PCT,

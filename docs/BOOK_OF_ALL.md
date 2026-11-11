@@ -14115,3 +14115,60 @@ Ce **nu ştiu**:
 - **Reload** pentru `bookFeed`/`market.js`/martor — după expirarea banului (22:37 UTC) şi a ferestrei WARM. Decizia operatorului.
 - După primul ban cu martor: citit `witness` din `binance_rate_state_log` şi numit sursa.
 - Cheia Bybit a uid=2 — expirată, doar operatorul o poate reînnoi.
+
+---
+
+# 🎯 2026-11-11, seara — CAUZA buclei de banuri: testnet-ul stingea mainnet-ul (b380)
+
+## Corecţie la secţiunea de mai sus
+
+Acolo scrie „sursa necunoscută". Nu mai e. Linia care a rezolvat-o era în log de la început:
+
+```
+[BINANCE_RATE] HTTP 418 from testnet.binancefuture.com/fapi/v2/positionRisk src=signer usedWeight=0/6000
+```
+
+**41 din 41** de răspunsuri 418/429 din 10–11 nov vin de la `testnet.binancefuture.com`. **Zero** de la `fapi.binance.com`. 39 dintre ele cu `usedWeight=0`. IP-ul numit în mesaj (`15.158.242.101/.104`) nu e al nostru (`178.104.64.124`) — testnet-ul numără pe o adresă care nu ne aparţine, deci banul nu depinde de ce cerem noi.
+
+## Defectul nostru
+
+`binance_rate_state` are un singur rând, `scope='global'`. Singurul scriitor al banului e `binanceSigner._setIpBan`, chemat la orice 418/429 pe o cerere semnată — **indiferent de host**. Poarta din `binanceScheduler.canProceed` citea acel rând pentru orice host Binance. Rezultat: reconcilierea de testnet a uid=1 (la 2 minute) primea 418, iar asta punea în SUPPRESSED şi apoi WARM **datele publice de pe mainnet**: klines, cartea adâncă (BOOK), ticker (rândul de preţuri), radar.
+
+Asta răspunde, cu întârziere, la trei întrebări ale operatorului: de ce nu se încarcă BOOK-ul, de ce lipsesc preţurile de sus, de unde e mesajul „Market data throttled".
+
+## Reparaţia
+
+Banul îşi ţine minte **familia de host** (`testnet` / `mainnet`) şi se aplică doar ei.
+
+- `binanceRateState.js` — `hostFamily()`, `tagReason()`, `banFamilyOf()`, `banAppliesTo()`; `recordBan` şi `abortWarmResume` primesc `family`. Familia călătoreşte ca etichetă la începutul lui `ban_reason` (`[family:testnet] …`) — **fără migraţie de schemă**; `ban_reason` supravieţuieşte ferestrei WARM.
+- `binanceScheduler.js` — dacă starea nu se aplică hostului cererii, modul e NORMAL pentru acea cerere.
+- `binanceSigner.js` — `_isIpBannedFor(baseUrl)`; `_setIpBan` primeşte hostul; familia se reciteşte din bază într-un `try` propriu.
+- `klineSelfHeal.shouldSeedAtBoot` — un ban de testnet nu mai lasă istoricul de mainnet neîncărcat la pornire.
+
+**Regulile de siguranţă** (fiecare cu mutant omorât):
+- ban fără etichetă (vechi sau scriitor necunoscut) → se aplică tuturor, ca înainte;
+- cerere cu host necunoscut → rămâne oprită;
+- două familii active deodată → ban pentru toţi; un ban existent nu se îngustează niciodată;
+- recitirea familiei pică → „toţi", nu o valoare ghicită.
+
+## Ce NU repară
+
+- Testnet-ul va continua să ne baneze; reconcilierea de testnet a uid=1 va fi oprită în acele ferestre. Asta e corect.
+- Banul activ la momentul livrării e scris **fără etichetă**, deci se aplică tuturor până expiră (22:37 UTC). Baza vie nu se editează din consolă (R-OP-13).
+- Un 418 **public** de pe mainnet nu trecea nici înainte prin `rateState` (doar prin `rateLimiter`/circuit). Neschimbat.
+
+## Greşelile mele, pe faţă
+
+- **Banul din 8–9 nov l-am pus pe seama celor patru reload-uri ale mele.** Nu am verificat atunci hostul. Verificat apoi pe toate cele şase zile de `pm2-error*.log` (6–11 nov): 41 de răspunsuri de limită, **toate de la testnet**, inclusiv în 8–9 nov. Outage-ul de cinci ore de atunci a fost acelaşi defect, nu reload-urile. Regula „fără reload-uri rapide" rămâne bună, dar vina pusă atunci pe ea n-a avut dovadă. (Liniile `[BINANCE_RATE]` sunt în `pm2-error`, nu în `pm2-out` — prima mea numărătoare pe `pm2-out` a ieşit goală din cauza asta.)
+- Am scris „sursa necunoscută" şi am construit un martor înainte să citesc linia `[BINANCE_RATE]` care spunea hostul. Am căutat în nginx, cron, proxy şi DNS înaintea logului propriu.
+- Recitirea familiei am pus-o întâi în acelaşi `try` cu jurnalul de tranziţie; o excepţie acolo ar fi oprit jurnalizarea banului. Prinsă de suita completă (2 teste roşii), izolată.
+- Am lansat suita cu `&` într-o comandă de fundal şi am primit „terminat" de la lansator, nu de la suită.
+
+## Regulile, bifate
+
+R-OP-1 un singur reload · R-OP-6 `version.js` validat (b380) · R-OP-8 suită completă `--forceExit --runInBand` ca `zeus` · R-OP-13 baza vie doar citită · R-OP-14 nicio cheie afişată · R8 zero artefacte root în `public/app` · R-P-9 Carte · R-P-10 UI în engleză · backup de cod în `_backups/` pentru fiecare fişier atins · offsite reuşit 11 nov 03:48 · `PRAGMA quick_check` = ok.
+
+## De urmărit
+
+- Baza creşte: 2,6 G → 3,1 G în două zile.
+- După următorul ban: `SELECT event_json FROM binance_rate_state_log ORDER BY id DESC LIMIT 3` — `reason` trebuie să înceapă cu `[family:testnet]`, iar BOOK-ul să rămână plin.

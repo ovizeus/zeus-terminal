@@ -180,7 +180,11 @@ function canProceed({ pressure, src, path, host }) {
         // expiry would skip warm and burst back to NORMAL.
         rateState.advanceState({ now });
         const state = rateState.load();
-        const mode = rateState.computeCurrentMode(state, now);
+        let mode = rateState.computeCurrentMode(state, now);
+        // Banul apartine familiei de host care l-a dat. Un 418 de pe TESTNET
+        // nu spune nimic despre mainnet (11 nov 2026: opt "banuri" pe zi, toate
+        // de testnet, tineau stinse klines si cartea de pe mainnet).
+        if (mode !== 'NORMAL' && !rateState.banAppliesTo(state, host)) mode = 'NORMAL';
 
         if (mode === 'SUPPRESSED') {
             _stats.byLane[lane].rejected++;

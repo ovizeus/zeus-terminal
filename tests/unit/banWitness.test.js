@@ -87,5 +87,9 @@ describe('martorul e CABLAT pe drumul banului, nu doar scris', () => {
         expect(logged[0].to).toBe('SUPPRESSED');
         expect(logged[0].witness).toBeNull();
         expect(signer.getIpCbStatus().banned).toBe(true);
+        // Starea de aici nu stie de familii (mock vechi): recitirea pica, deci
+        // banul se aplica TUTUROR — niciodata o familie ghicita.
+        expect(signer._isIpBannedFor('https://fapi.binance.com')).toBe(true);
+        expect(signer._isIpBannedFor('https://testnet.binancefuture.com')).toBe(true);
     });
 });
