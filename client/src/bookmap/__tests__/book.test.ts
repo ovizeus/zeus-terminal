@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
     bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread, fmtWall,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK,
-    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
+    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows, bookStallMessage,
     yToPrice, zoomStep, zoomLabel, FOCUS_MIN_PCT, zoomStepOut, cobLabelText, cobLabelFits, pickCobLabels, cobLabelPlacement } from '../book'
 
 describe('intensitatea e LOGARITMICA — raportul max/median masurat e 427x', () => {
@@ -523,5 +523,37 @@ describe('CARE rânduri primesc cifra — pânza are 300px si zeci de rânduri',
         expect(pickCobLabels(null as never, 1, y)).toEqual([])
         expect(pickCobLabels([mk(0, 1_000_000)], 0, y)).toEqual([])
         expect(pickCobLabels([mk(0, 1_000_000)], 1_000_000, () => NaN)).toEqual([])
+    })
+})
+
+describe('bookStallMessage — mesajul spune adevarul, nu „asteapta"', () => {
+    it('fara motiv, pastreaza textul de pornire', () => {
+        expect(bookStallMessage(null).title).toBe('Waiting for the first snapshot')
+    })
+
+    it('ban activ: NU mai scrie „waiting"', () => {
+        const m = bookStallMessage({ reason: 'suppressed_banned', at: 1 })
+        expect(m.title).not.toMatch(/waiting/i)
+        expect(m.title).toMatch(/rate-limiting/i)
+        expect(m.detail).toMatch(/on its own/)
+    })
+
+    it('fiecare motiv cunoscut are text propriu, nu cade pe acelasi', () => {
+        const seen = new Set<string>()
+        for (const r of ['suppressed_banned', 'warm_class_b', 'circuit_open', 'network', 'http_418']) {
+            const t = bookStallMessage({ reason: r, at: 1 }).title
+            expect(t).not.toBe('Waiting for the first snapshot')
+            seen.add(t)
+        }
+        expect(seen.size).toBe(5) // cele cinci din lista sunt distincte
+        // rate_limit IMPARTE intentionat textul cu warm_class_b: pentru operator
+        // e aceeasi situatie — ne temperam dupa o limita.
+        expect(bookStallMessage({ reason: 'rate_limit', at: 1 }).title)
+            .toBe(bookStallMessage({ reason: 'warm_class_b', at: 1 }).title)
+    })
+
+    it('un motiv necunoscut nu lasa panoul gol', () => {
+        const m = bookStallMessage({ reason: 'ceva_nou', at: 1 })
+        expect(m.title.length).toBeGreaterThan(0)
     })
 })

@@ -14061,3 +14061,57 @@ Am tratat o fereastră ca pe o concluzie (LONG) · am spus „tsc curat" de mai 
 ## Cifrele
 
 **37 de commit-uri** · server **10.555** teste trecute · client **1.828** · tipuri **0** · suita de client iese cu **0**, verificat pe codul de ieşire · **16 rulări de shard** curate de la reparaţia instabilităţii · server viu cu zero erori, zero 429, zero artefacte root.
+
+---
+
+# 🧾 2026-11-11 — BOOK-ul minţea „Waiting", bucla de banuri, martorul
+
+## Ce a întrebat operatorul
+
+„De ce nu-mi arată acum bookul de fiecare dată, n-ar fi trebuit să se încarce?" — captură cu BOOK pe „Waiting for the first snapshot" lângă „2,000 levels · 21 snapshots".
+
+## Ce era de fapt
+
+Două surse diferite: banda de sus vine pe WebSocket (neatinsă de ban), harta vine dintr-o interogare REST adâncă, pornită la cerere — exact clasa suprimată în ban. Panoul nu era stricat; **mesajul era fals**. `bookFeed._fetchDeep` făcea `if (!res.ok) { _deepFail++; return null }` şi arunca motivul, deşi motivul era deja în corpul răspunsului sintetic (`reason`). Aceeaşi clasă cu `bybitFeed._emit`: eroarea exista, nimeni n-o citea.
+
+## Ce s-a schimbat
+
+- `server/services/bookFeed.js` — reţine ultimul refuz (`deepRefusal: {reason, at}`), cu expirare la 180 s (`refusalIfFresh`), ca un refuz vechi să nu rămână lipit pe panou.
+- `server/routes/market.js` — trimite `stall` **numai** când harta e goală.
+- `client/src/bookmap/book.ts` — `bookStallMessage()`: text propriu pe `suppressed_banned`, `warm_class_b`/`rate_limit`, `circuit_open`, `network`, `http_*`; altfel textul de pornire.
+- `client/src/components/dock/LiqMapPanel.tsx` — afişează motivul.
+
+## Verificarea „intră la toţi" — făcută pe date vii, nu pe cod
+
+- 8 conturi cu `engine:*` în `at_state` (1, 2, 5, 11, 12, 13, 14, 15) — toate `atActive: true`.
+- **Toate 8 au închideri în ultimele 48 h**; 6 ţin poziţii deschise acum.
+- uid=2: 27 intrări / 25 ieşiri, 2 poziţii deschise. Unele intrări în aşteptare expiră neumplute (`no fill in 6 cycles`) — comportament normal al intrării la ţintă, nu defect.
+- Self-heal **confirmat**: pe 10 nov 16:44–16:49 a reumplut BNB, DOGE, ETH, LINK, SOL, XRP (5m/1h/4h, 200 de bare fiecare).
+
+## Bucla de banuri — DESCHISĂ, sursa necunoscută
+
+Pe 11 nov: **8 banuri într-o zi**, fiecare pornind la 1–15 minute după expirarea precedentului, cu durate de până la 4,6 h. Proces neatins de 2 zile — deci nu reload-urile.
+
+Ce am **exclus**, cu dovadă:
+- traficul clienţilor — nginx: 1.106 cereri în 52 de minute înaintea banului de la 18:00, din care 80 klines;
+- alt proces / cron — singurul cron pe minut (`health-watchdog.js`) nu atinge Binance; `/root/zeus-terminal` e symlink spre `/opt/zeus-terminal`;
+- proxy / tunel — niciunul.
+
+Ce **nu ştiu**:
+- cine din procesul zeus cere — telemetria pe surse e doar în memorie, în spatele sesiunii de admin;
+- de ce Binance numeşte în toate cele 51 de mesaje `15.158.242.101/.104`, când IP-ul nostru public e `178.104.64.124`. Observaţie, nu concluzie.
+
+## Martorul
+
+`server/services/banWitness.js` (nou, pur, nu aruncă) + cablat în `binanceSigner._setIpBan`: la fiecare trecere în SUPPRESSED scrie în `binance_rate_state_log` sursele de top după greutate, ritmul pe 1/5 minute, presiunea şi sursa cu cele mai multe 4xx. O linie per ban, în bază — supravieţuieşte rotirii logurilor. **Intră în vigoare la următorul reload.**
+
+## Greşelile mele, pe faţă
+
+- Am scris un test cu aritmetică greşită (aşteptam 4 texte distincte din 5 motive distincte). Am reparat testul.
+- Am spus întâi că la uid=2 „a doua cauză e încă vie" pe baza a două linii de log; datele (27 intrări, 2 poziţii deschise) arată că intră. Retras.
+
+## Ce rămâne
+
+- **Reload** pentru `bookFeed`/`market.js`/martor — după expirarea banului (22:37 UTC) şi a ferestrei WARM. Decizia operatorului.
+- După primul ban cu martor: citit `witness` din `binance_rate_state_log` şi numit sursa.
+- Cheia Bybit a uid=2 — expirată, doar operatorul o poate reînnoi.

@@ -469,3 +469,50 @@ export function pickCobLabels(
     }
     return out.sort((a, b) => a.row - b.row)
 }
+
+/**
+ * Ce scrie panoul cand harta e goala.
+ *
+ * „Waiting for the first snapshot" e corect doar la pornire. Cat timp bursa ne
+ * refuza cererile, acelasi text devine o minciuna: nu asteptam, ni se raspunde
+ * NU — si operatorul a stat o ora uitandu-se la el. Textul urmeaza motivul.
+ */
+export type BookStall = { reason: string; at: number } | null
+
+export function bookStallMessage(stall: BookStall): { title: string; detail: string } {
+    const r = stall && stall.reason ? stall.reason : ''
+    if (r === 'suppressed_banned') {
+        return {
+            title: 'Exchange is rate-limiting us',
+            detail: 'The deep book request is blocked until the limit clears. The map fills in on its own.',
+        }
+    }
+    if (r === 'warm_class_b' || r === 'rate_limit') {
+        return {
+            title: 'Easing back after a rate limit',
+            detail: 'Deep book requests resume shortly. The map fills in on its own.',
+        }
+    }
+    if (r === 'circuit_open') {
+        return {
+            title: 'Exchange connection is open-circuited',
+            detail: 'Requests are paused after repeated failures. Retrying automatically.',
+        }
+    }
+    if (r === 'network') {
+        return {
+            title: 'Cannot reach the exchange',
+            detail: 'The deep book request failed. Retrying automatically.',
+        }
+    }
+    if (r.startsWith('http_')) {
+        return {
+            title: 'Exchange refused the request',
+            detail: `The deep book request came back ${r.slice(5)}. Retrying automatically.`,
+        }
+    }
+    return {
+        title: 'Waiting for the first snapshot',
+        detail: '',
+    }
+}

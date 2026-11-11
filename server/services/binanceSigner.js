@@ -71,12 +71,21 @@ function _setIpBan(untilMs, reason) {
     try {
       const rateState = require('./binanceRateState');
       rateState.recordBan({ bannedUntil: target, reason: _ipBanReason, now: Date.now() });
+      // MARTORUL: cine cerea in clipa banului. Fara el stiam cand, niciodata
+      // cine (11 nov 2026: opt banuri intr-o zi, sursa necunoscuta). Se scrie
+      // in jurnalul din baza, ca sa supravietuiasca rotirii logurilor.
+      let witness = null;
+      try {
+        witness = require('./banWitness').banWitness(require('./binanceTelemetry').getSnapshot(), 6);
+        console.warn('[BINANCE IP-CB] witness ' + JSON.stringify(witness));
+      } catch (_w) { /* fara martor, dar banul se inregistreaza */ }
       rateState.appendTransitionLog({
         from: 'NORMAL_OR_WARM',
         to: 'SUPPRESSED',
         reason: _ipBanReason,
         ts: Date.now(),
         bannedUntil: target,
+        witness,
       });
     } catch (_err) { /* defensive — never block ban path */ }
   }
@@ -307,4 +316,4 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
   }
 }
 
-module.exports = { signParams, sendSignedRequest, getIpCbStatus };
+module.exports = { signParams, sendSignedRequest, getIpCbStatus, _setIpBan };

@@ -12,7 +12,7 @@ import {
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
     yToPrice, zoomStep, zoomStepOut, zoomLabel,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
-    cobLabelText, cobLabelPlacement, pickCobLabels,
+    cobLabelText, cobLabelPlacement, pickCobLabels, bookStallMessage,
     type Trade, type Liq,
 } from '../../bookmap/book'
 
@@ -775,10 +775,14 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
 
     if (!data) return <Empty what="The order book" />
     if (!heat || !heat.frames) {
+        // Mesajul urmeaza MOTIVUL dat de server. Textul fix „Waiting for the
+        // first snapshot" a tinut panoul o ora intr-o minciuna: bursa ne
+        // refuza, deci nu era nimic de asteptat.
+        const stall = bookStallMessage(data.stall || null)
         return (
             <div className="zlq-empty">
-                <b>Waiting for the first snapshot</b>
-                <span>{sourceLabel(data.source || null)}</span>
+                <b>{stall.title}</b>
+                <span>{stall.detail || sourceLabel(data.source || null)}</span>
             </div>
         )
     }

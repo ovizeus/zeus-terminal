@@ -142,9 +142,21 @@ router.get('/bookmap', (req, res) => {
         const top = feed.topFrames(sym);
         const last = top.length ? top[top.length - 1] : null;
 
+        // Daca harta e goala, spune DE CE. Panoul scria "Waiting for the first
+        // snapshot" si cat timp bursa ne refuza — adica exact cand nu aveam ce
+        // sa asteptam. Motivul vine din bookFeed, nu e ghicit aici.
+        let stall = null;
+        if (!heat || !heat.frames) {
+            try {
+                const h = feed.health();
+                if (h && h.deepRefusal) stall = { reason: h.deepRefusal.reason, at: h.deepRefusal.at };
+            } catch (_) { /* fara motiv, dar ruta nu cade */ }
+        }
+
         res.json({
             symbol: sym,
             heat,
+            stall,
             ladder: { cells: ladder.cells, mid: ladder.mid, bandPct: ladder.bandPct,
                 rowPct: ladder.rowPct, maxUsd: ladder.maxUsd, frames: ladder.frames,
                 excludedLevels: ladder.excludedLevels },

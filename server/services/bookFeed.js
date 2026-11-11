@@ -67,6 +67,7 @@ const _top = new Map();           // symbol -> [frame] (WS, doar banda de sus)
 const _lastWs = new Map();        // symbol -> ts ultimul cadru păstrat
 let _ws = null, _wsTimer = null, _deepTimer = null, _stopped = true;
 let _usedWeight = 0, _wsFrames = 0, _wsKept = 0, _deepOk = 0, _deepFail = 0;
+let _deepRefusal = null;   // ultimul NU de la bursa: motiv + cand
 let _lastDemand = null;
 
 function _push(map, symbol, frame, maxN) {
@@ -126,7 +127,20 @@ async function _fetchDeep(symbol) {
         const res = await require('./binanceGateway').fetch(url, {
             signal: AbortSignal.timeout(9000), __src: 'bookmap:depth', __weight: 20,
         });
-        if (!res || !res.ok) { _deepFail++; return null; }
+        if (!res || !res.ok) {
+            _deepFail++;
+            // MOTIVUL, nu doar faptul. Varianta veche facea `return null` si
+            // panoul scria "Waiting for the first snapshot" cat timp bursa ne
+            // refuza — un mesaj fals, pentru ca nu asteptam nimic, ni se
+            // raspundea NU. Motivul e deja in corpul raspunsului sintetic.
+            let why = res && res._reason ? String(res._reason) : 'http_' + ((res && res.status) || 0);
+            try {
+                const b = await res.json();
+                if (b && b.reason) why = String(b.reason);
+            } catch (_) { /* corp necitibil — rămâne motivul de mai sus */ }
+            _deepRefusal = { reason: why, at: Date.now() };
+            return null;
+        }
         // Greutatea raportată de BINANCE, nu estimată de mine.
         try {
             const w = Number(res.headers && res.headers.get && res.headers.get('x-mbx-used-weight-1m'));
@@ -139,7 +153,23 @@ async function _fetchDeep(symbol) {
         });
         if (f) { f.src = 'rest'; f.levels = (j.bids || []).length + (j.asks || []).length; _deepOk++; }
         return f;
-    } catch (_) { _deepFail++; return null; }
+    } catch (e) {
+        _deepFail++;
+        _deepRefusal = { reason: 'network', at: Date.now(), detail: e && e.message };
+        return null;
+    }
+}
+
+/**
+ * Un refuz vechi nu mai acuza bursa.
+ *
+ * Fara expirare, un singur refuz ar lipi mesajul de eroare pe panou pentru
+ * totdeauna — inclusiv dupa ce cartea s-a umplut din nou.
+ */
+const REFUSAL_TTL_MS = 180_000;
+function refusalIfFresh(r, now) {
+    if (!r || !r.at) return null;
+    return (now - r.at) <= REFUSAL_TTL_MS ? r : null;
 }
 
 async function _deepTick() {
@@ -189,6 +219,7 @@ function health() {
         wsFrames: _wsFrames, wsKept: _wsKept, deepOk: _deepOk, deepFail: _deepFail,
         deepIntervalMs: _intervalFor(Date.now(), _lastDemand, _usedWeight),
         watchedRecently: !!(_lastDemand && Date.now() - _lastDemand <= DEMAND_TTL_MS),
+        deepRefusal: refusalIfFresh(_deepRefusal, Date.now()),
         symbols: per,
     };
 }
@@ -213,6 +244,7 @@ function stop() {
 
 module.exports = {
     start, stop, health, deepFrames, topFrames, noteDemand, SYMBOLS, _intervalFor,
+    refusalIfFresh, _fetchDeep, REFUSAL_TTL_MS,
     DEEP_LIMIT, DEEP_MS, DEEP_MS_SLOW, DEEP_MS_IDLE, DEMAND_TTL_MS,
     WEIGHT_SLOW_AT, WS_SAMPLE_MS, RING_MS, RING_MAX, TOP_MAX,
 };
