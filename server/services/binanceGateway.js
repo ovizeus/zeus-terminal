@@ -124,7 +124,11 @@ async function gatewayFetch(url, opts) {
 
     // Post-flight: record result in circuit breaker
     const status = res ? res.status : 0;
-    circuitBreaker.record(exchange, endpoint, status);
+    // Un 503 sintetic vine din PROPRIA poarta (ban/warm/presiune), nu de la
+    // bursa. Numarat ca eroare a ei, deschidea disjunctorul: 11 nov 2026, trei
+    // refuzuri la pornire au tinut klines-ul Bybit inchis 108 s si graficul a
+    // ramas fara rezerva ("cannot load data, HTTP 502").
+    if (!(res && res._synthetic === true)) circuitBreaker.record(exchange, endpoint, status);
 
     return res;
 }

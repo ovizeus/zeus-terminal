@@ -169,6 +169,9 @@ async function wrapFetch(fetchFn, url, opts) {
             return {
                 status: 503,
                 ok: false,
+                // Refuzul e AL NOSTRU, nu al bursei: disjunctorul nu are voie
+                // sa-l numere ca pe o cadere a ei (vezi binanceGateway).
+                _synthetic: true,
                 headers: { get: () => null },
                 json: async () => ({
                     code: 'BINANCE_SCHEDULER_BACKPRESSURE',

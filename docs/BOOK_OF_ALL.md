@@ -14172,3 +14172,19 @@ R-OP-1 un singur reload · R-OP-6 `version.js` validat (b380) · R-OP-8 suită c
 
 - Baza creşte: 2,6 G → 3,1 G în două zile.
 - După următorul ban: `SELECT event_json FROM binance_rate_state_log ORDER BY id DESC LIMIT 3` — `reason` trebuie să înceapă cu `[family:testnet]`, iar BOOK-ul să rămână plin.
+
+## După reload (b380, 21:27:11 UTC) — „Chart: cannot load data (HTTP 502)"
+
+Captura operatorului e de la 21:28:39 UTC. Trei lucruri suprapuse, 108 secunde:
+
+1. `_lastGood` din `routes/marketProxy.js` e în memorie — reload-ul l-a golit. Până atunci graficul trăia din el.
+2. Binance oprit de banul vechi, fără etichetă (până la 22:37 UTC).
+3. Disjunctorul de klines **Bybit** deschis la 21:27:31, „recovered" la 21:29:19, `refused: 263`. Cauza: `binanceGateway` chema `circuitBreaker.record()` şi pentru 503-ul **sintetic** al propriei porţi. Trei refuzuri la pornire = bursa „căzută".
+
+Nginx: 242 de cereri `/api/market/klines` cu 502, 7 cu 200 (după 21:29:19).
+
+**Reparat (livrat în cod, NEpornit — intră la următorul reload):** răspunsul sintetic al porţii poartă `_synthetic: true` (`binanceTelemetry.wrapFetch`), iar `binanceGateway` nu-l mai trece disjunctorului. Un 503 real îl deschide în continuare. Test: `tests/unit/gatewaySyntheticNotBreaker.test.js`, 2 mutanţi omorâţi. Neatins intenţionat: 429-ul preemptiv de presiune.
+
+**Greşeala mea:** am ales reload-ul în timpul banului fără să văd că golesc rezerva graficului. Am cântărit doar riscul faţă de Binance.
+
+**Deschis:** `_bybitKlineFallback` are `catch (_) { return null }` — a treia eroare înghiţită găsită azi (după `bookFeed._fetchDeep` şi `bybitFeed._emit`). Nereparat încă.
