@@ -555,7 +555,9 @@ function HeatView({ heat, price, onTap, onOut, zoomed, magnet }: { heat: any; pr
             // mincinoasa la margine: doar o sageata care spune incotro.
             if (magnet && magnet.target) {
                 const on = magnetOnAxis(magnet.target.pct, grid.lo - grid.step / 2, grid.hi + grid.step / 2)
-                const col = `rgb(${MAGNET_RGB})`
+                // [2026-11-12] Culoarea urmeaza directia, cerut de operator:
+                // magnet in SUS = verdele de pe chart, in JOS = rosul.
+                const col = magnet.side === 'UP' ? HEAT.short : magnet.side === 'DOWN' ? HEAT.long : `rgb(${MAGNET_RGB})`
                 const arrow = magnet.side === 'UP' ? '↑' : '↓'
                 g.textAlign = 'left'
                 // [2026-11-12] Eticheta sta pe AXA de pret, nu pe harta. Prima

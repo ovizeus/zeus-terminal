@@ -14473,3 +14473,9 @@ Suita verde înainte de build: client 2.042, typecheck curat. Nerandat în brows
 **De ţinut minte (din datele reale, 12 nov):** pe BTC magnetul NU are avantaj măsurat pe 1H şi 4H (sub rata de bază); 24H e în calibrare (16/30, ~13 zile).
 
 Teste schimbate deliberat în `bookRender.test.tsx` (FIT nu mai există). Suita verde înainte de build: client 2.055, typecheck curat. Nerandat în browser — confirmă operatorul.
+
+### 🧲 2026-11-12 — Magnetul colorat după direcţie (doar client)
+
+Cerut de operator: magnetul roşu/verde după long/short, în ambele taburi. Magnet în SUS = verdele de pe chart (`#00d97a`), în JOS = roşul (`#ff3355`): caseta (HEATMAP şi BOOK), dunga punctată şi cartuşul de pe axa heatmap-ului. Stările fără direcţie („Collecting data…", „No magnet right now", „measured for BTC and ETH only") rămân gri. Violetul nu mai e folosit pentru un magnet viu.
+
+Suita verde înainte de build: client 2.055, typecheck curat. Nerandat în browser — confirmă operatorul.

@@ -891,3 +891,11 @@
 .zbk-depth { font-family: ui-monospace, monospace; font-size: 10px; color: #e8c547; background: rgba(7, 10, 14, .8); padding: 2px 5px; border-radius: 3px; }
 .zlq-mag-tag.proven { color: #0a0f14; background: #b68cff; border-color: #b68cff; }
 .zlq-mag-tag.no-edge { color: #d8b25e; border-color: #4a3f26; }
+
+/* ── MAGNET: culoarea urmeaza directia (2026-11-12) — sus verde, jos rosu ── */
+.zlq-mag.up { border-color: #153a2b; border-left-color: #00d97a; background: #08130f; }
+.zlq-mag.up .zlq-mag-hd b { color: #00d97a; }
+.zlq-mag.down { border-color: #45182a; border-left-color: #ff3355; background: #160a0e; }
+.zlq-mag.down .zlq-mag-hd b { color: #ff3355; }
+.zlq-mag.up .zlq-mag-tag.proven { background: #00d97a; border-color: #00d97a; }
+.zlq-mag.down .zlq-mag-tag.proven { background: #ff3355; border-color: #ff3355; }
