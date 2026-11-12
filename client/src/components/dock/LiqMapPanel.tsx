@@ -11,7 +11,7 @@ import {
     fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
     yToPrice, zoomStep, zoomStepOut, zoomLabel,
-    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows, cobCumulative,
+    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows, cobCumulative, cobPeak, rowToPrice, fmtBookPrice,
     cobLabelText, pickCobLabels, bookStallMessage,
     type Trade, type Liq,
 } from '../../bookmap/book'
@@ -830,7 +830,7 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                 // la capatul ei. [2026-11-12] Prima varianta scria cifra in
                 // coltul panzei, unde se calca pe pretul de pe axa — operatorul
                 // a vazut „72,54M": pret si total lipite.
-                const flag = (steps: { row: number }[], up: boolean, usd: number, label: string, rgb: string) => {
+                const flag = (steps: { row: number }[], up: boolean, usd: number, label: string, rgb: string, side: 'ask' | 'bid') => {
                     if (!steps.length || !(usd > 0)) return
                     const far = steps[steps.length - 1]
                     const yEdge = rowToY(far.row, rows, h) + (up ? 0 : ch)
@@ -853,9 +853,40 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                     ctx.fillRect(x0, y - 8, pw, 16)
                     ctx.fillStyle = '#06090c'
                     ctx.fillText(txt, x0 + 6, y + 0.5)
+
+                    // Lipit de total: cel mai gros nivel de pe partea asta si
+                    // PRETUL lui. Se scrie doar daca incape pana la bare, cu
+                    // loc de dunga dupa el — altfel forma scurta, altfel nimic.
+                    // O eticheta taiata sau calcata pe bare e mai rea decat una
+                    // lipsa; pretul ramane oricum in casetele de sub harta.
+                    const pk = cobPeak(cob, side)
+                    const px = pk ? rowToPrice(pk.row, rows, Number(heat.priceLo), Number(heat.priceHi)) : null
+                    const pxTxt = px ? fmtBookPrice(px) : ''
+                    if (pk && pxTxt) {
+                        const room = (cx + cobW) - (x0 + pw) - 14
+                        const amt = cobLabelText(pk.usd)
+                        const pick = [amt ? `max ${amt} @ ${pxTxt}` : '', `max @ ${pxTxt}`, `@ ${pxTxt}`]
+                            .find((t) => t && ctx.measureText(t).width + 12 <= room)
+                        if (pick) {
+                            const cw2 = ctx.measureText(pick).width + 12
+                            ctx.fillStyle = 'rgba(7,10,14,.94)'
+                            ctx.fillRect(x0 + pw, y - 8, cw2, 16)
+                            ctx.strokeStyle = `rgb(${rgb})`
+                            ctx.lineWidth = 1
+                            ctx.strokeRect(x0 + pw + 0.5, y - 7.5, cw2 - 1, 15)
+                            ctx.fillStyle = `rgb(${rgb})`
+                            ctx.fillText(pick, x0 + pw + 6, y + 0.5)
+                        }
+                        // sageata mica pe randul zidului, la marginea barelor
+                        const yp = rowToY(pk.row, rows, h) + ch / 2
+                        ctx.fillStyle = '#ffd77a'
+                        ctx.beginPath()
+                        ctx.moveTo(cx - 1, yp); ctx.lineTo(cx - 7, yp - 4); ctx.lineTo(cx - 7, yp + 4)
+                        ctx.closePath(); ctx.fill()
+                    }
                 }
-                flag(cum.ask.steps, true, cum.ask.usd, 'Asks', BOOK.ask)
-                flag(cum.bid.steps, false, cum.bid.usd, 'Bids', BOOK.bid)
+                flag(cum.ask.steps, true, cum.ask.usd, 'Asks', BOOK.ask, 'ask')
+                flag(cum.bid.steps, false, cum.bid.usd, 'Bids', BOOK.bid, 'bid')
                 ctx.textAlign = 'left'
             }
         } catch { /* fara dunga, dar cu harta intreaga */ }
@@ -944,9 +975,14 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
             {(() => {
                 const cum = cobCumulative(cobRows(heat.cells, heat.cols))
                 if (!(cum.scale > 0)) return null
+                const peakOf = (k: 'ask' | 'bid') => {
+                    const pk = cobPeak(cobRows(heat.cells, heat.cols), k)
+                    const px = pk ? rowToPrice(pk.row, heat.rows, Number(heat.priceLo), Number(heat.priceHi)) : null
+                    return pk && px ? `max ${fmtUsd(pk.usd)} @ ${fmtBookPrice(px)}` : ''
+                }
                 const row = (k: 'ask' | 'bid', label: string) => (
                     <div className={'zbk-sum-row ' + k + (cum.heavier === k ? ' heavier' : '')}>
-                        <span>{label}</span>
+                        <span>{label}<em className="zbk-sum-pk">{peakOf(k)}</em></span>
                         <span className="zbk-sum-p">{Math.round(cum[k].share * 100)}%</span>
                         <span className="zbk-sum-v">{fmtUsd(cum[k].usd)}</span>
                     </div>

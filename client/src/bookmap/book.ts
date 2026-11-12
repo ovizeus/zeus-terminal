@@ -558,3 +558,37 @@ export function cobCumulative(cob: { row: number; bidUsd: number; askUsd: number
     }
     return out
 }
+
+// ── COB: cel mai gros nivel pe fiecare parte (2026-11-12) ───────────────────
+// Langa total, si UNDE e zidul cel mai mare. La egalitate ramane nivelul mai
+// apropiat de spread: acela e atins primul.
+export function cobPeak(
+    cob: { row: number; bidUsd: number; askUsd: number }[], side: 'ask' | 'bid',
+): { row: number; usd: number } | null {
+    if (!Array.isArray(cob)) return null
+    let best: { row: number; usd: number } | null = null
+    for (const r of cob) {
+        const row = Number(r && r.row)
+        const usd = Number(r && (side === 'ask' ? r.askUsd : r.bidUsd))
+        if (!Number.isFinite(row) || !Number.isFinite(usd) || usd <= 0) continue
+        const nearer = best !== null && usd === best.usd && (side === 'ask' ? row < best.row : row > best.row)
+        if (best === null || usd > best.usd || nearer) best = { row, usd }
+    }
+    return best
+}
+
+/** Pretul de la mijlocul unui rand; randul 0 e JOS. `null` pe o grila fara sens. */
+export function rowToPrice(row: number, rows: number, priceLo: number, priceHi: number): number | null {
+    const r = Number(row), R = Number(rows), lo = Number(priceLo), hi = Number(priceHi)
+    if (![r, R, lo, hi].every(Number.isFinite) || R <= 0 || !(hi > lo) || r < 0 || r >= R) return null
+    return lo + (r + 0.5) * ((hi - lo) / R)
+}
+
+export function fmtBookPrice(p: number): string {
+    const v = Number(p)
+    if (!Number.isFinite(v) || v <= 0) return ''
+    if (v >= 1000) return Math.round(v).toLocaleString('en-US')
+    if (v >= 100) return v.toFixed(1)
+    if (v >= 1) return v.toFixed(2)
+    return v.toFixed(4)
+}

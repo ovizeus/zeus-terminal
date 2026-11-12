@@ -810,3 +810,6 @@
 .zbk-sum-row.heavier { background: #101a23; border-color: #2a3b4b; }
 .zbk-sum-row.heavier .zbk-sum-v, .zbk-sum-row.heavier .zbk-sum-p { color: #ffd77a; }
 @media (max-width: 420px) { .zbk-sum { grid-template-columns: 1fr; } }
+.zbk-sum-pk { display: block; margin-top: 2px; font-style: normal; font-size: 9.5px; color: #6f8496; }
+.zbk-sum-row.ask .zbk-sum-pk { color: #ffb27a; }
+.zbk-sum-row.bid .zbk-sum-pk { color: #3fd8c4; }

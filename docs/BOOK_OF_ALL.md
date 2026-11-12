@@ -14384,3 +14384,15 @@ Fişier: `LiqMapPanel.tsx` (pasul 6). Typecheck curat, build ca `zeus`. Nerandat
 **Greşeala mea:** am lansat build-ul în acelaşi lanţ cu testele şi s-a servit un pachet cu un test roşu (`bookRender.test.tsx` — ţinea geometria veche a COB-ului). Testul a fost adus la geometria nouă şi întărit (nicio bară în fâşia cifrelor). Client 2.003 verzi, typecheck curat. De acum build-ul se face DUPĂ ce suita e verde, nu alături.
 
 Nerandat în browser — confirmă operatorul.
+
+### 🧮 2026-11-12 — BOOK: lângă total, preţul celui mai gros nivel (doar client)
+
+**Cerut de operator:** lângă „Asks"/„Bids" cu totalul, şi preţul la care e maxima, pe aceleaşi linii, fără să se calce.
+
+- Lipit de eticheta plină a totalului, o a doua casetă cu contur: `max 6.1M @ 71,790` — suma celui mai gros nivel de pe partea aceea şi preţul lui.
+- Se scrie doar dacă încape până la bare, cu loc de dungă după ea; altfel forma scurtă (`max @ 71,790`, apoi `@ 71,790`), altfel nimic. Nu se taie şi nu se calcă pe bare.
+- O săgeată galbenă mică, la marginea barelor, arată rândul zidului.
+- Acelaşi text apare şi în casetele de sub hartă, sub „Asks resting above" / „Bids resting below".
+- Preţul e mijlocul rândului de pe grilă (rândul are câţiva dolari pe BTC), nu preţul exact al unui ordin; tabelul „Thickest resting levels" rămâne sursa pentru preţul exact.
+
+**Fişiere:** `bookmap/book.ts` (`cobPeak`, `rowToPrice`, `fmtBookPrice`), `LiqMapPanel.tsx`, `liqmap.css`. Test: `bookmap/__tests__/cobPeak.test.ts` (7). Suita verde ÎNAINTE de build: client 2.010, typecheck curat. Nerandat în browser — confirmă operatorul.
