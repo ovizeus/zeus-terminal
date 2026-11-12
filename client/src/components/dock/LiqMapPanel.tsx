@@ -823,19 +823,37 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                 }
                 stroke(cum.ask.steps, true, '#ffe2c7')
                 stroke(cum.bid.steps, false, '#d6fff6')
-                // totalul la capat: sus vanzarile, jos cumpararile
-                ctx.font = 'bold 9px monospace'
-                ctx.textAlign = 'right'
-                const tag = (txt: string, y: number, color: string) => {
+                // Totalul la capat, ca la Coinglass: o dunga PUNCTATA de la
+                // capatul curbei spre stanga, peste harta, si o eticheta plina
+                // la capatul ei. [2026-11-12] Prima varianta scria cifra in
+                // coltul panzei, unde se calca pe pretul de pe axa — operatorul
+                // a vazut „72,54M": pret si total lipite.
+                const flag = (steps: { row: number }[], up: boolean, usd: number, label: string, rgb: string) => {
+                    if (!steps.length || !(usd > 0)) return
+                    const far = steps[steps.length - 1]
+                    const yEdge = rowToY(far.row, rows, h) + (up ? 0 : ch)
+                    const y = Math.max(9, Math.min(h - 9, yEdge))
+                    const txt = label + ' ' + fmtUsd(usd)
+                    ctx.font = 'bold 10px monospace'
+                    ctx.textAlign = 'left'
+                    ctx.textBaseline = 'middle'
                     const tw = ctx.measureText(txt).width
-                    ctx.fillStyle = 'rgba(7,10,14,.88)'
-                    ctx.fillRect(w - tw - 6, y - 6, tw + 6, 12)
-                    ctx.fillStyle = color
-                    ctx.fillText(txt, w - 3, y)
+                    // butonul FIT sta in coltul din stanga-sus
+                    const x0 = y < 40 ? 62 : 4
+                    const pw = tw + 12
+                    ctx.save()
+                    ctx.setLineDash([4, 3])
+                    ctx.lineWidth = 1.2
+                    ctx.strokeStyle = `rgba(${rgb}, .95)`
+                    ctx.beginPath(); ctx.moveTo(x0 + pw, y); ctx.lineTo(w, y); ctx.stroke()
+                    ctx.restore()
+                    ctx.fillStyle = `rgb(${rgb})`
+                    ctx.fillRect(x0, y - 8, pw, 16)
+                    ctx.fillStyle = '#06090c'
+                    ctx.fillText(txt, x0 + 6, y + 0.5)
                 }
-                const ta = cobLabelText(cum.ask.usd), tb = cobLabelText(cum.bid.usd)
-                if (ta) tag(ta, 7, '#ffe2c7')
-                if (tb) tag(tb, h - 7, '#d6fff6')
+                flag(cum.ask.steps, true, cum.ask.usd, 'Asks', BOOK.ask)
+                flag(cum.bid.steps, false, cum.bid.usd, 'Bids', BOOK.bid)
                 ctx.textAlign = 'left'
             }
         } catch { /* fara dunga, dar cu harta intreaga */ }

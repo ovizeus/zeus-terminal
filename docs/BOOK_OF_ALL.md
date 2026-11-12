@@ -14364,3 +14364,11 @@ Cerut de operator după MAP: „da, pune dunga şi pe book".
 **Fişiere:** `client/src/bookmap/book.ts` (`cobCumulative`, pură), `LiqMapPanel.tsx` (pasul 6 din desen + casetele), `liqmap.css`. Test: `bookmap/__tests__/cobCumulative.test.ts` (5). Client 2.003 teste, typecheck curat, build ca `zeus`.
 
 **Neverificat:** nerandat în browser; aşezarea o confirmă operatorul pe telefon.
+
+### 🧮 2026-11-12 — BOOK: totalul mutat pe o dungă punctată cu etichetă (doar client)
+
+**Văzut de operator pe telefon:** totalul scris în colţul pânzei se călca pe preţul de pe axă („72,54M" — preţ şi total lipite). Greşeala mea: am pus cifra exact unde stă eticheta axei şi nu am randat.
+
+**Reparat, ca la Coinglass:** de la capătul fiecărei curbe pleacă spre stânga, peste hartă, o dungă punctată; la capătul ei din stânga e o etichetă plină — „Asks $54.15M" (portocaliu) sus, „Bids $48.46M" (cyan) jos. Colţurile pânzei rămân doar ale preţului. Lângă butonul FIT eticheta se mută la dreapta lui. Casetele de sub hartă au rămas.
+
+Fişier: `LiqMapPanel.tsx` (pasul 6). Typecheck curat, build ca `zeus`. Nerandat în browser — confirmă operatorul.
