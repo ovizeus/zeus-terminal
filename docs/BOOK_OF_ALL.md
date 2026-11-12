@@ -14238,3 +14238,68 @@ Deci testnet-ul ne banează la două cereri, pe o adresă care nu e a noastră. 
 ## Aşteaptă un reload (cu voia operatorului)
 
 `0875c228` (disjunctorul ignoră refuzul propriei porţi) şi commit-ul de mai sus.
+
+---
+
+# 🚨 2026-11-12, 02:30 UTC — CONTURILE DE PE BINANCE NU PRIMESC DECIZII. Garda mea din 9 nov. (b381, NEpornit)
+
+## Cum am aflat
+
+Verificând starea finală, `brain_decisions` pe oră:
+
+| oră UTC | uid=1 | uid=2 | uid=5,11–15 |
+|---|---|---|---|
+| 11 nov 18–20 | 120 | ~370 | 120 fiecare |
+| 11 nov 21 (reload la 21:27) | 54 | 349 | 54 |
+| 11 nov 22 → 12 nov 02 | **0** | ~450 | **0** |
+
+Mai devreme în aceeaşi seară raportasem „8 din 8 conturi intră". Era adevărat **până la reload-ul meu**.
+
+## Cauza
+
+`marketFeed.subscribe`, garda scrisă de mine pe 9 nov:
+
+```js
+if (!d.seed) { logger.warn(... 'skipping initial candle fetch' ...); return; }
+```
+
+`return` iese din **toată** funcţia. Sare peste istoric, dar şi peste pornirea pollerelor de bare, a pollerului de preţ şi a fluxurilor. Self-heal umple apoi istoricul (`initial: true`), însă acel drum nu setează `price`/`priceTs`. Brain-ul are la `serverBrain.js:997` un `continue` mut pe date vechi → simbolul e sărit, fără niciun rând în log.
+
+Dovezi:
+- linia `[ALT_WS_FEEDS=ON] <SYM>` (pornirea citirii vii): **0** apariţii după reload-ul din 11 nov; **1** (doar BTCUSDT) după cel din 9 nov;
+- poziţiile demo de pe BNBUSDT/SOLUSDT (uid 2, 11–15) sunt deschise din 9 nov şi au `updated_at` tot din 9 nov;
+- rândul de preţuri de sus gol în capturile operatorului.
+
+Deci din 9 nov, 19:59, pe Binance a trăit doar BTCUSDT; din 11 nov, 21:27, nimic.
+
+## Reparaţia
+
+Garda sare **doar** peste istoric (`seedHistory = false`), restul funcţiei rulează. Test: `tests/unit/bootGuardKeepsLiveFeed.test.js` — rulează `subscribe` întreg, în ban şi fără; 2 mutanţi omorâţi (inclusiv `return`-ul vechi pus la loc). Testul vechi verifica doar funcţia pură `shouldSeedAtBoot`; nimeni nu verifica ce face `subscribe` după ce garda spune „nu".
+
+Suită completă: 10.687 trecute, EXIT=0.
+
+## De ce NU am făcut reload
+
+Operatorul a spus „aşteptăm şi vedem dimineaţa", iar eu i-am promis că nu ating nimic. Toate conturile sunt pe **demo**; costul aşteptării e câteva ore fără tranzacţii demo. Nu-i înlocuiesc decizia cu judecata mea (lecţia din 4–5 nov). Totul e pregătit pentru un singur cuvânt.
+
+## Ce se întâmplă la reload — de spus operatorului ÎNAINTE
+
+La preţurile de la 02:10 UTC (BNB ≈ 678,7 · SOL ≈ 83,3 · ETH ≈ 2.085), când revine preţul viu:
+- uid=2 BNBUSDT LONG (SL 679,41) şi ETHUSDT LONG (SL 2.107,26) — sub stop → se închid **în pierdere**;
+- uid=15 SOLUSDT SHORT (TP 83,75) — peste ţintă → se închide **pe profit**;
+- uid=11–14 BNBUSDT SHORT (SL 691–695, TP 658–674) — rămân deschise, pe plus.
+
+Toate demo. Sunt închideri corecte, întârziate cu zile.
+
+## Greşelile mele, pe faţă
+
+- **Garda din 9 nov a oprit tranzacţionarea pe Binance** — parţial două zile, total cinci ore şi numărând. Am testat-o doar ca funcţie pură.
+- **Am raportat „6 conturi ţin poziţii deschise" ca dovadă că merge.** Erau poziţii îngheţate. O poziţie deschisă nu dovedeşte că e şi condusă.
+- **Am ales reload-ul în timpul unui ban**, adică exact condiţia care declanşează garda pe toate simbolurile.
+- `atStarvationWatch`, făcut tocmai pentru asta, n-a scris nimic. De cercetat.
+
+## Deschis
+
+- De ce a tăcut `atStarvationWatch`.
+- `continue`-ul mut de la `serverBrain.js:997` — un simbol sărit ore întregi ar trebui să lase un rând, pe muchie.
+- Self-heal: după `initial: true`, preţul rămâne nesetat dacă citirea vie nu merge.
