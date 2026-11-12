@@ -14415,3 +14415,15 @@ Operatorul a cerut mai multe detalii pe heatmap, cu propunerea ÎNAINTE de cod. 
 **Reparat în trecere:** numărul de rânduri presupunea treapta fixă de 0,25%; acum vine din `heat.bucket`, ca la zoom.
 
 **Fişiere:** `client/src/liqmap/heat.ts` (nou, pur), `LiqMapPanel.tsx` (`HeatView`), `liqmap.css`. Test: `liqmap/__tests__/heat.test.ts` (18). Suita verde înainte de build: client 2.028, typecheck curat. Nerandat în browser — confirmă operatorul.
+
+### 🗺️ 2026-11-12 — HEATMAP: atingi un pătrat şi vezi ce e în el + roşu/verde de pe chart (doar client)
+
+**Cerut de operator:** punctul 7 rămas de la heatmap, şi culorile hărţii schimbate în roşul şi verdele lumânărilor de pe chart.
+
+- **Atingerea alege un pătrat.** Sub hartă apare o casetă cu intervalul de timp (ora locală), preţul nivelului şi distanţa în %, longuri lichidate, shorturi lichidate, numărul de lichidări şi totalul. Pătratul ales are contur alb şi două linii fine până la axe. Atingerea departe de orice pătrat (sau ×) închide caseta.
+- O coloană are sub 3px pe telefon, deci se alege cel mai apropiat pătrat CU DATE pe o rază de 16px, nu „cel de sub deget".
+- Alegerea se ţine ca cheie (coloană + nivel): după zoom sau la date noi, dacă pătratul nu mai există, caseta dispare singură.
+- **Zoom-ul s-a mutat** de pe pânză pe butonul „+ Zoom" din colţul hărţii. Ieşirea din zoom rămâne în antet, ca înainte. Testul vechi care cerea zoom la atingerea pânzei a fost schimbat deliberat (gestul s-a schimbat la cererea operatorului).
+- **Culorile:** long lichidat = `#ff3355`, short lichidat = `#00d97a` (din `marketDataChart.ts`). Doar pe HEATMAP: pătrate, profil, etichetele maximelor, scara de culoare, legenda şi casetele. MAP, LIVE şi BOOK rămân chihlimbar/cyan.
+
+**Fişiere:** `liqmap/heat.ts` (`HEAT`, `heatCellColor`, `heatLayout`, `nearestCell`, `cellTimeRange`, `fmtCellTime`), `LiqMapPanel.tsx`, `liqmap.css`. Teste: `heatTap.test.ts` (12), `liqMapRender.test.tsx` (+1, 1 schimbat). Suita verde înainte de build: client 2.041, typecheck curat. Nerandat în browser — confirmă operatorul.

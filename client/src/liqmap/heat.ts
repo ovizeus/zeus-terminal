@@ -145,3 +145,91 @@ export function scaleSteps(maxUsd: number, n = 5): Array<{ usd: number; i: numbe
     }
     return out
 }
+
+// ── Culorile hartii de caldura (2026-11-12) ─────────────────────────────────
+// Cerut de operator: rosul si verdele lumanarilor de pe chart (`#ff3355`,
+// `#00d97a`, din marketDataChart.ts). Long lichidat = vanzare fortata = rosu;
+// short lichidat = cumparare fortata = verde. Doar harta de caldura — MAP,
+// LIVE si BOOK isi pastreaza chihlimbarul si cyanul.
+export const HEAT = {
+    long: '#ff3355',
+    short: '#00d97a',
+    longRgb: [255, 51, 85] as [number, number, number],
+    shortRgb: [0, 217, 122] as [number, number, number],
+}
+
+export function heatCellColor(isLong: boolean, i: number): string {
+    let a = Number(i)
+    if (!Number.isFinite(a)) a = 0
+    a = Math.max(0, Math.min(1, a))
+    const [r, g, b] = isLong ? HEAT.longRgb : HEAT.shortRgb
+    if (a === 0) return `rgba(${r}, ${g}, ${b}, 0)`
+    return `rgba(${r}, ${g}, ${b}, ${Math.max(0.12, a).toFixed(3)})`
+}
+
+// ── Geometria panzei: aceeasi la desen si la atingere ───────────────────────
+export type HeatLayout = {
+    W: number; H: number
+    axisW: number; timeH: number; profW: number
+    mapW: number; mapH: number
+    px0: number; ax0: number
+    cw: number; rh: number
+    yTop: (pct: number) => number
+    yAt: (pct: number) => number
+}
+
+export function heatCanvasSize(boxW: number): { W: number; H: number } {
+    const W = Math.max(240, Math.floor(Number(boxW)) || 320)
+    return { W, H: Math.max(236, Math.min(476, Math.round(W * 1.15) + 16)) }
+}
+
+export function heatLayout(W: number, H: number, grid: HeatGrid): HeatLayout {
+    const axisW = 46, timeH = 16
+    const profW = Math.max(34, Math.min(60, Math.round(W * 0.14)))
+    const mapW = Math.max(60, W - profW - axisW - 4)
+    const mapH = H - timeH
+    const cw = mapW / grid.cols, rh = mapH / grid.rows
+    return {
+        W, H, axisW, timeH, profW, mapW, mapH,
+        px0: mapW + 2, ax0: mapW + 2 + profW + 2, cw, rh,
+        yTop: (pct: number) => mapH - (grid.rowOf(pct) + 1) * rh,
+        yAt: (pct: number) => mapH - ((pct - grid.lo) / grid.step + 0.5) * rh,
+    }
+}
+
+/**
+ * Cel mai apropiat patrat CU DATE de punctul atins. O coloana are sub 3px pe
+ * telefon, deci „patratul de sub deget" nu exista practic; raza iarta.
+ */
+export function nearestCell<T extends { t: number; pct: number; longUsd: number; shortUsd: number }>(
+    cells: T[], x: number, y: number, L: HeatLayout, maxDist = 16,
+): T | null {
+    if (!Array.isArray(cells) || !Number.isFinite(x) || !Number.isFinite(y)) return null
+    if (x < 0 || x > L.mapW || y < 0 || y > L.mapH) return null
+    let best: T | null = null, bestD = Infinity
+    for (const c of cells) {
+        if (!c || !(pos(c.longUsd) + pos(c.shortUsd) > 0)) continue
+        const x0 = c.t * L.cw, y0 = L.yTop(c.pct)
+        // distanta pana la dreptunghi (0 daca punctul e inauntru)
+        const dx = Math.max(x0 - x, 0, x - (x0 + L.cw))
+        const dy = Math.max(y0 - y, 0, y - (y0 + L.rh))
+        const d = Math.hypot(dx, dy)
+        if (d < bestD) { bestD = d; best = c }
+    }
+    return bestD <= maxDist ? best : null
+}
+
+export function cellTimeRange(t: number, cols: number, tMin: number, tMax: number): { from: number; to: number } | null {
+    const c = Number(cols), a = Number(tMin), b = Number(tMax), k = Number(t)
+    if (![c, a, b, k].every(Number.isFinite) || c <= 0 || !(b > a) || a <= 0 || k < 0 || k >= c) return null
+    const w = (b - a) / c
+    return { from: Math.round(a + k * w), to: Math.round(a + (k + 1) * w) }
+}
+
+export function fmtCellTime(from: number, to: number, tzOffsetMin = 0): string {
+    const A = new Date(Number(from) + tzOffsetMin * 60_000), B = new Date(Number(to) + tzOffsetMin * 60_000)
+    if (!Number.isFinite(A.getTime()) || !Number.isFinite(B.getTime())) return ''
+    const day = (d: Date) => `${two(d.getUTCDate())}/${two(d.getUTCMonth() + 1)}`
+    const hm = (d: Date) => `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`
+    return day(A) === day(B) ? `${day(A)} ${hm(A)} – ${hm(B)}` : `${day(A)} ${hm(A)} – ${day(B)} ${hm(B)}`
+}

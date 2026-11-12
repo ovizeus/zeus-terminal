@@ -826,3 +826,31 @@
 .zlq-scale-bar { display: inline-flex; background: #070a0e; border: 1px solid #1a2531; border-radius: 2px; overflow: hidden; }
 .zlq-scale-bar i { display: block; width: 14px; height: 10px; }
 .zlq-scale-v { color: #d7e5f0; font-variant-numeric: tabular-nums; }
+
+/* ── HEATMAP: rosu/verde de pe chart + patratul atins (2026-11-12) ── */
+.zbk-sum-row.lg { border-left: 3px solid #ff3355; }
+.zbk-sum-row.sh { border-left: 3px solid #00d97a; }
+.zbk-sum-row.lg .zbk-sum-pk { color: #ff7a8f; }
+.zbk-sum-row.sh .zbk-sum-pk { color: #4be3a0; }
+.zlq-heat-cv { position: relative; }
+.zlq-heat canvas.zlq-pick { cursor: crosshair; touch-action: manipulation; }
+.zlq-heat-zoom {
+    position: absolute; top: 6px; left: 6px;
+    padding: 4px 9px; border: 1px solid #2a3b4b; border-radius: 4px;
+    background: rgba(7, 10, 14, .86); color: #d7e5f0;
+    font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; cursor: zoom-in;
+}
+.zlq-heat-zoom:active { background: #101a23; }
+.zlq-cell {
+    border: 1px solid #2a3b4b; border-radius: 4px; background: #0b1219; padding: 7px 9px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; font-size: 11px;
+}
+.zlq-cell-hd { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline; color: #d7e5f0; margin-bottom: 5px; }
+.zlq-cell-px { color: #ffd77a; font-weight: 700; }
+.zlq-cell-px em { font-style: normal; font-weight: 400; color: #8fa6b8; font-size: 10px; }
+.zlq-cell-x { border: 0; background: none; color: #8fa6b8; font-size: 15px; line-height: 1; padding: 0 2px; cursor: pointer; }
+.zlq-cell-row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; color: #8fa6b8; }
+.zlq-cell-row i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.zlq-cell-row b { color: #d7e5f0; }
+.zlq-cell-row.tot { border-top: 1px solid #1a2531; margin-top: 3px; padding-top: 5px; }
+.zlq-cell-hint { font-size: 10px; color: var(--liq-dim); }

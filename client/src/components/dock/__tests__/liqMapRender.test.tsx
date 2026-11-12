@@ -320,10 +320,32 @@ describe('zoom pe axa de pret', () => {
     const { container } = render(<LiqMapPanel />)
     await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
     fireEvent.click(screen.getByText('HEATMAP'))
+    // [2026-11-12] Zoom-ul s-a mutat de pe panza pe butonul din colt: atingerea
+    // panzei alege acum un patrat (cerut de operator, punctul 7).
+    const zoom = container.querySelector('.zlq-heat .zlq-heat-zoom') as HTMLElement
+    expect(zoom).toBeTruthy()
+    fireEvent.click(zoom)
+    await waitFor(() => expect(Number(span(lastPanel()))).toBeCloseTo(0.7, 6))
+  })
+
+  it('tap pe un patrat din HARTA DE CALDURA arata ce e in el si NU face zoom', async () => {
+    const { container } = render(<LiqMapPanel />)
+    await waitFor(() => expect(screen.getByText(/458/)).toBeTruthy())
+    fireEvent.click(screen.getByText('HEATMAP'))
     const cv = container.querySelector('.zlq-heat canvas') as HTMLElement
     expect(cv).toBeTruthy()
-    fireEvent.click(cv)
-    await waitFor(() => expect(Number(span(lastPanel()))).toBeCloseTo(0.7, 6))
+    expect(container.querySelector('.zlq-cell')).toBeNull()
+    // In jsdom panza are 320x384: harta e lata de 225 si inalta de 368, cu 8
+    // randuri. Celula (t=42, -0,25%) sta pe randul de jos, in jurul lui x=106.
+    fireEvent.click(cv, { clientX: 106, clientY: 345 })
+    await waitFor(() => expect(container.querySelector('.zlq-cell')).toBeTruthy())
+    const txt = (container.querySelector('.zlq-cell') as HTMLElement).textContent || ''
+    expect(txt).toContain('$2.56M')
+    expect(txt).toContain('11 liquidations')
+    expect(span(lastPanel())).toBeNull()
+    // departe de orice patrat: detaliile se inchid
+    fireEvent.click(cv, { clientX: 200, clientY: 200 })
+    await waitFor(() => expect(container.querySelector('.zlq-cell')).toBeNull())
   })
 
   it('fiecare tap intra mai adanc', async () => {

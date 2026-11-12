@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
-import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
+import { fmtUsd, fmtPct, intensity, barColor, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
-import { heatGrid, heatProfile, heatSides, priceTicks, timeTicks, scaleSteps } from '../../liqmap/heat'
+import {
+    heatGrid, heatProfile, heatSides, priceTicks, timeTicks, scaleSteps,
+    heatCanvasSize, heatLayout, nearestCell, cellTimeRange, fmtCellTime, heatCellColor, HEAT,
+} from '../../liqmap/heat'
 import { spanStep, spanStepOut, spanLabel, SPAN_FACTOR } from '../../liqmap/scale'
 import {
     fetchPredict, sideLabel, horizonLabel, strengthBar, targetLabel,
@@ -385,12 +388,17 @@ function SideTotal({ side, where, heavier }: { side: LadderSide; where: 'above' 
 // iar pe telefon asta se simte imediat.
 function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: () => void }) {
     const ref = useRef<HTMLCanvasElement | null>(null)
+    // [2026-11-12] Patratul atins. Se tine cheia (coloana + nivel), nu obiectul:
+    // la urmatoarea aducere celula e alt obiect, iar dupa zoom poate sa nu mai
+    // existe deloc — atunci detaliile dispar singure, nu raman pe date vechi.
+    const [selKey, setSelKey] = useState<string | null>(null)
+    const sel = selKey && heat?.cells
+        ? heat.cells.find((c: any) => c.t + '|' + c.pct === selKey) || null : null
     useEffect(() => {
         const cv = ref.current
         if (!cv) return
         const box = cv.parentElement
-        const W = Math.max(240, box?.clientWidth || 320)
-        const H = Math.max(236, Math.min(476, Math.round(W * 1.15) + 16))
+        const { W, H } = heatCanvasSize(box?.clientWidth || 320)
         const dpr = Math.min(2, window.devicePixelRatio || 1)
         cv.width = W * dpr; cv.height = H * dpr
         cv.style.width = W + 'px'; cv.style.height = H + 'px'
@@ -405,25 +413,14 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
         // [2026-11-12] Asezarea: harta | profil pe pret | axa de pret, iar jos
         // o fasie pentru ore. Inainte erau doar patrate — nu puteai citi nici
         // la ce pret, nici la ce ora.
-        const axisW = 46
-        const timeH = 16
-        const profW = Math.max(34, Math.min(60, Math.round(W * 0.14)))
-        const mapW = Math.max(60, W - profW - axisW - 4)
-        const mapH = H - timeH
-        const px0 = mapW + 2                 // unde incepe profilul
-        const ax0 = px0 + profW + 2          // unde incepe axa de pret
-        const cw = mapW / grid.cols
-        const rh = mapH / grid.rows
-        const yTop = (pct: number) => mapH - (grid.rowOf(pct) + 1) * rh
+        const { axisW, timeH, profW, mapW, mapH, px0, ax0, cw, rh, yTop, yAt } = heatLayout(W, H, grid)
         const yMid = (pct: number) => yTop(pct) + rh / 2
-        // pozitie continua pe axa (pentru repere care nu cad pe un rand)
-        const yAt = (pct: number) => mapH - ((pct - grid.lo) / grid.step + 0.5) * rh
 
         // ── 1. celulele ──
         for (const c of heat.cells) {
             const tot = c.longUsd + c.shortUsd
             const isLong = c.longUsd >= c.shortUsd
-            g.fillStyle = cellColor(isLong, intensity(tot, heat.maxUsd))
+            g.fillStyle = heatCellColor(isLong, intensity(tot, heat.maxUsd))
             g.fillRect(c.t * cw, yTop(c.pct), Math.max(1.5, cw - 0.5), Math.max(1.5, rh - 0.5))
         }
 
@@ -449,8 +446,8 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
             prof.rows.forEach((r, i) => {
                 const y = i * rh
                 const lw = (r.longUsd / pm) * profW, sw = (r.shortUsd / pm) * profW
-                if (lw > 0) { g.fillStyle = LIQ.long; g.fillRect(px0, y, Math.max(1, lw), Math.max(1, rh - 0.5)) }
-                if (sw > 0) { g.fillStyle = LIQ.short; g.fillRect(px0 + lw, y, Math.max(1, sw), Math.max(1, rh - 0.5)) }
+                if (lw > 0) { g.fillStyle = HEAT.long; g.fillRect(px0, y, Math.max(1, lw), Math.max(1, rh - 0.5)) }
+                if (sw > 0) { g.fillStyle = HEAT.short; g.fillRect(px0 + lw, y, Math.max(1, sw), Math.max(1, rh - 0.5)) }
             })
             g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1
             g.beginPath(); g.moveTo(px0 - 0.5, 0); g.lineTo(px0 - 0.5, mapH); g.stroke()
@@ -478,8 +475,8 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
                 const priceIdx = prof.rows.findIndex((r) => Math.abs(r.pct) < prof.step / 2)
                 const split = priceIdx >= 0 ? priceIdx : prof.rows.findIndex((r) => r.pct < 0)
                 const upFrom = (split < 0 ? prof.rows.length : split) - 1
-                run(upFrom, -1, -1, '#eafffb')                                   // in sus
-                run(priceIdx >= 0 ? priceIdx + 1 : (split < 0 ? prof.rows.length : split), prof.rows.length, 1, '#ffe9d6')   // in jos
+                run(upFrom, -1, -1, '#ffffff')                                   // in sus
+                run(priceIdx >= 0 ? priceIdx + 1 : (split < 0 ? prof.rows.length : split), prof.rows.length, 1, '#ffffff')   // in jos
                 // totalul la capatul dungii, scurt, in coloana profilului
                 g.font = 'bold 9px monospace'
                 g.textAlign = 'right'
@@ -520,8 +517,8 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
                 g.fillText(txt, x0 + 6, y + 0.5)
                 taken.push({ y, x1: x0 + pw })
             }
-            flag(prof.long.peak, 'Longs', LIQ.long)
-            flag(prof.short.peak, 'Shorts', LIQ.short)
+            flag(prof.long.peak, 'Longs', HEAT.long)
+            flag(prof.short.peak, 'Shorts', HEAT.short)
 
             // ── linia pretului curent, cu pretul scris pe axa ──
             if (yNow !== null) {
@@ -547,8 +544,32 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
                 g.fillText(t.label, Math.max(0, Math.min(mapW, t.f * mapW)), mapH + timeH / 2 + 1)
             })
             g.textAlign = 'left'
+
+            // ── patratul ales: contur + reper pe axe ──
+            if (sel) {
+                const x = sel.t * cw, y = yTop(sel.pct)
+                g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 1
+                g.beginPath()
+                g.moveTo(x + cw / 2, 0); g.lineTo(x + cw / 2, mapH)
+                g.moveTo(0, y + rh / 2); g.lineTo(mapW, y + rh / 2)
+                g.stroke()
+                const bw = Math.max(6, cw), bh = Math.max(6, rh)
+                g.strokeStyle = '#ffffff'; g.lineWidth = 1.6
+                g.strokeRect(x + cw / 2 - bw / 2 - 1, y + rh / 2 - bh / 2 - 1, bw + 2, bh + 2)
+            }
         } catch { /* fara repere, dar cu harta intreaga */ }
-    }, [heat, price])
+    }, [heat, price, selKey])
+
+    // Atingerea ALEGE un patrat; zoom-ul s-a mutat pe butonul din colt.
+    const onPick = (e: any) => {
+        const cv = ref.current
+        const grid = heatGrid(heat)
+        if (!cv || !grid) return
+        const r = cv.getBoundingClientRect()
+        const { W, H } = heatCanvasSize(cv.parentElement?.clientWidth || 320)
+        const hit = nearestCell<any>(heat.cells, Number(e.clientX) - r.left, Number(e.clientY) - r.top, heatLayout(W, H, grid))
+        setSelKey(hit ? hit.t + '|' + hit.pct : null)
+    }
 
     if (!heat || !heat.cells?.length) return <Empty what="The grid" />
     const prof = heatProfile(heat)
@@ -565,12 +586,39 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
     )
     return (
         <div className="zlq-heat">
-            <canvas ref={ref} onClick={onTap} className="zlq-tap" />
+            <div className="zlq-heat-cv">
+                <canvas ref={ref} onClick={onPick} className="zlq-pick" />
+                <button className="zlq-heat-zoom" title="Zoom in on the price" onClick={onTap}>+ Zoom</button>
+            </div>
+            {sel ? (() => {
+                const tr = cellTimeRange(sel.t, heat.cols || HEAT_COLS, heat.tMin, heat.tMax)
+                const tot = (Number(sel.longUsd) || 0) + (Number(sel.shortUsd) || 0)
+                return (
+                    <div className="zlq-cell">
+                        <div className="zlq-cell-hd">
+                            <span>{tr ? fmtCellTime(tr.from, tr.to, -new Date().getTimezoneOffset()) : ''}</span>
+                            <span className="zlq-cell-px">{fmtBookPrice(price * (1 + sel.pct / 100))} <em>{fmtPct(sel.pct)}</em></span>
+                            <button className="zlq-cell-x" title="Close" onClick={() => setSelKey(null)}>×</button>
+                        </div>
+                        <div className="zlq-cell-row">
+                            <span><i style={{ background: HEAT.long }} />Longs liquidated</span><b>{sel.longUsd > 0 ? fmtUsd(sel.longUsd) : '$0'}</b>
+                        </div>
+                        <div className="zlq-cell-row">
+                            <span><i style={{ background: HEAT.short }} />Shorts liquidated</span><b>{sel.shortUsd > 0 ? fmtUsd(sel.shortUsd) : '$0'}</b>
+                        </div>
+                        <div className="zlq-cell-row tot">
+                            <span>{(Number(sel.n) || 0).toLocaleString('en-US')} liquidations</span><b>{fmtUsd(tot)}</b>
+                        </div>
+                    </div>
+                )
+            })() : (
+                <div className="zlq-cell-hint">Tap a cell to see what was liquidated there</div>
+            )}
             {/* Totalurile numara doar ce e DESENAT: lichidarile din intervalul
                 de pret al hartii, nu tot istoricul din antet. */}
             <div className="zbk-sum" title="Liquidations inside the drawn price range">
-                {box('ask', 'Longs liquidated', pkTxt(prof.long.peak), prof.long.share, prof.long.usd, prof.heavier === 'long')}
-                {box('bid', 'Shorts liquidated', pkTxt(prof.short.peak), prof.short.share, prof.short.usd, prof.heavier === 'short')}
+                {box('lg', 'Longs liquidated', pkTxt(prof.long.peak), prof.long.share, prof.long.usd, prof.heavier === 'long')}
+                {box('sh', 'Shorts liquidated', pkTxt(prof.short.peak), prof.short.share, prof.short.usd, prof.heavier === 'short')}
                 {box('up', 'Above price', sides.above.n > 0 ? sides.above.n.toLocaleString('en-US') + ' liquidations' : '', sides.above.share, sides.above.usd, sides.heavier === 'above')}
                 {box('dn', 'Below price', sides.below.n > 0 ? sides.below.n.toLocaleString('en-US') + ' liquidations' : '', sides.below.share, sides.below.usd, sides.heavier === 'below')}
             </div>
@@ -579,17 +627,17 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
                     <span className="zlq-dim">one cell</span>
                     <span className="zlq-scale-v">{fmtUsd(steps[0].usd)}</span>
                     <span className="zlq-scale-bar">
-                        {steps.map((st, k) => <i key={'l' + k} style={{ background: cellColor(true, st.i) }} />)}
+                        {steps.map((st, k) => <i key={'l' + k} style={{ background: heatCellColor(true, st.i) }} />)}
                     </span>
                     <span className="zlq-scale-bar">
-                        {steps.map((st, k) => <i key={'s' + k} style={{ background: cellColor(false, st.i) }} />)}
+                        {steps.map((st, k) => <i key={'s' + k} style={{ background: heatCellColor(false, st.i) }} />)}
                     </span>
                     <span className="zlq-scale-v">{fmtUsd(steps[steps.length - 1].usd)}</span>
                 </div>
             )}
             <div className="zlq-heat-legend">
-                <span><i style={{ background: LIQ.long }} /> longs liquidated</span>
-                <span><i style={{ background: LIQ.short }} /> shorts liquidated</span>
+                <span><i style={{ background: HEAT.long }} /> longs liquidated</span>
+                <span><i style={{ background: HEAT.short }} /> shorts liquidated</span>
                 <span className="zlq-dim">
                     {fmtSpan(heat.tMin, heat.tMax) || 'older → newer'} · peak {fmtUsd(heat.maxUsd)}
                 </span>
