@@ -14207,3 +14207,34 @@ grep -a "BINANCE_RATE.*HTTP 4" data/logs/pm2-error*.log | grep -oE "from [a-z0-9
 - câmpul `witness` există pe rândurile SUPPRESSED → martorul scrie.
 
 **Nepornit încă (aşteaptă un reload):** `0875c228`, refuzul propriei porţi nu mai deschide disjunctorul.
+
+---
+
+# 🌙 2026-11-12, 02:00 UTC — ce s-a întâmplat peste noapte (doar citire)
+
+| id | UTC | tranziţie | motiv |
+|---|---|---|---|
+| 2674 | 11 nov 22:37:59 | → WARM | banul vechi (fără etichetă) a expirat |
+| 2675 | 11 nov 22:38:17 | → SUPPRESSED | 418 de la **testnet** (`/fapi/v1/openOrders`), la 18 s în fereastra WARM |
+| 2676 | 11 nov 22:53:16 | → WARM | expirat |
+
+De la ~22:58 UTC starea e **NORMAL**, fără niciun ban timp de 3 ore. Disjunctoarele Binance s-au închis (9 × „recovered"), self-heal a reumplut istoricul la 23:22–23:32. Proces neatins: online, 1170 restarts, 4,6 h.
+
+**Limita anunţată s-a adeverit exact:** banul 2675 a picat în fereastra WARM a celui vechi, fără etichetă, deci a moştenit „se aplică tuturor" (`reason` fără `[family:…]`). Încă 15 minute de mainnet stins. Lanţul s-a rupt apoi singur: starea e curată, deci **următorul** ban îşi ia familia proprie. Calea cu etichetă n-a rulat încă pe viu — n-a mai venit niciun ban.
+
+**Martorul a scris (id 2675)** şi închide întrebarea „cine cere":
+- către testnet, în fereastră: `signer:GET /fapi/v2/positionRisk` 1 apel, `signer:GET /fapi/v1/openOrders` 1 apel (acesta a luat 418). **Două cereri, 10 unităţi.**
+- `pressure` pe `fapi.binance.com`: **0**.
+- restul surselor de top: rezerva Bybit (84 + 60 apeluri) şi surse cu greutate 0.
+
+Deci testnet-ul ne banează la două cereri, pe o adresă care nu e a noastră. Nu e volumul nostru.
+
+## Rezerva pe Bybit nu-şi mai înghite eroarea (livrat în cod, NEpornit)
+
+- `bybitRest.fetchKlines` — fiecare `null` îşi lasă motivul (`lastKlineFailure()`): `unsupported_interval`, `network`, motivul porţii (`circuit_open`…), `http_NNN`, `retCode_N`, `bad_shape`, `empty`. Un succes îl şterge.
+- `routes/marketProxy.js` — `fallbackEdge()`: o linie WARN la cădere (cu motiv), una INFO la revenire. Nu la fiecare cerere.
+- `tests/unit/bybitKlineFallbackReason.test.js` — 11 teste, 3 mutanţi omorâţi.
+
+## Aşteaptă un reload (cu voia operatorului)
+
+`0875c228` (disjunctorul ignoră refuzul propriei porţi) şi commit-ul de mai sus.

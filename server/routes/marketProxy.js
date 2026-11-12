@@ -8,9 +8,37 @@ const bybitRest = require('../services/bybitRest');
 // [Phase B / Task B3b] Bybit REST kline fallback — Bybit isn't IP-blocked from this
 // host, so when Binance is unavailable we serve FRESH Bybit klines (normalized to
 // Binance shape) in preference to STALE Binance data. Returns null on any failure.
+//
+// Esecul rezervei se scrie pe MUCHIE: o linie la cadere (cu motiv), una la
+// revenire. Inainte era `catch (_) { return null }` — pe 11 nov 2026 rezerva a
+// refuzat 263 de cereri intr-un minut si logul n-a avut niciun rand despre ea.
+function fallbackEdge(state, ok, reason) {
+    const st = state || { failing: false };
+    if (ok) {
+        if (!st.failing) return { state: st, log: null };
+        return { state: { failing: false }, log: { level: 'info', msg: 'Bybit kline fallback recovered' } };
+    }
+    const r = reason || 'unknown';
+    if (st.failing && st.reason === r) return { state: st, log: null };
+    return { state: { failing: true, reason: r },
+        log: { level: 'warn', msg: `Bybit kline fallback unavailable — ${r}` } };
+}
+let _fallbackState = { failing: false };
+function _noteFallback(ok, reason) {
+    try {
+        const e = fallbackEdge(_fallbackState, ok, reason);
+        _fallbackState = e.state;
+        if (e.log) require('../services/logger')[e.log.level]('PROXY', e.log.msg);
+    } catch (_) { /* jurnalul nu are voie sa strice ruta */ }
+}
 async function _bybitKlineFallback(symbol, interval, limit) {
-    try { return await bybitRest.fetchKlines(symbol, interval, limit); }
-    catch (_) { return null; }
+    try {
+        const out = await bybitRest.fetchKlines(symbol, interval, limit);
+        if (out) { _noteFallback(true); return out; }
+        const f = typeof bybitRest.lastKlineFailure === 'function' ? bybitRest.lastKlineFailure() : null;
+        _noteFallback(false, f && f.reason);
+        return null;
+    } catch (e) { _noteFallback(false, 'threw: ' + (e && e.message)); return null; }
 }
 
 const FUTURES_BASE = 'https://fapi.binance.com';
@@ -204,6 +232,7 @@ router._serveTest = { resolveServe: _resolveServe };
 
 module.exports = router;
 module.exports._buildKlinesUrl = _buildKlinesUrl;
+module.exports.fallbackEdge = fallbackEdge;
 module.exports._klinesCacheKeyParams = _klinesCacheKeyParams;
 module.exports._klinesTtl = _klinesTtl;
 module.exports.FUTURES_BASE = FUTURES_BASE;

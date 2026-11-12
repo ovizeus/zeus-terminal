@@ -58,22 +58,37 @@ function _normalizeKlines(bybitList) {
 
 // Fetch klines from Bybit REST, normalized to Binance array shape.
 // Returns the array on success, or null on any failure (caller falls back further).
+// Ultimul esec al rezervei, cu motiv. `fetchKlines` intorcea `null` din cinci
+// locuri fara sa spuna din care: pe 11 nov 2026 graficul a ramas gol si logul
+// nu avea nimic. Un succes sterge motivul.
+let _lastKlineFailure = null;
+function _failK(reason, detail) {
+    _lastKlineFailure = { reason, at: Date.now(), detail: detail == null ? undefined : String(detail).slice(0, 160) };
+    return null;
+}
+function lastKlineFailure() { return _lastKlineFailure; }
+
 async function fetchKlines(symbol, binanceInterval, limit) {
     const bi = _toBybitInterval(binanceInterval);
-    if (!bi || !symbol) return null;
+    if (!symbol) return _failK('no_symbol');
+    if (!bi) return _failK('unsupported_interval', binanceInterval);
     const lim = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 1000); // Bybit max 1000
     const url = `${BYBIT_REST}/v5/market/kline?category=linear`
         + `&symbol=${encodeURIComponent(symbol)}&interval=${bi}&limit=${lim}`;
     let res;
     try {
         res = await gateway.fetch(url, { __weight: 1, __src: 'bybit-kline-fallback' });
-    } catch (_) { return null; }
-    if (!res || !res.ok) return null;
+    } catch (e) { return _failK('network', e && e.message); }
+    if (!res) return _failK('no_response');
+    if (!res.ok) return _failK(res._reason ? String(res._reason) : 'http_' + (res.status || 0));
     let data;
-    try { data = await res.json(); } catch (_) { return null; }
-    if (!data || data.retCode !== 0 || !data.result || !Array.isArray(data.result.list)) return null;
+    try { data = await res.json(); } catch (e) { return _failK('bad_json', e && e.message); }
+    if (!data || data.retCode !== 0) return _failK('retCode_' + (data ? data.retCode : 'none'), data && data.retMsg);
+    if (!data.result || !Array.isArray(data.result.list)) return _failK('bad_shape');
     const norm = _normalizeKlines(data.result.list);
-    return norm.length > 0 ? norm : null;
+    if (norm.length === 0) return _failK('empty');
+    _lastKlineFailure = null;
+    return norm;
 }
 
 // [Phase B / Task B5] Bybit tickers → Binance /ticker/24hr field shape so marketRadar's
@@ -115,6 +130,7 @@ async function fetchTickers() {
 
 module.exports = {
     fetchKlines,
+    lastKlineFailure,
     fetchTickers,
     _test: { toBybitInterval: _toBybitInterval, normalizeKlines: _normalizeKlines, normalizeTickers: _normalizeTickers },
 };
