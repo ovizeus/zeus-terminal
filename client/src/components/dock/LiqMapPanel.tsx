@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
-import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, fmtSpan, LIQ } from '../../liqmap/scale'
+import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
 import { spanStep, spanStepOut, spanLabel, SPAN_FACTOR } from '../../liqmap/scale'
 import {
@@ -311,9 +311,13 @@ function MapView({ map, price, onTap }: { map: any; price: number; onTap?: () =>
     const rungs = buildLadder(map.buckets, price, Number(map.bucket) > 0 ? 1 / Number(map.bucket) : 0.25)
     if (!rungs.length) return <Empty what="The ladder" />
     const max = rungs.reduce((m, r) => Math.max(m, r.longUsd + r.shortUsd), 0) || 1
+    // [2026-11-12] Dunga care aduna de la pret in afara + totalul la capat:
+    // raspunsul la „deasupra sau dedesubt sunt mai multe?" fara adunat din ochi.
+    const sides = ladderSides(rungs)
     return (
         <div className="zlq-map">
-            {rungs.map((r) => {
+            <SideTotal side={sides.above} where="above" heavier={sides.heavier === 'above'} />
+            {rungs.map((r, i) => {
                 // ⛔ Marcajul de pret INGHITEA galeata de la 0%. La fereastra
                 // plina, aia era de 21,7 milioane cu 132 de lichidari in 24h —
                 // adica exact gramada de langa pret, cea mai interesanta,
@@ -337,18 +341,40 @@ function MapView({ map, price, onTap }: { map: any; price: number; onTap?: () =>
                 const tot = r.longUsd + r.shortUsd
                 const isLong = r.longUsd >= r.shortUsd
                 const wpc = tot > 0 ? Math.max(2, (tot / max) * 100) : 0
+                const cum = sides.rows[i]
+                const peak = i === sides.above.maxIdx || i === sides.below.maxIdx
                 return (
                     <div key={r.pct} onClick={onTap}
-                        className={'zlq-row' + (r.pct >= 0 ? ' up' : ' dn') + (r.empty ? ' void' : '')}>
+                        className={'zlq-row' + (r.pct >= 0 ? ' up' : ' dn') + (r.empty ? ' void' : '') + (peak ? ' peak' : '')}>
                         <span className="zlq-px">{Math.round(r.price)}</span>
                         <span className="zlq-pc">{fmtPct(r.pct)}</span>
                         <span className="zlq-bar">
                             {tot > 0 && <i style={{ width: wpc + '%', background: barColor(isLong) }} />}
+                            {cum && sides.scale > 0 && (
+                                <svg className="zlq-cum" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+                                    <line x1={1 + cum.top * 98} y1="0" x2={1 + cum.bottom * 98} y2="10"
+                                        vectorEffect="non-scaling-stroke" />
+                                </svg>
+                            )}
                         </span>
                         <span className="zlq-v">{tot > 0 ? fmtUsd(tot) : ''}</span>
                     </div>
                 )
             })}
+            <SideTotal side={sides.below} where="below" heavier={sides.heavier === 'below'} />
+        </div>
+    )
+}
+
+// Capatul dungii: cat s-a adunat pe partea asta, si cat inseamna din total.
+function SideTotal({ side, where, heavier }: { side: LadderSide; where: 'above' | 'below'; heavier: boolean }) {
+    const pct = Math.round(side.share * 100)
+    return (
+        <div className={'zlq-end ' + (where === 'above' ? 'up' : 'dn') + (heavier ? ' heavier' : '')}>
+            <span className="zlq-end-l">{where === 'above' ? 'Above price' : 'Below price'}</span>
+            <span className="zlq-end-n">{side.n > 0 ? side.n.toLocaleString('en-US') + ' liquidations' : 'none in this window'}</span>
+            <span className="zlq-end-p">{side.usd > 0 ? pct + '%' : ''}</span>
+            <span className="zlq-end-v">{side.usd > 0 ? fmtUsd(side.usd) : '$0'}</span>
         </div>
     )
 }

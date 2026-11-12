@@ -249,3 +249,88 @@ export function spanStepOut(
     const next = c * SPAN_FACTOR
     return next >= lim ? null : next
 }
+
+// ── Totalul pe fiecare parte a pretului ─────────────────────────────────────
+// [LIQ-MAP 2026-11-12] Scara arata UNDE a murit lumea, dar nu raspundea la
+// intrebarea pe care o pui primul: deasupra sau dedesubt sunt mai multe?
+// Trebuia sa aduni barele din ochi. `ladderSides` aduna de la pret in afara,
+// pe fiecare parte, si da si totalul de la capat.
+//
+// Cele doua parti stau pe ACEEASI scara (partea mai grea = 1). Daca fiecare ar
+// avea scara ei, ambele dungi ar ajunge la margine si n-ai mai vedea care e
+// mai mare — exact ce se cere de la desen.
+//
+// Treapta de la pret nu e nici sus, nici jos: ramane afara din ambele si e
+// raportata separat (`atPrice`), ca sa nu dispara in liniste.
+export type LadderSide = {
+    usd: number
+    n: number
+    longUsd: number
+    shortUsd: number
+    share: number      // din cele doua parti impreuna, 0..1
+    maxIdx: number     // indexul treptei celei mai mari; -1 daca partea e goala
+}
+export type LadderSides = {
+    above: LadderSide
+    below: LadderSide
+    atPrice: number
+    scale: number      // dolari care inseamna 1 pe axa dungii
+    heavier: 'above' | 'below' | 'even'
+    // pe treapta: cat a adunat dunga la marginea de sus si la cea de jos
+    rows: Array<{ top: number; bottom: number } | null>
+}
+
+function usdOf(v: any): number {
+    const x = Number(v)
+    return Number.isFinite(x) && x > 0 ? x : 0
+}
+
+export function ladderSides(rungs: Rung[]): LadderSides {
+    const side = (): LadderSide => ({ usd: 0, n: 0, longUsd: 0, shortUsd: 0, share: 0, maxIdx: -1 })
+    const out: LadderSides = { above: side(), below: side(), atPrice: 0, scale: 0, heavier: 'even', rows: [] }
+    if (!Array.isArray(rungs) || !rungs.length) return out
+
+    const tot: number[] = []
+    const where: Array<'above' | 'below' | 'price'> = []
+    const best = { above: 0, below: 0 }
+    rungs.forEach((r, i) => {
+        const lu = usdOf(r && r.longUsd), su = usdOf(r && r.shortUsd)
+        const t = lu + su
+        tot.push(t)
+        const w = r && r.isPrice ? 'price' : (Number(r && r.pct) >= 0 ? 'above' : 'below')
+        where.push(w)
+        if (w === 'price') { out.atPrice += t; return }
+        const s = out[w]
+        s.usd += t; s.longUsd += lu; s.shortUsd += su
+        s.n += usdOf(r.n)
+        if (t > best[w]) { best[w] = t; s.maxIdx = i }
+    })
+
+    const both = out.above.usd + out.below.usd
+    if (both > 0) {
+        out.above.share = out.above.usd / both
+        out.below.share = out.below.usd / both
+    }
+    out.scale = Math.max(out.above.usd, out.below.usd)
+    out.heavier = out.above.usd > out.below.usd ? 'above' : out.below.usd > out.above.usd ? 'below' : 'even'
+    const k = out.scale > 0 ? 1 / out.scale : 0
+
+    out.rows = rungs.map(() => null)
+    // deasupra: de la pret in SUS — treptele sunt de sus in jos, deci invers
+    let acc = 0
+    for (let i = rungs.length - 1; i >= 0; i--) {
+        if (where[i] !== 'above') continue
+        const from = acc
+        acc += tot[i]
+        out.rows[i] = { top: acc * k, bottom: from * k }
+    }
+    // dedesubt: de la pret in JOS
+    acc = 0
+    for (let i = 0; i < rungs.length; i++) {
+        if (where[i] !== 'below') continue
+        const from = acc
+        acc += tot[i]
+        out.rows[i] = { top: from * k, bottom: acc * k }
+    }
+    return out
+}

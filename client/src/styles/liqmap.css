@@ -752,3 +752,46 @@
 }
 .zbk-out { position: absolute; top: 4px; left: 62px; z-index: 2; }
 .zlq-out:hover, .zbk-out:hover { color: #fff; }
+
+/* ── MAP: dunga cumulata + totalul de la capat (2026-11-12) ──
+   Dunga porneste de la pret si aduna in afara, pe aceeasi scara pentru ambele
+   parti: cea care ajunge mai departe e partea mai grea. */
+.zlq-row .zlq-bar { position: relative; overflow: visible; }
+.zlq-cum {
+    position: absolute; left: 0; right: 0; top: -1px; bottom: -1px;
+    width: 100%; height: calc(100% + 2px);
+    overflow: visible; pointer-events: none;
+}
+.zlq-cum line { stroke-width: 1.5; stroke-linecap: round; fill: none; }
+.zlq-row.up .zlq-cum line { stroke: #7fe0c2; }
+.zlq-row.dn .zlq-cum line { stroke: #f0a070; }
+.zlq-row.void .zlq-cum { opacity: 1; }
+.zlq-row.void { opacity: 1; }
+.zlq-row.void > :not(.zlq-bar) { opacity: .34; }
+.zlq-row.peak .zlq-v { color: #ffd77a; font-weight: 700; }
+.zlq-row.peak .zlq-bar { box-shadow: 0 0 0 1px rgba(255, 215, 122, .45); }
+
+.zlq-end {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid #1a2531;
+    border-radius: 4px;
+    background: #0b1219;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+.zlq-end.up { margin-bottom: 6px; border-left: 3px solid #7fe0c2; }
+.zlq-end.dn { margin-top: 6px; border-left: 3px solid #f0a070; }
+.zlq-end-l { color: #d7e5f0; letter-spacing: .04em; }
+.zlq-end-n { color: var(--liq-dim); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zlq-end-p { color: #8fa6b8; }
+.zlq-end-v { color: #d7e5f0; font-size: 13px; font-weight: 700; }
+.zlq-end.heavier { background: #101a23; border-color: #2a3b4b; }
+.zlq-end.heavier.up { border-left-color: #7fe0c2; }
+.zlq-end.heavier.dn { border-left-color: #f0a070; }
+.zlq-end.heavier .zlq-end-v { color: #ffd77a; font-size: 15px; }
+.zlq-end.heavier .zlq-end-p { color: #ffd77a; }

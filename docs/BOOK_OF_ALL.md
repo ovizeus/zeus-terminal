@@ -14334,3 +14334,20 @@ Operatorul a dat acordul („dacă e să faci reload, fă-l tu"). Un singur `pm2
 **uid=2:** KILL SWITCH la 17:42:28 (pierdere −533,25 ≤ −500, 5% din 10.000). Nu mai primeşte decizii după asta. Protecţia a lucrat cum e scrisă; nu am atins-o.
 
 **Rămâne deschis:** tăcerea `atStarvationWatch`; `continue`-ul mut de la `serverBrain.js:997`; self-heal care nu setează preţul; creşterea bazei (3,46 G); sursa banurilor de testnet (`positionRisk` din reconciliere la 2 minute).
+
+### 🧮 2026-11-12 — MAP: dunga cumulată şi totalul de la capăt (doar client, fără reload)
+
+**Cerut de operator** (două capturi în `data/book_uploads`, Coinglass şi Zeus): să se vadă dintr-o privire unde sunt mai multe lichidări, deasupra sau dedesubtul preţului, „cu dungă şi la capăt totalul", pe datele reale.
+
+**Ce s-a făcut**, pe scara din tabul MAP (lichidări MĂSURATE, nu prezise):
+- o dungă care porneşte de la preţ şi adună în afară, separat în sus şi în jos;
+- ambele părţi pe ACEEAŞI scară (partea mai grea = lăţimea întreagă), altfel ambele dungi ar atinge marginea şi nu s-ar vedea care e mai mare;
+- la capătul de sus „Above price", la cel de jos „Below price": număr de lichidări, procent din cele două părţi şi totalul în dolari; partea mai grea e scoasă în evidenţă;
+- treapta cea mai mare de pe fiecare parte e marcată cu galben;
+- treapta de la preţ nu intră în niciuna din părţi (îşi arată suma pe marcajul PRICE, ca înainte).
+
+**Fişiere:** `client/src/liqmap/scale.ts` (`ladderSides`, pură), `client/src/components/dock/LiqMapPanel.tsx` (`MapView`, `SideTotal`), `client/src/styles/liqmap.css`. Test: `liqmap/__tests__/ladderSides.test.ts` (7). Mutaţie: scara făcută per-parte → 1 test roşu; refăcut → verde. Client 1.998 teste, typecheck curat, build ca `zeus`.
+
+**Neverificat:** nu am randat pagina într-un browser (fără Playwright pe VPS-ul viu). Aşezarea o confirmă operatorul pe telefon.
+
+**Diferenţa faţă de Coinglass, de ţinut minte:** la ei dunga adună lichidări ESTIMATE care ar urma dacă preţul ajunge acolo; la noi adună lichidări care S-AU ÎNTÂMPLAT în fereastra aleasă (4H…90D).
