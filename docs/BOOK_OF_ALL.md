@@ -14303,3 +14303,34 @@ Toate demo. Sunt închideri corecte, întârziate cu zile.
 - De ce a tăcut `atStarvationWatch`.
 - `continue`-ul mut de la `serverBrain.js:997` — un simbol sărit ore întregi ar trebui să lase un rând, pe muchie.
 - Self-heal: după `initial: true`, preţul rămâne nesetat dacă citirea vie nu merge.
+
+### ✅ 2026-11-12 17:42 UTC — b381 PORNIT, conturile de pe Binance primesc din nou decizii
+
+Operatorul a dat acordul („dacă e să faci reload, fă-l tu"). Un singur `pm2 reload` la 17:42:25 UTC (restart nr. 1171).
+
+**Înainte de reload:** era activ un ban de 418 pe testnet (id 2681, de la 13:06 UTC până la 18:26 UTC). Rândul din bază începe cu `[family:testnet]` — prima rulare pe viu a etichetei din b380. Martorul arată presiune mainnet 0,031 şi testnet 0; cererea respinsă: `signer:GET /fapi/v2/positionRisk`. Banul nu a atins datele publice de pe mainnet, deci reload-ul în timpul lui a fost sigur.
+
+**Măsurat după reload:**
+- `[ALT_WS_FEEDS=ON]` pentru toate cele 7 simboluri (17:42:27–17:42:30). Niciun rând „skipping initial candle fetch".
+- `brain_decisions` în 2 minute (17:43–17:45 UTC): uid 1, 5, 11, 12, 14, 15 = 22 fiecare, uid 13 = 23. Înainte: 0 pe oră din 11 nov 22:00 UTC.
+- Semnatarul a reîncărcat banul din bază cu familia lui; `createListenKey` şi reconcilierea uid=1 au fost refuzate local (aşteptat, sunt cereri de testnet).
+- Nicio eroare nouă şi niciun circuit deschis după pornire.
+- Offsite 12 nov: OK la 03:43 UTC (364 MB).
+
+**Poziţii demo închise la revenirea preţului (toate la preţul curent, nu la nivelul stopului/ţintei):**
+
+| Cont | Poziţie | Intrare → Ieşire | PnL |
+|---|---|---|---|
+| uid=2 | ETHUSDT LONG | 2128,98 → 2010,22 | −533,25 |
+| uid=2 | SOLUSDT LONG | 83,18 → 81,35 | −247,47 |
+| uid=2 | BNBUSDT LONG | 689,07 → 655,90 | −962,30 |
+| uid=11, 12, 13, 14 | BNBUSDT SHORT | 688,52 → 655,90 | +473,64 fiecare |
+| uid=15 | SOLUSDT SHORT | 86,40 → 81,35 | +23,28 |
+
+**Ce înseamnă cifrele:** cât timp preţul a fost îngheţat, stopurile nu s-au executat. BNB LONG al uid=2 avea SL la 679,41 şi a ieşit la 655,90; ETH avea SL la 2107,26 şi a ieşit la 2010,22. Pierderea uid=2 (−1.743,02 în total) e mai mare decât ar fi fost cu date vii, iar câştigurile shorturilor sunt umflate din acelaşi motiv. Cifrele acestor 8 închideri nu sunt bune pentru nicio statistică.
+
+**Greşeala mea de prognoză:** spusesem că shorturile BNB ale uid 11–14 rămân deschise. Preţul trecuse de ţintă în timpul îngheţului şi s-au închis toate.
+
+**uid=2:** KILL SWITCH la 17:42:28 (pierdere −533,25 ≤ −500, 5% din 10.000). Nu mai primeşte decizii după asta. Protecţia a lucrat cum e scrisă; nu am atins-o.
+
+**Rămâne deschis:** tăcerea `atStarvationWatch`; `continue`-ul mut de la `serverBrain.js:997`; self-heal care nu setează preţul; creşterea bazei (3,46 G); sursa banurilor de testnet (`positionRisk` din reconciliere la 2 minute).
