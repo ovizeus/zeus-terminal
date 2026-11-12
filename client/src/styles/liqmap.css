@@ -795,3 +795,18 @@
 .zlq-end.heavier.dn { border-left-color: #f0a070; }
 .zlq-end.heavier .zlq-end-v { color: #ffd77a; font-size: 15px; }
 .zlq-end.heavier .zlq-end-p { color: #ffd77a; }
+
+/* ── BOOK: totalul dungii cumulate (2026-11-12) ── */
+.zbk-sum { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0 4px; }
+.zbk-sum-row {
+    display: grid; grid-template-columns: 1fr auto auto; align-items: baseline; gap: 6px;
+    padding: 5px 8px; border: 1px solid #1a2531; border-radius: 4px; background: #0b1219;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums; font-size: 10px; color: #8fa6b8;
+}
+.zbk-sum-row.ask { border-left: 3px solid #ffb27a; }
+.zbk-sum-row.bid { border-left: 3px solid #3fd8c4; }
+.zbk-sum-v { color: #d7e5f0; font-size: 12px; font-weight: 700; }
+.zbk-sum-row.heavier { background: #101a23; border-color: #2a3b4b; }
+.zbk-sum-row.heavier .zbk-sum-v, .zbk-sum-row.heavier .zbk-sum-p { color: #ffd77a; }
+@media (max-width: 420px) { .zbk-sum { grid-template-columns: 1fr; } }

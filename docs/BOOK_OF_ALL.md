@@ -14351,3 +14351,16 @@ Operatorul a dat acordul („dacă e să faci reload, fă-l tu"). Un singur `pm2
 **Neverificat:** nu am randat pagina într-un browser (fără Playwright pe VPS-ul viu). Aşezarea o confirmă operatorul pe telefon.
 
 **Diferenţa faţă de Coinglass, de ţinut minte:** la ei dunga adună lichidări ESTIMATE care ar urma dacă preţul ajunge acolo; la noi adună lichidări care S-AU ÎNTÂMPLAT în fereastra aleasă (4H…90D).
+
+### 🧮 2026-11-12 — BOOK: aceeaşi dungă pe profilul din dreapta (doar client, fără reload)
+
+Cerut de operator după MAP: „da, pune dunga şi pe book".
+
+- Pe coloana COB (carnetul de acum) se desenează o dungă care adună ordinele în aşteptare de la spread în afară: vânzările în sus, cumpărările în jos. Ambele pe aceeaşi scară, deci dunga care ajunge mai departe e partea mai groasă.
+- La capătul de sus şi de jos al coloanei apare totalul scurt (ex. `24M`).
+- Sub hartă, două casete cu cifra întreagă şi procentul: „Asks resting above" şi „Bids resting below"; partea mai grea e galbenă.
+- Sunt ordine în aşteptare din banda DESENATĂ (la zoom se schimbă), nu lichidări.
+
+**Fişiere:** `client/src/bookmap/book.ts` (`cobCumulative`, pură), `LiqMapPanel.tsx` (pasul 6 din desen + casetele), `liqmap.css`. Test: `bookmap/__tests__/cobCumulative.test.ts` (5). Client 2.003 teste, typecheck curat, build ca `zeus`.
+
+**Neverificat:** nerandat în browser; aşezarea o confirmă operatorul pe telefon.

@@ -11,7 +11,7 @@ import {
     fetchBook, bookIntensity, bookColor, BANDS, WINDOWS, fmtSpread,
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
     yToPrice, zoomStep, zoomStepOut, zoomLabel,
-    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows,
+    bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows, cobCumulative,
     cobLabelText, cobLabelPlacement, pickCobLabels, bookStallMessage,
     type Trade, type Liq,
 } from '../../bookmap/book'
@@ -797,6 +797,48 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                 ctx.fillText(txt, place.x, rowToY(L.row, rows, h) + ch / 2)
             }
         } catch { /* fara cifre, dar cu harta intreaga */ }
+
+        // ── 6. dunga cumulata: de la spread in afara, cu totalul la capat ──
+        // [2026-11-12] Ca pe MAP. Se deseneaza ULTIMA, peste bare, cu un contur
+        // inchis dedesubt, altfel se pierde pe culoarea barelor.
+        try {
+            const cum = cobCumulative(cob)
+            if (cum.scale > 0) {
+                const xOf = (f: number) => cx + 1 + f * (cobW - 2)
+                const trace = (steps: { row: number; from: number; to: number }[], up: boolean) => {
+                    ctx.beginPath()
+                    steps.forEach((s, i) => {
+                        const yTop = rowToY(s.row, rows, h)
+                        const yNear = up ? yTop + ch : yTop
+                        const yFar = up ? yTop : yTop + ch
+                        if (i === 0) ctx.moveTo(xOf(s.from), yNear); else ctx.lineTo(xOf(s.from), yNear)
+                        ctx.lineTo(xOf(s.to), yFar)
+                    })
+                }
+                const stroke = (steps: any[], up: boolean, color: string) => {
+                    if (!steps.length) return
+                    ctx.lineJoin = 'round'
+                    trace(steps, up); ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.lineWidth = 3.2; ctx.stroke()
+                    trace(steps, up); ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke()
+                }
+                stroke(cum.ask.steps, true, '#ffe2c7')
+                stroke(cum.bid.steps, false, '#d6fff6')
+                // totalul la capat: sus vanzarile, jos cumpararile
+                ctx.font = 'bold 9px monospace'
+                ctx.textAlign = 'right'
+                const tag = (txt: string, y: number, color: string) => {
+                    const tw = ctx.measureText(txt).width
+                    ctx.fillStyle = 'rgba(7,10,14,.88)'
+                    ctx.fillRect(w - tw - 6, y - 6, tw + 6, 12)
+                    ctx.fillStyle = color
+                    ctx.fillText(txt, w - 3, y)
+                }
+                const ta = cobLabelText(cum.ask.usd), tb = cobLabelText(cum.bid.usd)
+                if (ta) tag(ta, 7, '#ffe2c7')
+                if (tb) tag(tb, h - 7, '#d6fff6')
+                ctx.textAlign = 'left'
+            }
+        } catch { /* fara dunga, dar cu harta intreaga */ }
     }, [heat, data])
 
     if (!data) return <Empty what="The order book" />
@@ -875,6 +917,27 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                     <span>{heat.priceLo ? Math.round(heat.priceLo).toLocaleString('en-US') : ''}</span>
                 </div>
             </div>
+
+            {/* [2026-11-12] Totalul dungii, in cifre intregi: pe panza incape
+                doar forma scurta. Sunt ordine in asteptare din fereastra
+                desenata, nu lichidari. */}
+            {(() => {
+                const cum = cobCumulative(cobRows(heat.cells, heat.cols))
+                if (!(cum.scale > 0)) return null
+                const row = (k: 'ask' | 'bid', label: string) => (
+                    <div className={'zbk-sum-row ' + k + (cum.heavier === k ? ' heavier' : '')}>
+                        <span>{label}</span>
+                        <span className="zbk-sum-p">{Math.round(cum[k].share * 100)}%</span>
+                        <span className="zbk-sum-v">{fmtUsd(cum[k].usd)}</span>
+                    </div>
+                )
+                return (
+                    <div className="zbk-sum" title="Resting orders in the drawn band, summed outward from the spread">
+                        {row('ask', 'Asks resting above')}
+                        {row('bid', 'Bids resting below')}
+                    </div>
+                )
+            })()}
 
             <div className="zbk-legend">
                 <span><i style={{ background: `rgb(${BOOK.bid})` }} />bids / buys</span>

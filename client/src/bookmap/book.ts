@@ -516,3 +516,45 @@ export function bookStallMessage(stall: BookStall): { title: string; detail: str
         detail: '',
     }
 }
+
+// ── COB: dunga cumulata si totalul pe parte (2026-11-12) ────────────────────
+// Aceeasi intrebare ca pe MAP — „unde e mai mult?" — pusa cartii de ordine.
+// Se aduna de la spread in AFARA: vanzarile in sus, cumpararile in jos. Ambele
+// parti pe aceeasi scara (partea mai grea = 1), altfel ambele dungi ating
+// marginea si nu se mai vede care e mai mare.
+//
+// ⚠️ Sunt ordine in asteptare din fereastra vizibila a cartii, nu lichidari.
+export type CobStep = { row: number; from: number; to: number }
+export type CobSide = { usd: number; share: number; steps: CobStep[] }
+export type CobCumulative = { ask: CobSide; bid: CobSide; scale: number; heavier: 'ask' | 'bid' | 'even' }
+
+export function cobCumulative(cob: { row: number; bidUsd: number; askUsd: number }[]): CobCumulative {
+    const out: CobCumulative = {
+        ask: { usd: 0, share: 0, steps: [] }, bid: { usd: 0, share: 0, steps: [] }, scale: 0, heavier: 'even',
+    }
+    if (!Array.isArray(cob) || !cob.length) return out
+    const pos = (v: any) => { const x = Number(v); return Number.isFinite(x) && x > 0 ? x : 0 }
+    const rows = cob
+        .filter((r) => r && Number.isFinite(Number(r.row)))
+        .map((r) => ({ row: Number(r.row), bid: pos(r.bidUsd), ask: pos(r.askUsd) }))
+        .sort((a, b) => a.row - b.row)
+    for (const r of rows) { out.ask.usd += r.ask; out.bid.usd += r.bid }
+    const both = out.ask.usd + out.bid.usd
+    if (both > 0) { out.ask.share = out.ask.usd / both; out.bid.share = out.bid.usd / both }
+    out.scale = Math.max(out.ask.usd, out.bid.usd)
+    out.heavier = out.ask.usd > out.bid.usd ? 'ask' : out.bid.usd > out.ask.usd ? 'bid' : 'even'
+    if (!(out.scale > 0)) return out
+    const S = out.scale
+    let acc = 0
+    for (const r of rows) {                       // vanzari: de jos in sus
+        if (!(r.ask > 0)) continue
+        out.ask.steps.push({ row: r.row, from: acc / S, to: (acc + r.ask) / S }); acc += r.ask
+    }
+    acc = 0
+    for (let i = rows.length - 1; i >= 0; i--) {  // cumparari: de sus in jos
+        const r = rows[i]
+        if (!(r.bid > 0)) continue
+        out.bid.steps.push({ row: r.row, from: acc / S, to: (acc + r.bid) / S }); acc += r.bid
+    }
+    return out
+}
