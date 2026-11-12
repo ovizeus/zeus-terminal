@@ -14372,3 +14372,15 @@ Cerut de operator după MAP: „da, pune dunga şi pe book".
 **Reparat, ca la Coinglass:** de la capătul fiecărei curbe pleacă spre stânga, peste hartă, o dungă punctată; la capătul ei din stânga e o etichetă plină — „Asks $54.15M" (portocaliu) sus, „Bids $48.46M" (cyan) jos. Colţurile pânzei rămân doar ale preţului. Lângă butonul FIT eticheta se mută la dreapta lui. Casetele de sub hartă au rămas.
 
 Fişier: `LiqMapPanel.tsx` (pasul 6). Typecheck curat, build ca `zeus`. Nerandat în browser — confirmă operatorul.
+
+### 🧮 2026-11-12 — BOOK: cifrele profilului, roşii şi verzi, în fâşia lor (doar client)
+
+**Cerut de operator:** cifrele din dreapta (3.5M, 4.3M…) se îmbinau cu barele şi cu curba — „dă rău la ochi". Doar cifrele, nimic altceva.
+
+- Harta se opreşte cu 34px mai devreme; după coloana de bare vine o fâşie doar pentru cifre.
+- Cifrele: roşu (`#ff6b6b`) pentru vânzări, verde (`#4be38f`) pentru cumpărări, bold 9px. Barele şi harta rămân cyan/chihlimbar — regula „nu roşu/verde" din `book.ts` rămâne pentru ele; excepţia e cerută explicit de operator, numai pentru cifre.
+- Dunga punctată a totalului se opreşte la capătul barelor. Eticheta „COB →" a fost scoasă (stătea în fâşia cifrelor).
+
+**Greşeala mea:** am lansat build-ul în acelaşi lanţ cu testele şi s-a servit un pachet cu un test roşu (`bookRender.test.tsx` — ţinea geometria veche a COB-ului). Testul a fost adus la geometria nouă şi întărit (nicio bară în fâşia cifrelor). Client 2.003 verzi, typecheck curat. De acum build-ul se face DUPĂ ce suita e verde, nu alături.
+
+Nerandat în browser — confirmă operatorul.

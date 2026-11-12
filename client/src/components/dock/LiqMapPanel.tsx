@@ -12,7 +12,7 @@ import {
     rowToY, colToX, bandLabel, windowLabel, sourceLabel, BOOK, type Wall,
     yToPrice, zoomStep, zoomStepOut, zoomLabel,
     bubbleRadius, bubbleColor, bubbleCutoff, liqRing, liqSourceNote, cobRows, cobCumulative,
-    cobLabelText, cobLabelPlacement, pickCobLabels, bookStallMessage,
+    cobLabelText, pickCobLabels, bookStallMessage,
     type Trade, type Liq,
 } from '../../bookmap/book'
 
@@ -659,7 +659,10 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
         const { cols, rows, cells, maxUsd, loUsd, mids } = heat
         // Coloana COB stă în dreapta, ca la Bookmap. Harta se opreşte înainte.
         const cobW = Math.max(26, Math.min(64, Math.round(w * 0.13)))
-        const mapW = Math.max(40, w - cobW - 2)
+        // [2026-11-12] Jgheab separat pentru cifrele profilului. Scrise peste
+        // bare (portocaliu pe portocaliu, plus curba peste ele) nu se citeau.
+        const labW = 34
+        const mapW = Math.max(40, w - cobW - labW - 2)
         const cw = mapW / cols
         const ch = h / rows
 
@@ -780,7 +783,8 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
         // Harta nu se atinge — se adauga doar text, dupa bara. Si daca panza nu
         // stie sa masoare text, desenul ramane intreg fara cifre.
         try {
-            ctx.font = '8px monospace'
+            ctx.font = 'bold 9px monospace'
+            ctx.textAlign = 'left'
             ctx.textBaseline = 'middle'
             const byRow = new Map(cob.map((c) => [c.row, c]))
             for (const L of pickCobLabels(cob, cobMax, (row) => rowToY(row, rows, h))) {
@@ -788,13 +792,11 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                 const src = byRow.get(L.row)
                 if (!txt || !src) continue
                 const usd = L.side === 'ask' ? src.askUsd : src.bidUsd
-                const barW = (usd / cobMax) * cobW
-                const place = cobLabelPlacement(cx, barW, ctx.measureText(txt).width, w)
-                if (!place) continue
-                // In interiorul barei textul trebuie sa se vada PE culoare,
-                // deci negru; dupa bara, in culoarea ei.
-                ctx.fillStyle = place.inside ? 'rgba(0,0,0,0.85)' : bookColor(L.side, 0.75)
-                ctx.fillText(txt, place.x, rowToY(L.row, rows, h) + ch / 2)
+                if (!(usd > 0)) continue
+                // Rosu = vanzari, verde = cumparari, cerut de operator: cifrele
+                // trebuie sa se desparta de bare, nu sa le continue culoarea.
+                ctx.fillStyle = L.side === 'ask' ? '#ff6b6b' : '#4be38f'
+                ctx.fillText(txt, cx + cobW + 4, rowToY(L.row, rows, h) + ch / 2)
             }
         } catch { /* fara cifre, dar cu harta intreaga */ }
 
@@ -845,7 +847,7 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                     ctx.setLineDash([4, 3])
                     ctx.lineWidth = 1.2
                     ctx.strokeStyle = `rgba(${rgb}, .95)`
-                    ctx.beginPath(); ctx.moveTo(x0 + pw, y); ctx.lineTo(w, y); ctx.stroke()
+                    ctx.beginPath(); ctx.moveTo(x0 + pw, y); ctx.lineTo(cx + cobW, y); ctx.stroke()
                     ctx.restore()
                     ctx.fillStyle = `rgb(${rgb})`
                     ctx.fillRect(x0, y - 8, pw, 16)
@@ -931,7 +933,7 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                 </button>
                 <div className="zbk-axis">
                     <span>{heat.priceHi ? Math.round(heat.priceHi).toLocaleString('en-US') : ''}</span>
-                    <span className="zbk-axis-mid">COB →</span>
+                    <span />
                     <span>{heat.priceLo ? Math.round(heat.priceLo).toLocaleString('en-US') : ''}</span>
                 </div>
             </div>

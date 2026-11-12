@@ -694,10 +694,14 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
     // cade pe 320. cobW = max(26, min(64, 320*0.13)) = 42, deci harta se
     // opreste la 276 si COB-ul incepe la 278. Orice dreptunghi dincolo de 277
     // e al COB-ului — celulele hartii nu pot ajunge acolo.
-    const W = 320, cobW = Math.max(26, Math.min(64, Math.round(W * 0.13)))
-    const mapW = Math.max(40, W - cobW - 2)
+    // [2026-11-12] Dupa COB vine un jgheab de 34px doar pentru cifre, deci
+    // harta se opreste mai devreme: 320 - 42 - 34 - 2 = 242, COB-ul la 244.
+    const W = 320, cobW = Math.max(26, Math.min(64, Math.round(W * 0.13))), labW = 34
+    const mapW = Math.max(40, W - cobW - labW - 2)
     const inCob = rects.filter((r: any) => r[0] >= mapW + 1)
     expect(inCob.length).toBeGreaterThan(0)
+    // Barele raman in coloana lor: jgheabul cifrelor nu primeste bare.
+    expect(rects.filter((r: any) => r[0] >= mapW + 2 + cobW + 1).length).toBe(0)
   })
 
   it('bulele de TRANZACTII au raze diferite intre ele, nu doar fata de inele', async () => {
