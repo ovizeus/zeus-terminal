@@ -856,3 +856,9 @@
 .zlq-cell-row b { color: #d7e5f0; }
 .zlq-cell-row.tot { border-top: 1px solid #1a2531; margin-top: 3px; padding-top: 5px; }
 .zlq-cell-hint { font-size: 10px; color: var(--liq-dim); }
+
+/* ── MAP: rosu/verde pe bare → dunga cumulata si capetele devin neutre (2026-11-12)
+   Altfel ar fi patru culori pe aceeasi scara: doua pentru long/short si alte
+   doua pentru sus/jos. Sus/jos se citeste din pozitie. */
+.zlq-row.up .zlq-cum line, .zlq-row.dn .zlq-cum line { stroke: #f2f6fa; }
+.zlq-end.up, .zlq-end.dn, .zlq-end.heavier.up, .zlq-end.heavier.dn { border-left-color: #8fa6b8; }

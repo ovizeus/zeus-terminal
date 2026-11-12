@@ -14434,3 +14434,13 @@ Operatorul a cerut mai multe detalii pe heatmap, cu propunerea ÎNAINTE de cod. 
 - **Văzut în captura lui:** totalul de la capătul dungii scria „6698M". Eticheta scurtă nu ştia miliarde. Acum `fmtShortUsd` scrie „6.7B". Greşeala mea: refolosisem formatul din BOOK, unde sumele nu ajung la miliarde.
 
 Fişiere: `liqmap/heat.ts` (`fmtShortUsd`), `LiqMapPanel.tsx`, `liqmap.css`. Teste: `heatTap.test.ts` (+1), `liqMapRender.test.tsx` (zoom out). Suita verde înainte de build: client 2.042, typecheck curat.
+
+### 🎨 2026-11-12 — MAP şi LIVE: roşu/verde de pe chart (doar client)
+
+Cerut de operator după HEATMAP: aceleaşi culori şi pe MAP şi LIVE. Long lichidat = `#ff3355`, short lichidat = `#00d97a` (`HEAT` din `liqmap/heat.ts`, prin `sideColor` în `LiqMapPanel.tsx`).
+
+- MAP: barele scării şi pătratul de pe marcajul PRICE. Dunga cumulată a devenit albă, iar capetele „Above/Below price" au margine neutră — altfel erau patru culori pe aceeaşi scară (două pentru long/short, două pentru sus/jos).
+- LIVE: punctul şi eticheta de parte de pe fiecare rând.
+- Neschimbat, dinadins: PREDICT, BOOK, acoperirea din antet şi accentul portocaliu al panoului (taburi, simbol activ) — rămân pe `LIQ`/`BOOK`. Nu au fost cerute.
+
+Suita verde înainte de build: client 2.042, typecheck curat. Nerandat în browser — confirmă operatorul.

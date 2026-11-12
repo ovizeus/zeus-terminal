@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
-import { fmtUsd, fmtPct, intensity, barColor, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
+import { fmtUsd, fmtPct, intensity, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
 import {
     heatGrid, heatProfile, heatSides, priceTicks, timeTicks, scaleSteps,
@@ -304,6 +304,11 @@ function SymbolStrip({ top, symbol, setSymbol }: any) {
 }
 
 // ── Vederea MAP: scara pe niveluri de preţ ────────────────────────
+// [2026-11-12] MAP si LIVE folosesc rosul si verdele de pe chart, ca HEATMAP
+// (cerut de operator): long lichidat = rosu, short lichidat = verde. PREDICT,
+// BOOK si accentul panoului raman pe chihlimbar/cyan (`LIQ`, `BOOK`).
+const sideColor = (isLong: boolean): string => (isLong ? HEAT.long : HEAT.short)
+
 function MapView({ map, price, onTap }: { map: any; price: number; onTap?: () => void }) {
     if (!map || !map.buckets?.length) return <Empty what="The ladder" />
     // Scara CONTINUĂ, nu doar nivelurile care au date: altfel se citeşte ca o
@@ -335,7 +340,7 @@ function MapView({ map, price, onTap }: { map: any; price: number; onTap?: () =>
                             <span>PRICE {Math.round(price)}</span>
                             {tot0 > 0 && (
                                 <span className="zlq-now-v">
-                                    <i style={{ background: barColor(r.longUsd >= r.shortUsd) }} />
+                                    <i style={{ background: sideColor(r.longUsd >= r.shortUsd) }} />
                                     {fmtUsd(tot0)}
                                 </span>
                             )}
@@ -353,7 +358,7 @@ function MapView({ map, price, onTap }: { map: any; price: number; onTap?: () =>
                         <span className="zlq-px">{Math.round(r.price)}</span>
                         <span className="zlq-pc">{fmtPct(r.pct)}</span>
                         <span className="zlq-bar">
-                            {tot > 0 && <i style={{ width: wpc + '%', background: barColor(isLong) }} />}
+                            {tot > 0 && <i style={{ width: wpc + '%', background: sideColor(isLong) }} />}
                             {cum && sides.scale > 0 && (
                                 <svg className="zlq-cum" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
                                     <line x1={1 + cum.top * 98} y1="0" x2={1 + cum.bottom * 98} y2="10"
@@ -677,8 +682,8 @@ function LiveView({ tape, mine }: { tape: LiqEvent[]; mine: string }) {
             {tape.map((e, i) => (
                 <div key={e.time + '-' + i}
                     className={'zlq-tp' + (i === 0 ? ' fresh' : '') + (e.symbol === mine ? ' mine' : '')}>
-                    <span className="zlq-tp-dot" style={{ background: barColor(!!e.isLong) }} />
-                    <span className="zlq-tp-side" style={{ color: barColor(!!e.isLong) }}>
+                    <span className="zlq-tp-dot" style={{ background: sideColor(!!e.isLong) }} />
+                    <span className="zlq-tp-side" style={{ color: sideColor(!!e.isLong) }}>
                         {e.isLong ? 'LONG' : 'SHORT'}
                     </span>
                     <span className="zlq-tp-sym">{e.symbol || ''}</span>
