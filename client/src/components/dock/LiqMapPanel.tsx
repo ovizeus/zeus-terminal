@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
 import { fmtUsd, fmtPct, intensity, cellColor, barColor, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
+import { heatGrid, heatProfile, heatSides, priceTicks, timeTicks, scaleSteps } from '../../liqmap/heat'
 import { spanStep, spanStepOut, spanLabel, SPAN_FACTOR } from '../../liqmap/scale'
 import {
     fetchPredict, sideLabel, horizonLabel, strengthBar, targetLabel,
@@ -389,7 +390,7 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
         if (!cv) return
         const box = cv.parentElement
         const W = Math.max(240, box?.clientWidth || 320)
-        const H = Math.max(220, Math.min(460, Math.round(W * 1.15)))
+        const H = Math.max(236, Math.min(476, Math.round(W * 1.15) + 16))
         const dpr = Math.min(2, window.devicePixelRatio || 1)
         cv.width = W * dpr; cv.height = H * dpr
         cv.style.width = W + 'px'; cv.style.height = H + 'px'
@@ -398,38 +399,194 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
         g.setTransform(dpr, 0, 0, dpr, 0, 0)
         g.clearRect(0, 0, W, H)
         g.fillStyle = '#070a0e'; g.fillRect(0, 0, W, H)
-        if (!heat || !heat.cells?.length) return
+        const grid = heatGrid(heat)
+        if (!grid) return
 
-        const pcts = heat.cells.map((c: any) => c.pct)
-        const lo = Math.min(...pcts), hi = Math.max(...pcts)
-        const span = Math.max(0.25, hi - lo)
-        const cols = heat.cols || HEAT_COLS
-        const cw = W / cols
-        const rows = Math.max(1, Math.round(span * 4) + 1)
-        const rh = H / rows
+        // [2026-11-12] Asezarea: harta | profil pe pret | axa de pret, iar jos
+        // o fasie pentru ore. Inainte erau doar patrate — nu puteai citi nici
+        // la ce pret, nici la ce ora.
+        const axisW = 46
+        const timeH = 16
+        const profW = Math.max(34, Math.min(60, Math.round(W * 0.14)))
+        const mapW = Math.max(60, W - profW - axisW - 4)
+        const mapH = H - timeH
+        const px0 = mapW + 2                 // unde incepe profilul
+        const ax0 = px0 + profW + 2          // unde incepe axa de pret
+        const cw = mapW / grid.cols
+        const rh = mapH / grid.rows
+        const yTop = (pct: number) => mapH - (grid.rowOf(pct) + 1) * rh
+        const yMid = (pct: number) => yTop(pct) + rh / 2
+        // pozitie continua pe axa (pentru repere care nu cad pe un rand)
+        const yAt = (pct: number) => mapH - ((pct - grid.lo) / grid.step + 0.5) * rh
 
+        // ── 1. celulele ──
         for (const c of heat.cells) {
             const tot = c.longUsd + c.shortUsd
             const isLong = c.longUsd >= c.shortUsd
-            const i = intensity(tot, heat.maxUsd)
-            g.fillStyle = cellColor(isLong, i)
-            const x = c.t * cw
-            const y = H - ((c.pct - lo) / span) * (H - rh) - rh
-            g.fillRect(x, y, Math.max(1.5, cw - 0.5), Math.max(1.5, rh - 0.5))
+            g.fillStyle = cellColor(isLong, intensity(tot, heat.maxUsd))
+            g.fillRect(c.t * cw, yTop(c.pct), Math.max(1.5, cw - 0.5), Math.max(1.5, rh - 0.5))
         }
-        // Linia preţului curent, dacă e în interval.
-        const nowPct = 0
-        if (nowPct >= lo && nowPct <= hi) {
-            const y = H - ((nowPct - lo) / span) * (H - rh) - rh / 2
-            g.strokeStyle = 'rgba(255,214,102,.55)'; g.lineWidth = 1
-            g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke()
-        }
+
+        try {
+            g.textBaseline = 'middle'
+            // ── 2. axa de pret: preturi rotunde + linii fine peste harta ──
+            const yNow = (0 >= grid.lo - grid.step && 0 <= grid.hi + grid.step) ? yAt(0) : null
+            g.font = '9px monospace'
+            g.textAlign = 'left'
+            for (const t of priceTicks(grid.lo, grid.hi, price, 6)) {
+                const y = yAt(t.pct)
+                if (y < 7 || y > mapH - 7) continue
+                if (yNow !== null && Math.abs(y - yNow) < 11) continue   // loc pentru pretul curent
+                g.strokeStyle = 'rgba(255,255,255,.055)'; g.lineWidth = 1
+                g.beginPath(); g.moveTo(0, Math.round(y) + 0.5); g.lineTo(mapW, Math.round(y) + 0.5); g.stroke()
+                g.fillStyle = '#7f93a6'
+                g.fillText(t.label, ax0 + 3, y)
+            }
+
+            // ── 3. profilul pe pret: tot ce s-a lichidat la fiecare nivel ──
+            const prof = heatProfile(heat)
+            const pm = prof.maxRowUsd || 1
+            prof.rows.forEach((r, i) => {
+                const y = i * rh
+                const lw = (r.longUsd / pm) * profW, sw = (r.shortUsd / pm) * profW
+                if (lw > 0) { g.fillStyle = LIQ.long; g.fillRect(px0, y, Math.max(1, lw), Math.max(1, rh - 0.5)) }
+                if (sw > 0) { g.fillStyle = LIQ.short; g.fillRect(px0 + lw, y, Math.max(1, sw), Math.max(1, rh - 0.5)) }
+            })
+            g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1
+            g.beginPath(); g.moveTo(px0 - 0.5, 0); g.lineTo(px0 - 0.5, mapH); g.stroke()
+
+            // dunga cumulata: de la pret in afara, aceeasi scara pe ambele parti
+            const sides = heatSides(prof)
+            if (sides.scale > 0) {
+                const xOf = (f: number) => px0 + 1 + f * (profW - 2)
+                const run = (from: number, to: number, stepDir: number, color: string) => {
+                    const pts: Array<[number, number]> = []
+                    for (let i = from; i !== to; i += stepDir) {
+                        const c = sides.rows[i]
+                        if (!c) continue
+                        const near: [number, number] = stepDir < 0 ? [xOf(c.bottom), (i + 1) * rh] : [xOf(c.top), i * rh]
+                        const far: [number, number] = stepDir < 0 ? [xOf(c.top), i * rh] : [xOf(c.bottom), (i + 1) * rh]
+                        if (!pts.length) pts.push(near)
+                        pts.push(far)
+                    }
+                    if (pts.length < 2) return
+                    const trace = () => { g.beginPath(); pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y))) }
+                    g.lineJoin = 'round'
+                    trace(); g.strokeStyle = 'rgba(0,0,0,.75)'; g.lineWidth = 3.2; g.stroke()
+                    trace(); g.strokeStyle = color; g.lineWidth = 1.4; g.stroke()
+                }
+                const priceIdx = prof.rows.findIndex((r) => Math.abs(r.pct) < prof.step / 2)
+                const split = priceIdx >= 0 ? priceIdx : prof.rows.findIndex((r) => r.pct < 0)
+                const upFrom = (split < 0 ? prof.rows.length : split) - 1
+                run(upFrom, -1, -1, '#eafffb')                                   // in sus
+                run(priceIdx >= 0 ? priceIdx + 1 : (split < 0 ? prof.rows.length : split), prof.rows.length, 1, '#ffe9d6')   // in jos
+                // totalul la capatul dungii, scurt, in coloana profilului
+                g.font = 'bold 9px monospace'
+                g.textAlign = 'right'
+                const tag = (txt: string, y: number) => {
+                    if (!txt) return
+                    const tw = g.measureText(txt).width
+                    g.fillStyle = 'rgba(7,10,14,.9)'
+                    g.fillRect(px0 + profW - tw - 5, y - 6, tw + 5, 12)
+                    g.fillStyle = '#ffd77a'
+                    g.fillText(txt, px0 + profW - 2, y)
+                }
+                tag(cobLabelText(sides.above.usd), 7)
+                tag(cobLabelText(sides.below.usd), mapH - 7)
+            }
+
+            // ── 4. cele doua maxime: dunga punctata + eticheta la capat ──
+            const taken: Array<{ y: number; x1: number }> = []
+            const flag = (pk: { pct: number; usd: number } | null, word: string, color: string) => {
+                if (!pk) return
+                const y = Math.max(9, Math.min(mapH - 9, yMid(pk.pct)))
+                const px = fmtBookPrice(price * (1 + pk.pct / 100))
+                g.font = 'bold 10px monospace'
+                g.textAlign = 'left'
+                const clash = taken.find((t) => Math.abs(t.y - y) < 18)
+                const x0 = clash ? clash.x1 + 6 : 4
+                const room = mapW - x0 - 16
+                const txt = [`${word} max ${fmtUsd(pk.usd)} @ ${px}`, `${word} ${fmtUsd(pk.usd)} @ ${px}`, `${fmtUsd(pk.usd)} @ ${px}`]
+                    .find((t) => g.measureText(t).width + 12 <= room)
+                const pw = txt ? g.measureText(txt).width + 12 : 0
+                g.save()
+                g.setLineDash([4, 3]); g.lineWidth = 1.2; g.strokeStyle = color
+                g.beginPath(); g.moveTo(x0 + pw, y); g.lineTo(px0 + profW, y); g.stroke()
+                g.restore()
+                if (!txt) return
+                g.fillStyle = color
+                g.fillRect(x0, y - 8, pw, 16)
+                g.fillStyle = '#06090c'
+                g.fillText(txt, x0 + 6, y + 0.5)
+                taken.push({ y, x1: x0 + pw })
+            }
+            flag(prof.long.peak, 'Longs', LIQ.long)
+            flag(prof.short.peak, 'Shorts', LIQ.short)
+
+            // ── linia pretului curent, cu pretul scris pe axa ──
+            if (yNow !== null) {
+                g.strokeStyle = 'rgba(255,214,102,.6)'; g.lineWidth = 1
+                g.beginPath(); g.moveTo(0, yNow); g.lineTo(ax0, yNow); g.stroke()
+                const lbl = fmtBookPrice(price)
+                if (lbl) {
+                    g.font = 'bold 9px monospace'
+                    g.textAlign = 'left'
+                    g.fillStyle = '#ffd77a'
+                    g.fillRect(ax0, yNow - 7, axisW - 2, 14)
+                    g.fillStyle = '#06090c'
+                    g.fillText(lbl, ax0 + 3, yNow + 0.5)
+                }
+            }
+
+            // ── axa de timp ──
+            g.font = '9px monospace'
+            g.fillStyle = '#7f93a6'
+            const ticks = timeTicks(heat.tMin, heat.tMax, W < 300 ? 4 : 5, -new Date().getTimezoneOffset())
+            ticks.forEach((t, k) => {
+                g.textAlign = k === 0 ? 'left' : k === ticks.length - 1 ? 'right' : 'center'
+                g.fillText(t.label, Math.max(0, Math.min(mapW, t.f * mapW)), mapH + timeH / 2 + 1)
+            })
+            g.textAlign = 'left'
+        } catch { /* fara repere, dar cu harta intreaga */ }
     }, [heat, price])
 
     if (!heat || !heat.cells?.length) return <Empty what="The grid" />
+    const prof = heatProfile(heat)
+    const sides = heatSides(prof)
+    const steps = scaleSteps(heat.maxUsd, 5)
+    const pkTxt = (pk: { pct: number; usd: number } | null) =>
+        pk ? `max ${fmtUsd(pk.usd)} @ ${fmtBookPrice(price * (1 + pk.pct / 100))}` : ''
+    const box = (cls: string, label: string, sub: string, share: number, usd: number, heavy: boolean) => (
+        <div className={'zbk-sum-row ' + cls + (heavy ? ' heavier' : '')}>
+            <span>{label}<em className="zbk-sum-pk">{sub}</em></span>
+            <span className="zbk-sum-p">{usd > 0 ? Math.round(share * 100) + '%' : ''}</span>
+            <span className="zbk-sum-v">{usd > 0 ? fmtUsd(usd) : '$0'}</span>
+        </div>
+    )
     return (
         <div className="zlq-heat">
             <canvas ref={ref} onClick={onTap} className="zlq-tap" />
+            {/* Totalurile numara doar ce e DESENAT: lichidarile din intervalul
+                de pret al hartii, nu tot istoricul din antet. */}
+            <div className="zbk-sum" title="Liquidations inside the drawn price range">
+                {box('ask', 'Longs liquidated', pkTxt(prof.long.peak), prof.long.share, prof.long.usd, prof.heavier === 'long')}
+                {box('bid', 'Shorts liquidated', pkTxt(prof.short.peak), prof.short.share, prof.short.usd, prof.heavier === 'short')}
+                {box('up', 'Above price', sides.above.n > 0 ? sides.above.n.toLocaleString('en-US') + ' liquidations' : '', sides.above.share, sides.above.usd, sides.heavier === 'above')}
+                {box('dn', 'Below price', sides.below.n > 0 ? sides.below.n.toLocaleString('en-US') + ' liquidations' : '', sides.below.share, sides.below.usd, sides.heavier === 'below')}
+            </div>
+            {steps.length > 0 && (
+                <div className="zlq-scale" title="What one cell is worth, from faint to bright">
+                    <span className="zlq-dim">one cell</span>
+                    <span className="zlq-scale-v">{fmtUsd(steps[0].usd)}</span>
+                    <span className="zlq-scale-bar">
+                        {steps.map((st, k) => <i key={'l' + k} style={{ background: cellColor(true, st.i) }} />)}
+                    </span>
+                    <span className="zlq-scale-bar">
+                        {steps.map((st, k) => <i key={'s' + k} style={{ background: cellColor(false, st.i) }} />)}
+                    </span>
+                    <span className="zlq-scale-v">{fmtUsd(steps[steps.length - 1].usd)}</span>
+                </div>
+            )}
             <div className="zlq-heat-legend">
                 <span><i style={{ background: LIQ.long }} /> longs liquidated</span>
                 <span><i style={{ background: LIQ.short }} /> shorts liquidated</span>

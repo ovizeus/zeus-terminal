@@ -813,3 +813,16 @@
 .zbk-sum-pk { display: block; margin-top: 2px; font-style: normal; font-size: 9.5px; color: #6f8496; }
 .zbk-sum-row.ask .zbk-sum-pk { color: #ffb27a; }
 .zbk-sum-row.bid .zbk-sum-pk { color: #3fd8c4; }
+
+/* ── HEATMAP: totaluri + scara de culoare (2026-11-12) ── */
+.zbk-sum-row.up { border-left: 3px solid #7fe0c2; }
+.zbk-sum-row.dn { border-left: 3px solid #f0a070; }
+.zbk-sum-row.up .zbk-sum-pk, .zbk-sum-row.dn .zbk-sum-pk { color: #6f8496; }
+.zlq-heat .zbk-sum { margin: 0; }
+.zlq-scale {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px;
+}
+.zlq-scale-bar { display: inline-flex; background: #070a0e; border: 1px solid #1a2531; border-radius: 2px; overflow: hidden; }
+.zlq-scale-bar i { display: block; width: 14px; height: 10px; }
+.zlq-scale-v { color: #d7e5f0; font-variant-numeric: tabular-nums; }

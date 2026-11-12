@@ -14396,3 +14396,22 @@ Nerandat în browser — confirmă operatorul.
 - Preţul e mijlocul rândului de pe grilă (rândul are câţiva dolari pe BTC), nu preţul exact al unui ordin; tabelul „Thickest resting levels" rămâne sursa pentru preţul exact.
 
 **Fişiere:** `bookmap/book.ts` (`cobPeak`, `rowToPrice`, `fmtBookPrice`), `LiqMapPanel.tsx`, `liqmap.css`. Test: `bookmap/__tests__/cobPeak.test.ts` (7). Suita verde ÎNAINTE de build: client 2.010, typecheck curat. Nerandat în browser — confirmă operatorul.
+
+### 🗺️ 2026-11-12 — HEATMAP: axe, profil, maxime, totaluri, scară de culoare (doar client)
+
+Operatorul a cerut mai multe detalii pe heatmap, cu propunerea ÎNAINTE de cod. Din 7 propuneri a ales 1–6; a 7-a (atingi un pătrat şi vezi detaliile) rămâne pentru după, fiindcă schimbă gestul de zoom.
+
+Înainte harta avea doar pătrate şi o linie: nu se putea citi nici preţul, nici ora. Acum, totul calculat din celulele măsurate trimise de server (`{t, pct, longUsd, shortUsd, n}`), fără nicio estimare:
+
+1. **Axa de preţ** în dreapta: preţuri rotunde, linii fine peste hartă, preţul curent scris pe linia galbenă.
+2. **Axa de timp** jos: ore (fereastră ≤ 2 zile) sau date, în fusul celui care priveşte; ultimul reper e „Now".
+3. **Profil pe preţ**: bare cu tot ce s-a lichidat la fiecare nivel pe toată perioada (long + short), dunga cumulată de la preţ în sus şi în jos pe aceeaşi scară, totalul scurt la capete.
+4. **Cele două maxime**: dungă punctată + etichetă „Longs max $X @ preţ" şi „Shorts max $X @ preţ". Dacă cele două etichete ar cădea una peste alta, a doua se mută după prima; dacă nu încape, rămâne doar dunga.
+5. **Totaluri sub hartă**: Longs liquidated / Shorts liquidated / Above price / Below price, cu sumă, procent şi partea mai grea în galben.
+6. **Scara de culoare**: cât valorează un pătrat de la stins la aprins, cu aceeaşi funcţie care colorează harta.
+
+**De ţinut minte:** totalurile numără doar lichidările din intervalul de preţ DESENAT, nu tot istoricul din antet (serverul taie ce e în afara ferestrei). Numărul de lichidări dintr-o celulă nu e despărţit pe părţi, deci e atribuit părţii care domină celula.
+
+**Reparat în trecere:** numărul de rânduri presupunea treapta fixă de 0,25%; acum vine din `heat.bucket`, ca la zoom.
+
+**Fişiere:** `client/src/liqmap/heat.ts` (nou, pur), `LiqMapPanel.tsx` (`HeatView`), `liqmap.css`. Test: `liqmap/__tests__/heat.test.ts` (18). Suita verde înainte de build: client 2.028, typecheck curat. Nerandat în browser — confirmă operatorul.
