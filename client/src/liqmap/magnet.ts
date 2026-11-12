@@ -24,11 +24,13 @@ export type MagnetState = {
     proof: string
     /** cel putin un orizont masurat, cu avantaj peste intamplare */
     proven: boolean
+    /** proven = masurat cu avantaj; no-edge = masurat, fara avantaj; calibrating = inca nemasurat */
+    verdict: 'proven' | 'no-edge' | 'calibrating'
     target: { price: number; pct: number; usd: number; n: number } | null
 }
 
 const blank = (kind: MagnetState['kind'], title: string, detail = ''): MagnetState =>
-    ({ kind, side: null, title, detail, proof: '', proven: false, target: null })
+    ({ kind, side: null, title, detail, proof: '', proven: false, verdict: 'calibrating', target: null })
 
 const short = (sym: string): string => String(sym || '').replace(/USDT$|USDC$|USD$/, '')
 
@@ -51,17 +53,19 @@ export function magnetState(rows: PredictSymbol[], symbol: string, price: number
     const hs = Array.isArray(row.horizons) ? row.horizons : []
     const proof = hs.map((h) => `${horizonLabel(h.horizonMs)} ${liftLabel(h)}`).join(' · ')
     const proven = hs.some((h) => !h.calibrating && Number(h.lift) >= 1.15)
+    const measured = hs.some((h) => !h.calibrating)
+    const verdict: MagnetState['verdict'] = proven ? 'proven' : measured ? 'no-edge' : 'calibrating'
 
     const s = row.signal
     if (s.side !== 'UP' && s.side !== 'DOWN') {
-        return { ...blank('none', 'No magnet right now', String(s.reason || '')), proof, proven }
+        return { ...blank('none', 'No magnet right now', String(s.reason || '')), proof, proven, verdict }
     }
     const arrow = s.side === 'UP' ? '↑' : '↓'
     const tp = Number(s.target && s.target.price)
     if (!s.target || !Number.isFinite(tp) || tp <= 0) {
         return {
             kind: 'direction', side: s.side, title: `Magnet ${arrow} ${s.side === 'UP' ? 'up' : 'down'}`,
-            detail: 'no price cluster mapped yet — collecting data', proof, proven, target: null,
+            detail: 'no price cluster mapped yet — collecting data', proof, proven, verdict, target: null,
         }
     }
 
@@ -82,7 +86,7 @@ export function magnetState(rows: PredictSymbol[], symbol: string, price: number
     parts.push(`strength ${Math.round(Number(s.strength) || 0)}`)
     return {
         kind: 'live', side: s.side, title: `Magnet ${arrow} ${fmtPx(tp)}`,
-        detail: parts.join(' · '), proof, proven, target: { price: tp, pct, usd, n },
+        detail: parts.join(' · '), proof, proven, verdict, target: { price: tp, pct, usd, n },
     }
 }
 

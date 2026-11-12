@@ -406,7 +406,7 @@ function MagnetStrip({ m }: { m: MagnetState | null | undefined }) {
             <div className="zlq-mag-hd">
                 <b>{m.title}</b>
                 {m.kind === 'live' || m.kind === 'direction'
-                    ? <span className={'zlq-mag-tag' + (m.proven ? ' ok' : '')}>{m.proven ? 'measured edge' : 'edge not proven yet'}</span>
+                    ? <span className={'zlq-mag-tag ' + m.verdict}>{m.verdict === 'proven' ? 'measured edge' : m.verdict === 'no-edge' ? 'no edge measured so far' : 'edge not proven yet'}</span>
                     : null}
             </div>
             {m.detail ? <div className="zlq-mag-d">{m.detail}</div> : null}
@@ -557,45 +557,31 @@ function HeatView({ heat, price, onTap, onOut, zoomed, magnet }: { heat: any; pr
                 const on = magnetOnAxis(magnet.target.pct, grid.lo - grid.step / 2, grid.hi + grid.step / 2)
                 const col = `rgb(${MAGNET_RGB})`
                 const arrow = magnet.side === 'UP' ? '↑' : '↓'
-                const pc = `${magnet.target.pct >= 0 ? '+' : ''}${magnet.target.pct.toFixed(2)}%`
-                g.font = 'bold 10px monospace'
                 g.textAlign = 'left'
+                // [2026-11-12] Eticheta sta pe AXA de pret, nu pe harta. Prima
+                // varianta o punea peste patrate, in mijloc: acoperea exact
+                // zona pe care operatorul voia s-o atinga. Pe harta ramane doar
+                // dunga punctata; restul e in caseta de sub harta.
+                const chip = (txt: string, y: number) => {
+                    g.font = 'bold 9px monospace'
+                    g.fillStyle = col
+                    g.fillRect(ax0, y - 7, axisW - 2, 14)
+                    g.fillStyle = '#06090c'
+                    g.fillText(txt, ax0 + 3, y + 0.5)
+                }
                 if (on && on.where === 'inside') {
-                    const y = Math.max(9, Math.min(mapH - 9, yAt(on.pct)))
-                    const txt = [`Magnet ${arrow} ${fmtBookPrice(magnet.target.price)} ${pc}`, `${arrow} ${fmtBookPrice(magnet.target.price)} ${pc}`, `${arrow} ${pc}`]
-                        .find((t) => g.measureText(t).width + 12 <= mapW - 8) || ''
-                    const pw = txt ? g.measureText(txt).width + 12 : 0
-                    // eticheta sta in DREAPTA hartii (maximele stau in stanga);
-                    // daca s-ar calca pe una din ele, urca sau coboara un rand
-                    const x0 = mapW - pw - 2
-                    let ly = y
-                    const hit = taken.find((t) => Math.abs(t.y - y) < 18 && t.x1 > x0 - 4)
-                    if (hit) ly = y - 18 >= 9 ? y - 18 : y + 18
+                    const y = Math.max(8, Math.min(mapH - 8, yAt(on.pct)))
                     g.save()
                     g.setLineDash([2, 3]); g.lineWidth = 1.4; g.strokeStyle = col
-                    g.beginPath(); g.moveTo(0, y); g.lineTo(px0 + profW, y); g.stroke()
+                    g.beginPath(); g.moveTo(0, y); g.lineTo(ax0, y); g.stroke()
                     g.restore()
-                    if (txt) {
-                        g.fillStyle = 'rgba(7,10,14,.94)'
-                        g.fillRect(x0, ly - 8, pw, 16)
-                        g.strokeStyle = col; g.lineWidth = 1
-                        g.strokeRect(x0 + 0.5, ly - 7.5, pw - 1, 15)
-                        g.fillStyle = col
-                        g.fillText(txt, x0 + 6, ly + 0.5)
-                    }
+                    // nu se calca pe pretul curent de pe axa
+                    let cy = y
+                    if (yNow !== null && Math.abs(cy - yNow) < 15) cy = cy <= yNow ? yNow - 15 : yNow + 15
+                    chip(fmtBookPrice(magnet.target.price), cy)
                 } else if (on) {
-                    const txt = `Magnet ${arrow} ${fmtBookPrice(magnet.target.price)} ${pc} · off map`
-                    const pw = g.measureText(txt).width + 12
-                    if (pw <= mapW - 8) {
-                        const x0 = Math.round((mapW - pw) / 2)
-                        const ly = on.where === 'above' ? 42 : mapH - 10   // sub butoanele de zoom
-                        g.fillStyle = 'rgba(7,10,14,.94)'
-                        g.fillRect(x0, ly - 8, pw, 16)
-                        g.strokeStyle = col; g.lineWidth = 1
-                        g.strokeRect(x0 + 0.5, ly - 7.5, pw - 1, 15)
-                        g.fillStyle = col
-                        g.fillText(txt, x0 + 6, ly + 0.5)
-                    }
+                    // in afara hartii: fara dunga, doar sageata si pretul la capatul axei
+                    chip(arrow + fmtBookPrice(magnet.target.price), on.where === 'above' ? 8 : mapH - 8)
                 }
             }
 
@@ -904,6 +890,17 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom, mag
         setZoom({ price: p, pct: zoomStep(zoom?.pct ?? h?.bandPct), home: home as number })
     }, [data, zoom, setZoom])
 
+    // „+ Zoom": acelasi pas ca un tap, dar pe centrul hartii (sau pe pretul
+    // deja ales), pentru cine nu vrea sa tinteasca un nivel cu degetul.
+    const onZoomIn = useCallback(() => {
+        const h = data?.heat
+        const lo = Number(h?.priceLo), hi = Number(h?.priceHi)
+        const centre = zoom?.price ?? (lo > 0 && hi > lo ? (lo + hi) / 2 : null)
+        if (centre === null) return
+        const home = zoom?.home ?? (Number(h?.bandPct) > 0 ? Number(h.bandPct) : undefined)
+        setZoom({ price: centre, pct: zoomStep(zoom?.pct ?? h?.bandPct), home: home as number })
+    }, [data, zoom, setZoom])
+
     const onZoomOut = useCallback(() => {
         if (!zoom) return
         const next = zoomStepOut(zoom.pct, zoom.home)
@@ -1129,8 +1126,8 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom, mag
                     ctx.textAlign = 'left'
                     ctx.textBaseline = 'middle'
                     const tw = ctx.measureText(txt).width
-                    // butonul FIT sta in coltul din stanga-sus
-                    const x0 = y < 40 ? 62 : 4
+                    // butoanele de zoom stau in coltul din stanga-sus
+                    const x0 = y < 34 ? 150 : 4
                     const pw = tw + 12
                     ctx.save()
                     ctx.setLineDash([4, 3])
@@ -1242,20 +1239,16 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom, mag
 
             <div className="zbk-canvas">
                 <canvas ref={cv} onClick={onMapTap} className="zbk-tap" />
-                {heat.focused ? (
-                    <button className="zbk-out" title="Zoom out one step"
-                        onClick={onZoomOut}>&minus;</button>
-                ) : null}
-                <button className={'zbk-fit' + (zoom ? ' act' : '')}
-                    title="Fit the whole book"
-                    onClick={() => setZoom(null)}>
-                    {/* Eticheta vine din ce s-a DESENAT (`heat.focused` +
-                        banda masurata), nu din ce s-a cerut la tap: serverul
-                        margineste adancimea, deci starea clientului poate
-                        spune altceva decat harta de pe ecran. Aceeasi regula
-                        ca la „9 of 1000 trades drawn". */}
-                    {zoomLabel(heat.focused ? heat.bandPct : null)}
-                </button>
+                {/* [2026-11-12] „+ Zoom" / „− Zoom" in loc de FIT, ca pe HEATMAP
+                    (cerut de operator). Iesirea pana la capat duce la cartea
+                    intreaga. Adancimea scrisa alaturi vine din ce s-a DESENAT
+                    (`heat.focused` + banda masurata), nu din ce s-a cerut:
+                    serverul margineste adancimea. */}
+                <div className="zbk-zooms">
+                    <button className="zbk-zoom in" title="Zoom in on the price" onClick={onZoomIn}>+ Zoom</button>
+                    <button className="zbk-zoom zbk-out" title="Zoom out one step" disabled={!zoom} onClick={onZoomOut}>&minus; Zoom</button>
+                    {heat.focused ? <span className="zbk-depth">{zoomLabel(heat.bandPct)}</span> : null}
+                </div>
                 <div className="zbk-axis">
                     <span>{heat.priceHi ? Math.round(heat.priceHi).toLocaleString('en-US') : ''}</span>
                     <span />

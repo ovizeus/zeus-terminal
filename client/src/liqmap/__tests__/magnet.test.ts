@@ -72,6 +72,7 @@ describe('magnetState', () => {
         const m = magnetState([ROW()] as any, 'BTCUSDT', 71572)
         expect(m.proof).toBe('1H CALIBRATING 12/30 · 4H CALIBRATING 3/30')
         expect(m.proven).toBe(false)
+        expect(m.verdict).toBe('calibrating')
     })
 
     it('a measured horizon shows its rate against the base rate', () => {
@@ -79,11 +80,15 @@ describe('magnetState', () => {
         const m = magnetState([row] as any, 'BTCUSDT', 71572)
         expect(m.proof).toBe('1H 30% vs 9% base  ×3.3')
         expect(m.proven).toBe(true)
+        expect(m.verdict).toBe('proven')
     })
 
     it('a measured horizon with no edge is NOT called proven', () => {
         const row = ROW({ horizons: [H({ calibrating: false, pct: 86, controlPct: 86, lift: 1.0, resolved: 40 })] })
-        expect(magnetState([row] as any, 'BTCUSDT', 71572).proven).toBe(false)
+        const m = magnetState([row] as any, 'BTCUSDT', 71572)
+        expect(m.proven).toBe(false)
+        // masurat si fara avantaj: se spune asta, nu „inca nedovedit"
+        expect(m.verdict).toBe('no-edge')
     })
 
     it('a broken target is treated as no target, not drawn at zero', () => {

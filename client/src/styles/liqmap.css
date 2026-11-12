@@ -877,3 +877,17 @@
 .zlq-mag-p { margin-top: 2px; font-size: 9.5px; color: #7f8ea0; }
 .zlq-mag.collecting, .zlq-mag.untracked, .zlq-mag.none { border-left-color: #4a4560; }
 .zlq-mag.collecting .zlq-mag-hd b, .zlq-mag.untracked .zlq-mag-hd b, .zlq-mag.none .zlq-mag-hd b { color: #9a93ad; font-weight: 400; }
+
+/* ── BOOK: + Zoom / − Zoom in loc de FIT (2026-11-12) ── */
+.zbk-zooms { position: absolute; top: 4px; left: 4px; z-index: 2; display: flex; align-items: center; gap: 6px; }
+.zbk-zoom, .zbk-zoom.zbk-out {
+    position: static; margin: 0;
+    padding: 4px 9px; border: 1px solid #2a3b4b; border-radius: 4px;
+    background: rgba(7, 10, 14, .86); color: #d7e5f0;
+    font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.3; letter-spacing: .06em; cursor: zoom-in;
+}
+.zbk-zoom.zbk-out { cursor: zoom-out; }
+.zbk-zoom:disabled { opacity: .38; cursor: default; }
+.zbk-depth { font-family: ui-monospace, monospace; font-size: 10px; color: #e8c547; background: rgba(7, 10, 14, .8); padding: 2px 5px; border-radius: 3px; }
+.zlq-mag-tag.proven { color: #0a0f14; background: #b68cff; border-color: #b68cff; }
+.zlq-mag-tag.no-edge { color: #d8b25e; border-color: #4a3f26; }

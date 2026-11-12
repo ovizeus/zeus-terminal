@@ -630,14 +630,20 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
     })
   })
 
-  it('ZOOM: butonul de FIT scoate fereastra din cerere', async () => {
+  it('ZOOM: „+ Zoom" intra un pas fara tap pe harta, „− Zoom" scoate fereastra din cerere', async () => {
+    // [2026-11-12] FIT a fost inlocuit cu „+ Zoom" / „− Zoom", cerut de operator.
     const { container } = await openBook()
-    const cv = container.querySelector('.zbk-canvas canvas') as HTMLCanvasElement
-    cv.getBoundingClientRect = () => ({ top: 0, left: 0, width: 320, height: 200,
-      right: 320, bottom: 200, x: 0, y: 0, toJSON: () => ({}) } as any)
-    fireEvent.click(cv, { clientX: 100, clientY: 100 })
-    await waitFor(() => expect(lastBookUrl).toMatch(/focus=/))
-    fireEvent.click(screen.getByTitle('Fit the whole book'))
+    expect(screen.queryByTitle('Fit the whole book')).toBeNull()
+    fireEvent.click(container.querySelector('.zbk-zoom.in') as HTMLElement)
+    await waitFor(() => expect(lastBookUrl).toMatch(/focusPct=/))
+    const p1 = Number(new URL('http://x' + lastBookUrl.replace(/^[^?]*/, '')).searchParams.get('focusPct'))
+    fireEvent.click(container.querySelector('.zbk-zoom.in') as HTMLElement)
+    await waitFor(() => {
+      const p2 = Number(new URL('http://x' + lastBookUrl.replace(/^[^?]*/, '')).searchParams.get('focusPct'))
+      expect(p2).toBeLessThan(p1)
+    })
+    fireEvent.click(container.querySelector('.zbk-out') as HTMLElement)
+    fireEvent.click(container.querySelector('.zbk-out') as HTMLElement)
     await waitFor(() => expect(lastBookUrl).not.toMatch(/focus=/))
   })
 
@@ -663,7 +669,7 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
     mockFetch(b)
     const { container } = await openBook()
     await waitFor(() =>
-      expect(container.querySelector('.zbk-fit')?.textContent?.trim()).toBe('±0.05%'))
+      expect(container.querySelector('.zbk-depth')?.textContent?.trim()).toBe('±0.05%'))
   })
 
   it('ZOOM: harta nefocalizata spune FIT, chiar daca banda masurata e mica', async () => {
@@ -672,8 +678,9 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
     b.heat.bandPct = 0.05
     mockFetch(b)
     const { container } = await openBook()
-    await waitFor(() =>
-      expect(container.querySelector('.zbk-fit')?.textContent?.trim()).toBe('FIT'))
+    await waitFor(() => expect(container.querySelector('.zbk-zoom.in')).toBeTruthy())
+    // nefocalizata: nicio adancime scrisa langa butoane
+    expect(container.querySelector('.zbk-depth')).toBeNull()
   })
 
   it('fara tranzactii si fara lichidari, harta tot se deseneaza', async () => {
@@ -741,12 +748,13 @@ describe('NEREUS: iesirea din zoom', () => {
   const pct = () => Number(new URL('http://x' + lastBookUrl.replace(/^[^?]*/, ''))
     .searchParams.get('focusPct'))
 
-  it('butonul de ieşire apare doar cand e zoom', async () => {
+  it('butonul de ieşire e aprins doar cand e zoom', async () => {
     const { container } = await openBook()
-    expect(container.querySelector('.zbk-out')).toBeNull()
+    // butonul e mereu la vedere, dar STINS cat timp nu e zoom
+    expect((container.querySelector('.zbk-out') as HTMLButtonElement).disabled).toBe(true)
     tap(container)
     await waitFor(() => expect(lastBookUrl).toMatch(/focusPct=/))
-    expect(container.querySelector('.zbk-out')).toBeTruthy()
+    expect((container.querySelector('.zbk-out') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('⛔ doua tapuri inauntru, un pas afara: se intoarce la adancimea de dinainte', async () => {
@@ -763,10 +771,10 @@ describe('NEREUS: iesirea din zoom', () => {
   it('un pas afara de la primul nivel duce la FIT', async () => {
     const { container } = await openBook()
     tap(container)
-    await waitFor(() => expect(container.querySelector('.zbk-out')).toBeTruthy())
+    await waitFor(() => expect((container.querySelector('.zbk-out') as HTMLButtonElement).disabled).toBe(false))
     fireEvent.click(container.querySelector('.zbk-out') as HTMLElement)
     await waitFor(() => expect(lastBookUrl).not.toMatch(/focus=/))
-    expect(container.querySelector('.zbk-out')).toBeNull()
+    expect((container.querySelector('.zbk-out') as HTMLButtonElement).disabled).toBe(true)
   })
 })
 

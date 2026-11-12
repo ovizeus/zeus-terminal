@@ -14461,3 +14461,15 @@ Suita verde înainte de build: client 2.042, typecheck curat. Nerandat în brows
 **De ţinut minte:** avantajul magnetului rămâne NEDOVEDIT până ies orizonturile din calibrare; caseta o spune singură. Predict se aduce acum şi când eşti pe HEATMAP sau BOOK (ruta serveşte rezultatul din tick, nu cere bursei).
 
 **Fişiere:** `liqmap/magnet.ts` (nou, pur), `LiqMapPanel.tsx` (`MagnetStrip`, linia din `HeatView`, `BookView`), `liqmap.css`. Test: `liqmap/__tests__/magnet.test.ts` (13). Suita verde înainte de build: client 2.055, typecheck curat. Nerandat în browser — confirmă operatorul.
+
+### 🧲 2026-11-12 — Magnetul mutat pe axă (HEATMAP) + „+ Zoom / − Zoom" în BOOK (doar client)
+
+**Văzut de operator pe telefon:** eticheta magnetului stătea în mijlocul heatmap-ului, peste pătrate şi peste eticheta „Longs max" — acoperea exact zona pe care voia s-o atingă. Greşeala mea: am pus-o pe hartă fără să o văd randată.
+
+- **HEATMAP:** pe hartă rămâne doar dunga violet punctată; preţul magnetului e acum un cartuş violet pe AXA de preţ, ca preţul curent (galben). Dacă cele două ar cădea unul peste altul, cel violet se mută cu un rând. În afara hărţii: fără dungă, doar săgeată + preţ la capătul axei. Detaliile rămân în caseta de sub hartă.
+- **BOOK:** butonul FIT a fost înlocuit cu „+ Zoom" şi „− Zoom", ca pe HEATMAP (cerut de operator). „+ Zoom" intră un pas pe centrul hărţii (sau pe preţul deja ales); atingerea hărţii face în continuare zoom pe nivelul atins. „− Zoom" e stins când nu eşti în zoom; ieşind până la capăt ajungi la cartea întreagă. Adâncimea desenată (ex. „±0.05%") apare lângă butoane doar în zoom.
+- **Eticheta de dovadă a magnetului** are acum trei stări, nu două: „measured edge", „no edge measured so far" (orizonturi măsurate, fără avantaj) şi „edge not proven yet" (încă în calibrare). Captura lui arăta 1H „11% vs 12% base ×0.9" şi 4H „19% vs 28% base ×0.7" sub eticheta „not proven yet" — prea blând faţă de ce spun cifrele.
+
+**De ţinut minte (din datele reale, 12 nov):** pe BTC magnetul NU are avantaj măsurat pe 1H şi 4H (sub rata de bază); 24H e în calibrare (16/30, ~13 zile).
+
+Teste schimbate deliberat în `bookRender.test.tsx` (FIT nu mai există). Suita verde înainte de build: client 2.055, typecheck curat. Nerandat în browser — confirmă operatorul.
