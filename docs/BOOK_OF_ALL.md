@@ -14444,3 +14444,20 @@ Cerut de operator după HEATMAP: aceleaşi culori şi pe MAP şi LIVE. Long lich
 - Neschimbat, dinadins: PREDICT, BOOK, acoperirea din antet şi accentul portocaliu al panoului (taburi, simbol activ) — rămân pe `LIQ`/`BOOK`. Nu au fost cerute.
 
 Suita verde înainte de build: client 2.042, typecheck curat. Nerandat în browser — confirmă operatorul.
+
+### 🧲 2026-11-12 — MAGNETUL pe HEATMAP şi BOOK, tras din PREDICT (doar client)
+
+**Cerut de operator:** unde trage magnetul, până la ce preţ şi cât la sută; „real, nu fake" — când nu are date să scrie că adună date, iar când le strânge să le afişeze. Propunerea a fost discutată ÎNAINTE de cod.
+
+**Hotărât:** magnetul e cifra lui PREDICT (`/api/market/liq-predict`), nu un al doilea calcul — două taburi care socotesc separat ajung să spună lucruri diferite.
+
+- **HEATMAP:** linie violet punctată la preţul-ţintă, cu etichetă în dreapta hărţii („Magnet ↑ 73,900 +3.31%"). Dacă s-ar călca pe eticheta unei maxime, urcă sau coboară un rând. Dacă ţinta e în afara hărţii, nu se desenează o linie la margine: apare doar „… · off map", sus sau jos.
+- **BOOK:** doar caseta de text deasupra hărţii. Cartea e lată de ~±0,3%, ţinta stă de obicei mult mai departe.
+- **Caseta (aceeaşi în ambele taburi):** titlu, apoi distanţa în % şi în dolari faţă de preţul de ACUM, dolarii şi numărul de lichidări din grămadă, puterea; dedesubt dovada pe orizonturi, prin `liftLabel` (CALIBRATING x/y până când serverul are destule cazuri, apoi rata faţă de rata de bază). Eticheta „edge not proven yet" devine „measured edge" doar când un orizont măsurat are raport ≥ 1,15.
+- **Stările fără cifră, fiecare cu textul ei:** „Collecting data for magnet" (nimic primit încă), „Magnet is measured for BTC and ETH only" (alte pieţe — serverul calculează doar aceste două), „No magnet right now" + motivul serverului, „Magnet ↑ up — no price cluster mapped yet".
+
+**Pe viu la 19:38–19:52 UTC:** BTC magnet UP spre 73.900 (putere 48), ETH magnet DOWN spre 1.992 (putere 62) — din `liq_predict_snapshots`.
+
+**De ţinut minte:** avantajul magnetului rămâne NEDOVEDIT până ies orizonturile din calibrare; caseta o spune singură. Predict se aduce acum şi când eşti pe HEATMAP sau BOOK (ruta serveşte rezultatul din tick, nu cere bursei).
+
+**Fişiere:** `liqmap/magnet.ts` (nou, pur), `LiqMapPanel.tsx` (`MagnetStrip`, linia din `HeatView`, `BookView`), `liqmap.css`. Test: `liqmap/__tests__/magnet.test.ts` (13). Suita verde înainte de build: client 2.055, typecheck curat. Nerandat în browser — confirmă operatorul.

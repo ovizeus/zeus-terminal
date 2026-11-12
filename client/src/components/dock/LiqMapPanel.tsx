@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
 import { fmtUsd, fmtPct, intensity, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
+import { magnetState, magnetOnAxis, type MagnetState } from '../../liqmap/magnet'
 import {
     heatGrid, heatProfile, heatSides, priceTicks, timeTicks, scaleSteps,
     heatCanvasSize, heatLayout, nearestCell, cellTimeRange, fmtCellTime, heatCellColor, HEAT, fmtShortUsd,
@@ -127,7 +128,9 @@ export function LiqMapPanel() {
     }, [view, symbol, bookBand, bookWin, bookZoom])
 
     useEffect(() => {
-        if (view !== 'pred') return
+        // [2026-11-12] Magnetul de pe HEATMAP si BOOK e cifra lui PREDICT, deci
+        // se aduce si acolo. Ruta serveste rezultatul din tick, nu cere bursei.
+        if (view !== 'pred' && view !== 'heat' && view !== 'book') return
         let on = true
         const ac = new AbortController()
         const go = async () => {
@@ -210,11 +213,12 @@ export function LiqMapPanel() {
 
             <div className="zlq-body">
                 {view === 'map' && <MapView map={map} price={price} onTap={onLiqTap} />}
-                {view === 'heat' && <HeatView heat={heat} price={price} onTap={onLiqTap} onOut={onLiqOut} zoomed={!!liqSpan} />}
+                {view === 'heat' && <HeatView heat={heat} price={price} onTap={onLiqTap} onOut={onLiqOut} zoomed={!!liqSpan}
+                    magnet={magnetState(pred, symbol, price)} />}
                 {view === 'live' && <LiveView tape={tape} mine={symbol} />}
                 {view === 'pred' && <PredictView rows={pred} />}
                 {view === 'book' && (
-                    <BookView data={book} band={bookBand} setBand={setBookBand}
+                    <BookView data={book} band={bookBand} setBand={setBookBand} magnet={magnetState(pred, symbol, price)}
                         win={bookWin} setWin={setBookWin} symbol={symbol}
                         zoom={bookZoom} setZoom={setBookZoom} />
                 )}
@@ -391,7 +395,27 @@ function SideTotal({ side, where, heavier }: { side: LadderSide; where: 'above' 
 // ── Vederea HEATMAP: timp × preţ ──────────────────────────────────
 // Canvas, nu DOM: 90 de coloane × zeci de niveluri ar însemna mii de noduri,
 // iar pe telefon asta se simte imediat.
-function HeatView({ heat, price, onTap, onOut, zoomed }: { heat: any; price: number; onTap?: () => void; onOut?: () => void; zoomed?: boolean }) {
+// Magnetul, ca rand de text: aceeasi caseta pe HEATMAP si pe BOOK. Starile fara
+// cifra („Collecting data for magnet", „No magnet right now") se scriu la fel
+// de vizibil ca un magnet viu — o caseta care dispare ar arata ca o defectiune.
+const MAGNET_RGB = '182, 140, 255'
+function MagnetStrip({ m }: { m: MagnetState | null | undefined }) {
+    if (!m) return null
+    return (
+        <div className={'zlq-mag ' + m.kind + (m.side ? ' ' + m.side.toLowerCase() : '')}>
+            <div className="zlq-mag-hd">
+                <b>{m.title}</b>
+                {m.kind === 'live' || m.kind === 'direction'
+                    ? <span className={'zlq-mag-tag' + (m.proven ? ' ok' : '')}>{m.proven ? 'measured edge' : 'edge not proven yet'}</span>
+                    : null}
+            </div>
+            {m.detail ? <div className="zlq-mag-d">{m.detail}</div> : null}
+            {m.proof ? <div className="zlq-mag-p">{m.proof}</div> : null}
+        </div>
+    )
+}
+
+function HeatView({ heat, price, onTap, onOut, zoomed, magnet }: { heat: any; price: number; onTap?: () => void; onOut?: () => void; zoomed?: boolean; magnet?: MagnetState | null }) {
     const ref = useRef<HTMLCanvasElement | null>(null)
     // [2026-11-12] Patratul atins. Se tine cheia (coloana + nivel), nu obiectul:
     // la urmatoarea aducere celula e alt obiect, iar dupa zoom poate sa nu mai
@@ -525,6 +549,56 @@ function HeatView({ heat, price, onTap, onOut, zoomed }: { heat: any; price: num
             flag(prof.long.peak, 'Longs', HEAT.long)
             flag(prof.short.peak, 'Shorts', HEAT.short)
 
+            // ── magnetul: tinta lui PREDICT, pe aceeasi axa de pret ──
+            // Violet, ca sa nu se confunde cu long/short (rosu/verde) sau cu
+            // pretul (galben). In afara hartii nu se deseneaza o linie
+            // mincinoasa la margine: doar o sageata care spune incotro.
+            if (magnet && magnet.target) {
+                const on = magnetOnAxis(magnet.target.pct, grid.lo - grid.step / 2, grid.hi + grid.step / 2)
+                const col = `rgb(${MAGNET_RGB})`
+                const arrow = magnet.side === 'UP' ? '↑' : '↓'
+                const pc = `${magnet.target.pct >= 0 ? '+' : ''}${magnet.target.pct.toFixed(2)}%`
+                g.font = 'bold 10px monospace'
+                g.textAlign = 'left'
+                if (on && on.where === 'inside') {
+                    const y = Math.max(9, Math.min(mapH - 9, yAt(on.pct)))
+                    const txt = [`Magnet ${arrow} ${fmtBookPrice(magnet.target.price)} ${pc}`, `${arrow} ${fmtBookPrice(magnet.target.price)} ${pc}`, `${arrow} ${pc}`]
+                        .find((t) => g.measureText(t).width + 12 <= mapW - 8) || ''
+                    const pw = txt ? g.measureText(txt).width + 12 : 0
+                    // eticheta sta in DREAPTA hartii (maximele stau in stanga);
+                    // daca s-ar calca pe una din ele, urca sau coboara un rand
+                    const x0 = mapW - pw - 2
+                    let ly = y
+                    const hit = taken.find((t) => Math.abs(t.y - y) < 18 && t.x1 > x0 - 4)
+                    if (hit) ly = y - 18 >= 9 ? y - 18 : y + 18
+                    g.save()
+                    g.setLineDash([2, 3]); g.lineWidth = 1.4; g.strokeStyle = col
+                    g.beginPath(); g.moveTo(0, y); g.lineTo(px0 + profW, y); g.stroke()
+                    g.restore()
+                    if (txt) {
+                        g.fillStyle = 'rgba(7,10,14,.94)'
+                        g.fillRect(x0, ly - 8, pw, 16)
+                        g.strokeStyle = col; g.lineWidth = 1
+                        g.strokeRect(x0 + 0.5, ly - 7.5, pw - 1, 15)
+                        g.fillStyle = col
+                        g.fillText(txt, x0 + 6, ly + 0.5)
+                    }
+                } else if (on) {
+                    const txt = `Magnet ${arrow} ${fmtBookPrice(magnet.target.price)} ${pc} · off map`
+                    const pw = g.measureText(txt).width + 12
+                    if (pw <= mapW - 8) {
+                        const x0 = Math.round((mapW - pw) / 2)
+                        const ly = on.where === 'above' ? 42 : mapH - 10   // sub butoanele de zoom
+                        g.fillStyle = 'rgba(7,10,14,.94)'
+                        g.fillRect(x0, ly - 8, pw, 16)
+                        g.strokeStyle = col; g.lineWidth = 1
+                        g.strokeRect(x0 + 0.5, ly - 7.5, pw - 1, 15)
+                        g.fillStyle = col
+                        g.fillText(txt, x0 + 6, ly + 0.5)
+                    }
+                }
+            }
+
             // ── linia pretului curent, cu pretul scris pe axa ──
             if (yNow !== null) {
                 g.strokeStyle = 'rgba(255,214,102,.6)'; g.lineWidth = 1
@@ -563,7 +637,7 @@ function HeatView({ heat, price, onTap, onOut, zoomed }: { heat: any; price: num
                 g.strokeRect(x + cw / 2 - bw / 2 - 1, y + rh / 2 - bh / 2 - 1, bw + 2, bh + 2)
             }
         } catch { /* fara repere, dar cu harta intreaga */ }
-    }, [heat, price, selKey])
+    }, [heat, price, selKey, magnet?.kind, magnet?.side, magnet?.target?.price])
 
     // Atingerea ALEGE un patrat; zoom-ul s-a mutat pe butonul din colt.
     const onPick = (e: any) => {
@@ -623,6 +697,7 @@ function HeatView({ heat, price, onTap, onOut, zoomed }: { heat: any; price: num
             })() : (
                 <div className="zlq-cell-hint">Tap a cell to see what was liquidated there</div>
             )}
+            <MagnetStrip m={magnet} />
             {/* Totalurile numara doar ce e DESENAT: lichidarile din intervalul
                 de pret al hartii, nu tot istoricul din antet. */}
             <div className="zbk-sum" title="Liquidations inside the drawn price range">
@@ -802,7 +877,7 @@ function PredictCard({ r }: { r: PredictSymbol }) {
 // cartea care EXISTĂ e lată de 253 de dolari pe BTC (−0,155% … +0,160%).
 // Nu există pereţi la 1% distanţă. Deci „zoom" nu te depărtează — te duce mai
 // adânc în bandă şi mai departe pe timp.
-function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: any) {
+function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom, magnet }: any) {
     const cv = useRef<HTMLCanvasElement | null>(null)
     // „e bine dar nu stiu sa-l citesc" — un panou care are nevoie de mine
     // alaturi nu si-a facut treaba. Explicatia sta DESCHISA pana cand o inchide
@@ -1159,6 +1234,11 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom }: a
                         onClick={() => setWin(wd.value)}>{wd.label}</button>
                 ))}
             </div>
+
+            {/* [2026-11-12] Magnetul aici e doar TEXT: cartea e lata de ~±0,3%,
+                iar tinta sta de obicei mult mai departe, deci o linie ar lipsi
+                aproape mereu. Linia e pe HEATMAP. */}
+            <MagnetStrip m={magnet} />
 
             <div className="zbk-canvas">
                 <canvas ref={cv} onClick={onMapTap} className="zbk-tap" />

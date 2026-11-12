@@ -862,3 +862,18 @@
    doua pentru sus/jos. Sus/jos se citeste din pozitie. */
 .zlq-row.up .zlq-cum line, .zlq-row.dn .zlq-cum line { stroke: #f2f6fa; }
 .zlq-end.up, .zlq-end.dn, .zlq-end.heavier.up, .zlq-end.heavier.dn { border-left-color: #8fa6b8; }
+
+/* ── MAGNET: tinta lui PREDICT, pe HEATMAP si BOOK (2026-11-12) ── */
+.zlq-mag {
+    border: 1px solid #2b2540; border-left: 3px solid #b68cff; border-radius: 4px;
+    background: #0e0c16; padding: 6px 9px; margin: 2px 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums;
+}
+.zlq-mag-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.zlq-mag-hd b { color: #d9c6ff; font-size: 12.5px; letter-spacing: .02em; }
+.zlq-mag-tag { font-size: 9px; color: #8b7fa6; border: 1px solid #2b2540; border-radius: 3px; padding: 1px 5px; }
+.zlq-mag-tag.ok { color: #0a0f14; background: #b68cff; border-color: #b68cff; }
+.zlq-mag-d { margin-top: 3px; font-size: 10.5px; color: #c4cfda; }
+.zlq-mag-p { margin-top: 2px; font-size: 9.5px; color: #7f8ea0; }
+.zlq-mag.collecting, .zlq-mag.untracked, .zlq-mag.none { border-left-color: #4a4560; }
+.zlq-mag.collecting .zlq-mag-hd b, .zlq-mag.untracked .zlq-mag-hd b, .zlq-mag.none .zlq-mag-hd b { color: #9a93ad; font-weight: 400; }
