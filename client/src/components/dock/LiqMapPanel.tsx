@@ -4,7 +4,7 @@ import { fmtUsd, fmtPct, intensity, barColor, buildLadder, ladderSides, fmtSpan,
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
 import {
     heatGrid, heatProfile, heatSides, priceTicks, timeTicks, scaleSteps,
-    heatCanvasSize, heatLayout, nearestCell, cellTimeRange, fmtCellTime, heatCellColor, HEAT,
+    heatCanvasSize, heatLayout, nearestCell, cellTimeRange, fmtCellTime, heatCellColor, HEAT, fmtShortUsd,
 } from '../../liqmap/heat'
 import { spanStep, spanStepOut, spanLabel, SPAN_FACTOR } from '../../liqmap/scale'
 import {
@@ -210,7 +210,7 @@ export function LiqMapPanel() {
 
             <div className="zlq-body">
                 {view === 'map' && <MapView map={map} price={price} onTap={onLiqTap} />}
-                {view === 'heat' && <HeatView heat={heat} price={price} onTap={onLiqTap} />}
+                {view === 'heat' && <HeatView heat={heat} price={price} onTap={onLiqTap} onOut={onLiqOut} zoomed={!!liqSpan} />}
                 {view === 'live' && <LiveView tape={tape} mine={symbol} />}
                 {view === 'pred' && <PredictView rows={pred} />}
                 {view === 'book' && (
@@ -386,7 +386,7 @@ function SideTotal({ side, where, heavier }: { side: LadderSide; where: 'above' 
 // ── Vederea HEATMAP: timp × preţ ──────────────────────────────────
 // Canvas, nu DOM: 90 de coloane × zeci de niveluri ar însemna mii de noduri,
 // iar pe telefon asta se simte imediat.
-function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: () => void }) {
+function HeatView({ heat, price, onTap, onOut, zoomed }: { heat: any; price: number; onTap?: () => void; onOut?: () => void; zoomed?: boolean }) {
     const ref = useRef<HTMLCanvasElement | null>(null)
     // [2026-11-12] Patratul atins. Se tine cheia (coloana + nivel), nu obiectul:
     // la urmatoarea aducere celula e alt obiect, iar dupa zoom poate sa nu mai
@@ -488,8 +488,8 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
                     g.fillStyle = '#ffd77a'
                     g.fillText(txt, px0 + profW - 2, y)
                 }
-                tag(cobLabelText(sides.above.usd), 7)
-                tag(cobLabelText(sides.below.usd), mapH - 7)
+                tag(fmtShortUsd(sides.above.usd), 7)
+                tag(fmtShortUsd(sides.below.usd), mapH - 7)
             }
 
             // ── 4. cele doua maxime: dunga punctata + eticheta la capat ──
@@ -588,7 +588,11 @@ function HeatView({ heat, price, onTap }: { heat: any; price: number; onTap?: ()
         <div className="zlq-heat">
             <div className="zlq-heat-cv">
                 <canvas ref={ref} onClick={onPick} className="zlq-pick" />
-                <button className="zlq-heat-zoom" title="Zoom in on the price" onClick={onTap}>+ Zoom</button>
+                <div className="zlq-heat-zooms">
+                    <button className="zlq-heat-zoom" title="Zoom in on the price" onClick={onTap}>+ Zoom</button>
+                    {/* Stins cand nu esti in zoom: nu are unde sa iasa. */}
+                    <button className="zlq-heat-zoom out" title="Zoom out one step" disabled={!zoomed} onClick={onOut}>&minus; Zoom</button>
+                </div>
             </div>
             {sel ? (() => {
                 const tr = cellTimeRange(sel.t, heat.cols || HEAT_COLS, heat.tMin, heat.tMax)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { heatGrid, heatLayout, nearestCell, cellTimeRange, fmtCellTime, heatCellColor, HEAT } from '../heat'
+import { fmtShortUsd, heatGrid, heatLayout, nearestCell, cellTimeRange, fmtCellTime, heatCellColor, HEAT } from '../heat'
 
 // [HEATMAP 2026-11-12] Punctul 7: atingi un patrat si vezi ce e in el. Pe
 // telefon o coloana are sub 3px, deci nimeni nu nimereste un patrat cu degetul:
@@ -87,5 +87,17 @@ describe('heat colours — the chart red and green', () => {
         expect(heatCellColor(true, 0)).toBe('rgba(255, 51, 85, 0)')
         expect(heatCellColor(false, 0.01)).toBe('rgba(0, 217, 122, 0.120)')
         expect(heatCellColor(true, NaN)).toBe('rgba(255, 51, 85, 0)')
+    })
+})
+
+describe('fmtShortUsd', () => {
+    it('switches to billions instead of writing thousands of millions', () => {
+        expect(fmtShortUsd(6_698_000_000)).toBe('6.7B')
+        expect(fmtShortUsd(359_000_000)).toBe('359M')
+        expect(fmtShortUsd(4_300_000)).toBe('4.3M')
+        expect(fmtShortUsd(999_700_000)).toBe('1.0B')
+        expect(fmtShortUsd(52_400)).toBe('52K')
+        expect(fmtShortUsd(0)).toBe('')
+        expect(fmtShortUsd(NaN)).toBe('')
     })
 })

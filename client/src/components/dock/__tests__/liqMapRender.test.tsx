@@ -324,8 +324,16 @@ describe('zoom pe axa de pret', () => {
     // panzei alege acum un patrat (cerut de operator, punctul 7).
     const zoom = container.querySelector('.zlq-heat .zlq-heat-zoom') as HTMLElement
     expect(zoom).toBeTruthy()
+    // „− Zoom" e stins cat timp nu esti in zoom
+    const out = container.querySelector('.zlq-heat .zlq-heat-zoom.out') as HTMLButtonElement
+    expect(out).toBeTruthy()
+    expect(out.disabled).toBe(true)
     fireEvent.click(zoom)
     await waitFor(() => expect(Number(span(lastPanel()))).toBeCloseTo(0.7, 6))
+    // dupa un pas inauntru se aprinde si te scoate inapoi
+    await waitFor(() => expect((container.querySelector('.zlq-heat .zlq-heat-zoom.out') as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(container.querySelector('.zlq-heat .zlq-heat-zoom.out') as HTMLElement)
+    await waitFor(() => expect(Number(span(lastPanel()))).not.toBeCloseTo(0.7, 6))
   })
 
   it('tap pe un patrat din HARTA DE CALDURA arata ce e in el si NU face zoom', async () => {

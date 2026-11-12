@@ -14427,3 +14427,10 @@ Operatorul a cerut mai multe detalii pe heatmap, cu propunerea ÎNAINTE de cod. 
 - **Culorile:** long lichidat = `#ff3355`, short lichidat = `#00d97a` (din `marketDataChart.ts`). Doar pe HEATMAP: pătrate, profil, etichetele maximelor, scara de culoare, legenda şi casetele. MAP, LIVE şi BOOK rămân chihlimbar/cyan.
 
 **Fişiere:** `liqmap/heat.ts` (`HEAT`, `heatCellColor`, `heatLayout`, `nearestCell`, `cellTimeRange`, `fmtCellTime`), `LiqMapPanel.tsx`, `liqmap.css`. Teste: `heatTap.test.ts` (12), `liqMapRender.test.tsx` (+1, 1 schimbat). Suita verde înainte de build: client 2.041, typecheck curat. Nerandat în browser — confirmă operatorul.
+
+### 🗺️ 2026-11-12 — HEATMAP: buton „− Zoom" lângă „+ Zoom" + miliarde pe eticheta scurtă (doar client)
+
+- **Cerut de operator:** lângă „+ Zoom" şi un „− Zoom", ca să se vadă. E stins cât timp nu eşti în zoom; după un pas înăuntru se aprinde şi iese câte un pas (acelaşi `onLiqOut` ca butonul din antet).
+- **Văzut în captura lui:** totalul de la capătul dungii scria „6698M". Eticheta scurtă nu ştia miliarde. Acum `fmtShortUsd` scrie „6.7B". Greşeala mea: refolosisem formatul din BOOK, unde sumele nu ajung la miliarde.
+
+Fişiere: `liqmap/heat.ts` (`fmtShortUsd`), `LiqMapPanel.tsx`, `liqmap.css`. Teste: `heatTap.test.ts` (+1), `liqMapRender.test.tsx` (zoom out). Suita verde înainte de build: client 2.042, typecheck curat.

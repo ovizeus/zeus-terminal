@@ -233,3 +233,14 @@ export function fmtCellTime(from: number, to: number, tzOffsetMin = 0): string {
     const hm = (d: Date) => `${two(d.getUTCHours())}:${two(d.getUTCMinutes())}`
     return day(A) === day(B) ? `${day(A)} ${hm(A)} – ${hm(B)}` : `${day(A)} ${hm(A)} – ${day(B)} ${hm(B)}`
 }
+
+/** Suma scurta pentru locuri inguste. Stie si miliarde: „6698M" nu se citeste. */
+export function fmtShortUsd(v: number): string {
+    const n = Number(v)
+    if (!Number.isFinite(n) || n <= 0) return ''
+    const f = (x: number) => (x >= 10 ? Math.round(x).toString() : x.toFixed(1))
+    if (n >= 999_500_000) return f(n / 1e9) + 'B'
+    if (n >= 999_500) return f(n / 1e6) + 'M'
+    if (n >= 1000) return Math.round(n / 1000) + 'K'
+    return Math.round(n).toString()
+}

@@ -834,8 +834,10 @@
 .zbk-sum-row.sh .zbk-sum-pk { color: #4be3a0; }
 .zlq-heat-cv { position: relative; }
 .zlq-heat canvas.zlq-pick { cursor: crosshair; touch-action: manipulation; }
+.zlq-heat-zooms { position: absolute; top: 6px; left: 6px; display: flex; gap: 6px; }
+.zlq-heat-zoom.out { cursor: zoom-out; }
+.zlq-heat-zoom:disabled { opacity: .38; cursor: default; }
 .zlq-heat-zoom {
-    position: absolute; top: 6px; left: 6px;
     padding: 4px 9px; border: 1px solid #2a3b4b; border-radius: 4px;
     background: rgba(7, 10, 14, .86); color: #d7e5f0;
     font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; cursor: zoom-in;
