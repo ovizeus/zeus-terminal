@@ -11,6 +11,7 @@ import { switchGlobalMode } from '../../data/marketDataTrading'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
 import { QuotaIndicator } from './QuotaIndicator'
+import { getAccessLevel, isAccessLevelKnown, showBetaNotice } from '../../core/betaGate'
 import { WsHealthIndicator } from './WsHealthIndicator'
 
 export function ModeBar() {
@@ -85,6 +86,8 @@ export function ModeBar() {
   const disabledTitle: string | undefined = undefined
 
   function handleSwitch() {
+    // [BETA-GATE 2026-11-13] Schimbarea modului porneste motorul de trading.
+    if (isAccessLevelKnown() && getAccessLevel() !== 'full') { showBetaNotice('Trading mode'); return }
     if (engineMode === 'demo') {
       if (executionEnv === null) {
         toast('LIVE MODE LOCKED: ' + (executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w)

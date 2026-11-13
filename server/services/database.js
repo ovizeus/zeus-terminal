@@ -10568,6 +10568,15 @@ migrate('424_byoi_requests', () => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_byoi_att ON byoi_attachments(request_id)');
 });
 
+// [BETA-GATE 2026-11-13] Nivelul de acces al contului. Coloana se adauga cu
+// 'viewer' ca valoare implicita (orice cont NOU porneste viewer), iar conturile
+// deja aprobate si adminii sunt ridicati la 'full' o singura data, aici —
+// pentru ei nu se schimba nimic. Conturile inca neaprobate raman 'viewer'.
+migrate('426_user_access_level', () => {
+    db.exec("ALTER TABLE users ADD COLUMN access_level TEXT NOT NULL DEFAULT 'viewer'");
+    db.exec("UPDATE users SET access_level = 'full' WHERE approved = 1 OR role = 'admin'");
+});
+
 migrate('425_byoi_indicators', () => {
     // [2026-11-06] A DELIVERED indicator. Separate from byoi_requests on
     // purpose: a request is one buyer's private paperwork, while a public
@@ -10624,7 +10633,8 @@ const _stmts = {
     countUsers: db.prepare('SELECT COUNT(*) as cnt FROM users'),
     insertUser: db.prepare('INSERT INTO users (email, password_hash, role, approved) VALUES (?, ?, ?, ?)'),
     setUserTermsConsent: db.prepare("UPDATE users SET terms_accepted_at = ?, terms_version = ?, updated_at = datetime('now') WHERE id = ?"),
-    listUsers: db.prepare('SELECT id, email, role, approved, status, created_at, app_version_code, app_version_name, app_platform, app_version_at FROM users ORDER BY created_at'),
+    listUsers: db.prepare('SELECT id, email, role, approved, status, access_level, created_at, app_version_code, app_version_name, app_platform, app_version_at FROM users ORDER BY created_at'),
+    setAccessLevel: db.prepare("UPDATE users SET access_level = ?, updated_at = datetime('now') WHERE id = ? AND role != 'admin'"),
     approveUser: db.prepare("UPDATE users SET approved = 1, updated_at = datetime('now') WHERE email = ?"),
     deleteUser: db.prepare('DELETE FROM users WHERE email = ? AND role != ?'),
     updatePassword: db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?"),
@@ -10916,6 +10926,14 @@ function approveUser(email) {
 
 function rejectUser(email) {
     return _stmts.deleteUser.run(email.toLowerCase().trim(), 'admin');
+}
+
+// [BETA-GATE] Doar cele doua valori cunoscute; adminul nu poate fi coborat.
+function setAccessLevel(userId, level) {
+    if (level !== 'viewer' && level !== 'full') throw new Error('invalid access level');
+    const r = _stmts.setAccessLevel.run(level, userId);
+    try { require('./accessLevel').invalidate(userId); } catch (_) { /* cache-ul expira singur */ }
+    return r;
 }
 
 function deleteUser(email, protectedRole) {
@@ -12203,6 +12221,7 @@ module.exports = {
     approveUser,
     rejectUser,
     deleteUser,
+    setAccessLevel,
     updatePassword,
     bumpTokenVersion,
     setTempPasswordMeta,

@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const db = require('../services/database');
 const logger = require('../services/logger');
 const { getActiveSessions, resetActivity } = require('../middleware/sessionAuth');
+const accessLevel = require('../services/accessLevel');
 function _mask(email) { if (!email) return '?'; const [u, d] = email.split('@'); return u[0] + '***@' + (d || '?'); }
 
 const router = express.Router();
@@ -519,7 +520,10 @@ router.get('/me', (req, res) => {
             });
         }
 
-        res.json({ ok: true, id: userId, email: decoded.email, role: decoded.role || 'user' });
+        // [BETA-GATE] Aplicatia isi pune lacatele dupa nivelul asta. Poarta
+        // adevarata e pe server (middleware/viewerGate.js), nu aici.
+        res.json({ ok: true, id: userId, email: decoded.email, role: decoded.role || 'user',
+            accessLevel: accessLevel.levelOf(userId) });
     } catch (err) {
         res.clearCookie('zeus_token', { path: '/' });
         res.clearCookie('zeus_uid', { path: '/' });
@@ -547,6 +551,7 @@ router.get('/admin/users', (req, res) => {
             email: u.email,
             role: u.role || 'user',
             approved: !!u.approved,
+            accessLevel: accessLevel.levelOfUser(u),
             status: u.status || 'active',
             bannedUntil: u.banned_until || null,
             createdAt: u.created_at,
@@ -641,6 +646,35 @@ router.post('/admin/approve', (req, res) => {
 });
 
 // ─── ADMIN: POST /auth/admin/delete — delete a user ───
+// [BETA-GATE 2026-11-13] Ridica sau coboara un cont intre 'viewer' si 'full'.
+router.post('/admin/access-level', (req, res) => {
+    const token = req.cookies && req.cookies.zeus_token;
+    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+        const caller = db.findUserByEmail(decoded.email);
+        if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
+            return res.status(403).json({ error: 'Admin only' });
+        }
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
+            return res.status(401).json({ error: 'Session expired' });
+        }
+        const { email, level } = req.body || {};
+        if (!email) return res.status(400).json({ error: 'Email required' });
+        if (level !== 'viewer' && level !== 'full') return res.status(400).json({ error: 'Level must be viewer or full' });
+        const target = db.findUserByEmail(String(email).toLowerCase().trim());
+        if (!target) return res.status(404).json({ error: 'User not found' });
+        if (target.role === 'admin') return res.status(400).json({ error: 'Admin access cannot be changed' });
+        const from = accessLevel.levelOfUser(target);
+        db.setAccessLevel(target.id, level);
+        db.auditLog(caller.id, 'ADMIN_ACCESS_LEVEL', { targetId: target.id, from, to: level }, req.ip);
+        logger.info('AUTH', 'Admin changed access level', { target: _mask(target.email), from, to: level });
+        res.json({ ok: true, accessLevel: level });
+    } catch (err) {
+        res.status(401).json({ error: 'Token invalid' });
+    }
+});
+
 router.post('/admin/delete', (req, res) => {
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
@@ -836,6 +870,7 @@ router.get('/admin/users/:id', (req, res) => {
             email: u.email,
             role: u.role || 'user',
             approved: !!u.approved,
+            accessLevel: accessLevel.levelOfUser(u),
             status: u.status || 'active',
             bannedUntil: u.banned_until || null,
             createdAt: u.created_at,

@@ -23,6 +23,7 @@ import { start as startLiqFeedClient, stop as stopLiqFeedClient } from './servic
 import './app.css'
 import './styles/institutional.css'
 import './styles/liqmap.css'
+import './styles/betagate.css'
 
 export function App() {
   const theme = useUiStore((s) => s.theme)

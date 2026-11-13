@@ -20,7 +20,9 @@ exchangeInfo._setFiltersForTest('BTCUSDT', { stepSize: '0.001', tickSize: '0.10'
 
 function seedUser(uid) {
   try {
-    db.prepare('INSERT OR IGNORE INTO users (id, email, password_hash) VALUES (?, ?, ?)').run(uid, `u${uid}@test.local`, 'x');
+    // [BETA-GATE 2026-11-13] Cont cu acces COMPLET: un cont nou e view-only si
+    // nu primeste intrari deloc, deci garda testata aici n-ar fi atinsa.
+    db.prepare('INSERT OR IGNORE INTO users (id, email, password_hash, access_level) VALUES (?, ?, ?, 'full')').run(uid, `u${uid}@test.local`, 'x');
   } catch (_) {}
 }
 function _decision(extra) {

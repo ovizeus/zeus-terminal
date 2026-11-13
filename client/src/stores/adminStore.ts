@@ -24,6 +24,8 @@ export interface AdminUser {
   role: string
   status: string
   approved: boolean
+  /** [BETA-GATE] 'viewer' = chart, date de piata, lichidari; 'full' = tot. */
+  accessLevel?: 'viewer' | 'full'
   bannedUntil?: string | null
   createdAt?: string
   // [2026-06-26] Installed native APK version (null until the app reports it on boot).

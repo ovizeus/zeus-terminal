@@ -6,6 +6,7 @@
 
 const Sentry = require('@sentry/node');
 const logger = require('./logger');
+const _accessLevel = require('./accessLevel');
 const brainLock = require('../brainLock');
 const serverState = require('./serverState');
 const serverAT = require('./serverAT');
@@ -637,12 +638,15 @@ function start() {
 function _restoreStcFromDb() {
     try {
         const rows = db.db.prepare("SELECT key, value, user_id FROM at_state WHERE key LIKE 'stc:%'").all();
-        let restored = 0;
+        let restored = 0, skippedViewers = 0;
         for (const row of rows) {
             const m = /^stc:(\d+)$/.exec(row.key);
             if (!m) continue;
             const userId = parseInt(m[1], 10);
             if (!userId || userId <= 0) continue;
+            // [BETA-GATE 2026-11-13] Un viewer nu intra in brain, nici daca
+            // i-a ramas o configuratie salvata dinainte de a fi coborat.
+            if (_accessLevel.isViewer(userId)) { skippedViewers++; continue; }
             try {
                 const cfg = JSON.parse(row.value);
                 if (cfg && typeof cfg === 'object') {
@@ -652,6 +656,7 @@ function _restoreStcFromDb() {
                 }
             } catch (_) { /* skip corrupt row */ }
         }
+        if (skippedViewers > 0) logger.info('BRAIN', `[BETA-GATE] ${skippedViewers} view-only account(s) not restored into the brain loop`);
         if (restored > 0) {
             logger.info('BRAIN', `Restored STC config for ${restored} user(s) from DB`);
         }
@@ -939,6 +944,14 @@ function _runCycle() {
         // getUserState, dailyPnL, ddAssess, openPositions, recentCloses) are
         // hoisted above the symbol loop per audit §Performance Considerations.
         for (const [userId, stc] of users) {
+            // [BETA-GATE 2026-11-13] Un cont coborat la 'viewer' in timp ce era
+            // in bucla iese de aici la primul ciclu (ruta lui de configurare e
+            // inchisa, deci `updateConfig` nu l-ar mai scoate niciodata).
+            if (_accessLevel.isViewer(userId)) {
+                _stcMap.delete(userId);
+                logger.info('BRAIN', `[BETA-GATE] uid=${userId} is view-only — removed from the brain loop`);
+                continue;
+            }
             // [HOIST-1] Skip users who have AT disabled — no point computing gates/fusion
             if (!serverAT.isATActive(userId)) continue;
             // [HOIST-2] Server-authoritative dispatch gate (see original comment below).
@@ -2727,6 +2740,13 @@ function getDecisionLog(limit) {
 // Allow updating server trading config from client sync (per-user)
 function updateConfig(userId, cfg) {
     if (!userId || !cfg || typeof cfg !== 'object') return;
+    // [BETA-GATE 2026-11-13] Aici intra un cont in bucla brain-ului. Un viewer
+    // nu intra: fara asta ar primi decizii si ar tranzactiona demo, chiar daca
+    // ruta care cheama functia e deja inchisa pentru el.
+    if (_accessLevel.isViewer(userId)) {
+        if (_stcMap.delete(userId)) logger.info('BRAIN', `[BETA-GATE] uid=${userId} is view-only — removed from the brain loop`);
+        return;
+    }
     let stc = _stcMap.get(userId);
     if (!stc) {
         stc = Object.assign({}, DEFAULT_STC);
@@ -2986,6 +3006,7 @@ module.exports = {
         getServerSigDirState: () => _serverSigDirState,
         resetServerSigDirState: () => { _serverSigDirState = null; },
         setStcForTest: (uid, stc) => { _stcMap.set(uid, stc); },
+        stcUserIds: () => [..._stcMap.keys()],
         setMainCycleActiveForTest: (v) => { _mainCycleActiveOverrideForTest = v; },
     },
 };

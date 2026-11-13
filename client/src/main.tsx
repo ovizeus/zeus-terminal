@@ -1,6 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { installBetaFetchGuard } from './core/betaGate'
+
+// [BETA-GATE 2026-11-13] Inainte de orice cerere: un cont 'viewer' nu trimite
+// cereri catre zonele inchise. Poarta adevarata ramane pe server.
+installBetaFetchGuard()
 
 // [R33] Silence console.{log,debug,info} in production. 147 call sites emit
 // diagnostic chatter that clutters real-user consoles and slows Chrome's

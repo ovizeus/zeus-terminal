@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isModalLocked, getAccessLevel, isAccessLevelKnown, showBetaNotice, lockedLabel } from '../core/betaGate'
 import type { ThemeId } from '../types'
 
 type ModalId = 'notifications' | 'cloud' | 'alerts' | 'charts' | 'llv' | 'supremus' | 'sr' | 'settings' | 'ovi' | 'welcome' | 'admin' | 'adminPage' | 'cmdpalette' | 'exposure' | 'decisionlog' | 'missed' | 'session' | 'regime' | 'performance' | 'compare' | 'byoi'
@@ -132,7 +133,12 @@ export const useUiStore = create<UiStore>()((set) => ({
   setActivePanel: (panel) => set({ activePanel: panel }),
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
   setConnected: (connected) => set({ connected }),
-  openModal: (id, from = null) => set({ activeModal: id, modalReturnTo: from }),
+  openModal: (id, from = null) => {
+    // [BETA-GATE 2026-11-13] Un singur loc prin care se deschide orice
+    // fereastra: un cont 'viewer' primeste mesajul de beta in locul ei.
+    if (isAccessLevelKnown() && isModalLocked(String(id), getAccessLevel())) { showBetaNotice(lockedLabel(String(id))); return }
+    set({ activeModal: id, modalReturnTo: from })
+  },
   closeModal: () => set({ activeModal: null, modalReturnTo: null }),
   patch: (partial) => set((s) => ({ ...s, ...partial })),
   // [Phase 3B] Logout reset — clears ownership/env/mode/UI-connection fields to defaults.

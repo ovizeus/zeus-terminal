@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
+import { BetaBadge } from '../common/BetaNotice'
 import { useSupportStore } from '../../stores/supportStore'
 
 export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
@@ -160,6 +161,7 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
           <div>
             <div className="t1">ZEU&apos;S</div>
             <div className="t2">AI TRADING ANALYTICS</div>
+            <BetaBadge />
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
               <div className="bprice" id="bprice">
                 {price > 0

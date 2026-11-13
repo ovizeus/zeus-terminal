@@ -231,6 +231,11 @@ app.get('/app', (req, res, next) => {
 // ─── Session Auth (protects everything below) ───
 app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] prefer config source
 
+// ─── [BETA-GATE 2026-11-13] Conturile 'viewer' ajung doar la rutele de pe lista ───
+// Imediat dupa sessionAuth si inaintea ORICAREI rute protejate: o ruta montata
+// deasupra liniei asteia ar ocoli poarta.
+app.use(require('./server/middleware/viewerGate').createViewerGate());
+
 // ─── App Version endpoint ───
 // ─── [OPS-6] Prometheus /metrics endpoint ───────────────────────────
 // Text exposition format (Prometheus 0.0.4). No npm dep — formats the

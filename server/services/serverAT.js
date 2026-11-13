@@ -1234,10 +1234,26 @@ function _classifyOrphanResolution(ctx) {
     return (ctx && ctx.isZeusCreated === true) ? 'CLOSE' : 'ADOPT';
 }
 
+// Un rand pe cont, nu unul la fiecare ciclu.
+const _betaGateSeen = new Set();
+function _betaGateWarn(userId) {
+    if (_betaGateSeen.has(userId)) return;
+    _betaGateSeen.add(userId);
+    logger.warn('AT_ENGINE', `[BETA-GATE] entry refused uid=${userId} — view-only account`);
+}
+
 function processBrainDecision(decision, stc, userId, userIntent) {
     if (!decision || !decision.fusion || !stc) return null;
     // [MULTI-USER] Hard guard — reject decisions without userId
     if (!userId) { logger.error('AT_ENGINE', 'processBrainDecision called without userId — skipping'); return null; }
+
+    // [BETA-GATE 2026-11-13] A doua plasa: nicio intrare pentru un cont viewer,
+    // indiferent pe unde ar ajunge decizia aici. Doar INTRARILE sunt oprite —
+    // iesirile si protectiile unei pozitii existente nu trec prin functia asta.
+    if (require('./accessLevel').isViewer(userId)) {
+        _betaGateWarn(userId);
+        return null;
+    }
 
     // [Phase 2 S2.B] Global panic halt — hard block before any per-user gate.
     // Must come before _uState() to stay cheap when halted.

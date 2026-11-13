@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 // [Phase 3C] Engine mode single source — useATStore.mode. AT.mode is a read mirror.
 import { useATStore, useAuthStore } from '../../stores'
+import { isDockLocked, showBetaNotice, lockedLabel } from '../../core/betaGate'
 
 // [R24.1] SVG contents converted from hardcoded HTML strings (which were fed
 // into dangerouslySetInnerHTML) to structured JSX fragments. No user data
@@ -372,6 +373,9 @@ export function ZeusDock({ active, onDockClick }: ZeusDockProps) {
   const { atHasPos, manualHasPos } = useDockLinkState()
   const role = useAuthStore((s) => s.role)
   const isAdmin = role === 'admin'
+  // [BETA-GATE 2026-11-13] Pictogramele de activitate raman la vedere, cu
+  // lacat; apasate, arata mesajul de beta in loc sa deschida panoul.
+  const accessLevel = useAuthStore((s) => (s.accessKnown ? s.accessLevel : 'full'))
   const pendingCount = useAdminPendingCount(isAdmin)
   let lastGroup = ''
 
@@ -380,17 +384,28 @@ export function ZeusDock({ active, onDockClick }: ZeusDockProps) {
       {DOCK_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
         const showSep = lastGroup !== '' && item.group !== lastGroup
         lastGroup = item.group
+        const locked = isDockLocked(item.id, accessLevel)
         return (
           <span key={item.id}>
             {showSep && <div className="zd-sep" />}
             <div
-              className={`zd-item${active === item.id ? ' active' : ''}`}
+              className={`zd-item${active === item.id ? ' active' : ''}${locked ? ' zd-locked' : ''}`}
               data-dock={item.id}
-              onClick={() => onDockClick(item.id)}
+              aria-disabled={locked || undefined}
+              title={locked ? `${item.label} — locked during beta` : undefined}
+              onClick={() => { if (locked) showBetaNotice(lockedLabel(item.id)); else onDockClick(item.id) }}
             >
               <div className="zd-icon">
                 <svg viewBox="0 0 24 24" width="24" height="24">{item.icon}</svg>
                 <LinkDots forItem={item.id} atHasPos={atHasPos} manualHasPos={manualHasPos} />
+                {locked && (
+                  <span className="zd-lock" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="10" height="10">
+                      <rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" />
+                      <path d="M8 10.5V7.6a4 4 0 018 0v2.9" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                )}
                 {item.id === 'admin' && pendingCount > 0 && (
                   <span className="zd-badge" aria-label={`${pendingCount} pending approval${pendingCount > 1 ? 's' : ''}`}>
                     {pendingCount > 9 ? '9+' : pendingCount}

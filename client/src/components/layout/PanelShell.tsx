@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useUiStore } from '../../stores'
+import { useUiStore, useAuthStore } from '../../stores'
 import { ChartControls } from '../chart/ChartControls'
 import { TradingChart } from '../chart/TradingChart'
 import { BrainCockpit } from '../brain/BrainCockpit'
@@ -9,6 +9,8 @@ import { MaxTradesProtectBadge } from '../MaxTradesProtectBadge'
 import { StatusBar } from './StatusBar'
 import WatchlistBar from './WatchlistBar'
 import { ZeusDock } from './ZeusDock'
+import { BetaNotice } from '../common/BetaNotice'
+import { isDockLocked, showBetaNotice, lockedLabel } from '../../core/betaGate'
 import { PageView } from './PageView'
 import { _zComingSoon } from '../../ui/dock'
 import { ModeBar } from './ModeBar'
@@ -113,9 +115,26 @@ const DOCK_TITLES: Record<string, string> = {
 }
 
 export function PanelShell() {
-  const [dockActive, setDockActive] = useState<string | null>(() => {
+  // Pana confirma serverul nivelul, nu se inchide nimic (vezi authStore.accessKnown).
+  const accessLevel = useAuthStore((s) => (s.accessKnown ? s.accessLevel : 'full'))
+  const [dockActive, setDockActiveRaw] = useState<string | null>(() => {
     try { return sessionStorage.getItem('zeusDock') || null } catch { return null }
   })
+  // [BETA-GATE 2026-11-13] Toate drumurile catre un panou trec pe aici (dock,
+  // evenimentul `zeus:dock-activate`, panoul tinut minte din sesiunea trecuta):
+  // un cont 'viewer' primeste mesajul de beta in locul unui panou sub lacat.
+  const setDockActive = (next: string | null) => {
+    if (next && isDockLocked(next, accessLevel)) { showBetaNotice(lockedLabel(next)); return }
+    setDockActiveRaw(next)
+  }
+  // Panoul tinut minte se inchide daca a ajuns sub lacat (nivelul soseste dupa
+  // prima randare, deci nu poate fi hotarat in initializator).
+  useEffect(() => {
+    if (dockActive && isDockLocked(dockActive, accessLevel)) {
+      setDockActiveRaw(null)
+      try { sessionStorage.removeItem('zeusDock') } catch { /* mod privat */ }
+    }
+  }, [dockActive, accessLevel])
   const activeModal = useUiStore((s) => s.activeModal)
   const closeModal = useUiStore((s) => s.closeModal)
   // Phase 2C: canonical executionEnv. null → LOCKED label in dock title.
@@ -549,6 +568,7 @@ export function PanelShell() {
 
         {/* ── Icon Dock — 1:1 from original zeus-dock ── */}
         <ZeusDock active={dockActive} onDockClick={handleDockClick} />
+        <BetaNotice />
 
         {/*
          * ══ BRIDGE: #zeus-groups — ALL panels always in DOM ══

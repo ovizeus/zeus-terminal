@@ -208,7 +208,8 @@ export function UsersSection() {
                     onBanPicker={() => setBanMenuFor(banMenuFor === u.email ? null : u.email)}
                     banPickerOpen={banMenuFor === u.email}
                     onPickBan={(dur) => { setBanMenuFor(null); if (dur === 'permanent') { setConfirm({ title: 'Permanent ban', message: `Ban ${u.email} PERMANENTLY?\n\nThis is a strong action. User can be unbanned later but the audit will remain.`, confirmText: 'Ban permanently', tone: 'danger', requireType: u.email, onConfirm: async () => { setConfirm(null); await runAction('ban', { email: u.email, duration: 'permanent' }, `Banned ${u.email} permanently`) } }) } else { void runAction('ban', { email: u.email, duration: dur }, `Banned ${u.email} (${dur})`) } }}
-                    onApprove={() => runAction('approve', { email: u.email }, `Approved ${u.email}`)}
+                    onApprove={() => runAction('approve', { email: u.email }, `Approved ${u.email} — view-only until you grant full access`)}
+                    onSetAccess={(level) => { if (level === 'full') { setConfirm({ title: 'Grant full access', message: `Give ${u.email} full access?\n\nThis unlocks AutoTrade, manual trading, ARES, DSL, the brain and OMEGA for this account.`, confirmText: 'Grant full access', tone: 'gold', onConfirm: async () => { setConfirm(null); await runAction('access-level', { email: u.email, level: 'full' }, `${u.email} now has full access`) } }) } else { void runAction('access-level', { email: u.email, level: 'viewer' }, `${u.email} is now view-only`) } }}
                     onReject={() => { setConfirm({ title: 'Reject user', message: `Reject pending user ${u.email}?\n\nTheir account will be deleted.`, confirmText: 'Reject', tone: 'danger', onConfirm: async () => { setConfirm(null); await runAction('reject', { email: u.email }, `Rejected ${u.email}`) } }) }}
                     onDelete={() => { setConfirm({ title: 'Delete user', message: `Delete ${u.email}?\n\nThis permanently removes the account and exchange keys. Irreversible.`, confirmText: 'Delete permanently', tone: 'danger', requireType: u.email, onConfirm: async () => { setConfirm(null); await runAction('delete', { email: u.email }, `Deleted ${u.email}`) } }) }}
                     onForceLogout={() => { setConfirm({ title: 'Force logout', message: `Force logout ${u.email}?\n\nAll their active sessions will be invalidated.`, confirmText: 'Force logout', tone: 'gold', onConfirm: async () => { setConfirm(null); await runAction('force-logout', { email: u.email }, `Forced logout ${u.email}`) } }) }}
@@ -289,7 +290,7 @@ function VersionCell({ u, latestVer }: { u: AdminUser; latestVer: number | null 
 
 function UserRow({
   u, latestVer, selected, onToggleSelect, onOpen, onBlock, onUnblock, onBanPicker, banPickerOpen, onPickBan, onUnban,
-  onApprove, onReject, onDelete, onForceLogout, onSuspend, onResetPassword,
+  onApprove, onSetAccess, onReject, onDelete, onForceLogout, onSuspend, onResetPassword,
 }: {
   u: AdminUser
   latestVer: number | null
@@ -303,6 +304,7 @@ function UserRow({
   onPickBan: (dur: string) => void
   onUnban: () => void
   onApprove: () => void
+  onSetAccess: (level: 'viewer' | 'full') => void
   onReject: () => void
   onDelete: () => void
   onForceLogout: () => void
@@ -333,6 +335,10 @@ function UserRow({
           {!isAdmin && !isBanned && isBlocked && <span className="zac-b zac-b-blocked">BLOCKED</span>}
           {!isAdmin && !isBanned && !isBlocked && isPending && <span className="zac-b zac-b-pending">PENDING</span>}
           {!isAdmin && !isBanned && !isBlocked && !isPending && <span className="zac-b zac-b-active">ACTIVE</span>}
+          {/* [BETA-GATE] Nivelul de acces, vizibil pe fiecare cont. */}
+          {!isAdmin && (u.accessLevel === 'full'
+            ? <span className="zac-b zac-b-full" title="Full access: trading, brain and OMEGA are unlocked">FULL</span>
+            : <span className="zac-b zac-b-viewer" title="View-only: chart, indicators, market data, liquidation map">VIEW-ONLY</span>)}
         </div>
       </td>
       <td><ApiBadge u={u} /></td>
@@ -349,6 +355,9 @@ function UserRow({
           {!isAdmin && !isPending && (
             <>
               <button className="zac-btn zac-btn-sm" onClick={onOpen}>View</button>
+              {u.accessLevel === 'full'
+                ? <button className="zac-btn zac-btn-sm" onClick={() => onSetAccess('viewer')} title="Back to view-only">Set view-only</button>
+                : <button className="zac-btn zac-btn-gold zac-btn-sm" onClick={() => onSetAccess('full')} title="Unlock trading, brain and OMEGA">Grant full</button>}
               {isBanned ? (
                 <button className="zac-btn zac-btn-primary zac-btn-sm" onClick={onUnban}>Unban</button>
               ) : (

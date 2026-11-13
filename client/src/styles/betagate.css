@@ -1,0 +1,56 @@
+/* ═══ BETA — lacate si mesaj pentru conturile 'viewer' (2026-11-13) ═══
+   Pictogramele sub lacat raman la vedere, stinse, cu un lacat mic in colt.
+   Poarta adevarata e pe server; astea sunt doar semnele de pe usa. */
+.zd-item.zd-locked { opacity: .5; }
+.zd-item.zd-locked .zd-icon { position: relative; filter: saturate(.25); }
+.zd-item.zd-locked:active { opacity: .7; }
+.zd-lock {
+    position: absolute; right: -3px; bottom: -3px;
+    width: 15px; height: 15px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #0a0f16; border: 1px solid #f0c04088; color: #f0c040;
+    pointer-events: none;
+}
+
+.zbeta-ov {
+    position: fixed; inset: 0; z-index: 100000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(4, 7, 11, .72);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+.zbeta-box {
+    width: 100%; max-width: 360px; text-align: center;
+    padding: 22px 20px 18px; border-radius: 10px;
+    background: #0d141c; border: 1px solid #2a3b4b;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, .6);
+    font-family: var(--ff, system-ui, sans-serif);
+}
+.zbeta-lock {
+    width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #f0c040; background: #f0c04014; border: 1px solid #f0c04055;
+}
+.zbeta-t { font-size: 15px; font-weight: 700; color: #eaf2f8; letter-spacing: .01em; }
+.zbeta-m { margin-top: 10px; font-size: 12.5px; line-height: 1.55; color: #b9c6d2; }
+.zbeta-s { margin-top: 10px; font-size: 11.5px; line-height: 1.5; color: #7f93a6; }
+.zbeta-ok {
+    margin-top: 16px; width: 100%; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid #f0c040; background: #f0c040; color: #0a0f14;
+    font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.zbeta-ok:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+.zbeta-badge {
+    display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 9px;
+    font-size: 8px; font-weight: 700; letter-spacing: .08em; white-space: nowrap;
+    color: #f0c040; background: #f0c04014; border: 1px solid #f0c04055;
+}
+
+/* Admin: nivelul de acces pe fiecare cont */
+.zac-b-full { background: #b68cff18; color: #c9a8ff; border-color: #b68cff55; }
+.zac-b-viewer { background: #8fa6b818; color: #9fb3c4; border-color: #8fa6b844; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .zbeta-box { animation: zbeta-in .16s ease-out; }
+    @keyframes zbeta-in { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
