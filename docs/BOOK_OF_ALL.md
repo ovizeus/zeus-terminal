@@ -14608,3 +14608,21 @@ Chart şi piaţă (`/api/market/*` pe nume, `/api/sd/symbols`, `/api/fng`), lich
 Cerut de operator în timp ce îşi refăcea contul de probă: „să pui lacăt şi pe BYOI". Fereastra BYOI era deja închisă pentru un cont view-only (apăsarea arăta mesajul de beta), dar butonul de pe chart nu avea niciun semn. Acum butoanele `BYOI` şi `EXP` din rândul de unelte al chartului şi rândul „Build your own" din lista de indicatori poartă un lacăt mic galben când contul e view-only. Pentru conturile cu acces complet nu se schimbă nimic.
 
 Fişiere: `ChartControls.tsx`, `betagate.css`. Client 2.079 teste, typecheck curat, build după teste. Serverul neatins, fără repornire.
+
+## ✉️ 2026-11-13 — Emailuri de cont: „am primit cererea" şi „accesul e aprobat" (b383)
+
+**Cerut de operator**, discutat înainte de cod: cine cere un cont să afle că cererea a ajuns şi că se aprobă manual, apoi să afle când a fost aprobat. Până acum omul se înregistra şi nu mai auzea nimic. Serverul trimitea deja emailuri (codul de login), deci nu a fost nevoie de un serviciu nou.
+
+**Hotărât de operator:** exact propunerea — scurte, în engleză, semnate „The Zeus Terminal team"; fără email la respingere; cei doi deja înscrişi (id 19, 20) primesc doar emailul de aprobare. Limita de conturi: 50 (a scris întâi 20, apoi a confirmat 50).
+
+**Ce face** (`server/services/accountEmails.js`):
+- **La înregistrare** — „Zeus Terminal — we received your request": cererea a ajuns, aprobarea e manuală şi nu e instantanee, urmează un al doilea email, aplicaţia e în beta şi ce va vedea, „dacă nu tu ai cerut, ignoră".
+- **La aprobare** — „Zeus Terminal — your access is approved": poate intra, linkul de login, ce e deschis şi ce e sub lacăt până la lansare, unde întreabă (Support din aplicaţie).
+- Trimiterea nu e aşteptată şi nu aruncă: înregistrarea şi aprobarea reuşesc şi cu SMTP căzut; eşecul rămâne în jurnal (`[MAIL]`), cu adresa mascată.
+- Emailul de înregistrare pleacă doar pentru un cont NOU creat; o a doua încercare cu aceeaşi adresă primeşte acelaşi răspuns şi niciun email (nu se poate folosi ca să bombardezi un cont existent şi nici ca să afli dacă o adresă există).
+- Emailul de aprobare pleacă o singură dată, la trecerea din neaprobat în aprobat (şi din aprobarea în grup). Starea de dinainte se citeşte ÎNAINTE de scriere.
+- Niciun termen promis; adresa trece prin escapare înainte de a ajunge în HTML; adresa publică vine din `APP_PUBLIC_URL` doar dacă e un `https` curat, altfel `https://zeus-terminal.com`.
+
+**Limita de conturi:** `MAX_USERS=50` în `.env` (era implicit 10 şi era plină după refacerea contului de probă — următoarea cerere ar fi primit „Maximum number of accounts reached").
+
+**Teste:** `tests/unit/accountEmails.test.js` (12): conţinut, fără termene, fără injecţie, SMTP căzut, şi momentul trimiterii în rute. Mutaţie: aprobarea care trimite mereu → 1 test roşu.

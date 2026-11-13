@@ -11,6 +11,7 @@ const db = require('../services/database');
 const logger = require('../services/logger');
 const { getActiveSessions, resetActivity } = require('../middleware/sessionAuth');
 const accessLevel = require('../services/accessLevel');
+const accountEmails = require('../services/accountEmails');
 function _mask(email) { if (!email) return '?'; const [u, d] = email.split('@'); return u[0] + '***@' + (d || '?'); }
 
 const router = express.Router();
@@ -251,6 +252,11 @@ router.post('/register', async (req, res) => {
 
         // Non-admin: registered but pending approval
         logger.info('AUTH', 'User registered (pending)', { email: _mask(normalEmail) });
+        // [2026-11-13] „Am primit cererea, se aproba manual." Doar pentru un cont
+        // NOU creat acum — ramura de mai sus, pentru o adresa care exista deja,
+        // nu trimite nimic (altfel oricine ar putea bombarda un cont existent).
+        // Neasteptat: raspunsul nu depinde de email.
+        void accountEmails.sendAccountEmail('registered', normalEmail);
         res.json({ ok: true, pending: true, message: 'Account created. Waiting for admin approval.' });
     } catch (err) {
         logger.error('AUTH', 'Register error', { error: err.message });
@@ -636,8 +642,14 @@ router.post('/admin/approve', (req, res) => {
         const user = db.findUserByEmail(normalEmail);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        // Starea de DINAINTE, citita inainte de scriere: emailul pleaca doar la
+        // trecerea din neaprobat in aprobat.
+        const wasApproved = !!user.approved;
         db.approveUser(normalEmail);
         db.auditLog(caller.id, 'ADMIN_APPROVE_USER', { targetEmail: normalEmail }, req.ip);
+        // [2026-11-13] „Accesul a fost aprobat" — o singura data; o a doua
+        // apasare pe Approve nu mai trimite.
+        if (!wasApproved) void accountEmails.sendAccountEmail('approved', normalEmail);
         logger.info('AUTH', 'Admin approved user', { target: _mask(normalEmail) });
         res.json({ ok: true });
     } catch (err) {
@@ -1034,7 +1046,7 @@ router.post('/admin/bulk', (req, res) => {
             if (!u) { results.skipped++; continue; }
             if (u.role === 'admin' && u.id !== guard.caller.id) { results.skipped++; continue; }
             if (action === 'force-logout') { db.bumpTokenVersion(id); }
-            else if (action === 'approve') { db.approveUser(u.email); }
+            else if (action === 'approve') { const wasApproved = !!u.approved; db.approveUser(u.email); if (!wasApproved) void accountEmails.sendAccountEmail('approved', u.email); }
             else if (action === 'block') { db.setUserStatus(u.id, 'blocked'); }
             else if (action === 'unblock') { db.setUserStatus(u.id, 'active'); }
             results.ok++;

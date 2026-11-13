@@ -55,4 +55,4 @@ async function sendCriticalEmail(subject, body) {
     }
 }
 
-module.exports = { sendCriticalEmail };
+module.exports = { sendCriticalEmail, getTransport: _getTransport };
