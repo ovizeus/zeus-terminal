@@ -71,7 +71,7 @@ export function AdaptivePanel() {
         <span>MULTI-SYMBOL SCANNER &mdash; LIVE</span>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <span id="mscanUpdTime" style={{ fontSize: '7px', color: 'var(--dim)' }}>&mdash;</span>
-          <span id="mscanOpps" style={{ fontSize: '7px', color: '#00ff88' }}>0 oportunitati</span>
+          <span id="mscanOpps" style={{ fontSize: '7px', color: '#00ff88' }}>0 opportunities</span>
           <button
             style={{
               fontSize: '7px', padding: '2px 7px', border: '1px solid #00b8d433',

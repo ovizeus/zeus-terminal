@@ -15,7 +15,7 @@
 export type AccessLevel = 'viewer' | 'full'
 
 export const BETA_MESSAGE =
-    'Zeus Terminal is in beta. This feature opens at public launch — for now it is available to the Zeus team only.'
+    'Zeus Terminal is in beta. Trading tools open at public launch and are, for now, available to the Zeus Terminal team only.'
 export const BETA_BADGE = 'BETA · view-only access'
 
 /**
@@ -79,7 +79,7 @@ const LOCKED_API: Array<[string, string]> = [
     ['/api/dsl/', 'DSL'], ['/api/dsldrive/', 'DSL'],
     ['/api/brain/', 'Brain'],
     ['/api/omega/', 'OMEGA'], ['/api/ring5/', 'OMEGA'],
-    ['/api/journal', 'Journal'], ['/api/performance', 'Journal'], ['/api/session-review', 'Journal'],
+    ['/api/journal', 'Journal'], ['/api/sync/journal', 'Journal'], ['/api/performance', 'Journal'], ['/api/session-review', 'Journal'],
     ['/api/compare', 'Journal'], ['/api/missed-trades', 'Journal'], ['/api/regime-history', 'Journal'],
     ['/api/exposure', 'Journal'], ['/api/dashboard', 'Journal'],
     ['/api/leaderboard', 'Leaderboard'],
@@ -126,12 +126,16 @@ export function currentBetaNotice(): string | null { return _notice }
 export function onBetaNotice(l: Listener): () => void { _listeners.add(l); return () => { _listeners.delete(l) } }
 
 /**
- * Inveleste `fetch` o singura data:
- *  - viewer + zona inchisa → raspuns 403 `beta_locked` facut pe loc, fara retea;
- *  - orice 403 `beta_locked` venit de la server pe o cerere care SCRIE arata
- *    mesajul de beta (un buton pe care nu l-am prevazut tot explica de ce).
- * Citirile refuzate tac: aplicatia veche le cere in bucla, iar un mesaj la
- * fiecare ar fi de nesuportat.
+ * Inveleste `fetch` o singura data: pentru un cont confirmat 'viewer', o
+ * cerere catre o zona inchisa primeste pe loc un 403 `beta_locked`, fara retea.
+ *
+ * ⚠️ Garda NU arata niciodata mesajul de beta. [2026-11-13] Prima varianta il
+ * arata la orice SCRIERE refuzata, pe ideea ca „un buton neprevazut tot explica
+ * de ce". In realitate aplicatia veche scrie singura, in fundal (sincronizare
+ * de configuratie, rapoarte), deci fereastra sarea pe ecran fara ca omul sa fi
+ * atins ceva — operatorul: „mesajele sunt abuzive, apar din cand in cand".
+ * Mesajul apare DOAR la o apasare: pictograma din dock, o fereastra sub lacat,
+ * comutatorul de mod. Garda tace.
  */
 export function installBetaFetchGuard(target: { fetch: typeof fetch } = globalThis as any): void {
     const g = target as any
@@ -139,24 +143,14 @@ export function installBetaFetchGuard(target: { fetch: typeof fetch } = globalTh
     const real: typeof fetch = g.fetch.bind(g)
     g.__zeusBetaGuard = true
     g.fetch = async (input: any, init?: any) => {
-        const url = typeof input === 'string' ? input : (input && input.url) || String(input)
-        const method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase()
-        const write = method !== 'GET' && method !== 'HEAD'
         if (_known && _level !== 'full') {
+            const url = typeof input === 'string' ? input : (input && input.url) || String(input)
             const feature = lockedApiFeature(url)
             if (feature) {
-                if (write) showBetaNotice(feature)
                 return new Response(JSON.stringify({ error: 'beta_locked', feature, message: BETA_MESSAGE }),
                     { status: 403, headers: { 'Content-Type': 'application/json' } })
             }
         }
-        const res: Response = await real(input, init)
-        if (res.status === 403 && write) {
-            try {
-                const body = await res.clone().json()
-                if (body && body.error === 'beta_locked') showBetaNotice(lockedApiFeature(url) || 'This feature')
-            } catch { /* nu e JSON: nu e al nostru */ }
-        }
-        return res
+        return real(input, init)
     }
 }

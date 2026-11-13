@@ -62,11 +62,12 @@ describe('lockedApiFeature', () => {
         expect(lockedApiFeature('https://zeus.example/api/ares/state')).toBe('ARES')
         expect(lockedApiFeature('/api/journal')).toBe('Journal')
         expect(lockedApiFeature('/api/positions')).toBe('Trading')
+        expect(lockedApiFeature('/api/sync/journal')).toBe('Journal')
     })
     it('⛔ nu inchide ce serverul lasa deschis', () => {
         for (const u of ['/api/market/klines', '/api/market/liq-panel', '/api/market/bookmap', '/api/user/settings',
             '/api/sync/state', '/api/sync/user-context', '/api/indicators/active', '/api/support/thread',
-            '/api/profile', '/api/byoi/config', '/api/version', '/auth/me', '/app/index.html']) {
+            '/api/profile', '/api/byoi/config', '/api/version', '/api/migration/flags', '/api/market/ticker', '/auth/me', '/app/index.html']) {
             expect([u, lockedApiFeature(u)]).toEqual([u, null])
         }
     })
@@ -100,16 +101,19 @@ describe('garda de fetch', () => {
         expect(calls).toEqual([])
         expect(currentBetaNotice()).toBeNull()
     })
-    it('viewer: o SCRIERE intr-o zona inchisa arata mesajul, cu numele functiei', async () => {
+    it('⛔ viewer: nici o SCRIERE refuzata nu arata mesajul — aplicatia scrie si singura, in fundal', async () => {
+        // Operatorul: „mesajele sunt abuzive, apar din cand in cand". Fereastra
+        // de beta apare doar la o apasare, niciodata dintr-o cerere.
         mk()
         const seen: Array<string | null> = []
         const off = onBetaNotice((f) => seen.push(f))
         const r = await target.fetch('/api/at/toggle', { method: 'POST' })
+        await target.fetch('/api/tc/sync', { method: 'POST' })
         off()
         expect(r.status).toBe(403)
         expect(calls).toEqual([])
-        expect(currentBetaNotice()).toBe('AutoTrade')
-        expect(seen).toEqual(['AutoTrade'])
+        expect(currentBetaNotice()).toBeNull()
+        expect(seen).toEqual([])
     })
     it('viewer: ce e deschis trece neatins', async () => {
         mk()
@@ -125,12 +129,12 @@ describe('garda de fetch', () => {
         expect(calls.length).toBe(2)
         expect(currentBetaNotice()).toBeNull()
     })
-    it('un 403 beta_locked venit de la server pe o scriere neprevazuta tot explica de ce', async () => {
+    it('⛔ un 403 beta_locked venit de la server nu arata nici el mesajul', async () => {
         mk(403, { error: 'beta_locked', feature: 'byoi', message: BETA_MESSAGE })
         const r = await target.fetch('/api/byoi/draft', { method: 'POST' })
         expect(r.status).toBe(403)
         expect((await r.json()).error).toBe('beta_locked')      // raspunsul ramane citibil pentru cel care a cerut
-        expect(currentBetaNotice()).toBe('This feature')
+        expect(currentBetaNotice()).toBeNull()
     })
     it('un 403 obisnuit (nu al nostru) nu arata mesajul de beta', async () => {
         mk(403, { error: 'Admin only' })

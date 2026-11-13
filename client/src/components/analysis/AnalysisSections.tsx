@@ -137,7 +137,7 @@ export function AnalysisSections() {
               <div className="conf-label" id="confLabel">WAITING DATA</div>
             </div>
             <div style={{ flex: 1, paddingLeft: '12px' }}>
-              <div style={{ fontSize: '7px', color: 'var(--dim)', letterSpacing: '1px', marginBottom: '4px' }}>CONFLUENTA</div>
+              <div style={{ fontSize: '7px', color: 'var(--dim)', letterSpacing: '1px', marginBottom: '4px' }}>CONFLUENCE</div>
               <div className="conf-meter">
                 <div className="conf-fill" id="confFill" style={{ width: '0%', background: '#555' }}></div>
               </div>

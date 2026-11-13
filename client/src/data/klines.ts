@@ -435,7 +435,7 @@ export function renderMscanTable(results: any[], opps: number) {
   const tbody = el('mscanBody')
   const oppsEl = el('mscanOpps')
   const updEl = el('mscanUpdTime')
-  if (oppsEl) oppsEl.textContent = opps + ' oportunit' + (opps === 1 ? 'ate' : 'ati')
+  if (oppsEl) oppsEl.textContent = opps + ' opportunit' + (opps === 1 ? 'y' : 'ies')
   if (updEl) updEl.textContent = new Date().toLocaleTimeString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   if (!tbody) return
 

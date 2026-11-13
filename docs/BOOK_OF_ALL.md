@@ -14630,3 +14630,35 @@ Fişiere: `ChartControls.tsx`, `betagate.css`. Client 2.079 teste, typecheck cur
 **Corecţie de la operator (13 nov, după ce a văzut textele):** semnătura e „Zeus Terminal team", fără „The". Schimbată în `accountEmails.js` şi în test; a cerut o a doua repornire, făcută după o pauză, fiindcă prima era deja pornită când a venit mesajul.
 
 **Livrat b383, 13 nov:** suita de server 10.746 trecute pe 4 sferturi; prima repornire 19:28:55 UTC, a doua (semnătura) 19:36:05 UTC, la 7 minute distanţă. După fiecare: cele 7 simboluri pornite, `brain_decisions` curge pentru uid 1, 5, 12–15, nicio eroare nouă. Schimbarea de semnătură (o constantă) a mers doar cu testul ei, fără reluarea suitei complete. La cererea operatorului, ambele emailuri au fost trimise ca probă pe adresa lui de test (`sendAccountEmail` a întors `true` pentru amândouă). Livrarea în căsuţă (inbox sau spam) o confirmă el.
+
+## 🩹 2026-11-13 — Contul de probă view-only: preţuri goale, mesaje care sar singure, texte în română (b384)
+
+Operatorul şi-a refăcut contul `mihutovidiu27@yahoo.com`, l-a aprobat şi a intrat ca view-only. A raportat patru lucruri, cu trei poze (`data/book_uploads`, 13 nov 21:24–21:27 ora lui):
+1. în Adaptive scrie în română („SEMNAL BULLISH (2/3) · 2 indicatori aliniati · Confluenta MEDIE");
+2. mesajele de „locked" apar din când în când singure — „abuzive"; să apară doar la apăsarea pe pictogramă;
+3. rândul de monede de sus e gol, doar BTC se încarcă, la schimbarea monedei chartul rămâne gol;
+4. caseta de „locked" să fie mai serioasă, fără galben, scris mai frumos.
+
+### 3 — datele de piaţă (două cauze, niciuna ghicită)
+Din `/var/log/nginx/access.log`, cererile cu 403 ale sesiunii de probă:
+
+- **`/api/market/ticker`, `sentiment`, `time`, `liq-panel`, `liq-map`, `liq-predict`, `bookmap` → 403 cu 90 de octeţi.** Răspunsul porţii mele are ~165 de octeţi, deci nu era ea. Era `resolveExchange`: routerul de trading e montat pe `/api` şi începe cu el, iar `/api/market` (market.js) era montat DUPĂ. Orice cont fără chei de exchange primea „No exchange connected" la toate datele de piaţă. **Eroare veche**, nevăzută cât toate conturile aveau chei. Reparat: `/api/market` se montează înaintea rutelor de trading (rutele din market.js nu citesc nimic din cont). Efect secundar ştiut: aceste rute nu mai trec prin limitatorul de ritm al routerului de trading; rămâne cel global de pe `/api`.
+- **`/api/migration/flags` → 403 de la poarta mea.** Aplicaţia îl citeşte la pornire, înaintea oricărei conexiuni (`bootstrapStartApp.ts`), ca să ştie de unde ia preţurile şi chartul. Fără el `window.__MF = {}` şi contul cădea pe calea veche (direct la bursă din browser): rând de monede gol, „STALE", chart gol la schimbarea monedei. **Greşeala mea:** lista permisă a fost făcută din ce mi s-a părut că ţine de „informaţie", nu din ce cere aplicaţia la pornire. Reparat: ruta e permisă, iar un cont view-only primeşte doar cele patru steaguri de date (`WS_PROXY_ENABLED`, `ALT_WS_FEEDS`, `CHART_BACKFILL_ENABLED`, `LIQ_FEED_VIA_SERVER`), nu toate cele 39.
+
+**Inventar făcut acum, care trebuia făcut de la început:** toate cele 166 de căi `/api/…` din sursa clientului, trecute prin `classify`. 33 permise, 133 refuzate; cele refuzate au fost citite una câte una — în afară de `migration/flags`, sunt de activitate, de admin sau de diagnostic. Două teste noi ţin asta: lista steagurilor pentru viewer trebuie să fie EXACT ce citeşte aplicaţia din `window.__MF`, şi nicio rută permisă unui viewer nu poate sta în spatele cerinţei de chei de exchange.
+
+### 2 — mesajele care săreau singure
+Garda de `fetch` din aplicaţie arăta fereastra de beta la orice SCRIERE refuzată, pe ideea că „un buton neprevăzut tot explică de ce". Dar aplicaţia veche scrie singură, în fundal (sincronizarea configuraţiei, rapoarte), deci fereastra apărea fără ca omul să fi atins ceva. Acum garda tace complet; fereastra apare doar la o apăsare: pictogramă din dock, fereastră sub lacăt, comutatorul de mod.
+
+### 4 — caseta
+Refăcută: fond de ardezie, un singur accent rece (albastru-oţel) în loc de galben, IBM Plex Sans în loc de fontul monospaţiat al aplicaţiei, aliniată la stânga, titlu „{funcţia} opens at launch", un rând separat „Included in your account", buton „Understood". Lacătele din dock, eticheta din antet şi lacătul de pe BYOI/EXP au trecut pe acelaşi accent.
+
+### 1 — texte în română
+`engine/signals.ts` („BULLISH SIGNAL / BEARISH SIGNAL", „N indicators aligned · STRONG/MEDIUM confluence"), `data/klines.ts` şi `AdaptivePanel.tsx` („N opportunities"), `AnalysisSections.tsx`, plus mesajul lui `resolveExchange`. Restul panoului Adaptive era deja în engleză.
+
+### Altele, în aceeaşi trecere
+- Clasamentul din profil scria unui cont view-only „No ranked traders yet — trade to join the board"; acum scrie „The leaderboard opens at public launch."
+- `/api/sync/journal` e trecut la zona „journal", iar aplicaţia nu-l mai cere degeaba pentru un cont view-only (265 de refuzuri în jurnal).
+- Emailul „am primit cererea" a fost trimis şi celor doi deja înscrişi (id 19, 20), la cererea operatorului.
+
+**Neconfirmat:** în poza cu Adaptive, butonul „ADAPTIVE ON/OFF" pare fără text; poate fi reflexia ecranului. De întrebat operatorul.

@@ -401,6 +401,12 @@ app.get('/api/diag/binance-rates', (_req, res) => {
 
 // ─── Migration Flags (admin-only control for gradual migration) ───
 app.get('/api/migration/flags', (_req, res) => {
+  // [BETA-GATE 2026-11-13] Un cont view-only primeste doar steagurile de care
+  // aplicatia are nevoie ca sa-si aleaga calea de date. `accessLevel` e pus de
+  // poarta; lipseste la cererile locale fara utilizator (verificari de operator).
+  if (_req.accessLevel && _req.accessLevel !== 'full') {
+    return res.json(require('./server/middleware/viewerGate').viewerFlags(MF.getAll()));
+  }
   res.json(MF.getAll());
 });
 app.post('/api/migration/flags', (_req, res) => {
@@ -1307,9 +1313,15 @@ const healthRoutes = require('./server/routes/health');
 app.use('/api/health', healthRoutes);
 
 // ─── API Routes (trading + exchange) ───
+// [2026-11-13] Datele de piata se monteaza INAINTEA rutelor de trading. Routerul
+// de trading e montat pe `/api` si incepe cu `resolveExchange`, care refuza cu
+// 403 orice cont fara chei de exchange — deci si `/api/market/*`, cand statea
+// dedesubt. Un cont nou vedea randul de preturi gol, harta de lichidari goala
+// si chartul gol la schimbarea monedei. Nu se vazuse pana acum fiindca toate
+// conturile vechi aveau chei. Rutele din market.js nu citesc nimic din cont.
+app.use('/api/market', require('./server/routes/market'));
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
-app.use('/api/market', require('./server/routes/market'));
 
 // ─── [C7] Client Error Forwarding (+ Sentry) ───
 // [2026-10-11] A SECOND app.post('/api/client-error') used to live here, and

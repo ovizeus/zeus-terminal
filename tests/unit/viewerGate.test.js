@@ -94,6 +94,43 @@ describe('classify — ce are voie un viewer', () => {
     });
 });
 
+describe('viewerFlags — ce steaguri primeste un cont view-only', () => {
+    const { viewerFlags, VIEWER_FLAG_KEYS } = require('../../server/middleware/viewerGate');
+    const ALL = { WS_PROXY_ENABLED: true, ALT_WS_FEEDS: true, CHART_BACKFILL_ENABLED: false, LIQ_FEED_VIA_SERVER: true,
+        SERVER_AT: false, _SRV_POS_REAL_ENABLED: true, ML_LIVE_INFLUENCE_ENABLED: true };
+
+    test('doar steagurile de date, cu valorile lor', () => {
+        expect(viewerFlags(ALL)).toEqual({ WS_PROXY_ENABLED: true, ALT_WS_FEEDS: true, CHART_BACKFILL_ENABLED: false, LIQ_FEED_VIA_SERVER: true });
+    });
+    test('⛔ nimic despre motoare sau despre real', () => {
+        const out = viewerFlags(ALL);
+        for (const k of Object.keys(out)) expect(VIEWER_FLAG_KEYS).toContain(k);
+        expect(JSON.stringify(out)).not.toMatch(/SERVER_|REAL|ML_|BRAIN|_AT/);
+    });
+    test('lista acopera EXACT ce citeste aplicatia din window.__MF', () => {
+        // Daca aplicatia incepe sa citeasca un steag nou, un viewer nu l-ar primi
+        // si ar cadea iar pe calea veche — testul pica pana e hotarat aici.
+        const read = new Set();
+        const walk = (dir) => {
+            for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (f.name === '__tests__' || f.name === 'node_modules') continue;
+                const p = path.join(dir, f.name);
+                if (f.isDirectory()) walk(p);
+                else if (/\.(ts|tsx)$/.test(f.name)) {
+                    for (const m of fs.readFileSync(p, 'utf8').matchAll(/__MF\??\.([A-Z_][A-Z0-9_]+)/g)) read.add(m[1]);
+                }
+            }
+        };
+        walk(path.join(ROOT, 'client/src'));
+        expect([...read].sort()).toEqual([...VIEWER_FLAG_KEYS].sort());
+    });
+    test('gunoi la intrare = nimic', () => {
+        expect(viewerFlags(null)).toEqual({});
+        expect(viewerFlags('x')).toEqual({});
+        expect(viewerFlags({ WS_PROXY_ENABLED: 'yes' })).toEqual({ WS_PROXY_ENABLED: false });
+    });
+});
+
 describe('viewerGate — middleware', () => {
     const run = (level, method, url, user = { id: 7 }) => {
         const gate = createViewerGate({ levelOf: () => level });
@@ -206,6 +243,7 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'GET /api/market/sentiment', 'GET /api/market/spot/klines', 'GET /api/market/symbol/:symbol',
             'GET /api/market/ticker', 'GET /api/market/ticker/all', 'GET /api/market/ticker24hr',
             'GET /api/market/time', 'GET /api/market/top', 'GET /api/market/topLongShort',
+            'GET /api/migration/flags',
             'GET /api/profile', 'GET /api/referral', 'GET /api/sd/symbols',
             'GET /api/support/thread', 'GET /api/support/unread',
             'GET /api/sync/state', 'GET /api/sync/user-context', 'GET /api/user/settings',
@@ -250,6 +288,35 @@ describe('⛔ poarta e montata unde trebuie', () => {
             "'/api/tc/sync'", "'/api/at/mode'", "'/api/panic'", "'/api/dsl/toggle'"]) {
             expect([needle, at(needle) > gate]).toEqual([needle, true]);
         }
+    });
+
+    test('⛔ datele de piata sunt montate INAINTEA rutelor de trading', () => {
+        // Routerul de trading sta pe `/api` si incepe cu `resolveExchange`, care
+        // da 403 oricarui cont fara chei de exchange. Cu `/api/market` dedesubt,
+        // un cont nou nu primea preturi, lichidari sau carte de ordine: 403
+        // „No exchange connected" la ticker, sentiment, time, liq-panel, liq-map,
+        // bookmap — masurat in jurnalul nginx pe contul de proba, 13 nov.
+        const market = at("app.use('/api/market', require('./server/routes/market'))");
+        const trading = at("app.use('/api', tradingRoutes)");
+        expect(market).toBeGreaterThan(0);
+        expect(trading).toBeGreaterThan(0);
+        expect(market).toBeLessThan(trading);
+    });
+
+    test('⛔ nicio ruta permisa unui viewer nu sta in spatele cerintei de chei de exchange', () => {
+        // Tot ce e montat DUPA routerul de trading trece intai prin el. Singurele
+        // rute de acolo la care are voie un viewer sunt cele pe care
+        // `resolveExchange` le lasa sa treaca fara chei (`/user/...`).
+        const trading = at("app.use('/api', tradingRoutes)");
+        const after = [...srv.slice(trading + 10).matchAll(/app\.use\(\s*'(\/api\/[^']*)'/g)].map((m) => m[1]);
+        for (const mount of after) {
+            const exposed = VIEWER_ALLOW.filter((r) => r.split(' ')[1].startsWith(mount + '/') || r.split(' ')[1] === mount);
+            expect([mount, exposed]).toEqual([mount, []]);
+        }
+        const resolve = fs.readFileSync(path.join(ROOT, 'server/middleware/resolveExchange.js'), 'utf8');
+        expect(resolve).toMatch(/readOnlyPaths = \[[^\]]*'\/user'/);
+        // …si mesajul lui e in engleza (R-P-10)
+        expect(resolve).not.toMatch(/configureaz/);
     });
 
     test('ce e montat DEASUPRA portii e doar ce e public cu buna stiinta', () => {

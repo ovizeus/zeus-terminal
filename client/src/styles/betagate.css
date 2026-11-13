@@ -1,60 +1,78 @@
-/* ═══ BETA — lacate si mesaj pentru conturile 'viewer' (2026-11-13) ═══
+/* ═══ BETA — lacate si mesaj pentru conturile 'viewer' ═══
    Pictogramele sub lacat raman la vedere, stinse, cu un lacat mic in colt.
-   Poarta adevarata e pe server; astea sunt doar semnele de pe usa. */
+   Poarta adevarata e pe server; astea sunt doar semnele de pe usa.
+
+   [2026-11-13] Refacut la cererea operatorului: fara galben, mai sobru. Un
+   singur accent rece (albastru-otel), pe un fond de ardezie; restul e text. */
+:root { --zbeta-accent: #8fb4d9; --zbeta-ink: #e9eef4; --zbeta-sub: #a9b6c4; --zbeta-dim: #74839a; }
+
 .zd-item.zd-locked { opacity: .5; }
-.zd-item.zd-locked .zd-icon { position: relative; filter: saturate(.25); }
+.zd-item.zd-locked .zd-icon { position: relative; filter: saturate(.2); }
 .zd-item.zd-locked:active { opacity: .7; }
 .zd-lock {
     position: absolute; right: -3px; bottom: -3px;
     width: 15px; height: 15px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    background: #0a0f16; border: 1px solid #f0c04088; color: #f0c040;
+    background: #0b111a; border: 1px solid rgba(143, 180, 217, .5); color: var(--zbeta-accent);
     pointer-events: none;
 }
 
 .zbeta-ov {
     position: fixed; inset: 0; z-index: 100000;
     display: flex; align-items: center; justify-content: center;
-    padding: 16px; background: rgba(4, 7, 11, .72);
-    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    padding: 20px; background: rgba(3, 6, 10, .78);
+    -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
 .zbeta-box {
-    width: 100%; max-width: 360px; text-align: center;
-    padding: 22px 20px 18px; border-radius: 10px;
-    background: #0d141c; border: 1px solid #2a3b4b;
-    box-shadow: 0 18px 60px rgba(0, 0, 0, .6);
-    font-family: var(--ff, system-ui, sans-serif);
+    width: 100%; max-width: 372px; text-align: left;
+    padding: 22px 22px 20px; border-radius: 12px;
+    background: linear-gradient(180deg, #121a25 0%, #0c121b 100%);
+    border: 1px solid #243244;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, .65), inset 0 1px 0 rgba(255, 255, 255, .04);
+    font-family: 'IBM Plex Sans', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
+/* Aplicatia are un font monospatiat pe tot; in caseta asta nu. */
+.zbeta-box * { font-family: inherit; }
+.zbeta-hd { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .zbeta-lock {
-    width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 50%;
+    width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
     display: flex; align-items: center; justify-content: center;
-    color: #f0c040; background: #f0c04014; border: 1px solid #f0c04055;
+    color: var(--zbeta-accent); background: rgba(143, 180, 217, .08); border: 1px solid rgba(143, 180, 217, .28);
 }
-.zbeta-t { font-size: 15px; font-weight: 700; color: #eaf2f8; letter-spacing: .01em; }
-.zbeta-m { margin-top: 10px; font-size: 12.5px; line-height: 1.55; color: #b9c6d2; }
-.zbeta-s { margin-top: 10px; font-size: 11.5px; line-height: 1.5; color: #7f93a6; }
+.zbeta-kicker { font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--zbeta-accent); }
+.zbeta-t { margin: 0; font-size: 19px; line-height: 1.3; font-weight: 600; letter-spacing: -.005em; color: var(--zbeta-ink); }
+.zbeta-m { margin: 10px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--zbeta-sub); }
+.zbeta-inc {
+    margin-top: 16px; padding: 11px 13px; border-radius: 8px;
+    background: rgba(255, 255, 255, .025); border: 1px solid #1d2937;
+    display: flex; flex-direction: column; gap: 4px;
+}
+.zbeta-inc-l { font-size: 11px; color: var(--zbeta-dim); }
+.zbeta-inc-v { font-size: 12.5px; line-height: 1.5; color: #d3dce6; }
 .zbeta-ok {
-    margin-top: 16px; width: 100%; padding: 10px 12px; border-radius: 6px;
-    border: 1px solid #f0c040; background: #f0c040; color: #0a0f14;
-    font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+    margin-top: 18px; width: 100%; padding: 11px 14px; border-radius: 8px;
+    border: 1px solid rgba(143, 180, 217, .45); background: rgba(143, 180, 217, .12); color: var(--zbeta-ink);
+    font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: background .15s ease, border-color .15s ease;
 }
-.zbeta-ok:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.zbeta-ok:hover { background: rgba(143, 180, 217, .2); border-color: rgba(143, 180, 217, .7); }
+.zbeta-ok:focus-visible { outline: 2px solid var(--zbeta-accent); outline-offset: 2px; }
 
 .zbeta-badge {
     display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 9px;
     font-size: 8px; font-weight: 700; letter-spacing: .08em; white-space: nowrap;
-    color: #f0c040; background: #f0c04014; border: 1px solid #f0c04055;
+    color: var(--zbeta-accent); background: rgba(143, 180, 217, .08); border: 1px solid rgba(143, 180, 217, .35);
 }
 
 /* Admin: nivelul de acces pe fiecare cont */
 .zac-b-full { background: #b68cff18; color: #c9a8ff; border-color: #b68cff55; }
 .zac-b-viewer { background: #8fa6b818; color: #9fb3c4; border-color: #8fa6b844; }
 
-@media (prefers-reduced-motion: no-preference) {
-    .zbeta-box { animation: zbeta-in .16s ease-out; }
-    @keyframes zbeta-in { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
-}
-
 /* Lacat pe butoanele de pe chart (BYOI, EXP) pentru un cont view-only */
-.zbeta-glyph { display: inline-block; margin-left: 4px; vertical-align: -1px; color: #f0c040; }
+.zbeta-glyph { display: inline-block; margin-left: 4px; vertical-align: -1px; color: var(--zbeta-accent); }
 .tfb.zbeta-locked { opacity: .6; }
+
+@media (prefers-reduced-motion: no-preference) {
+    .zbeta-box { animation: zbeta-in .18s ease-out; }
+    @keyframes zbeta-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+}

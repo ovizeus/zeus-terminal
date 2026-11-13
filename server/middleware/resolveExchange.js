@@ -24,7 +24,7 @@ function resolveExchange(req, res, next) {
         const creds = getExchangeCreds(req.user.id);
         if (!creds) {
             return res.status(403).json({
-                error: 'No exchange connected — configurează API keys în Settings → Exchange API'
+                error: 'No exchange connected — add your API keys in Settings → Exchange API'
             });
         }
         // [BUG-1 FIX 2026-05-28] Add userId for per-user circuit breaker key —

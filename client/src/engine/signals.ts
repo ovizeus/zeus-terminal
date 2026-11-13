@@ -27,8 +27,8 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
       mega.innerHTML = `<div class="mega-sig ${isBull ? 'bull' : 'bear'}">
         <span class="mega-sig-ico">${isBull ? _ZI.tup : _ZI.drop}</span>
         <div class="mega-sig-txt">
-          <div class="mega-type">${isBull ? 'SEMNAL BULLISH' : 'SEMNAL BEARISH'} (${isBull ? bullCount : bearCount}/${total})</div>
-          <div class="mega-det">${isBull ? bullCount : bearCount} indicatori aliniati · Confluenta ${(isBull ? bullCount : bearCount) >= 4 ? 'PUTERNICA' : 'MEDIE'}</div>
+          <div class="mega-type">${isBull ? 'BULLISH SIGNAL' : 'BEARISH SIGNAL'} (${isBull ? bullCount : bearCount}/${total})</div>
+          <div class="mega-det">${isBull ? bullCount : bearCount} indicators aligned · ${(isBull ? bullCount : bearCount) >= 4 ? 'STRONG' : 'MEDIUM'} confluence</div>
         </div>
       </div>`
     } else {

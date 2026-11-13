@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { leaderboardApi, type LeaderboardRow } from '../../services/api'
+import { useAuthStore } from '../../stores'
 import { initialsAvatar } from '../../profile/avatar'
 
 // [2026-06-24] Real leaderboard (Phase 2). Podium for the top 3 VIPs + a ranked list below.
@@ -30,12 +31,18 @@ export function LeaderboardPanel() {
   const [rows, setRows] = useState<LeaderboardRow[]>([])
   const [loading, setLoading] = useState(true)
 
+  // [BETA-GATE 2026-11-13] Clasamentul e inchis pe server pentru un cont
+  // view-only. Fara randul de mai jos ar scrie „No ranked traders yet — trade
+  // to join the board", adica o invitatie la ceva ce contul nu poate face.
+  const betaLocked = useAuthStore((s) => s.accessKnown && s.accessLevel !== 'full')
+
   useEffect(() => {
+    if (betaLocked) { setRows([]); setLoading(false); return }
     let alive = true
     setLoading(true)
     leaderboardApi.get(env, 'all').then((r) => { if (alive) { setRows(r.ok && r.leaderboard ? r.leaderboard : []); setLoading(false) } })
     return () => { alive = false }
-  }, [env])
+  }, [env, betaLocked])
 
   const top3 = rows.slice(0, 3)
   const rest = rows.slice(3)
@@ -51,7 +58,8 @@ export function LeaderboardPanel() {
         ))}
       </div>
 
-      {loading ? <div style={empty}>Loading…</div>
+      {betaLocked ? <div style={empty}>The leaderboard opens at public launch.</div>
+        : loading ? <div style={empty}>Loading…</div>
         : rows.length === 0 ? <div style={empty}>No ranked traders yet — trade to join the board.</div>
           : (
             <>

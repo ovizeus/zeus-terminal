@@ -37,6 +37,12 @@ const VIEWER_ALLOW = [
     'POST /api/support/send', 'GET /api/support/thread', 'GET /api/support/unread',
     'GET /api/referral',
     // ── aplicatia insasi ──
+    // `migration/flags` e citit la pornire, INAINTE de orice conexiune: spune
+    // aplicatiei de unde ia preturile si chartul (proxy-ul serverului sau calea
+    // veche). Fara el, un cont nou ramanea pe calea veche: randul de monede
+    // gol, chart gol la schimbarea monedei. Un viewer primeste doar steagurile
+    // de date (`viewerFlags`), nu toata lista.
+    'GET /api/migration/flags',
     'GET /api/version', 'POST /api/app/version', 'POST /api/client-error', 'GET /api/ws/health',
 ];
 
@@ -51,7 +57,7 @@ const FEATURES = [
     ['/api/dsl/', 'dsl'], ['/api/dsldrive', 'dsl'],
     ['/api/brain/', 'brain'],
     ['/api/omega', 'omega'], ['/api/ring5', 'omega'],
-    ['/api/journal', 'journal'], ['/api/performance', 'journal'], ['/api/session-review', 'journal'],
+    ['/api/journal', 'journal'], ['/api/sync/journal', 'journal'], ['/api/performance', 'journal'], ['/api/session-review', 'journal'],
     ['/api/compare', 'journal'], ['/api/missed-trades', 'journal'], ['/api/regime-history', 'journal'],
     ['/api/exposure', 'journal'], ['/api/dashboard', 'journal'], ['/api/audit', 'journal'],
     ['/api/user/telegram', 'alerts'],
@@ -105,6 +111,18 @@ function classify(method, path) {
     return { gated: true, allowed: false, feature: featureOf(p) };
 }
 
+// Steagurile pe care aplicatia le citeste ca sa aleaga calea de DATE. Restul
+// (ce motor ruleaza, ce e pornit pe real) nu e treaba unui cont view-only.
+const VIEWER_FLAG_KEYS = ['WS_PROXY_ENABLED', 'ALT_WS_FEEDS', 'CHART_BACKFILL_ENABLED', 'LIQ_FEED_VIA_SERVER'];
+
+/** Functie pura: din toate steagurile, doar cele de date. */
+function viewerFlags(all) {
+    const out = {};
+    if (!all || typeof all !== 'object') return out;
+    for (const k of VIEWER_FLAG_KEYS) if (Object.prototype.hasOwnProperty.call(all, k)) out[k] = all[k] === true;
+    return out;
+}
+
 function createViewerGate(opts) {
     const levelOf = (opts && opts.levelOf) || accessLevel.levelOf;
     return function viewerGate(req, res, next) {
@@ -123,4 +141,4 @@ function createViewerGate(opts) {
     };
 }
 
-module.exports = { createViewerGate, classify, featureOf, VIEWER_ALLOW, FEATURES, MESSAGE };
+module.exports = { createViewerGate, classify, featureOf, viewerFlags, VIEWER_ALLOW, VIEWER_FLAG_KEYS, FEATURES, MESSAGE };
