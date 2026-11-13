@@ -14662,3 +14662,7 @@ Refăcută: fond de ardezie, un singur accent rece (albastru-oţel) în loc de g
 - Emailul „am primit cererea" a fost trimis şi celor doi deja înscrişi (id 19, 20), la cererea operatorului.
 
 **Neconfirmat:** în poza cu Adaptive, butonul „ADAPTIVE ON/OFF" pare fără text; poate fi reflexia ecranului. De întrebat operatorul.
+
+**Livrat b384, 13 nov 23:19 UTC.** Teste înainte: server 10.752 pe 4 sferturi (EXIT=0), client 2.084, typecheck curat. Ordinea respectată de data asta: serverul repornit ÎNTÂI (o singură dată, 23:19:29), build-ul de client după. După pornire: 7 simboluri pornite, `brain_decisions` curge pentru uid 1, 5, 12–15 (35 fiecare în 2 minute), nicio eroare nouă; fără sesiune, `/api/market/ticker` răspunde 401 (ajunge la autentificare, nu la refuzul de chei).
+
+**Neverificat pe viu:** după repornire nu a mai fost nimeni conectat (zero cereri în jurnalul nginx), deci nu am văzut un cont view-only primind 200 la datele de piaţă. Dovada e din teste şi din diagnosticul pe jurnal; confirmarea e a operatorului, cu contul de probă (id 21, view-only).
