@@ -14517,3 +14517,65 @@ Operatorul a scris adresa cu o greşeală de tastare („6ahoo"); singura potriv
 ### Întrebări deschise către operator
 1. Confirmă ştergerea completă a uid=11 (`mihutovidiu27@yahoo.com`), cu toate datele lui.
 2. Conturile existente 2, 5, 12, 13, 14, 15 rămân `full` (propus), sau devin şi ele `viewer` şi rămâne doar adminul cu acces? A doua variantă le opreşte autotrade-ul demo.
+
+## 🔐 2026-11-13/14 — ACCES BETA „view-only" pentru conturile noi — CONSTRUIT (b382)
+
+Urmează planul din secţiunea de mai sus. Operatorul a confirmat: uid=11 se şterge complet; conturile existente rămân cu acces complet; cele noi pornesc view-only; BYOI tot cu lacăt; pictogramele rămân la vedere şi la apăsare apare mesajul de beta.
+
+### Ce are voie un cont view-only (lista exactă, 41 de rute)
+Chart şi date de piaţă (`/api/market/*` — klines, ticker, depth, funding, OI, sentiment, top), lichidări (`liq-panel`, `liq-map`, `liq-predict`, `bookmap`, `/api/liq/recent`), indicatori (`/api/indicators/*`, citirea `/api/byoi/config` şi `/api/byoi/indicators`), contul lui (`/api/profile`, `/api/sync/state`, `/api/sync/user-context`, `/api/user/settings`), suport (`send`, `thread`, `unread`), `/api/referral`, şi rutele aplicaţiei (`version`, `app/version`, `client-error`, `ws/health`).
+
+### Ce e refuzat (403 `beta_locked`, cu numele funcţiei)
+Autotrade (`/api/at/*`, `/api/tc/*`, `/api/panic`), tranzacţii (`order`, `positions`, `balance`, `leverage`, `manual`, `addon`, `openOrders`, `risk`, `/api/exchange/*`), ARES, DSL şi DSL Drive, brain, OMEGA şi Ring5, jurnal şi rapoarte (`journal`, `performance`, `session-review`, `compare`, `missed-trades`, `regime-history`, `exposure`, `dashboard`), alerte Telegram, clasament şi profilurile altora, cererile BYOI. Orice rută nouă e refuzată până e pusă pe listă.
+
+### Cum e făcut
+- **`server/services/accessLevel.js`** — `levelOfUser` (pură), `levelOf`/`isViewer` cu memorie de 10 s, golită la schimbare. Cade închis: fără un `'full'` exact în `users.access_level`, contul e viewer; adminul e mereu full. `VIEWER_GATE_ENABLED=false` stinge poarta.
+- **`server/middleware/viewerGate.js`** — lista exactă (metodă + cale, nu prefix) şi middleware-ul, montat în `server.js` imediat după `sessionAuth`.
+- **Baza:** migrarea `426_user_access_level` adaugă coloana cu `'viewer'` implicit şi ridică o singură dată la `'full'` conturile deja aprobate şi adminii. `db.setAccessLevel`.
+- **Motoarele:** `serverBrain.updateConfig`, `_restoreStcFromDb` şi ciclul principal sar/scot un viewer; `serverAT.processBrainDecision` refuză intrarea (un rând de jurnal pe cont). Ieşirile unei poziţii existente nu trec prin poartă.
+- **Auth:** `/auth/me` trimite `accessLevel`; `POST /auth/admin/access-level` (doar admin, cu rând în `audit_log`: `ADMIN_ACCESS_LEVEL`).
+- **Aplicaţia:** `client/src/core/betaGate.ts` (lacăte, mesaj, garda de `fetch`), `BetaNotice`/`BetaBadge`, lacăt pe pictogramele din dock, pe ferestre (`uiStore.openModal`), pe comutatorul de mod; în Admin → Users: eticheta FULL / VIEW-ONLY şi butoanele „Grant full" / „Set view-only". Aprobarea lasă contul view-only.
+- **`scripts/purge-user.js`** — ştergerea completă a unui cont (fără `--apply` doar numără; cere id ŞI email; refuză adminul; o singură tranzacţie).
+
+### Greşeli prinse pe drum (toate înainte de build)
+1. **Cursă la pornire.** Garda de `fetch` şi lacătele tratau „nu ştim încă nivelul" ca „viewer". Până răspundea `/auth/me`, un cont FULL ar fi pierdut primele cereri şi ar fi văzut lacăte la fiecare reîncărcare. Acum nimic nu se închide până când serverul CONFIRMĂ view-only (`accessKnown`).
+2. **Test care nu apăra nimic.** „`processBrainDecision` întoarce null pentru viewer" trecea şi cu garda scoasă (decizia de test era respinsă de alte porţi). Proba prin mutaţie l-a prins; acum verifică rândul de jurnal al porţii, pentru viewer şi nu pentru full.
+3. **10 teste de pe drumul banilor au picat** (`oppositeSideGuard`, `r1-block-chokepoint`): îşi făceau conturi de probă fără acces complet, deci poarta le refuza intrarea înainte de garda testată. Contractul lor nu s-a schimbat; pregătirea creează acum un cont full. La prima corectură am stricat ghilimelele într-unul şi suita nu mai pornea — reparat.
+4. **Fişiere sursă deţinute de root** (19, din 8 nov) în `client/src`, `tests`, `docs` — date înapoi lui `zeus`.
+
+### Limite cunoscute, spuse dinainte
+- Lacătele din aplicaţie nu au fost văzute într-un browser. Poarta de pe server nu depinde de ele, dar aşezarea şi orice buton rămas fără lacăt se văd abia la proba operatorului cu contul lui refăcut.
+- Pe pagina principală pot exista zone de trading în afara dock-ului care nu au lacăt vizual. Apăsate, serverul refuză, iar garda de `fetch` arată mesajul de beta la orice scriere refuzată.
+- Aplicaţia unui viewer încă cere în buclă câteva citiri din zonele închise; garda le opreşte local, fără reţea.
+- `/api/srv-pos` e montat deasupra autentificării (diagnostic vechi, dinainte de lucrarea asta) şi nu trece prin poartă.
+
+## 🔐 2026-11-13/14 — ACCES BETA „view-only" pentru conturile noi — CONSTRUIT (b382)
+
+Urmează planul de mai sus. Răspunsurile operatorului: şterge complet uid=11; conturile existente rămân cu acces complet; cele noi primesc doar chart, indicatori, date de piaţă şi lichidări; BYOI tot sub lacăt; pictogramele rămân la vedere, cu mesaj.
+
+### Ce face
+- **Nivel pe cont:** `users.access_level` = `viewer` | `full` (migrarea `426_user_access_level`). Coloana porneşte `viewer`; conturile aprobate şi adminii au fost ridicaţi la `full` o singură dată, în migrare. Adminul e mereu `full`.
+- **Poarta (server):** `server/middleware/viewerGate.js`, montată imediat după `sessionAuth`. Listă EXACTĂ de 41 de rute (metodă + cale) permise unui viewer; orice altă rută de sub `/api` → `403 { error: 'beta_locked', feature, message }`. Nu pe prefix: o rută nouă sub `/api/market` nu devine vizibilă din greşeală.
+- **Motoarele:** un viewer nu intră în bucla brain-ului (`serverBrain.updateConfig`, `_restoreStcFromDb`, şi ciclul îl scoate dacă a fost coborât între timp) şi nu primeşte nicio intrare (`serverAT.processBrainDecision`). Ieşirile şi protecţiile poziţiilor existente nu sunt atinse.
+- **Cade închis:** nivel lipsă, valoare necunoscută, cont inexistent sau eroare la citire = `viewer`.
+- **Aplicaţia:** `client/src/core/betaGate.ts`. Pictogramele de activitate (AutoTrade, Manual Trade, DSL, DSL Drive, OMEGA, MultiExchange, ARES, THEIA, Post-Mortem, PnL Lab, Activity) şi ferestrele BYOI / jurnal rămân la vedere cu lacăt; apăsate, arată fereastra „… is locked during beta". Eticheta „BETA · view-only access" în antet. Schimbarea modului (demo/live) e şi ea oprită.
+- **Admin → Users:** eticheta FULL / VIEW-ONLY pe fiecare cont şi butoanele „Grant full" (cu confirmare) / „Set view-only". Ruta `POST /auth/admin/access-level`, doar admin, cu rând `ADMIN_ACCESS_LEVEL` în audit. Aprobarea unui cont nou îl lasă view-only.
+- **Maneta de urgenţă:** `VIEWER_GATE_ENABLED=false` în mediu → toţi sunt `full`, ca înainte.
+
+### Ce poate chema un viewer (cele 41 de rute)
+Chart şi piaţă (`/api/market/*` pe nume, `/api/sd/symbols`, `/api/fng`), lichidări (`liq-panel`, `liq-map`, `liq-predict`, `bookmap`, `/api/liq/recent`), indicatori (`/api/indicators/*`, citirea `/api/byoi/config` şi `/api/byoi/indicators`), contul lui (`/api/profile`, `/api/sync/state`, `/api/sync/user-context`, `/api/user/settings`), suport, referral, versiunea aplicaţiei. Singurele scrieri permise sunt pe contul propriu (8 rute), fixate într-un test.
+
+### Greşeli prinse înainte de livrare
+1. **Cursă la pornire.** Garda de `fetch` din aplicaţie tăia cererile cât timp nivelul era „viewer implicit", adică şi unui cont FULL, la fiecare reîncărcare, până răspundea `/auth/me`. „Nu ştim încă" nu e „viewer": acum garda şi lacătele acţionează doar după ce serverul a confirmat nivelul (`accessKnown`).
+2. **Test care nu apăra nimic.** Testul pentru garda de intrare verifica „întoarce null"; proba prin mutaţie a trecut cu garda scoasă, fiindcă decizia era respinsă şi de alte porţi. Acum verifică rândul de jurnal al porţii, pentru viewer da şi pentru full nu.
+3. **10 teste de bani picate la prima rulare** (`oppositeSideGuard`, `r1-block-chokepoint`): îşi făceau conturile de probă prin `INSERT` brut, deci view-only. Contractul lor nu s-a schimbat; pregătirea lor declară acum explicit un cont cu acces complet.
+
+### Ştergerea contului de probă
+`scripts/purge-user.js --id 11 --email mihutovidiu27@yahoo.com [--apply]`: cere id ŞI email ale aceluiaşi rând, refuză adminii, fără `--apply` doar numără, totul într-o tranzacţie, verifică la sfârşit că nimic nu mai poartă id-ul. Repetat pe o copie a backup-ului din 13 nov: 384.361 de rânduri din 28 de tabele, 17 secunde, `quick_check` ok, ceilalţi 8 utilizatori neatinşi. Pe baza vie erau 512.699 de rânduri în 27 de tabele şi zero poziţii deschise (numărat 13 nov).
+
+### Limite cunoscute
+- Lacătele din aplicaţie acoperă dock-ul, ferestrele şi comutatorul de mod. Secţiunile vechi din pagina principală care cheamă rute de activitate nu au toate lacăt vizibil; pentru ele, citirile tac, iar orice scriere arată mesajul de beta. De văzut pe telefon cu contul de probă.
+- `/api/srv-pos` e montat înaintea autentificării (diagnostic, existent dinainte), deci nu trece prin poartă.
+- Nerandat în browser.
+
+**Teste noi:** server `viewerGate` (25, cu inventarul rutelor reale şi locul montării), `betaGateEngines` (9), `admin-access-level` (8), `purgeUser` (5); client `betaGate` (20), `betaDock` (4). Plasa de întoarcere: tag `pre-viewer-gate`.
