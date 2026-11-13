@@ -12,11 +12,11 @@
 //   - niciun termen promis (nici „in 24h", nici o data de lansare);
 //   - doar adresa destinatarului — nimic despre alti utilizatori;
 //   - fara email la respingere (hotarat de operator);
-//   - text in ENGLEZA (R-P-10), semnat „The Zeus Terminal team".
+//   - text in ENGLEZA (R-P-10), semnat „Zeus Terminal team".
 
 const logger = require('./logger');
 
-const TEAM = 'The Zeus Terminal team';
+const TEAM = 'Zeus Terminal team';
 const OPEN_NOW = 'the chart, indicators, market data and the liquidation map';
 
 function appUrl() {

@@ -15,7 +15,7 @@ describe('continutul emailurilor', () => {
         expect(reg.text).toMatch(/second email/);
         expect(reg.text).toMatch(/in beta/);
         expect(reg.text).toMatch(/did not request this account/);
-        expect(reg.text.trim().endsWith('The Zeus Terminal team')).toBe(true);
+        expect(reg.text.trim().endsWith('\n\nZeus Terminal team')).toBe(true);
     });
 
     test('aprobare: poate intra acum, cu linkul de login, si stie ce e deschis si ce e sub lacat', () => {

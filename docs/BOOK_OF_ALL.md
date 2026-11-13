@@ -14626,3 +14626,5 @@ Fişiere: `ChartControls.tsx`, `betagate.css`. Client 2.079 teste, typecheck cur
 **Limita de conturi:** `MAX_USERS=50` în `.env` (era implicit 10 şi era plină după refacerea contului de probă — următoarea cerere ar fi primit „Maximum number of accounts reached").
 
 **Teste:** `tests/unit/accountEmails.test.js` (12): conţinut, fără termene, fără injecţie, SMTP căzut, şi momentul trimiterii în rute. Mutaţie: aprobarea care trimite mereu → 1 test roşu.
+
+**Corecţie de la operator (13 nov, după ce a văzut textele):** semnătura e „Zeus Terminal team", fără „The". Schimbată în `accountEmails.js` şi în test; a cerut o a doua repornire, făcută după o pauză, fiindcă prima era deja pornită când a venit mesajul.
