@@ -14579,3 +14579,26 @@ Chart şi piaţă (`/api/market/*` pe nume, `/api/sd/symbols`, `/api/fng`), lich
 - Nerandat în browser.
 
 **Teste noi:** server `viewerGate` (25, cu inventarul rutelor reale şi locul montării), `betaGateEngines` (9), `admin-access-level` (8), `purgeUser` (5); client `betaGate` (20), `betaDock` (4). Plasa de întoarcere: tag `pre-viewer-gate`.
+
+### ✅ 2026-11-13 18:38 UTC — b382 PORNIT: acces BETA view-only viu, contul de probă scos
+
+**Teste înainte de livrare:** server 10.734 trecute pe 4 sferturi (EXIT=0 pe toate), client 2.079, typecheck curat.
+
+**Livrarea (o singură repornire, 17 secunde de oprire):** `pm2 stop` → `wal_checkpoint(TRUNCATE)` → copie a bazei cu serverul oprit (`data/db_backups/zeus-pre-purge-20261113.db`, 3,9 G) → `purge-user.js --id 11 --apply` (518.506 rânduri din 27 de tabele + rândul din `users`; „Rows still carrying id 11: 0") → `pm2 start`. Înainte: zero poziţii deschise pe toate conturile; banul activ era doar pe testnet.
+
+**Măsurat după pornire:**
+- migrarea `426_user_access_level` aplicată; uid 1, 2, 5, 12, 13, 14, 15 = `full`; uid 19 şi 20 (neaprobate) = `viewer`;
+- `[ALT_WS_FEEDS=ON]` pe toate cele 7 simboluri;
+- `brain_decisions` în 4 minute: uid 1, 5, 12–15 ≈ 42 fiecare, uid 2 (Bybit) porneşte cu câteva zeci de secunde mai târziu, ca de obicei;
+- nicio eroare nouă în afară de cele două refuzuri locale de testnet de la pornire (aşteptate);
+- uid 11: zero rânduri în `users`, `brain_decisions`, `at_state`.
+
+**Neverificat pe viu:** un viewer adevărat lovind o rută blocată (nu fabric sesiuni). Asta e proba operatorului: îşi reface contul, îl aprobă, vede lacătele.
+
+**Două lucruri care NU au mers cum trebuia:**
+1. **Build de client servit înaintea serverului.** La 18:18 UTC lucrarea a fost comisă, unită în `main`, urcată şi construită (`public/app`) în timp ce serverul era încă pe b381. Aplicaţia nouă citea nivelul din `/auth/me`, serverul vechi nu-l trimitea, deci conturile `full` care NU sunt admin (uid 2, 5, 12–15) ar fi văzut lacăte ~20 de minute, până la repornirea de la 18:38. Motoarele lor de pe server nu au fost atinse. Regula care trebuia respectată: când clientul depinde de un câmp nou al serverului, serverul porneşte ÎNTÂI.
+2. **Acele comenzi de la 18:18 nu apar în firul meu de lucru.** Mesajul „continuă" a sosit de două ori; cel mai probabil a rulat şi o a doua tură în paralel, care a făcut commit-ul, merge-ul, build-ul şi a început un backup rămas neterminat (`zeus-pre-viewer-gate-20261114.db`, şters). Conţinutul commit-ului e exact lucrarea mea, verificat. De ţinut minte: înainte de orice pas ireversibil, verific starea reală (ramură, `reflog`, `pm2`), nu ce cred că am lăsat.
+
+**Backup online blocat:** `sqlite3 .backup` pe baza vie nu a terminat în 20 de minute (baza se scrie continuu). Copia făcută cu serverul oprit a durat 7 secunde. Pentru o copie sigură înaintea unei scrieri mari: oprit, apoi `cp`.
+
+**Rămâne operatorului:** îşi reface contul `mihutovidiu27@yahoo.com`, îl aprobă din Admin (rămâne VIEW-ONLY), verifică pe telefon; apoi hotărăşte conturile 19 (Brazilia) şi 20 (China). Întoarcere dacă e nevoie: `VIEWER_GATE_ENABLED=false`, sau tag-ul `pre-viewer-gate`.
