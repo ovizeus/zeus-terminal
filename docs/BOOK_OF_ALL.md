@@ -14602,3 +14602,9 @@ Chart şi piaţă (`/api/market/*` pe nume, `/api/sd/symbols`, `/api/fng`), lich
 **Backup online blocat:** `sqlite3 .backup` pe baza vie nu a terminat în 20 de minute (baza se scrie continuu). Copia făcută cu serverul oprit a durat 7 secunde. Pentru o copie sigură înaintea unei scrieri mari: oprit, apoi `cp`.
 
 **Rămâne operatorului:** îşi reface contul `mihutovidiu27@yahoo.com`, îl aprobă din Admin (rămâne VIEW-ONLY), verifică pe telefon; apoi hotărăşte conturile 19 (Brazilia) şi 20 (China). Întoarcere dacă e nevoie: `VIEWER_GATE_ENABLED=false`, sau tag-ul `pre-viewer-gate`.
+
+### 🔐 2026-11-13 — Lacăt vizibil pe BYOI şi EXP (doar client)
+
+Cerut de operator în timp ce îşi refăcea contul de probă: „să pui lacăt şi pe BYOI". Fereastra BYOI era deja închisă pentru un cont view-only (apăsarea arăta mesajul de beta), dar butonul de pe chart nu avea niciun semn. Acum butoanele `BYOI` şi `EXP` din rândul de unelte al chartului şi rândul „Build your own" din lista de indicatori poartă un lacăt mic galben când contul e view-only. Pentru conturile cu acces complet nu se schimbă nimic.
+
+Fişiere: `ChartControls.tsx`, `betagate.css`. Client 2.079 teste, typecheck curat, build după teste. Serverul neatins, fără repornire.

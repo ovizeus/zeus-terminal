@@ -54,3 +54,7 @@
     .zbeta-box { animation: zbeta-in .16s ease-out; }
     @keyframes zbeta-in { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
 }
+
+/* Lacat pe butoanele de pe chart (BYOI, EXP) pentru un cont view-only */
+.zbeta-glyph { display: inline-block; margin-left: 4px; vertical-align: -1px; color: #f0c040; }
+.tfb.zbeta-locked { opacity: .6; }

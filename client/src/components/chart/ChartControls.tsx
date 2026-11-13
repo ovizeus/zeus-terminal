@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { useMarketStore, useUiStore } from '../../stores'
+import { useMarketStore, useUiStore, useAuthStore } from '../../stores'
 import { setTF } from '../../data/marketDataFeeds'
 import { togInd as togIndFn } from '../../ui/dom2'
 import { togOvr as togOvrFn } from '../../data/marketDataOverlays'
@@ -597,6 +597,15 @@ type IndMeta = { id: string; ico: string; name: string; desc: string; settingsMo
  * and visibly un-styled so it still gets its own dedicated icon later, per the
  * no-recycled-emoji rule above.
  */
+function BetaLockGlyph() {
+  return (
+    <svg className="zbeta-glyph" viewBox="0 0 24 24" width="9" height="9" aria-hidden="true">
+      <rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor" />
+      <path d="M8 10.5V7.6a4 4 0 018 0v2.9" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function _mergePanelList(
   list: IndMeta[],
   registry: { id?: string; name?: string; desc?: string }[] | null | undefined,
@@ -750,6 +759,10 @@ export function ChartControls() {
   const overlays = useMarketStore((s) => s.market.overlays)
   const patch = useMarketStore((s) => s.patch)
   const openModal = useUiStore((s) => s.openModal)
+  // [BETA-GATE 2026-11-13] Lacat vizibil pe butoanele care deschid ferestre
+  // inchise pentru un cont view-only (BYOI, Exposure). Apasarea arata mesajul
+  // de beta — asta o face deja `openModal`; aici e doar semnul de pe usa.
+  const betaLocked = useAuthStore((st) => st.accessKnown && st.accessLevel !== 'full')
 
   const [tfOpen, setTfOpen] = useState(false)
   const [ctOpen, setCtOpen] = useState(false)
@@ -1247,11 +1260,11 @@ export function ChartControls() {
               document.body,
             )}
           </div>
-          <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => openModal('exposure')}>EXP</button>
+          <button className={'tfb ztf-sibling expo-toggle-btn' + (betaLocked ? ' zbeta-locked' : '')} id="expoToggleBtn" title={betaLocked ? 'Exposure Dashboard — locked during beta' : 'Exposure Dashboard'} onClick={() => openModal('exposure')}>EXP{betaLocked && <BetaLockGlyph />}</button>
           {/* [2026-11-06] Build Your Own Indicator. Same classes as EXP on purpose:
               a bespoke control here would read as bolted on, and this sits in the
               row the user already scans for chart tools. */}
-          <button className="tfb ztf-sibling" id="byoiToggleBtn" title="Build Your Own Indicator" onClick={() => openModal('byoi')}>BYOI</button>
+          <button className={'tfb ztf-sibling' + (betaLocked ? ' zbeta-locked' : '')} id="byoiToggleBtn" title={betaLocked ? 'Build Your Own Indicator — locked during beta' : 'Build Your Own Indicator'} onClick={() => openModal('byoi')}>BYOI{betaLocked && <BetaLockGlyph />}</button>
         </div>
 
         {/* Exposure inline panel (hidden by default) */}
@@ -1369,7 +1382,7 @@ export function ChartControls() {
                     <div className="ind-row-l">
                       <span className="ind-row-ico">&#10022;</span>
                       <div>
-                        <div className="ind-row-name">Build your own</div>
+                        <div className="ind-row-name">Build your own{betaLocked && <BetaLockGlyph />}</div>
                         <div className="ind-row-desc">Your own indicator, your name on it</div>
                       </div>
                     </div>
