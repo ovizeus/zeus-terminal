@@ -14479,3 +14479,41 @@ Teste schimbate deliberat în `bookRender.test.tsx` (FIT nu mai există). Suita 
 Cerut de operator: magnetul roşu/verde după long/short, în ambele taburi. Magnet în SUS = verdele de pe chart (`#00d97a`), în JOS = roşul (`#ff3355`): caseta (HEATMAP şi BOOK), dunga punctată şi cartuşul de pe axa heatmap-ului. Stările fără direcţie („Collecting data…", „No magnet right now", „measured for BTC and ETH only") rămân gri. Violetul nu mai e folosit pentru un magnet viu.
 
 Suita verde înainte de build: client 2.055, typecheck curat. Nerandat în browser — confirmă operatorul.
+
+## 🔐 2026-11-13 — PLAN: acces „viewer" pentru conturile noi (BETA) — NECODAT, aşteaptă două confirmări
+
+**Cerut de operator:** vrea să aprobe conturile noi (id 19 Brazilia, id 20 China, ambele neaprobate), dar până la lansare ele să vadă doar chart, informaţii şi lichidări. Tot ce e activitate — AT, manual, ARES, DSL, brain — blocat, la fel OMEGA, cu mesaj că aplicaţia e în beta. Profesional: backup, reguli, cale de întoarcere. Vrea şi un cont al lui scos cu totul, ca să-l refacă şi să testeze ca viewer.
+
+**Ce există azi (citit din cod, 13 nov):** un cont e aprobat sau nu (`users.approved`) şi are rol `admin` sau `user`. Un user aprobat ajunge la toate rutele în afară de admin. Nu există nicio treaptă intermediară. Motoarele de pe server (AT, brain) pornesc pentru fiecare cont din `db.listUsers()` (`server.js:1619/1685/2217`, `serverBrain.js:691/760/792`). `POST /auth/admin/delete` şterge doar rândul din `users`; datele contului rămân orfane.
+
+### Principii
+1. **Poarta e pe server.** Ascunderea din aplicaţie e doar politeţe; un viewer care cheamă ruta direct trebuie refuzat.
+2. **Interzis dacă nu e pe listă.** Viewer-ul are o listă scurtă de rute permise; orice rută nouă e blocată automat până e adăugată deliberat.
+3. **Motoarele nu pornesc pentru viewer.** Fără AT, fără brain, fără DSL, fără rânduri în `brain_decisions` pentru el.
+4. **Conturile existente nu se schimbă** (de confirmat — vezi întrebarea 2).
+5. **Un singur comutator de urgenţă** (`VIEWER_GATE_ENABLED`): stins = comportamentul de azi, fără reload de cod vechi.
+
+### Paşii
+- **P0 — Plasă de siguranţă.** Backup local al bazei + `quick_check`; offsite-ul zilei confirmat; tag git pe versiunea vie (`pre-viewer-gate`). Întoarcerea: comutatorul stins, sau `git checkout` pe tag + reload.
+- **P1 — Nivelul de acces.** Coloană nouă `users.access_level` (`viewer` | `full`), migrare aditivă. Toate conturile existente primesc `full`; înregistrările noi primesc `viewer`. Adminul e mereu `full`. Test: migrarea nu atinge niciun alt câmp; rulată de două ori nu strică nimic.
+- **P2 — Poarta pe rute.** Un singur middleware, montat o dată, cu lista permisă pentru viewer: `/api/market/*` (chart, lichidări, book, predict), `/api/indicators` (citire), `/api/profile` (al lui), `/api/sync` (doar setările lui de afişare), `/api/support`, `/api/app`, `/api/health`, `/auth/*`. Refuz cu `403 { error: 'beta_locked', feature }` pentru rest: tranzacţii (`/api` trading), `/api/exchange`, `/api/srv-pos`, `/api/dsldrive`, `/api/omega*`, `/api/ring5`, `/api/journal`, `/api/brain/*`, `/api/byoi`, `/api/leaderboard`, `/api/referral`. Test: tabel rută × nivel, plus un test care pică dacă apare o rută nouă neclasificată.
+- **P3 — WebSocket.** Aceeaşi regulă la conectare şi pe mesaje: viewer primeşte fluxurile de piaţă, nu poate trimite comenzi şi nu primeşte evenimente de cont.
+- **P4 — Motoarele.** În buclele care pornesc AT/brain/DSL pe conturi, viewer-ul e sărit, cu un rând de jurnal la pornire (nu tăcut). Test pe efect, nu pe funcţia pură: după pornire, pentru un viewer nu există stare AT şi nu apar decizii. (Lecţia din 9–12 nov: testasem doar funcţia pură.)
+- **P5 — Aplicaţia.** `/auth/me` trimite nivelul. Panourile blocate (AT, manual, ARES, DSL, brain, OMEGA, jurnal, BYOI) rămân vizibile, cu lacăt şi mesaj; nu dispar. Text propus (EN, R-P-10): „Zeus Terminal is in beta. This feature opens at public launch — for now it is available to the Zeus team only." Un banner discret „BETA · view-only access" pentru viewer.
+- **P6 — Admin.** În lista de utilizatori: nivelul fiecărui cont şi un comutator viewer ↔ full, cu rând în `audit_log`. Aprobarea unui cont nou îl lasă `viewer`.
+- **P7 — Scoaterea contului de probă** (vezi mai jos), apoi operatorul îl reface, îl aprobă şi verifică pe telefon că vede chart + lichidări şi că restul e cu lacăt.
+- **P8 — Livrare.** Suita server pe shard-uri ca `zeus` + suita client, verzi ÎNAINTE de build; `version.js` validat; un singur reload, fără ban activ pe mainnet; verificare pe viu: `brain_decisions` curge pentru conturile `full`, zero pentru viewer; cerere directă de viewer la o rută blocată → 403.
+- **P9 — Abia apoi** aprobarea conturilor 19 şi 20, de către operator.
+
+### Contul de scos: uid=11 `mihutovidiu27@yahoo.com` (de confirmat)
+Operatorul a scris adresa cu o greşeală de tastare („6ahoo"); singura potrivire e uid=11. Ţine acum: 30.005 decizii brain, 240.449 rânduri `dsl_parity_log`, 38 tranzacţii demo închise, 8 rânduri `at_state`, 2.288 rânduri de audit, setări. Ruta de admin existentă şterge doar rândul din `users` şi lasă restul orfan, iar motorul îl ţine în memorie până la reload. „Cu totul" înseamnă: backup → verificat că nu are poziţii deschise → şters din toate tabelele cu `user_id` → verificat zero rânduri → dispare din motoare la reload-ul din P8. E ireversibil în afara backup-ului; id-ul 11 nu se refoloseşte (contul refăcut primeşte id nou).
+
+### Reguli pentru lucrarea asta
+- Niciun cont nou nu se aprobă până nu trece P8.
+- Nicio scriere în baza vie din consolă în afara scriptului de ştergere aprobat explicit de operator, rulat o singură dată, după backup.
+- Regresie pe o rută de bani = contract, nu test de actualizat.
+- Mesajele pentru viewer nu promit date de lansare.
+
+### Întrebări deschise către operator
+1. Confirmă ştergerea completă a uid=11 (`mihutovidiu27@yahoo.com`), cu toate datele lui.
+2. Conturile existente 2, 5, 12, 13, 14, 15 rămân `full` (propus), sau devin şi ele `viewer` şi rămâne doar adminul cu acces? A doua variantă le opreşte autotrade-ul demo.
