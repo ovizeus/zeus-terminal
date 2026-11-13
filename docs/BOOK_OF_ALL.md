@@ -14628,3 +14628,5 @@ Fişiere: `ChartControls.tsx`, `betagate.css`. Client 2.079 teste, typecheck cur
 **Teste:** `tests/unit/accountEmails.test.js` (12): conţinut, fără termene, fără injecţie, SMTP căzut, şi momentul trimiterii în rute. Mutaţie: aprobarea care trimite mereu → 1 test roşu.
 
 **Corecţie de la operator (13 nov, după ce a văzut textele):** semnătura e „Zeus Terminal team", fără „The". Schimbată în `accountEmails.js` şi în test; a cerut o a doua repornire, făcută după o pauză, fiindcă prima era deja pornită când a venit mesajul.
+
+**Livrat b383, 13 nov:** suita de server 10.746 trecute pe 4 sferturi; prima repornire 19:28:55 UTC, a doua (semnătura) 19:36:05 UTC, la 7 minute distanţă. După fiecare: cele 7 simboluri pornite, `brain_decisions` curge pentru uid 1, 5, 12–15, nicio eroare nouă. Schimbarea de semnătură (o constantă) a mers doar cu testul ei, fără reluarea suitei complete. La cererea operatorului, ambele emailuri au fost trimise ca probă pe adresa lui de test (`sendAccountEmail` a întors `true` pentru amândouă). Livrarea în căsuţă (inbox sau spam) o confirmă el.
