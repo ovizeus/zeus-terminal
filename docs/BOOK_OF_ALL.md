@@ -14754,3 +14754,11 @@ Cadrul de preţ vine din puntea serverului (`wsMarketProxy`, independentă de fs
 **Fişiere:** server `liqOkx.js`, `liqFeedAggregator.js`, `scripts/fix-okx-liq-contracts.js`; client `engine/liqPulse.ts`, `engine/fusionMath.ts`, `engine/brain.ts`, `components/brain/BrainCockpit.tsx`, `services/liqFeedClient.ts`, `data/basisRate.ts`, `data/marketDataWS.ts`, `app.css`. **Teste noi:** `liqOkx` (12), `fixOkxLiqContracts` (5), `liqPulse` (14), `projectedVolume` (8), `basisRate` (7).
 
 **Văzut, neatins:** operatorul a pornit din Admin steagul `ML_BANDIT_AUTO_APPLY_MINOR` (14 nov 20:53 UTC). `data/migration_flags.json` apare modificat în git din cauza asta; nu l-am inclus în commit.
+
+**Livrat b386, 14 nov 21:54 UTC.** Teste înainte: server 10.857 pe 4 sferturi (EXIT=0), client 2.113, typecheck curat. Ordinea: `pm2 stop` → `wal_checkpoint` → copie a bazei (`data/db_backups/zeus-pre-okxfix-20261114.db`, 4,5 G) → `fix-okx-liq-contracts.js --apply` → `pm2 start` → abia apoi build-ul de client. 14 secunde de oprire; zero poziţii deschise înainte.
+
+**Corecţia pe baza vie:** 182.972 de rânduri OKX rescalate, 3 şterse; totalul OKX din bază de la 77,4 miliarde $ la 1,43 miliarde $. Semn în `_migrations`: `data_okx_liq_ctval_fix_20261114`.
+
+**Măsurat după pornire:** „OKX contract values loaded: 543" înaintea conectării; lichidările OKX noi au în medie 4.151 $ (2 evenimente în 3 minute — puţine, dar de ordinul corect); BTC pe 24h: bybit 75,8 M$ (medie 9.901 $), gate 63,0 M$ (12.728 $), okx 32,0 M$ (20.558 $) — înainte OKX singur arăta peste 2 miliarde. `quick_check` ok; 7 simboluri pornite; `brain_decisions` curge pentru uid 1, 5, 12–15; nicio eroare nouă.
+
+**Neverificat:** cadranele şi radarul nu au fost văzute randate (fără browser pe server). Confirmă operatorul.
