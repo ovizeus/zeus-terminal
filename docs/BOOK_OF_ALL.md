@@ -14710,3 +14710,5 @@ Azi trimiterea e prin Gmail (`smtp.gmail.com`), de pe o adresă `@gmail.com`. Do
 3. **La schimbarea emailului, celelalte sesiuni nu sunt închise**, iar jetonul lor poartă adresa veche.
 4. **`_sendCode` întoarce „trimis" când SMTP nu e configurat**, şi în producţie, pentru schimbare de parolă / email / parolă uitată / închidere cont (doar login-ul verifică). Codul ajunge în consola serverului. Azi SMTP e configurat, deci nu se manifestă.
 5. **„This email address is already in use"** la schimbarea emailului îi spune oricărui utilizator logat dacă o adresă are cont.
+
+**Livrat b385, 14 nov 07:09 UTC.** Teste înainte: server 10.840 pe 4 sferturi (EXIT=0); clientul neatins, deci fără build. O singură repornire. După pornire: 7 simboluri pornite, `brain_decisions` curge pentru uid 1, 5, 12–15, nicio eroare nouă, paginile de login şi suport răspund, conexiunea SMTP verificată, antetul expeditorului e „Zeus Terminal <…>". **Nu am trimis niciun email de probă** de data asta (nu a fost cerut); operatorul le vede la prima acţiune reală sau la cerere.
