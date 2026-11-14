@@ -106,7 +106,11 @@ function _validatePassword(pw) {
     return null;
 }
 
-async function _sendCode(email, code) {
+// `purpose` spune PENTRU CE e codul (login / change_password / change_email /
+// forgot_password / close_account). Pana pe 14 nov toate cele cinci primeau un
+// singur email, care scria „Login verification code" — inclusiv cel pentru
+// inchiderea contului.
+async function _sendCode(email, code, purpose) {
     const mailer = _getMailer();
     if (!mailer) {
         // SMTP not configured — log code to console for local dev
@@ -114,19 +118,8 @@ async function _sendCode(email, code) {
         return true;
     }
     try {
-        await mailer.sendMail({
-            from: process.env.SMTP_FROM || process.env.SMTP_USER,
-            to: email,
-            subject: '🔐 Zeus Terminal — Verification Code',
-            text: `Your verification code: ${code}\n\nThis code expires in 5 minutes.\nIf you did not request this code, ignore this email.`,
-            html: `
-                <div style="font-family:sans-serif;background:#0a0f16;color:#e0e0e0;padding:30px;border-radius:12px;max-width:400px;margin:0 auto">
-                    <h2 style="color:#00afff;margin:0 0 16px">⚡ Zeus Terminal</h2>
-                    <p style="margin:0 0 20px;color:#999">Login verification code:</p>
-                    <div style="background:#111a28;border:1px solid #00afff44;border-radius:8px;padding:20px;text-align:center;font-size:32px;letter-spacing:8px;font-weight:700;color:#00ff88">${code}</div>
-                    <p style="margin:16px 0 0;color:#556;font-size:12px">Code expires in 5 minutes.</p>
-                </div>`
-        });
+        const m = accountEmails.codeEmail(purpose || 'login', code, CODE_TTL / 60000);
+        await mailer.sendMail({ from: accountEmails.fromHeader(), to: email, subject: m.subject, text: m.text, html: m.html });
         logger.info('AUTH', '2FA code sent', { to: _mask(email) });
         return true;
     } catch (err) {
@@ -413,7 +406,7 @@ router.post('/login', async (req, res) => {
             return res.json({ ok: true, needsCode: true, message: '2FA code printed to the server console (dev mode).' });
         }
 
-        const sent = await _sendCode(normalEmail, code);
+        const sent = await _sendCode(normalEmail, code, 'login');
         if (!sent) {
             pendingCodes.delete(normalEmail);
             logger.error('AUTH', 'SMTP failed, login blocked', { email: _mask(normalEmail) });
@@ -421,7 +414,7 @@ router.post('/login', async (req, res) => {
         }
 
         logger.info('AUTH', '2FA code sent for login', { email: _mask(normalEmail) });
-        res.json({ ok: true, needsCode: true, message: 'Cod de verificare trimis pe email.' });
+        res.json({ ok: true, needsCode: true, message: 'A verification code was sent to your email.' });
     } catch (err) {
         console.error('[AUTH] Login error:', err.message);
         res.status(500).json({ error: 'Internal error' });
@@ -680,6 +673,8 @@ router.post('/admin/access-level', (req, res) => {
         const from = accessLevel.levelOfUser(target);
         db.setAccessLevel(target.id, level);
         db.auditLog(caller.id, 'ADMIN_ACCESS_LEVEL', { targetId: target.id, from, to: level }, req.ip);
+        // [2026-11-14] Doar la ridicare, si doar daca s-a schimbat ceva.
+        if (level === 'full' && from !== 'full') void accountEmails.sendAccountEmail('access_full', target.email);
         logger.info('AUTH', 'Admin changed access level', { target: _mask(target.email), from, to: level });
         res.json({ ok: true, accessLevel: level });
     } catch (err) {
@@ -762,8 +757,14 @@ router.post('/admin/block', (req, res) => {
         if (!target) return res.status(404).json({ error: 'User not found' });
         if (target.role === 'admin') return res.status(400).json({ error: 'Cannot block admin' });
         const newStatus = block ? 'blocked' : 'active';
+        // Starea de DINAINTE, citita inainte de scriere: emailul pleaca doar la
+        // o schimbare reala, nu la a doua apasare pe acelasi buton.
+        const wasBlocked = target.status === 'blocked';
+        const wasBanned = !!(target.banned_until && new Date(target.banned_until) > new Date());
         db.setUserStatus(target.id, newStatus);
         if (!block) db.unbanUser(target.id); // unblock also clears ban
+        if (block && !wasBlocked) void accountEmails.sendAccountEmail('suspended', target.email);
+        if (!block && (wasBlocked || wasBanned)) void accountEmails.sendAccountEmail('restored', target.email);
         db.auditLog(caller.id, block ? 'ADMIN_BLOCK_USER' : 'ADMIN_UNBLOCK_USER', { targetEmail: normalEmail }, req.ip);
         logger.info('AUTH', block ? 'Admin blocked user' : 'Admin unblocked user', { target: _mask(normalEmail) });
         res.json({ ok: true, status: newStatus });
@@ -796,6 +797,8 @@ router.post('/admin/ban', (req, res) => {
         }
         db.banUser(target.id, bannedUntil);
         db.auditLog(caller.id, 'ADMIN_BAN_USER', { targetEmail: normalEmail, duration, bannedUntil }, req.ip);
+        // Un ban permanent nu are o data de scris.
+        void accountEmails.sendAccountEmail('suspended', target.email, { data: duration === 'permanent' ? {} : { until: bannedUntil } });
         logger.info('AUTH', 'Admin banned user', { target: _mask(normalEmail), duration, bannedUntil });
         res.json({ ok: true, bannedUntil });
     } catch (err) { res.status(401).json({ error: 'Token invalid' }); }
@@ -935,7 +938,9 @@ router.post('/admin/suspend', (req, res) => {
     const target = db.findUserByEmail(normalEmail);
     if (!target) return res.status(404).json({ error: 'User not found' });
     if (target.role === 'admin') return res.status(400).json({ error: 'Cannot suspend admin' });
+    const wasBlocked = target.status === 'blocked';
     db.setUserStatus(target.id, 'blocked');
+    if (!wasBlocked) void accountEmails.sendAccountEmail('suspended', target.email);
     db.auditLog(guard.caller.id, 'ADMIN_SUSPEND_USER', { targetEmail: normalEmail, reason: reason || 'admin_suspend' }, req.ip);
     logger.info('AUTH', 'Admin suspended user', { target: _mask(normalEmail), reason });
     res.json({ ok: true });
@@ -1010,6 +1015,9 @@ router.post('/admin/reset-password', async (req, res) => {
     db.setTempPasswordMeta(target.id, expiresAt);
     db.bumpTokenVersion(target.id);
     db.auditLog(guard.caller.id, 'ADMIN_RESET_PASSWORD', { targetEmail: normalEmail, targetId: target.id, expiresAt }, req.ip);
+    // [2026-11-14] Omul afla ca parola i-a fost resetata. Parola temporara NU se
+    // scrie in email: i-o da echipa, direct.
+    void accountEmails.sendAccountEmail('admin_password_reset', normalEmail);
     res.json({ ok: true, tempPassword, expiresAt, note: 'Temp password expires in 1 hour. Communicate via secure channel; user must change on first login.' });
 });
 
@@ -1047,8 +1055,8 @@ router.post('/admin/bulk', (req, res) => {
             if (u.role === 'admin' && u.id !== guard.caller.id) { results.skipped++; continue; }
             if (action === 'force-logout') { db.bumpTokenVersion(id); }
             else if (action === 'approve') { const wasApproved = !!u.approved; db.approveUser(u.email); if (!wasApproved) void accountEmails.sendAccountEmail('approved', u.email); }
-            else if (action === 'block') { db.setUserStatus(u.id, 'blocked'); }
-            else if (action === 'unblock') { db.setUserStatus(u.id, 'active'); }
+            else if (action === 'block') { const was = u.status === 'blocked'; db.setUserStatus(u.id, 'blocked'); if (!was) void accountEmails.sendAccountEmail('suspended', u.email); }
+            else if (action === 'unblock') { const was = u.status === 'blocked'; db.setUserStatus(u.id, 'active'); if (was) void accountEmails.sendAccountEmail('restored', u.email); }
             results.ok++;
         } catch (err) { results.errors.push({ id, error: err.message }); }
     }
@@ -1156,14 +1164,14 @@ router.post('/change-password/request', async (req, res) => {
             expiresAt: Date.now() + CODE_TTL
         });
 
-        const sent = await _sendCode(decoded.email, code);
+        const sent = await _sendCode(decoded.email, code, 'change_password');
         if (!sent) {
             pendingCodes.delete('chpw_' + decoded.email);
             return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
         }
 
         db.auditLog(user.id, 'CHANGE_PASSWORD_REQUESTED', {}, req.ip);
-        res.json({ ok: true, message: 'Cod trimis pe email' });
+        res.json({ ok: true, message: 'A code was sent to your email.' });
     } catch (err) {
         res.status(401).json({ error: 'Token invalid' });
     }
@@ -1228,6 +1236,8 @@ router.post('/change-password/confirm', async (req, res) => {
         _setAuthCookie(res, newToken, user.id);
 
         db.auditLog(user.id, 'CHANGE_PASSWORD_SUCCESS', {}, req.ip);
+        // [2026-11-14] Confirmare: daca altcineva a schimbat parola, omul afla.
+        void accountEmails.sendAccountEmail('password_changed', decoded.email);
         logger.info('AUTH', 'Password changed', { email: _mask(decoded.email) });
         res.json({ ok: true, message: 'Your password has been changed successfully.' });
     } catch (err) {
@@ -1253,11 +1263,11 @@ router.post('/change-email/request', async (req, res) => {
 
         const normalised = newEmail.toLowerCase().trim();
         if (normalised === decoded.email.toLowerCase()) {
-            return res.status(400).json({ error: 'Emailul nou este identic cu cel actual' });
+            return res.status(400).json({ error: 'The new email is the same as your current one.' });
         }
 
         const existing = db.findUserByEmail(normalised);
-        if (existing) return res.status(409).json({ error: 'Acest email este deja folosit' });
+        if (existing) return res.status(409).json({ error: 'This email address is already in use.' });
 
         const valid = await bcrypt.compare(currentPassword, user.password_hash);
         if (!valid) {
@@ -1274,14 +1284,14 @@ router.post('/change-email/request', async (req, res) => {
             expiresAt: Date.now() + CODE_TTL
         });
 
-        const sent = await _sendCode(normalised, code);
+        const sent = await _sendCode(normalised, code, 'change_email');
         if (!sent) {
             pendingCodes.delete('chem_' + decoded.email);
             return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
         }
 
         db.auditLog(user.id, 'CHANGE_EMAIL_REQUESTED', { newEmail: normalised }, req.ip);
-        res.json({ ok: true, message: 'Cod trimis pe noul email' });
+        res.json({ ok: true, message: 'A code was sent to your new email address.' });
     } catch (err) {
         res.status(401).json({ error: 'Token invalid' });
     }
@@ -1298,7 +1308,7 @@ router.post('/change-email/confirm', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const { code } = req.body;
-        if (!code) return res.status(400).json({ error: 'Codul este necesar' });
+        if (!code) return res.status(400).json({ error: 'The code is required' });
 
         const key = 'chem_' + decoded.email;
         const pending = pendingCodes.get(key);
@@ -1335,21 +1345,12 @@ router.post('/change-email/confirm', async (req, res) => {
         );
         _setAuthCookie(res, newToken, user.id); // [bug#3] refresh zeus_uid companion cookie too
 
-        // Notify old email about the change
-        const _oldMailer = _getMailer();
-        if (_oldMailer) {
-            _oldMailer.sendMail({
-                from: process.env.SMTP_FROM || process.env.SMTP_USER,
-                to: decoded.email,
-                subject: '⚠️ Zeus Terminal — Email address changed',
-                text: 'The email address associated with your Zeus Terminal account has been changed.\nIf you did not request this change, contact the administrator immediately.',
-                html: '<div style="font-family:sans-serif;background:#0a0f16;color:#e0e0e0;padding:30px;border-radius:12px;max-width:400px;margin:0 auto"><h2 style="color:#ff6600;margin:0 0 16px">⚠️ Zeus Terminal</h2><p>The email address associated with your account has been changed.</p><p style="margin:16px 0 0;color:#ff4444;font-size:13px">If you did not request this change, contact the administrator immediately.</p></div>'
-            }).catch(err => logger.error('AUTH', 'Old email notification failed', { error: err.message }));
-        }
+        // Anunt catre adresa VECHE (nu spune care e cea noua).
+        void accountEmails.sendAccountEmail('email_changed', decoded.email);
 
         db.auditLog(user.id, 'CHANGE_EMAIL_SUCCESS', { oldEmail: decoded.email, newEmail: pending.newEmail }, req.ip);
         logger.info('AUTH', 'Email changed', { from: _mask(decoded.email), to: _mask(pending.newEmail) });
-        res.json({ ok: true, message: 'Emailul a fost schimbat cu succes!' });
+        res.json({ ok: true, message: 'Your email address has been changed.' });
     } catch (err) {
         res.status(401).json({ error: 'Token invalid' });
     }
@@ -1359,7 +1360,7 @@ router.post('/change-email/confirm', async (req, res) => {
 router.post('/forgot-password/request', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const email = (req.body.email || '').toLowerCase().trim(); // [S13] normalize
-    if (!email) return res.status(400).json({ error: 'Emailul este necesar' });
+    if (!email) return res.status(400).json({ error: 'Email is required' });
 
     const user = db.findUserByEmail(email);
     // Always return success (don't reveal if email exists)
@@ -1377,7 +1378,7 @@ router.post('/forgot-password/request', async (req, res) => {
         expiresAt: Date.now() + CODE_TTL
     });
 
-    const sent = await _sendCode(email, code);
+    const sent = await _sendCode(email, code, 'forgot_password');
     if (!sent) {
         pendingCodes.delete('fgpw_' + email.toLowerCase().trim());
         return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
@@ -1430,6 +1431,11 @@ router.post('/forgot-password/confirm', async (req, res) => {
     pendingCodes.delete(key);
 
     db.auditLog(pending.userId, 'FORGOT_PASSWORD_SUCCESS', {}, req.ip);
+    // [2026-11-14] Confirmare pe adresa CONTULUI (din baza), nu pe cea din cerere.
+    try {
+        const owner = db.findUserById(pending.userId);
+        if (owner && owner.email) void accountEmails.sendAccountEmail('password_reset', owner.email);
+    } catch (_) { /* confirmarea nu blocheaza resetarea */ }
     logger.info('AUTH', 'Password reset via forgot-password', { email: _mask(email) });
     res.json({ ok: true, message: 'Your password has been reset successfully. You can now sign in.' });
 });
@@ -1465,14 +1471,14 @@ router.post('/close-account/request', async (req, res) => {
             expiresAt: Date.now() + CODE_TTL
         });
 
-        const sent = await _sendCode(decoded.email, code);
+        const sent = await _sendCode(decoded.email, code, 'close_account');
         if (!sent) {
             pendingCodes.delete('clac_' + decoded.email);
             return res.status(503).json({ error: 'Could not send the code. Please try again later.' });
         }
 
         db.auditLog(user.id, 'CLOSE_ACCOUNT_REQUESTED', {}, req.ip);
-        res.json({ ok: true, message: 'Cod trimis pe email' });
+        res.json({ ok: true, message: 'A code was sent to your email.' });
     } catch (err) {
         res.status(401).json({ error: 'Token invalid' });
     }
@@ -1493,7 +1499,7 @@ router.post('/close-account/confirm', async (req, res) => {
         }
 
         const { code } = req.body;
-        if (!code) return res.status(400).json({ error: 'Codul este necesar' });
+        if (!code) return res.status(400).json({ error: 'The code is required' });
 
         const key = 'clac_' + decoded.email;
         const pending = pendingCodes.get(key);
@@ -1530,6 +1536,7 @@ router.post('/close-account/confirm', async (req, res) => {
         res.clearCookie('zeus_uid', { path: '/' });
 
         db.auditLog(user.id, 'CLOSE_ACCOUNT_SUCCESS', { email: decoded.email }, req.ip);
+        void accountEmails.sendAccountEmail('account_closed', decoded.email);
         logger.info('AUTH', 'Account closed', { email: _mask(decoded.email) });
         res.json({ ok: true, message: 'Your account has been deleted. You will be redirected.' });
     } catch (err) {

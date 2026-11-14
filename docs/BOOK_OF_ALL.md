@@ -14666,3 +14666,47 @@ Refăcută: fond de ardezie, un singur accent rece (albastru-oţel) în loc de g
 **Livrat b384, 13 nov 23:19 UTC.** Teste înainte: server 10.752 pe 4 sferturi (EXIT=0), client 2.084, typecheck curat. Ordinea respectată de data asta: serverul repornit ÎNTÂI (o singură dată, 23:19:29), build-ul de client după. După pornire: 7 simboluri pornite, `brain_decisions` curge pentru uid 1, 5, 12–15 (35 fiecare în 2 minute), nicio eroare nouă; fără sesiune, `/api/market/ticker` răspunde 401 (ajunge la autentificare, nu la refuzul de chei).
 
 **Neverificat pe viu:** după repornire nu a mai fost nimeni conectat (zero cereri în jurnalul nginx), deci nu am văzut un cont view-only primind 200 la datele de piaţă. Dovada e din teste şi din diagnosticul pe jurnal; confirmarea e a operatorului, cu contul de probă (id 21, view-only).
+
+## ✉️ 2026-11-14 — Notificări de cont pe email (b385)
+
+**Cerut de operator**, după un inventar făcut fără cod: ce emailuri trimite Zeus şi ce lipseşte. Concluzia inventarului: codurile pleacă peste tot unde trebuie, dar după ce se schimbă ceva la cont nu pleacă nicio confirmare, toate codurile scriu „Login verification code", iar expeditorul apare ca o adresă goală de Gmail. A ales toate cele cinci puncte din recomandare.
+
+### Ce trimite acum (`server/services/accountEmails.js`, un singur şablon)
+| Moment | Email |
+|---|---|
+| Înregistrare | we received your request |
+| Aprobare | your access is approved |
+| Cod: login / schimbare parolă / email nou / parolă uitată / închidere cont | cinci subiecte diferite; fiecare spune pentru ce e codul |
+| Parolă schimbată | your password was changed (când, celelalte sesiuni închise, ce faci dacă n-ai fost tu) |
+| Parolă resetată („forgot password") | your password was reset — pe adresa CONTULUI din bază, nu pe cea din cerere |
+| Parolă resetată din Admin | your password was reset by our team — **fără parola în email** |
+| Cont închis | your account has been closed |
+| Email schimbat | către adresa VECHE; nu spune care e cea nouă |
+| Acces complet acordat | you now have full access (doar la ridicare) |
+| Blocare / suspendare / ban | your account has been suspended (cu data, dacă are) |
+| Deblocare | your account is active again |
+| Răspuns de la suport | new reply from support, cu mesajul (max 600 de caractere); cel mult unul la 10 minute pe adresă |
+
+### Reguli ţinute de teste
+- O notificare nu blochează nimic: acţiunea reuşeşte şi cu SMTP căzut. (Codurile rămân aşteptate: fără cod acţiunea nu poate continua.)
+- Fiecare pleacă o singură dată, la o schimbare reală: starea de dinainte se citeşte ÎNAINTE de scriere (a doua apăsare pe Block / Approve / Grant full nu mai trimite).
+- Nicio parolă într-un email; niciun termen promis; nimic despre alţi utilizatori; fără email la respingere sau la ştergerea din Admin.
+- Expeditorul: `fromHeader()` pune „Zeus Terminal" în faţa adresei din mediu dacă nu are deja un nume. Folosit şi de alertele critice către admini.
+- Sub teste nu pleacă niciodată un email adevărat (fără transport dat explicit, funcţia se opreşte).
+
+### Texte în engleză
+Răspunsurile rămase în română din `auth.js` (8), `exchange.js` (2), `database.js` (1) şi `resolveExchange.js`. Un test citeşte toate şirurile `error/message/note` din aceste fişiere.
+
+### Hotărât de mine, de confirmat de operator
+- **Parola temporară nu se scrie în email** (întrebarea a rămas fără răspuns; am ales varianta prudentă). Emailul spune că echipa i-o dă direct şi că poate folosi „Forgot password".
+- **La coborârea de la full la view-only nu pleacă email.**
+
+### Punctul 5 — adresă pe domeniu (`noreply@zeus-terminal.com`): NEFĂCUT, cere paşi ai operatorului
+Azi trimiterea e prin Gmail (`smtp.gmail.com`), de pe o adresă `@gmail.com`. Domeniul are doar redirecţionare de primire (Cloudflare) şi o verificare Brevo începută (`brevo-code` în DNS), fără DKIM. De făcut de operator: în Brevo — autentificarea domeniului (înregistrările DKIM pe care le arată ei, puse în Cloudflare) şi o cheie SMTP; apoi în `.env`: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` de la Brevo şi `SMTP_FROM="Zeus Terminal <noreply@zeus-terminal.com>"`. Codul nu mai trebuie schimbat.
+
+### Erori găsite pe drum (NEREPARATE, de hotărât)
+1. **`pwd_must_change` nu are niciun cititor.** După o resetare din Admin, utilizatorul nu e obligat să-şi schimbe parola temporară; dacă nu o schimbă într-o oră, următorul login e refuzat până la o nouă resetare sau „Forgot password".
+2. **Închiderea contului de către utilizator şi „Delete" din Admin şterg doar rândul din `users`.** Deciziile, jurnalul şi restul rămân orfane; textul din Admin spune „permanently removes the account". Scriptul `purge-user.js` există, dar nu e legat de aceste butoane.
+3. **La schimbarea emailului, celelalte sesiuni nu sunt închise**, iar jetonul lor poartă adresa veche.
+4. **`_sendCode` întoarce „trimis" când SMTP nu e configurat**, şi în producţie, pentru schimbare de parolă / email / parolă uitată / închidere cont (doar login-ul verifică). Codul ajunge în consola serverului. Azi SMTP e configurat, deci nu se manifestă.
+5. **„This email address is already in use"** la schimbarea emailului îi spune oricărui utilizator logat dacă o adresă are cont.

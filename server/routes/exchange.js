@@ -156,9 +156,9 @@ router.post('/save', async (req, res) => {
     const safeMode = (mode === 'testnet') ? 'testnet' : 'live';
 
     if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length < 10)
-        return res.status(400).json({ ok: false, error: 'API Key invalid — minim 10 caractere' });
+        return res.status(400).json({ ok: false, error: 'Invalid API key — at least 10 characters' });
     if (!apiSecret || typeof apiSecret !== 'string' || apiSecret.trim().length < 10)
-        return res.status(400).json({ ok: false, error: 'Secret Key invalid — minim 10 caractere' });
+        return res.status(400).json({ ok: false, error: 'Invalid secret key — at least 10 characters' });
 
     const cleanKey = apiKey.trim();
     const cleanSecret = apiSecret.trim();

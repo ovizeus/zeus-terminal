@@ -33,7 +33,8 @@ async function sendCriticalEmail(subject, body) {
         const db = require('./database');
         const admins = (db.listUsers() || []).filter(u => u && u.role === 'admin' && u.email);
         if (admins.length === 0) return 0;
-        const from = process.env.SMTP_USER;
+        // Acelasi antet „From" ca emailurile de cont (cu numele „Zeus Terminal").
+        const from = require('./accountEmails').fromHeader() || process.env.SMTP_USER;
         let sent = 0;
         for (const a of admins) {
             try {

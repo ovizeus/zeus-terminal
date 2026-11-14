@@ -10982,7 +10982,7 @@ function atomicEmailUpdate(userId, newEmail) {
     const normalised = newEmail.toLowerCase().trim();
     const txn = db.transaction(() => {
         const existing = _stmts.findByEmail.get(normalised);
-        if (existing) return { ok: false, error: 'Acest email este deja folosit' };
+        if (existing) return { ok: false, error: 'This email address is already in use.' };
         _stmts.updateEmail.run(normalised, userId);
         return { ok: true };
     });

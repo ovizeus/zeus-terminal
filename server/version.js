@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.358',
-    build: 384,
+    version: '1.7.359',
+    build: 385,
     date: '2026-11-05',
     changelog: [
+        'b385 v1.7.359 - Notificari de cont pe email, 2026-11-14 (server). Codurile spun acum pentru ce sunt (login, schimbare parola, email nou, resetare, inchidere cont) - inainte toate scriau Login verification code. Orice schimbare la cont e confirmata: parola schimbata, parola resetata, parola resetata de echipa (fara parola in email), cont inchis, adresa schimbata. In plus: acces complet acordat, cont suspendat / reactivat, raspuns nou de la suport (cel mult unul la 10 minute). Expeditorul apare ca Zeus Terminal, nu ca o adresa goala. Raspunsurile serverului ramase in romana sunt in engleza. Nicio actiune nu depinde de trimiterea emailului.',
         'b384 v1.7.358 - Conturile noi nu primeau date de piata, 2026-11-13 (server + client). Doua cauze, gasite pe contul de proba: (1) /api/market era montat DUPA rutele de trading, iar acelea refuza cu 403 orice cont fara chei de exchange - deci randul de preturi, harta de lichidari si chartul la schimbarea monedei ramaneau goale; eroare veche, nevazuta cat toate conturile aveau chei. (2) /api/migration/flags, citit de aplicatie la pornire ca sa-si aleaga calea de date, nu era pe lista permisa unui cont view-only; acum e, si un cont view-only primeste doar cele patru steaguri de date. In plus: mesajul de beta apare doar la apasare (nu din cereri de fundal), caseta lui e refacuta, iar textele in romana din Adaptive / Signal Scanner sunt in engleza.',
         'b383 v1.7.357 - Emailuri de cont, 2026-11-13 (server). Cine cere un cont primeste un email ca cererea a ajuns si ca accesul se aproba manual; la aprobare primeste al doilea, cu linkul de intrare si cu ce e deschis in beta. Trimiterea nu blocheaza inregistrarea sau aprobarea; fara email la respingere; o a doua apasare pe Approve nu mai trimite. Limita de conturi ridicata de la 10 la 50 (MAX_USERS).',
         'b382 v1.7.356 - Acces BETA pentru conturile noi, 2026-11-13 (server + client). Un cont nou porneste view-only: chart, indicatori, date de piata si harta de lichidari. Autotrade, manual, ARES, DSL, brain, OMEGA, jurnal si BYOI sunt sub lacat pana la lansare. Poarta e pe server si e interzis-daca-nu-e-pe-lista (middleware/viewerGate.js): 41 de rute permise exact, restul 403 beta_locked; motoarele (brain, autotrade) nu pornesc pentru un cont view-only. Conturile aprobate dinainte raman cu acces complet. In Admin, la utilizatori: nivelul fiecarui cont si un buton de ridicare/coborare. In aplicatie pictogramele raman la vedere, cu lacat si mesaj. Maneta de urgenta: VIEWER_GATE_ENABLED=false.',

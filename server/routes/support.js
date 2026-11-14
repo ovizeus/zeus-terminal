@@ -100,6 +100,13 @@ router.post('/reply/:userId', _requireAuth, _requireAdmin, (req, res) => {
     try {
         const row = db.insertSupportMessage(uid, 'admin', message);
         _push(req, uid, row);
+        // [2026-11-14] Raspunsul ajungea doar in aplicatie: cine n-o avea
+        // deschisa nu afla ca i s-a raspuns. Cel mult un email la 10 minute
+        // pe utilizator (vezi accountEmails), neasteptat.
+        try {
+            const target = db.findUserById(uid);
+            if (target && target.email) void require('../services/accountEmails').sendAccountEmail('support_reply', target.email, { data: { message } });
+        } catch (_) { /* emailul nu blocheaza raspunsul */ }
         res.json({ ok: true, msg: row });
     } catch (err) {
         res.status(500).json({ ok: false, error: String(err && err.message || err) });
