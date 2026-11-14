@@ -71,7 +71,11 @@ describe('liqFeedAggregator (Plan A — server-side proxy)', () => {
     test('_normalizeOkx parses OKX liquidation-orders payload', () => {
         const mod = require('../../server/services/liqFeedAggregator');
         const { _normalizeOkx } = mod._internal_for_test;
-        const d = { instId: 'BTC-USDT-SWAP', side: 'sell', sz: '0.2', bkPx: '60500', ts: '1700000000456' };
+        // [2026-11-14] `sz` e in CONTRACTE (0,01 BTC pe BTC-USDT-SWAP). Testul
+        // vechi trata 0,2 contracte drept 0,2 BTC — exact eroarea de 100× gasita
+        // in `liq_events`. Acum: 20 de contracte = 0,2 BTC.
+        require('../../server/services/liqOkx')._setInstrumentsForTest({ 'BTC-USDT-SWAP': 0.01 });
+        const d = { instId: 'BTC-USDT-SWAP', side: 'sell', sz: '20', bkPx: '60500', ts: '1700000000456' };
         const liq = _normalizeOkx(d);
         expect(liq).toEqual({
             exchange: 'okx',
@@ -171,8 +175,12 @@ describe('[LIQ-FIX] OKX details[] flattening', () => {
     test('_normalizeOkx parses a flattened details item (docs push example)', () => {
         const mod = require('../../server/services/liqFeedAggregator');
         const { _normalizeOkx } = mod._internal_for_test;
+        require('../../server/services/liqOkx')._setInstrumentsForTest({ 'BTC-USDT-SWAP': 0.01 });
         const liq = _normalizeOkx({ instId: 'BTC-USDT-SWAP', side: 'buy', sz: '13', bkPx: '60000', ts: '1692266434010' });
-        expect(liq).toMatchObject({ exchange: 'okx', symbol: 'BTCUSDT', side: 'BUY', isLong: false, q: 13, p: 60000 });
+        // 13 contracte × 0,01 = 0,13 BTC (nu 13 BTC)
+        expect(liq).toMatchObject({ exchange: 'okx', symbol: 'BTCUSDT', side: 'BUY', isLong: false, p: 60000 });
+        expect(liq.q).toBeCloseTo(0.13, 10);
+        expect(liq.vol).toBeCloseTo(7800, 6);
     });
 
     test('_okxFlatten expands the wrapped docs shape into normalizable items', () => {

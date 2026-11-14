@@ -11,7 +11,8 @@ import { el, escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , DSL_PRESETS, _NEURO_SYMS, BM, BRAIN as BR } from '../core/config'
 import { calcConfluenceScore } from './confluence'
-import { liqIntensityScore, volumeIntensityScore } from './fusionMath'
+import { projectedVolume } from './fusionMath'
+import { recentLiqs, pulseOf, liqPulseScore, longSharePct, baselineOf, refreshBaseline, fmtUsdShort, PULSE_WINDOW_MS, BALANCE_WINDOW_MS } from './liqPulse'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
 import { _syncDslAssistUI } from '../trading/dsl'
@@ -1916,18 +1917,54 @@ export function renderBrainCockpit(): void {
   const orbWrap = el('zncOrbWrap')
   if (orbWrap) orbWrap.style.animation = chaos > 80 ? 'zHeat .15s infinite' : ''
 
-  // ── GAUGES: VOLATILITY + LIQ + VOL (all real; THREAT RADAR merged in here) ──
-  // [2026-06-13] Single honest panel. VOLATILITY = real ATR%; LIQ = real recent
-  // liquidations (w.S.events, 60s window, Bybit/OKX feed); VOL = real-time volume
-  // intensity from klines (latest bar vs trailing avg — the rate volume enters).
-  const volatScore = Math.round(Math.min(100, (BR.regimeAtrPct || 0) * 20))
-  const liqScore = liqIntensityScore((w.S && w.S.events) || [], Date.now(), 60_000, 1_000_000)
-  const volScore = volumeIntensityScore((w.S && w.S.klines) || [], 20)
+  // ── GAUGES: VOLATILITY + LIQ + VOL ──
+  // [2026-06-13] Un singur panou, doar date reale.
+  // [2026-11-14] Refacute dupa ce operatorul a vazut „VOL 0" si „LIQ 3":
+  //   VOLATILITY = ATR% real (neschimbat), cu cifra scrisa dedesubt;
+  //   LIQ  = lichidarile MONEDEI din chart pe 5 minute, de pe fluxul serverului,
+  //          fata de media ei pe 24h (inainte: toate monedele, 1 minut, fata de
+  //          un prag fix de 1 milion $, trecute prin filtrul personal);
+  //   VOL  = bara curenta adusa la lungimea ei intreaga (inainte compara o bara
+  //          neterminata cu bare intregi si arata 0 jumatate din timp).
+  // Un cadran fara date ramane gol („—"), nu arata un zero inventat.
+  const _nowG = Date.now()
+  const _symG = String((w.S && w.S.symbol) || '').toUpperCase()
+  const _atrPct = Number(BR.regimeAtrPct) || 0
+  const volatScore = Math.round(Math.min(100, _atrPct * 20))
+  const _liqs = recentLiqs(_nowG)
+  const _p5 = pulseOf(_liqs, _symG, _nowG, PULSE_WINDOW_MS)
+  const _p15 = pulseOf(_liqs, _symG, _nowG, BALANCE_WINDOW_MS)
+  try { refreshBaseline(_symG, Number(getPrice()) || 0, _nowG) } catch (_) { /* afisaj */ }
+  const liqScore = liqPulseScore(_p5.usd, baselineOf(_symG))
+  const _pv = projectedVolume((w.S && w.S.klines) || [], _nowG, 20)
+  const volScore = _pv ? _pv.score : null
   const _gaugeCol = (v: number) => v < 33 ? '#39ff14' : v < 66 ? '#f0c040' : '#ff3355';
-  [['volatGaugeArc', 'volatGaugeVal', volatScore], ['liqGaugeArc', 'liqGaugeVal', liqScore], ['volGaugeArc', 'volGaugeVal', volScore]].forEach(([aid, vid, v]: any) => {
-    const a = el(aid); if (a) a.setAttribute('stroke-dasharray', `${v / 100 * 75} 75`)
-    const vv = el(vid); if (vv) { vv.textContent = String(v); vv.style.color = _gaugeCol(v) }
+  ([
+    ['volatGaugeArc', 'volatGaugeVal', 'volatGaugeSub', volatScore, _atrPct > 0 ? 'ATR ' + _atrPct.toFixed(2) + '%' : 'ATR —'],
+    ['liqGaugeArc', 'liqGaugeVal', 'liqGaugeSub', liqScore, fmtUsdShort(_p5.usd) + ' / 5m'],
+    ['volGaugeArc', 'volGaugeVal', 'volGaugeSub', volScore, _pv ? '×' + _pv.ratio.toFixed(_pv.ratio >= 10 ? 0 : 1) + ' avg' : 'no data'],
+  ] as Array<[string, string, string, number | null, string]>).forEach(([aid, vid, sid, v, sub]) => {
+    const has = v !== null && Number.isFinite(v)
+    const a = el(aid); if (a) a.setAttribute('stroke-dasharray', `${(has ? (v as number) : 0) / 100 * 75} 75`)
+    const vv = el(vid); if (vv) { vv.textContent = has ? String(v) : '—'; vv.style.color = has ? _gaugeCol(v as number) : '#3a4a3a' }
+    const ss = el(sid); if (ss) ss.textContent = sub
   })
+  // Cine e lichidat acum, pe moneda din chart (15 minute).
+  {
+    const share = longSharePct(_p15)
+    const bar = el('liqBalBar'), txt = el('liqBalTxt')
+    if (bar) {
+      bar.style.width = (share === null ? 0 : share) + '%'
+      // Fara lichidari, banda e stinsa: una toata verde ar spune „100% shorturi".
+      const track = bar.parentElement
+      if (track) track.style.background = share === null ? '#0a1a0a' : '#00d97a'
+    }
+    if (txt) {
+      txt.textContent = share === null
+        ? 'no liquidations on ' + (_symG.replace('USDT', '') || 'this market') + ' · 15m'
+        : 'longs ' + share + '% · shorts ' + (100 - share) + '% · ' + fmtUsdShort(_p15.usd) + ' / 15m'
+    }
+  }
 
   // ── ARM DETAIL + TOP BLOCK REASON (uses S.* canonical) ──
   const trigType = sw.reclaim ? 'Sweep+Reclaim' : sw.displacement ? 'Displacement' : '—'

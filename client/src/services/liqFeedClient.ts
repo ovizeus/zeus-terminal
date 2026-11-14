@@ -16,6 +16,7 @@
 
 import { llvRequestRender } from '../data/marketDataOverlays'
 import { procLiq } from '../data/marketDataWS'
+import { recordLiq } from '../engine/liqPulse'
 
 const w = window as any
 
@@ -71,6 +72,9 @@ function _updateLlvBuckets(liq: LiqFeedEvent): void {
  */
 export function handleLiqFeedFrame(liq: LiqFeedEvent | null | undefined): void {
     if (!liq || !liq.exchange) return
+    // [2026-11-14] Pulsul lichidarilor din cockpit: TOATE evenimentele, pe orice
+    // moneda si bursa, nefiltrate de pragul personal `liqMinUsd`.
+    try { recordLiq({ symbol: liq.symbol, usd: liq.vol, isLong: liq.isLong, ts: liq.time }) } catch (_) { /* afisaj */ }
     // Update chart overlay buckets (BTC walls visualization)
     _updateLlvBuckets(liq)
     if (liq.exchange === 'okx') {

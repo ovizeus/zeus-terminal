@@ -14712,3 +14712,45 @@ Azi trimiterea e prin Gmail (`smtp.gmail.com`), de pe o adresă `@gmail.com`. Do
 5. **„This email address is already in use"** la schimbarea emailului îi spune oricărui utilizator logat dacă o adresă are cont.
 
 **Livrat b385, 14 nov 07:09 UTC.** Teste înainte: server 10.840 pe 4 sferturi (EXIT=0); clientul neatins, deci fără build. O singură repornire. După pornire: 7 simboluri pornite, `brain_decisions` curge pentru uid 1, 5, 12–15, nicio eroare nouă, paginile de login şi suport răspund, conexiunea SMTP verificată, antetul expeditorului e „Zeus Terminal <…>". **Nu am trimis niciun email de probă** de data asta (nu a fost cerut); operatorul le vede la prima acţiune reală sau la cerere.
+
+## 🚨 2026-11-14 — LICHIDĂRILE OKX ERAU SOCOTITE GREŞIT ÎN TOT LIQ MAP-ul + cadranele din cockpit (b386)
+
+**De unde a pornit:** operatorul a trimis o poză cu cele trei cadrane din cockpit (VOLATILITY 29, LIQ 3, VOL 0) şi a întrebat dacă merg, şi la conturile noi. A cerut apoi să le repar „exact cum ai zis" şi orice mai găsesc pe drum.
+
+### Ce am găsit pe drum: OKX în contracte, nu în monede
+Căutând o medie cinstită pentru cadranul LIQ, am comparat mărimea medie a unei lichidări pe burse, în `liq_events`, pe 24 de ore de BTC:
+
+| bursă | lichidări | medie (BTC) | medie ($) |
+|---|---|---|---|
+| bybit | 5.355 | 0,153 | 10.142 |
+| gate | 3.405 | 0,207 | 13.777 |
+| **okx** | 1.216 | **25,1** | **1.664.494** |
+
+Canalul `liquidation-orders` al OKX dă `sz` în CONTRACTE, iar `_normalizeOkx` socotea `preţ × sz`. Valoarea contractului, luată din API-ul public OKX: BTC 0,01 · ETH 0,1 · SOL 1 · XRP 100 · DOGE 1000. Deci BTC ieşea de 100× prea mare, ETH de 10×, DOGE de 1000× prea MIC. `liqGate.js` fusese scris exact împotriva acestei clase („cifre fantomă"), dar OKX era mai vechi decât lecţia. Două teste vechi cereau explicit comportamentul greşit (`sz: '13'` → 13 BTC).
+
+**Cât de mare:** pe toată baza, OKX avea înregistraţi **72,6 miliarde $** în 290.285 de rânduri (din 25 oct); corect sunt **1,37 miliarde $**. Pe BTC, 2,02 din cele „2,14 miliarde $ în 24h" afişate în antetul LIQ MAP erau umflătură.
+
+**Ce a fost atins de eroare:** tot ce citeşte `liq_events` — LIQ MAP (MAP, HEATMAP, totalurile, maximele), PREDICT (dolarii „arşi", alegerea ţintei magnetului, deci şi ratele lui măsurate) şi fluxul viu de lichidări OKX din aplicaţie. **Toate cifrele din LIQ MAP pe care le-am citat operatorului pe 12–13 nov erau umflate de OKX.**
+
+**Reparat:**
+- `server/services/liqOkx.js` (nou): încarcă valorile contractelor înainte de a deschide fluxul, le împrospătează la 6 ore, converteşte liniar şi invers, şi ARUNCĂ evenimentele fără valoare cunoscută. `liqFeedAggregator` îl foloseşte.
+- `scripts/fix-okx-liq-contracts.js`: corectează istoricul o singură dată (semn în `_migrations`; a doua rulare refuză), într-o tranzacţie; refuză dacă lista de contracte pare trunchiată (peste 5% din rânduri fără contract). Repetat pe o copie a backup-ului: 161.745 de rânduri rescalate, 3 şterse, 5 secunde, `quick_check` ok; după corecţie OKX pe BTC = 33,6 mii $ în medie, de acelaşi ordin cu Bybit şi Gate.
+
+**Limite, spuse deschis:**
+- Rândurile de pe contractele INVERSE OKX (5 monede) stau sub acelaşi simbol şi nu mai pot fi deosebite; sunt corectate ca liniare — aproximative, dar de ordinul corect. De acum înainte sunt convertite exact.
+- **PREDICT**: instantaneele şi ratele măsurate până acum au fost calculate pe greutăţi deformate (OKX conta de 100× pe BTC). Nu le-am şters. Operatorul hotărăşte dacă se reporneşte calibrarea.
+
+### Cadranele din cockpit
+- **VOL arăta 0 din socoteală, nu din lipsă de date:** compara bara care abia se formează cu bare întregi. Acum bara curentă e adusă la lungimea ei (`projectedVolume`); în primele 15% din bară foloseşte ultima bară închisă. Dedesubt: „×1.3 avg".
+- **LIQ** aduna toate monedele pe un minut, faţă de un prag fix de 1 milion $, trecute prin filtrul personal `liqMinUsd`. Acum: moneda din chart, 5 minute, din fluxul serverului nefiltrat, faţă de media ei pe 24h (`engine/liqPulse.ts`); media ×1 → 25, ×4 → 100. Fără medie cunoscută cadranul rămâne „—". Dedesubt: „$420K / 5m".
+- **VOLATILITY** neschimbat, cu „ATR 1.45%" dedesubt.
+- **Nou sub cadrane:** cine e lichidat acum pe moneda din chart (longuri / shorturi, 15 minute).
+- **Corecţie la ce i-am spus operatorului:** am zis că LIQ citeşte un flux vechi din browser. Greşit — cu steagul `LIQ_FEED_VIA_SERVER` evenimentele serverului ajung şi în acel flux. Problemele reale erau pragul fix, filtrul personal şi amestecul de monede.
+- **Balanţa cărţii de ordine** propusă pentru rândul al doilea NU a mai fost pusă: e deja afişată imediat dedesubt (ORDER FLOW) şi pe radar (IMB).
+
+### „FUND 0%" pe radar
+Cadrul de preţ vine din puntea serverului (`wsMarketProxy`, independentă de fstream), care nu poartă rata de finanţare; aplicaţia scria `w.S.fr = msg.fr || 0` la fiecare tic, deci rata era pusă pe zero pentru toată lumea. În plus `fetchBasisRate` cerea mereu BTCUSDT şi rula doar cu Quant Monitor deschis. Acum cadrul scrie rata doar dacă o aduce, iar rata se cere pentru moneda din chart, la conectare şi apoi la un minut; un răspuns sosit după schimbarea monedei se aruncă.
+
+**Fişiere:** server `liqOkx.js`, `liqFeedAggregator.js`, `scripts/fix-okx-liq-contracts.js`; client `engine/liqPulse.ts`, `engine/fusionMath.ts`, `engine/brain.ts`, `components/brain/BrainCockpit.tsx`, `services/liqFeedClient.ts`, `data/basisRate.ts`, `data/marketDataWS.ts`, `app.css`. **Teste noi:** `liqOkx` (12), `fixOkxLiqContracts` (5), `liqPulse` (14), `projectedVolume` (8), `basisRate` (7).
+
+**Văzut, neatins:** operatorul a pornit din Admin steagul `ML_BANDIT_AUTO_APPLY_MINOR` (14 nov 20:53 UTC). `data/migration_flags.json` apare modificat în git din cauza asta; nu l-am inclus în commit.

@@ -16,6 +16,7 @@
 const WebSocket = require('ws');
 const logger = require('./logger');
 const liqGate = require('./liqGate');
+const liqOkx = require('./liqOkx');
 // [LIQ-HISTORY 2026-10-25] Pana aici evenimentele traiau DOAR intr-un inel
 // de 1000 in RAM si 24h in localStorage-ul telefonului. Nimic nu supravietuia
 // unei reporniri. Acum harta are memorie.
@@ -137,29 +138,11 @@ function _normalizeBybit(data) {
     };
 }
 
+// [2026-11-14] `sz` e in CONTRACTE: conversia (si aruncarea evenimentelor fara
+// `ctVal` cunoscut) sta in liqOkx.js, cu testele ei. Pana azi aici se socotea
+// `pret × sz`, adica de 100× prea mult pe BTC — vezi nota din liqOkx.js.
 function _normalizeOkx(d) {
-    if (!d) return null;
-    const instId = typeof d.instId === 'string' ? d.instId : null;
-    if (!instId) return null;
-    const symbol = instId.split('-')[0] + 'USDT';
-    if (!symbol.endsWith('USDT')) return null;
-    const rawSide = typeof d.side === 'string' ? d.side.toLowerCase() : null;
-    if (rawSide !== 'buy' && rawSide !== 'sell') return null;
-    const p = parseFloat(d.bkPx || d.markPx || 0);
-    const q = parseFloat(d.sz || 0);
-    if (!isFinite(p) || !isFinite(q) || p <= 0 || q <= 0) return null;
-    const side = rawSide === 'sell' ? 'SELL' : 'BUY';
-    const time = Number(d.ts) || Date.now();
-    return {
-        exchange: 'okx',
-        symbol,
-        side,
-        isLong: side === 'SELL',
-        p,
-        q,
-        vol: p * q,
-        time,
-    };
+    return liqOkx.normalize(d);
 }
 
 // [LIQ-FIX 2026-06-06 #2] OKX wraps the liquidation fields in
@@ -436,6 +419,15 @@ function _connectGate() {
 // Se incarca INAINTE de a deschide fluxul si se improspateaza periodic (apar
 // contracte noi aproape zilnic). Daca incarcarea pica, pastram harta veche si
 // evenimentele de pe contracte necunoscute se arunca — nu se ghicesc.
+// La fel pentru OKX: fara valoarea contractului nu exista dolari adevarati.
+let _okxInstTimer = null;
+async function _loadOkxInstruments() {
+    const n = await liqOkx.loadInstruments();
+    if (n > 0) logger.info('LIQ-FEED', `OKX contract values loaded: ${n}`);
+    else logger.warn('LIQ-FEED', 'OKX contract values could NOT be loaded — events are dropped until they are');
+    return n;
+}
+
 let _gateMultTimer = null;
 async function _loadGateMultipliers() {
     const n = await liqGate.loadMultipliers();
@@ -451,7 +443,12 @@ function start() {
     _closing = false;
     _connectBnb();
     _connectByb();
-    _connectOkx();
+    // OKX porneste DUPA ce avem valorile contractelor, ca Gate.
+    _loadOkxInstruments().then(() => { if (!_closing) _connectOkx(); }).catch(() => { if (!_closing) _connectOkx(); });
+    if (!_okxInstTimer) {
+        _okxInstTimer = setInterval(() => { if (liqOkx.needsRefresh()) _loadOkxInstruments(); }, 3600000);
+        if (_okxInstTimer.unref) _okxInstTimer.unref();
+    }
     // Gate porneste DUPA ce avem multiplicatorii: altfel primele evenimente
     // s-ar arunca degeaba in secundele de dupa boot.
     _loadGateMultipliers().then(() => { if (!_closing) _connectGate(); }).catch(() => { if (!_closing) _connectGate(); });
@@ -469,6 +466,7 @@ function stop() {
     // un temporizator vii dupa stop() — exact clasa de scurgere pe care am
     // pazit-o azi si in client.
     if (_gateMultTimer) { clearInterval(_gateMultTimer); _gateMultTimer = null; }
+    if (_okxInstTimer) { clearInterval(_okxInstTimer); _okxInstTimer = null; }
     for (const ex of ['bnb', 'byb', 'okx', 'gate']) {
         _clearTimers(ex);
         const s = _state[ex];

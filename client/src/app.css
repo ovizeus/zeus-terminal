@@ -3053,6 +3053,13 @@ select.zac-select optgroup {
 .znc-g-wrap { text-align:center }
 .znc-g-lbl { font-size:10px; letter-spacing:1px; color:#1a3020; margin-bottom:1px }
 .znc-g-val { font-size:16px; font-weight:700; font-family:'Cinzel',serif; transition:color .4s }
+/* [2026-11-14] Cifra reala de sub fiecare cadran + cine e lichidat acum. */
+.znc-g-sub { margin-top:2px; font-size:9px; letter-spacing:.3px; color:#4f6a55; white-space:nowrap; font-variant-numeric:tabular-nums }
+.znc-liqbal { padding:2px 12px 8px }
+.znc-liqbal-hd { font-size:9px; letter-spacing:1.5px; color:#1a3020; text-align:center; margin-bottom:3px }
+.znc-liqbal-track { height:5px; border-radius:3px; background:#0a1a0a; overflow:hidden; opacity:.9; transition:background .3s }
+.znc-liqbal-fill { height:100%; background:#ff3355; transition:width .5s }
+.znc-liqbal-txt { margin-top:3px; font-size:9px; color:#4f6a55; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums }
 
 /* ─── arm status ─── */
 .znc-arm-box { padding:6px 10px; border-bottom:1px solid #0a1a0a; background:#030a08; text-align:center }

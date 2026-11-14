@@ -450,9 +450,11 @@ export const BrainCockpit = memo(function BrainCockpit() {
         {/* ═══ RIGHT COLUMN ═══ */}
         <div className="znc-right">
 
-          {/* GAUGES: VOLATILITY + LIQ + VOL — single real panel (THREAT RADAR merged
-              in, NEWS removed as fictive). VOLATILITY=real ATR, LIQ=real liquidations,
-              VOL=real-time volume rate. [2026-06-13] */}
+          {/* GAUGES: VOLATILITY + LIQ + VOL — un singur panou, doar date reale.
+              [2026-11-14] Fiecare cadran are cifra reala scrisa dedesubt (ATR %,
+              dolari lichidati in 5 minute, de cate ori e volumul peste medie),
+              iar sub ele: cine e lichidat acum pe moneda din chart. Umplute de
+              engine/brain.ts. */}
           <div className="znc-gauges">
             <div className="znc-g-wrap">
               <div className="znc-g-lbl">VOLATILITY</div>
@@ -462,7 +464,8 @@ export const BrainCockpit = memo(function BrainCockpit() {
                   id="volatGaugeArc" strokeLinecap="round" style={{ transition: 'all .5s' }} />
               </svg>
               <div style={{ marginTop: '-8px', textAlign: 'center' }}>
-                <div className="znc-g-val" id="volatGaugeVal" style={{ color: '#39ff14' }}>0</div>
+                <div className="znc-g-val" id="volatGaugeVal" style={{ color: '#39ff14' }}>—</div>
+                <div className="znc-g-sub" id="volatGaugeSub">ATR —</div>
               </div>
             </div>
             <div className="znc-g-wrap">
@@ -473,7 +476,8 @@ export const BrainCockpit = memo(function BrainCockpit() {
                   id="liqGaugeArc" strokeLinecap="round" style={{ transition: 'all .5s' }} />
               </svg>
               <div style={{ marginTop: '-8px', textAlign: 'center' }}>
-                <div className="znc-g-val" id="liqGaugeVal" style={{ color: '#f0c040' }}>0</div>
+                <div className="znc-g-val" id="liqGaugeVal" style={{ color: '#f0c040' }}>—</div>
+                <div className="znc-g-sub" id="liqGaugeSub">$0 / 5m</div>
               </div>
             </div>
             <div className="znc-g-wrap">
@@ -484,9 +488,16 @@ export const BrainCockpit = memo(function BrainCockpit() {
                   id="volGaugeArc" strokeLinecap="round" style={{ transition: 'all .5s' }} />
               </svg>
               <div style={{ marginTop: '-8px', textAlign: 'center' }}>
-                <div className="znc-g-val" id="volGaugeVal" style={{ color: '#00e5ff' }}>0</div>
+                <div className="znc-g-val" id="volGaugeVal" style={{ color: '#00e5ff' }}>—</div>
+                <div className="znc-g-sub" id="volGaugeSub">no data</div>
               </div>
             </div>
+          </div>
+          {/* Cine e lichidat acum: longuri (rosu) fata de shorturi (verde), 15 minute. */}
+          <div className="znc-liqbal" title="Who is being liquidated on this market, last 15 minutes">
+            <div className="znc-liqbal-hd">LIQUIDATED</div>
+            <div className="znc-liqbal-track"><div className="znc-liqbal-fill" id="liqBalBar" style={{ width: '0%' }}></div></div>
+            <div className="znc-liqbal-txt" id="liqBalTxt">waiting for data</div>
           </div>
 
           {/* ARM STATUS — store-driven */}

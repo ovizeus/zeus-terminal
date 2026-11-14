@@ -3,6 +3,7 @@
 // WS connections, liq processing, symbol switch, order book, feed,
 // modals, alerts, cloud, chart settings, sound
 
+import { fetchBasisRate } from './basisRate'
 import { readAlertControls, alertControlValues } from './alertFields'
 import { checkWhaleAlerts } from './whaleAlerts'
 import type { BookLevel } from './alertRules'
@@ -75,14 +76,28 @@ function _setWsDiag(name: string, patch: any) {
 
 // [WS-PROXY B.6] Server proxy path — receives market.* from /ws/sync
 let _proxyUnsubs: Array<() => void> = []
+let _fundingTimer: ReturnType<typeof setInterval> | null = null
 function _connectBNBProxy(): void {
   const sym = (w.S.symbol || 'BTCUSDT').toUpperCase()
+  // Rata de finantare a monedei din chart: o data la conectare (deci si la
+  // fiecare schimbare de moneda), apoi la un minut.
+  try {
+    void fetchBasisRate()
+    if (_fundingTimer) clearInterval(_fundingTimer)
+    _fundingTimer = setInterval(() => { void fetchBasisRate() }, 60_000)
+  } catch (_) { /* afisaj */ }
   const { on, subscribeSymbol } = require('../services/wsMarketBridge')
   _proxyUnsubs.forEach(fn => fn()); _proxyUnsubs = []
   _proxyUnsubs.push(on('market.price', (msg: any) => {
     if (msg.symbol !== sym) return
     if (w.ingestPrice(String(msg.price), 'BNB')) {
-      w.S.fr = msg.fr || 0; w.S.frCd = msg.frCd || 0
+      // [2026-11-14] Cadrul de pret vine acum din puntea serverului
+      // (wsMarketProxy, „fstream-independent"), care NU poarta rata de
+      // finantare. `msg.fr || 0` o punea pe ZERO la fiecare tic — de aici
+      // „FUND 0%" pe radar, la toata lumea. Se scrie doar cand cadrul chiar o
+      // aduce; altfel ramane ce a adus `fetchBasisRate`.
+      if (msg.fr !== undefined && msg.fr !== null && Number.isFinite(+msg.fr)) w.S.fr = +msg.fr
+      if (msg.frCd) w.S.frCd = msg.frCd
       _flowTick('notos')
       updatePriceDisplay(); updateMainMetrics()
       if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()

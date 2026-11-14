@@ -174,3 +174,47 @@ export function volumeIntensityScore(klines: Array<{ volume: number }>, lookback
   const ratio = lastVol / avg
   return Math.max(0, Math.min(100, Math.round((ratio - 0.5) * 50)))
 }
+
+/**
+ * [2026-11-14] Volumul barei CURENTE fata de media barelor inchise, cu bara
+ * curenta adusa la lungimea ei intreaga.
+ *
+ * `volumeIntensityScore` compara bara care abia se formeaza cu bare intregi: la
+ * inceputul fiecarei bare volumul e aproape zero, deci cadranul arata 0 pana
+ * cand bara strangea jumatate dintr-una obisnuita — pe un chart de 4 ore, doua
+ * ore din patru. Operatorul vedea „VOL 0" si nu era lipsa de date, era socoteala.
+ *
+ * Aici: daca din bara a trecut o fractiune `f`, volumul ei se imparte la `f`.
+ * In primele 15% din bara proiectia ar amplifica zgomotul (un singur ordin
+ * mare ar parea de 20×), asa ca acolo se foloseste ultima bara INCHISA.
+ *
+ * Intoarce `ratio` (de cate ori media) si `score` 0..100 pe aceeasi scara ca
+ * inainte: ×1 → 25, ×1,5 → 50, ×2 → 75, ≥×2,5 → 100. `null` fara date.
+ */
+export function projectedVolume(
+  klines: Array<{ time: number; volume: number }>, nowMs: number, lookback: number,
+): { ratio: number; score: number; projected: boolean } | null {
+  if (!Array.isArray(klines) || klines.length < 3) return null
+  const n = klines.length
+  const last = klines[n - 1], prev = klines[n - 2]
+  const vol = (k: any) => (k && Number.isFinite(+k.volume) && +k.volume >= 0 ? +k.volume : NaN)
+  const lb = Math.max(1, Math.min(lookback, n - 1))
+  let sum = 0, cnt = 0
+  for (let i = n - 1 - lb; i < n - 1; i++) { const v = vol(klines[i]); if (Number.isFinite(v)) { sum += v; cnt++ } }
+  const avg = cnt > 0 ? sum / cnt : 0
+  if (!(avg > 0)) return null
+  const tfSec = Number(last.time) - Number(prev.time)
+  const frac = tfSec > 0 ? (nowMs / 1000 - Number(last.time)) / tfSec : NaN
+  const lastVol = vol(last)
+  let ratio: number, projected = false
+  if (Number.isFinite(frac) && frac >= 0.15 && Number.isFinite(lastVol)) {
+    ratio = (lastVol / Math.min(1, frac)) / avg
+    projected = frac < 1
+  } else {
+    const pv = vol(prev)
+    if (!Number.isFinite(pv)) return null
+    ratio = pv / avg
+  }
+  if (!Number.isFinite(ratio)) return null
+  return { ratio, score: Math.max(0, Math.min(100, Math.round((ratio - 0.5) * 50))), projected }
+}
