@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../../services/api'
+import { startPoll } from '../../utils/poll'
 
 type MlProposal = {
   mlAction: string; mlReason: string
@@ -26,7 +27,6 @@ export function DslDrivePanel() {
   const [rows, setRows] = useState<DriveRow[]>([])
   const [mode, setMode] = useState('SHADOW')
   const [err, setErr] = useState<string | null>(null)
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const [score, setScore] = useState<any>(null)
 
   useEffect(() => {
@@ -40,15 +40,15 @@ export function DslDrivePanel() {
         if (alive) setErr(e instanceof Error ? e.message : String(e))
       }
     }
-    poll()
-    timer.current = setInterval(poll, POLL_MS)
-    return () => { alive = false; if (timer.current) clearInterval(timer.current) }
+    // [2026-11-16] startPoll: nimic in fundal, fara cereri suprapuse (furtuna de cereri)
+    const stop = startPoll(poll, POLL_MS)
+    return () => { alive = false; stop() }
   }, [])
 
   useEffect(() => {
     let alive = true
     const poll = async () => { try { const j = await api.raw<any>('GET', '/api/dsldrive/scoreboard'); if (alive && j && j.ok) setScore(j) } catch (_) {} }
-    poll(); const t = setInterval(poll, 5000); return () => { alive = false; clearInterval(t) }
+    const stop = startPoll(poll, 5000); return () => { alive = false; stop() }
   }, [])
 
   // [2026-10-11] Guarded like pct() below. /api/dsldrive/state passes the

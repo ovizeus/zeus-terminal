@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { startPoll } from '../../utils/poll'
 import { VerdictBand } from './theia/VerdictBand'
 import { BrainPulseCard } from './theia/BrainPulseCard'
 import { EnginePositionsCard } from './theia/EnginePositionsCard'
@@ -72,8 +73,9 @@ export function TheiaPage() {
   useEffect(() => {
     let alive = true
     refresh()
-    const id = setInterval(() => { if (alive) { setTick((t) => t + 1); refresh() } }, 12000)
-    return () => { alive = false; clearInterval(id); try { acRef.current?.abort() } catch (_) { /* */ } }
+    // [2026-11-16] nimic in fundal (furtuna de cereri)
+    const stop = startPoll(() => { if (alive) { setTick((t) => t + 1); refresh() } }, 12000, { immediate: false })
+    return () => { alive = false; stop(); try { acRef.current?.abort() } catch (_) { /* */ } }
   }, [refresh])
 
   // testnet/realized P&L trend from the REAL today-realized value (atStore).

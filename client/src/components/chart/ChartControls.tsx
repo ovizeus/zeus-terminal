@@ -1,4 +1,5 @@
 import { tzLabel, normalizeTz } from '../../core/timezones'
+import { startPoll } from '../../utils/poll'
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useMarketStore, useUiStore, useAuthStore } from '../../stores'
@@ -806,9 +807,8 @@ export function ChartControls() {
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (alive && j && j.ok && j.usage) setIndUsage(j.usage) })
       .catch(() => { /* badges just stay hidden */ })
-    load()
-    const t = setInterval(load, 5000)
-    return () => { alive = false; clearInterval(t) }
+    const stop = startPoll(load, 5000)   // [2026-11-16] nimic in fundal, fara suprapuneri
+    return () => { alive = false; stop() }
   }, [indPanelOpen])
 
   // Fetched when the sheet opens, not at boot: most users own none, and the

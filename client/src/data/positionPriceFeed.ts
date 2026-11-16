@@ -12,6 +12,7 @@
  */
 
 import { usePositionsStore } from '../stores/positionsStore'
+import { startPoll } from '../utils/poll'
 
 const w = window as any
 
@@ -161,22 +162,22 @@ export async function pollPositionPrices(): Promise<void> {
   } catch (_) { /* quiet — best-effort price feed */ }
 }
 
-let _timer: any = null
-let _markTimer: any = null
+let _timer: (() => void) | null = null
+let _markTimer: (() => void) | null = null
 /** Start the periodic feeds once. Idempotent. markPrice polls ~1s (live, primary); the lastPrice
  *  ticker polls slower as a fallback for symbols without a fresh markPrice. */
 export function startPositionPriceFeed(intervalMs = 6000): void {
   if (w.__ZEUS_POS_PRICE_FEED__) return
   w.__ZEUS_POS_PRICE_FEED__ = true
-  pollMarkPrices()
-  _markTimer = setInterval(pollMarkPrices, 1000) // live markPrice, to the second
-  pollPositionPrices()
-  _timer = setInterval(pollPositionPrices, intervalMs)
+  // [2026-11-16] startPoll cu runHidden: pretul ramane viu si in fundal, dar o cerere
+  // blocata (retea oprita) nu mai lasa sa se adune o coada care pleaca toata la revenire.
+  _markTimer = startPoll(pollMarkPrices, 1000, { runHidden: true }) // live markPrice, to the second
+  _timer = startPoll(pollPositionPrices, intervalMs, { runHidden: true })
 }
 
 /** Stop the feed (test/cleanup). */
 export function stopPositionPriceFeed(): void {
-  if (_markTimer) { clearInterval(_markTimer); _markTimer = null }
-  if (_timer) { clearInterval(_timer); _timer = null }
+  if (_markTimer) { _markTimer(); _markTimer = null }
+  if (_timer) { _timer(); _timer = null }
   w.__ZEUS_POS_PRICE_FEED__ = false
 }

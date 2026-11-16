@@ -13,6 +13,7 @@ import { MlConsentSection } from '../settings/MlConsentSection'
 import { useATStore, useUiStore } from '../../stores'
 import { useAuthStore } from '../../stores/authStore'
 import type { Utterance, Mood, HealthState } from './omegaApi'
+import { startPoll } from '../../utils/poll'
 import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
 import * as omegaTts from '../../audio/omegaTts'
 import * as omegaAmbient from '../../audio/omegaAmbient'
@@ -101,9 +102,9 @@ export function OmegaPage() {
                 setIntensity(m.intensity)
             } catch (_) { /* silent — orb keeps last known mood */ }
         }
-        poll()
-        const id = setInterval(poll, 2000)
-        return () => { alive = false; clearInterval(id) }
+        // [2026-11-16] startPoll: nimic in fundal, fara cereri suprapuse (furtuna de cereri)
+        const stop = startPoll(poll, 2000)
+        return () => { alive = false; stop() }
     }, [])
 
     // Voice + health polling — slower cadence
@@ -118,9 +119,8 @@ export function OmegaPage() {
             } catch (_) { /* silent */ }
             finally { if (alive) setVoiceLoading(false) }
         }
-        poll()
-        const id = setInterval(poll, 5000)
-        return () => { alive = false; clearInterval(id) }
+        const stop = startPoll(poll, 5000)
+        return () => { alive = false; stop() }
     }, [refreshTick])
 
     // [OMEGA CHAT CARD 2026-11-01] The card on the main page shows how many

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { startPoll } from '../../utils/poll'
 import { fetchPanel, normalizeLive, pushTape, EMPTY, type PanelData, type LiqEvent } from '../../liqmap/feed'
 import { fmtUsd, fmtPct, intensity, buildLadder, ladderSides, fmtSpan, LIQ, type LadderSide } from '../../liqmap/scale'
 import { RANGES, rangeLabel } from '../../liqmap/ranges'
@@ -122,9 +123,8 @@ export function LiqMapPanel() {
             }, ac.signal)
             if (on && d) setBook(d)
         }
-        go()
-        const iv = setInterval(go, BOOK_REFRESH_MS)
-        return () => { on = false; ac.abort(); clearInterval(iv) }
+        const stop = startPoll(go, BOOK_REFRESH_MS)   // [2026-11-16] nimic in fundal, fara suprapuneri
+        return () => { on = false; ac.abort(); stop() }
     }, [view, symbol, bookBand, bookWin, bookZoom])
 
     useEffect(() => {

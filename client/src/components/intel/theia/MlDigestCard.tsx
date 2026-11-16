@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { startPoll } from '../../../utils/poll'
 import { useDslStore } from '../../../stores/dslStore'
 
 // ML / OMEGA digest — REAL reads. Reuses the existing OMEGA mood/health endpoints (the same
@@ -22,9 +23,8 @@ export function MlDigestCard() {
         if (alive && r.ok) setHealth(await r.json())
       } catch (_) { /* */ }
     }
-    load()
-    const id = setInterval(load, 15000)
-    return () => { alive = false; clearInterval(id) }
+    const stop = startPoll(load, 15000)   // [2026-11-16] nimic in fundal, fara suprapuneri
+    return () => { alive = false; stop() }
   }, [])
 
   const moodLabel = mood?.mood ?? mood?.state ?? mood?.current

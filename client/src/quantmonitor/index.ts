@@ -1,6 +1,7 @@
 // Quantitative Monitor — Main lifecycle: init() / destroy()
 // Manages intervals, WS connections, render loop
 import { QM, qmLog, addLiq } from './state'
+import { startPoll } from '../utils/poll'
 import { runIntel } from './engines/intel'
 import { calcFLOW } from './engines/flow'
 import { calcARIA } from './engines/aria'
@@ -20,6 +21,8 @@ import { loadLiqSnapshot, startLiqPersist, stopLiqPersist, saveLiqSnapshot } fro
 
 const w = window as any
 const intervals: ReturnType<typeof setInterval>[] = []
+// [2026-11-16] Buclele rapide (5 s / 10 s) prin startPoll: nimic in fundal, fara suprapuneri.
+const polls: (() => void)[] = []
 let renderRaf = 0
 let renderIv: ReturnType<typeof setInterval> | null = null
 let _destroyed = false
@@ -321,12 +324,12 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
   qmLog('SYS', 'All engines ready — rendering')
 
   // Start periodic fetches
-  intervals.push(setInterval(fetchBasisRate, 5000))
+  polls.push(startPoll(fetchBasisRate, 5000, { immediate: false }))
   intervals.push(setInterval(fetchTicker24, 30000))
   intervals.push(setInterval(fetchCrossExchangeFR, 30000))
   intervals.push(setInterval(fetchBTCDominance, 300000))
   intervals.push(setInterval(fetchStablecoins, 600000))
-  intervals.push(setInterval(fetchTopTraderPositionRatio, 10000))
+  polls.push(startPoll(fetchTopTraderPositionRatio, 10000, { immediate: false }))
   // [LIQ-HISTORY 2026-10-25] Istoricul de 30 de zile. O data la deschidere ca
   // scara sa fie plina IMEDIAT, apoi la 60 s — mai des n-ar aduce nimic, e
   // istoric, iar reperul `asOf` acopera oricum golul cu evenimente in direct.
@@ -357,6 +360,8 @@ export function destroy(): void {
   stopLiqPersist()
   intervals.forEach(iv => clearInterval(iv))
   intervals.length = 0
+  polls.forEach(stop => stop())
+  polls.length = 0
   _lastHtml = ''
   if (renderIv) { clearInterval(renderIv); renderIv = null }
   if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0 }

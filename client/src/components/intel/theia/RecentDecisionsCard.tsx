@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { startPoll } from '../../../utils/poll'
 import { _relTime, _decisionColor } from './theiaDecisions'
 
 // 🧭 Recent brain decisions — REAL canonical trail from /api/brain/decisions/recent.
@@ -21,9 +22,8 @@ export function RecentDecisionsCard() {
         if (alive && d && Array.isArray(d.decisions)) { setRows(d.decisions); setNow(Date.now()) }
       } catch (_) { /* leave previous rows; never fabricate */ }
     }
-    load()
-    const id = setInterval(load, 12000)
-    return () => { alive = false; clearInterval(id) }
+    const stop = startPoll(load, 12000)   // [2026-11-16] nimic in fundal, fara suprapuneri
+    return () => { alive = false; stop() }
   }, [])
 
   return (

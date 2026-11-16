@@ -80,7 +80,7 @@ describe('panoul chiar cere date si asculta live-ul', () => {
   it('opreste si temporizatoarele', () => {
     const i = PANEL.indexOf('return () =>')
     expect(i).toBeGreaterThan(-1)
-    expect(PANEL.slice(i, i + 320)).toMatch(/clearInterval/)
+    expect(PANEL.slice(i, i + 320)).toMatch(/clearInterval|stop\(\)/)   // [2026-11-16] startPoll intoarce stop()
   })
 
   it('TOT UI-ul e in ENGLEZA — regula veche a operatorului, incalcata de mine ieri', () => {
