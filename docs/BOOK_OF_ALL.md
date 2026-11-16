@@ -14817,3 +14817,13 @@ Cerut de operator: radarul din Brain cockpit inlocuit cu „Brain v7", exact ca 
 **Abatere de la spec:** replay-ul unei tranzactii lungi pastreaza cel mult 1.200 de cadre (capetele intregi, mijlocul rarit) — altfel o ora de pozitie = mii de cadre, sute de MB pe telefon pentru 50 de replay-uri.
 
 **Teste:** 35 noi in `src/brain/__tests__/` (inclusiv capat-la-capat in jsdom: intrare → iesire → rand real → jurnal; „View all", ✕, Escape; demo→live nu e inchidere — garda verificata prin mutatie; regulile: nimic [DEMO-SIM], motorul nu importa creierul). Client 2.211 verzi, typecheck curat. Vazut randat intr-o pagina de proba locala cu valori fixe (nu in aplicatie).
+
+## 🧭 2026-11-16 — Bara MTF care impingea aplicatia + ecranul de PIN ramas auriu (doar client)
+
+Raportate de operator cu poze, dupa livrarea Brain v7.
+
+**Bara MTF (15m / 1h / 4h / TRIG) se misca si impingea aplicatia in jos.** Nu tinea de radarul vechi. Doi scriitori pe aceleasi trei celule: `renderBrainCockpit` le dadea clasa `znc-tf-badge` (chenar, 11 px, TF-urile profilului), iar `updateMTFAlignment` (engine/brain.ts) le rescria cu clasa `mtf-badge`, care n-are niciun stil (text mare, fara chenar). Se bateau la fiecare ciclu, bara isi schimba inaltimea si tot ce era dedesubt sarea. Valoarea pentru motor (`BM.mtf[tf]`) o scriau amandoi la fel; am scos doar scrierea de afisaj din `updateMTFAlignment`, `BM.mtf` ramane neschimbat. Badge-urile au efect real (alinierea MTF a motorului se citeste din `BM.mtf`), deci nu le-am scos.
+
+**Ecranul de PIN ramanea auriu, cu fontul Cinzel.** Refacerea din 15 nov era corecta in `app.css`, dar `bridge/legacyLoader.ts` incarca DUPA ea `public/css/main.css`, care are aceleasi clase `.pin-lock-*` in auriu, si le suprascria. Acum toate regulile sunt legate de `#pinLockScreen` (prioritate mai mare), iar stralucirile aurii vechi (filtrul de pe logo, umbra titlului, umbra butonului) sunt anulate explicit. ⚠️ Lectie: in aplicatia asta o foaie veche se incarca dupa `app.css`; o clasa noua care are acelasi nume ca una veche pierde.
+
+Teste: `pinAndMtfStyle.test.ts` (3). Client 2.215 verzi.

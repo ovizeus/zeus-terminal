@@ -5507,31 +5507,31 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* [2026-11-15] Ecranul de PIN refacut: sobru, institutional, fara galben.
    Fond de ardezie, un singur accent rece, logo-ul Zeus sus. Functiile sunt
    neschimbate (PinLockScreen.tsx). */
-#pinLockScreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px;
+html body #pinLockScreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px;
   background: radial-gradient(120% 80% at 50% 0%, #121b27 0%, #080d14 55%, #05080d 100%) }
-.pin-lock-inner { text-align: center; width: 100%; max-width: 340px; padding: 30px 26px 24px; border-radius: 16px;
+#pinLockScreen .pin-lock-inner { text-align: center; width: 100%; max-width: 340px; padding: 30px 26px 24px; border-radius: 16px;
   background: linear-gradient(180deg, rgba(18,26,37,.92) 0%, rgba(11,17,25,.92) 100%); border: 1px solid #223144;
   box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04); animation: wlcSlideIn .45s ease-out;
   font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif }
-.pin-lock-logo { display: flex; justify-content: center; margin-bottom: 14px }
-.pin-lock-logo img { width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(143,180,217,.25), 0 8px 26px rgba(0,0,0,.45) }
-.pin-lock-title { font-family: 'IBM Plex Sans', sans-serif; font-size: 17px; font-weight: 600; color: #e9eef4; letter-spacing: 3px; margin-bottom: 6px }
-.pin-lock-sub { font-size: 13px; color: #8a9bae; margin-bottom: 24px }
-.pin-lock-field { display: block; width: 100%; max-width: 230px; box-sizing: border-box; margin: 0 auto 14px; padding: 13px 14px; background: #070b11; border: 1px solid #2a3b4b; border-radius: 10px;
+#pinLockScreen .pin-lock-logo { display: flex; justify-content: center; margin-bottom: 14px; filter: none; font-size: inherit }
+#pinLockScreen .pin-lock-logo img { width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(143,180,217,.25), 0 8px 26px rgba(0,0,0,.45) }
+#pinLockScreen .pin-lock-title { font-family: 'IBM Plex Sans', sans-serif; font-size: 17px; font-weight: 600; color: #e9eef4; letter-spacing: 3px; margin-bottom: 6px; text-shadow: none }
+#pinLockScreen .pin-lock-sub { font-size: 13px; color: #8a9bae; margin-bottom: 24px }
+#pinLockScreen .pin-lock-field { display: block; width: 100%; max-width: 230px; box-sizing: border-box; margin: 0 auto 14px; padding: 13px 14px; background: #070b11; border: 1px solid #2a3b4b; border-radius: 10px;
   color: #e9eef4; font-size: 22px; text-align: center; letter-spacing: 10px; font-family: 'IBM Plex Mono', ui-monospace, monospace; outline: none; transition: border-color .15s, box-shadow .15s }
-.pin-lock-field::placeholder { color: #3d4d5e; letter-spacing: 8px }
-.pin-lock-field:focus { border-color: #8fb4d9; box-shadow: 0 0 0 3px rgba(143,180,217,.16) }
-.pin-lock-btn { display: block; width: 100%; max-width: 230px; margin: 0 auto 10px; padding: 12px; border-radius: 10px; cursor: pointer;
-  background: #8fb4d9; color: #07101a; border: 1px solid #8fb4d9; font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: .4px; transition: background .15s, transform .15s }
-.pin-lock-btn:hover { background: #a7c5e4 }
-.pin-lock-btn:active { transform: translateY(1px) }
-.pin-lock-btn:focus-visible { outline: 2px solid #e9eef4; outline-offset: 2px }
-.pin-lock-msg { min-height: 18px; font-size: 12px; color: #ff6b7d; margin: 4px 0 6px }
-.pin-lock-hint { font-size: 11px; color: #5d6d80; margin-top: 4px }
-.pin-lock-shake { animation: pinShake .4s ease-in-out }
-.pin-lock-bio-btn { display: block; width: 100%; max-width: 230px; margin: 0 auto 10px; padding: 10px; background: transparent; color: #c4d5e8;
+#pinLockScreen .pin-lock-field::placeholder { color: #3d4d5e; letter-spacing: 8px }
+#pinLockScreen .pin-lock-field:focus { border-color: #8fb4d9; box-shadow: 0 0 0 3px rgba(143,180,217,.16) }
+#pinLockScreen .pin-lock-btn { display: block; width: 100%; max-width: 230px; margin: 0 auto 10px; padding: 12px; border-radius: 10px; cursor: pointer;
+  background: #8fb4d9; color: #07101a; border: 1px solid #8fb4d9; font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: .4px; transition: background .15s, transform .15s; box-shadow: none }
+#pinLockScreen .pin-lock-btn:hover { background: #a7c5e4; box-shadow: none; transform: none }
+#pinLockScreen .pin-lock-btn:active { transform: translateY(1px) }
+#pinLockScreen .pin-lock-btn:focus-visible { outline: 2px solid #e9eef4; outline-offset: 2px }
+#pinLockScreen .pin-lock-msg { min-height: 18px; font-size: 12px; color: #ff6b7d; margin: 4px 0 6px }
+#pinLockScreen .pin-lock-hint { font-size: 11px; color: #5d6d80; margin-top: 4px }
+#pinLockScreen .pin-lock-shake { animation: pinShake .4s ease-in-out }
+#pinLockScreen .pin-lock-bio-btn { display: block; width: 100%; max-width: 230px; margin: 0 auto 10px; padding: 10px; background: transparent; color: #c4d5e8;
   border: 1px solid #2f4257; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s }
-.pin-lock-bio-btn:hover { background: rgba(143,180,217,.08); border-color: #8fb4d9 }
+#pinLockScreen .pin-lock-bio-btn:hover { background: rgba(143,180,217,.08); border-color: #8fb4d9 }
 .zsn-backdrop { position: fixed; inset: 0; background: rgba(4,8,14,0.78); backdrop-filter: blur(4px); z-index: 99998; display: flex; align-items: center; justify-content: center; animation: zsnFade .25s ease-out }
 .zsn-card { width: min(340px, 90vw); background: linear-gradient(165deg, #0a1018 0%, #0c1420 100%); border: 1px solid var(--gold-a40); border-radius: 14px; padding: 24px 22px; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 40px rgba(240,192,64,0.08); animation: zsnRise .3s ease-out }
 .zsn-icon { margin-bottom: 12px; filter: drop-shadow(0 0 14px rgba(240,192,64,0.25)) }

@@ -741,11 +741,10 @@ export function updateMTFAlignment(): void {
     const rsi = getRSI(tf) || 50
     const dir = rsi > 55 ? 'bull' : rsi < 45 ? 'bear' : 'neut'
     BM.mtf[tf] = dir
-    const badge = el('mtf' + tf)
-    if (badge) {
-      badge.textContent = tf + ' ' + (dir === 'bull' ? '▲' : dir === 'bear' ? '▼' : '—')
-      badge.className = 'mtf-badge ' + dir
-    }
+    // [2026-11-16] Afisajul badge-urilor MTF il face DOAR renderBrainCockpit (clasa
+    // znc-tf-badge, pe TF-urile profilului). Aici se scria aceeasi celula cu clasa
+    // `mtf-badge` (fara stil): cele doua scrieri se bateau la fiecare ciclu, bara isi
+    // schimba inaltimea si impingea aplicatia in jos. BM.mtf ramane neschimbat.
   })
 }
 
