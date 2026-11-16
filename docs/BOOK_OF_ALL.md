@@ -14882,3 +14882,13 @@ Acum (`core/chartTouch.ts`):
 - butonul plutitor ⇅ (`ScrollJumpButton`): apare doar cand pagina e mai lunga de doua ecrane si nu e blocata de o fereastra; un tap duce jos, apoi sus.
 
 Teste: `chartTouch.test.ts` (4). Client 2.241. ⚠️ Neverificat pe telefon — gesturile reale le confirma el.
+
+## ⬛ 2026-11-16 (5) — Coada goala sub continut: masurata pe telefon, nu ghicita
+
+Operatorul, cu poze: butonul ⇅ „jos" duce intr-un ecran complet negru, si la fel cand derulezi cu degetul pana jos („se duce in iad"). Si: „s-a mai intamplat o data si tot asa greu ai gasit". Notita din iunie (`feedback_mobile_modal_scroll_lock`) arata ca atunci s-a reparat DRUMUL spre gol (scroll-lock la ferestre si panouri), nu GOLUL: sub continut exista de mult o coada goala; acum, cu derularea libera pe charturi si butonul, se ajunge la ea direct.
+
+Din cod nu se vede ce o lungeste (verificate si excluse: panourile ascunse din `#zeus-groups` — taiate la 1×1 px; `Footer`; elementele adaugate direct in `body`; inaltimile in `vh`). Deci:
+- `core/layoutTailProbe.ts`: o data pe sesiune, cand pagina are sub `.bot` o coada mai mare de jumatate de ecran, trimite prin `/api/client-error` (motiv `LAYOUT_TAIL`) elementele care coboara cel mai jos sub continut (tag, id, clase, pozitie, parinte, inaltime). Nu schimba nimic in pagina.
+- Butonul ⇅: apare doar cat derulezi, dispare dupa 1,5 s; „jos" duce la capatul CONTINUTULUI (`.bot`), nu al documentului.
+
+Urmatorul pas: citesc raportul din `data/logs` (CLIENT_ERR LAYOUT_TAIL) dupa ce operatorul deruleaza o data pana jos, si tai cauza.

@@ -8370,5 +8370,8 @@ select option {
 .zscroll-jump { position: fixed; right: 12px; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); z-index: 850; width: 40px; height: 40px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; background: rgba(12,18,27,.88); color: #c4d5e8; border: 1px solid #2a3b4b;
   box-shadow: 0 6px 18px rgba(0,0,0,.45); cursor: pointer; -webkit-tap-highlight-color: transparent }
+.zscroll-jump { opacity: 0; pointer-events: none; transition: opacity .25s ease }
+.zscroll-jump.on { opacity: 1; pointer-events: auto }
+@media (prefers-reduced-motion: reduce) { .zscroll-jump { transition: none } }
 .zscroll-jump:active { transform: scale(.94) }
 .zscroll-jump:focus-visible { outline: 2px solid #8fb4d9; outline-offset: 2px }

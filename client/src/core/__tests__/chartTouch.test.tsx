@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import * as fs from 'fs'
 import * as path from 'path'
 import { installAxisVerticalDrag } from '../chartTouch'
@@ -42,5 +42,42 @@ describe('butonul ⇅', () => {
         expect(jumpTarget(0, 3000)).toBe('bottom')
         expect(jumpTarget(1400, 3000)).toBe('bottom')
         expect(jumpTarget(1600, 3000)).toBe('top')
+    })
+})
+
+import { render, act } from '@testing-library/react'
+import { ScrollJumpButton, IDLE_HIDE_MS } from '../../components/layout/ScrollJumpButton'
+import { vi } from 'vitest'
+import { tailOffenders } from '../layoutTailProbe'
+
+describe('[2026-11-16] butonul ⇅ apare doar cat derulezi', () => {
+    it('se arata la derulare pe o pagina lunga si dispare dupa pauza', async () => {
+        vi.useFakeTimers()
+        const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: any) => { cb(0); return 1 })
+        document.body.innerHTML = '<div class="bot"></div>'
+        const bot = document.querySelector('.bot') as HTMLElement
+        bot.getBoundingClientRect = () => ({ bottom: 5000, top: 4990, height: 10, width: 300, left: 0, right: 300, x: 0, y: 0, toJSON() {} }) as any
+        const { container } = render(<ScrollJumpButton />)
+        const btn = container.querySelector('.zscroll-jump') as HTMLElement
+        expect(btn.className).not.toContain(' on')
+        act(() => { window.dispatchEvent(new Event('scroll')) })
+        expect(btn.className).toContain(' on')
+        act(() => { vi.advanceTimersByTime(IDLE_HIDE_MS + 50) })
+        expect(btn.className).not.toContain(' on')
+        raf.mockRestore(); vi.useRealTimers()
+    })
+})
+
+describe('sonda cozii goale', () => {
+    it('gaseste elementele care coboara sub continut, cele mai adanci intai, fara cele fixe', () => {
+        document.body.innerHTML = '<div id="a"></div><div id="b" class="x y"></div><div id="c"></div>'
+        const set = (id: string, bottom: number, pos = 'static') => {
+            const e = document.getElementById(id) as HTMLElement
+            e.style.position = pos
+            e.getBoundingClientRect = () => ({ bottom, top: bottom - 50, height: 50, width: 10, left: 0, right: 10, x: 0, y: 0, toJSON() {} }) as any
+        }
+        set('a', 900); set('b', 4000); set('c', 9000, 'fixed')
+        const off = tailOffenders(1000)
+        expect(off.map((o) => o.el)).toEqual(['div#b.x.y'])
     })
 })
