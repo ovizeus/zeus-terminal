@@ -14803,3 +14803,17 @@ Raportate de operator după ce a confirmat cele 8 puncte („da merge").
 **Test vechi schimbat dinadins:** `alertsToast.test.ts` (scris de mine pe 15 nov) cerea ca mesajul de kill switch să rămână lipit; operatorul a cerut explicit să dispară. Mesajul de poziţie NEPROTEJATĂ rămâne lipit, dinadins.
 
 Teste: client 2.176, server 10.865 pe 4 sharduri (3 sărite), typecheck curat. Repornire cu ban activ doar pe TESTNET (până la 04:45 UTC); mainnet curat.
+
+## 🧠 2026-11-16 — ZeuS Brain v7 pe ramura `brain-v7` (NELIVRAT, asteapta OK-ul operatorului)
+
+Cerut de operator: radarul din Brain cockpit inlocuit cu „Brain v7", exact ca desenul facut cu Claude pe telefon (`docs/design/zeus_brain_v7_reference.html`), dupa specificatia `docs/design/ZEUS_BRAIN_SPEC.md`, legat la date reale. Lucrat intr-un worktree separat (`/opt/zeus-brain-v7`), backup: tag `pre-brain-v7` (= `6fbf68df`, b387). Nimic pe `main`, nimic construit in `public/app`.
+
+**Decizii ale operatorului:** prag = `confMin` din AutoTrade (1a); se inlocuieste TOT blocul vechi (bara de lentile, reactorul, radarul, busola) — cuvintele lui au batut varianta 2a din mesajul lipit; datele creierului raman doar pe dispozitiv (IndexedDB); ce nu exista scrie „coming soon", ce n-a sosit „waiting"; poarta de spread (motorul o pune `true` fara date) se arata NECUNOSCUTA, gri si punctata.
+
+**Ce exista acum (`client/src/brain/`):** `brainAdapter.ts` (doar citire: axele din pachetul pe care `engine/brain.ts` il trimite deja radarului — copiat in `marketCoreReactor.update` ca `w.__zeusBrainAxes`; portile din `BRAIN._safetyCache`; conf `BM.confluenceScore`; prag `BM.confMin`; regim `BRAIN.regime`; semnal = starea `ready` din `brainStore`; pozitii din `positionsStore`; sateliti din `MSCAN.sortedResults`; schimbarea monedei prin `setSymbol`), `brainDerived.ts` (dispozitie, EMA pentru lentilele TIMEFRAME/SLOW, detectorul de somn, maparea motivelor de inchidere), `brainRender.ts` (portul `[RENDER]`), `brainRecorder.ts` + `brainStorage.ts` (cadre 4 Hz, intrari/iesiri din pozitiile REALE, rezultatul si PnL-ul din randul real `/api/journal`), `brainUI.ts` (jurnal, toate tranzactiile, replay, share, psych, déjà vu, sablon, explicatii, sunet, Focus). Montat prin `components/brain/BrainV7.tsx`.
+
+**Lipsuri reale (FALLBACK):** increderea ML si atentia ML pe axe nu exista in motor → „ML coming soon", spite uniforme; satelitii nu au cele 12 axe (scanerul calculeaza doar scorul) → cercuri; lentilele TIMEFRAME/SLOW sunt EMA din RT („derived, not engine"); spread necunoscut.
+
+**Abatere de la spec:** replay-ul unei tranzactii lungi pastreaza cel mult 1.200 de cadre (capetele intregi, mijlocul rarit) — altfel o ora de pozitie = mii de cadre, sute de MB pe telefon pentru 50 de replay-uri.
+
+**Teste:** 35 noi in `src/brain/__tests__/` (inclusiv capat-la-capat in jsdom: intrare → iesire → rand real → jurnal; „View all", ✕, Escape; demo→live nu e inchidere — garda verificata prin mutatie; regulile: nimic [DEMO-SIM], motorul nu importa creierul). Client 2.211 verzi, typecheck curat. Vazut randat intr-o pagina de proba locala cu valori fixe (nu in aplicatie).

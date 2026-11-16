@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZeuS Brain v7 — design reference</title>
+<!--
+=====================================================================================
+ ZeuS BRAIN v7 — VISUAL REFERENCE IMPLEMENTATION
+ Read together with docs/design/ZEUS_BRAIN_SPEC.md (the spec wins if they disagree).
+
+ THIS FILE RUNS ON SIMULATED DATA. Sections are marked:
+   [CONFIG]      constants, colors, strings          -> PORT
+   [DEMO-SIM]    fake market, fake trades, seeded history, demo buttons -> DO NOT PORT
+   [RECORDER]    4 Hz frame recorder, trade capture   -> PORT, wired to real events
+   [DERIVED]     render-only derived values (mood, intent, consensus, sleep) -> PORT (inputs = real data)
+   [RENDER]      all canvas drawing                   -> PORT EXACTLY
+   [UI]          DOM, journal, modal, replay, share, psych, tap-to-explain -> PORT
+ The `st` object passed to render() is THE CONTRACT: production must build the same
+ object from real ZeuS state (see SPEC section 3).
+=====================================================================================
+-->
+<style>
+body{margin:0;background:#020610;display:flex;justify-content:center;font-family:monospace}
+.wrap{width:100%;max-width:420px;background:#040913;padding:12px 8px 14px;box-sizing:border-box}
+button{font-family:monospace;font-size:13px;padding:8px;border:1px solid;border-radius:8px;background:transparent;cursor:pointer}
+.row{display:flex;justify-content:space-between;padding:0 10px 2px;font-size:12px}
+.sec{padding:16px 10px 6px;font-size:12px;color:#9fb3c8;letter-spacing:2px}
+#allm{position:fixed;inset:0;background:rgba(2,6,16,.97);z-index:50;display:none;flex-direction:column;align-items:center}
+#allm .in{width:100%;max-width:420px;height:100%;display:flex;flex-direction:column;padding:12px 8px;box-sizing:border-box}
+#alll{flex:1;overflow-y:auto;font-size:12px;color:#7c8ea3}
+</style></head><body><div class="wrap">
+<canvas id="cv" style="width:100%;height:auto;display:block;cursor:pointer;"></canvas>
+<div style="display:flex;justify-content:space-between;padding:6px 6px 3px;font-size:11px;color:#7c8ea3;"><span>MOOD · LAST 3 MIN</span><span id="rbar" style="color:#fff;cursor:pointer;"></span></div>
+<canvas id="ms" style="width:100%;height:26px;display:block;cursor:pointer;"></canvas>
+<div id="info" style="min-height:36px;font-size:12px;color:#d8e4f0;padding:8px 8px 4px;line-height:1.45;"></div>
+<div id="mood" style="text-align:center;font-size:18px;letter-spacing:4px;color:#7fb8d6;padding:2px 0 6px;cursor:pointer;">CALM</div>
+<div class="row"><span id="mode" style="color:#39ff6a;">LONG MODE</span><span id="conf" style="color:#9fb3c8;">CONF —</span></div>
+<div class="row"><span id="gt" style="color:#9fb3c8;">GATES 7/7</span><span id="ml" style="color:#c08bff;">ML —</span></div>
+<div class="row"><span id="pos" style="color:#7c8ea3;">NO POSITION</span><span id="pnl"></span></div>
+<div class="row" style="color:#7c8ea3;padding-bottom:6px;"><span id="cons">consensus 0/3</span><span style="color:#d8e4f0;">┄ intent <span style="color:#ffc85a;">╌ best</span></span></div>
+<div id="dv" style="padding:6px 10px;font-size:12px;color:#9fb3c8;border-top:1px solid #142235;cursor:pointer;">DÉJÀ VU · …</div>
+<div id="tp" style="padding:2px 10px 6px;font-size:12px;color:#9fb3c8;cursor:pointer;">TEMPLATE · …</div>
+<div id="sig" style="text-align:center;font-size:13px;color:#7c8ea3;padding:4px 0 10px;">WAIT · building</div>
+<!-- [UI] production controls -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 8px;">
+<button id="snd" style="color:#9fb3c8;border-color:#2a3a4d;">Sound + haptics: off</button>
+<button id="foc" style="color:#9fb3c8;border-color:#2a3a4d;">Focus: off</button>
+</div>
+<!-- [DEMO-SIM] demo controls: DO NOT PORT -->
+<div style="padding:12px 10px 4px;font-size:10px;color:#56657a;letter-spacing:1px;">DEMO CONTROLS · reference only, not in production</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 8px;">
+<button data-r="0" style="color:#39ff6a;border-color:#1d5b33;">Long</button>
+<button data-r="1" style="color:#ff4d6d;border-color:#5b1d2a;">Short</button>
+<button data-r="2" style="color:#c08bff;border-color:#3d2a5b;">Squeeze</button>
+<button data-r="3" style="color:#5fd4ff;border-color:#1d4a5b;">Chop · sleeps</button>
+</div>
+<div class="sec">TRADE JOURNAL</div>
+<div id="jr" style="padding:0 8px;font-size:12px;color:#7c8ea3;"></div>
+<div id="share" style="padding:0 8px;"></div>
+<div id="prh" class="sec" style="cursor:pointer;">PSYCH REPORT</div>
+<div id="pr" style="padding:0 10px;font-size:12px;color:#7c8ea3;"></div>
+</div>
+<!-- [UI] all-trades modal -->
+<div id="allm" role="dialog" aria-modal="true" aria-label="All trades"><div class="in">
+<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 4px 10px;border-bottom:1px solid #142235;">
+<span id="allt" style="font-size:13px;color:#d8e4f0;letter-spacing:2px;">ALL TRADES</span>
+<button id="allx" aria-label="Close" style="color:#d8e4f0;border-color:#2a3a4d;padding:4px 12px;font-size:16px;">✕</button></div>
+<div id="alll"></div></div></div>
+<script>
+'use strict';
+// ================================= [CONFIG] =================================
+const STR={ // all user-facing strings in one place (i18n-ready)
+ idle:'Tap anything to see what it means.',
+ noTrades:'No trades yet. Each entry is captured automatically.',
+ viewAll:n=>`View all trades (${n})`,
+ allTitle:n=>`ALL TRADES (${n})`,
+ noReplay:'Replay not stored for this trade (only the last 50 trades keep replay frames).',
+ replayStart:id=>`Replaying trade #${id} from ~12s before entry. Tap the mood strip to jump, tap the replay label to exit.`,
+ replayEnd:'Replay finished. Back to live.',back:'Back to live.',
+ shareReady:'Share card ready below the journal: brain at entry, result, mood and @zeusterminal.',
+ woke:'Woke up: the market started moving again.',
+ collecting:(n,m)=>`collecting data · ${n}/${m} trades`,
+ na:'not available yet',
+ dv:'Déjà vu compares the current shape with the shape at every past entry and shows the closest matches with their results. It is a hint, not a signal: below ~100 trades the numbers are noisy.',
+ tpl:'Template is the gold dashed ghost on the radar: the entry shape of your best winning trade. Match shows how close the current shape is to it.',
+ psych:'Psych report groups your past trades by the mood right before entry and shows the win rate of each. Rows with fewer than 30 trades are marked low.',
+ moodNote:'The mood is display only, it never changes trading decisions.',
+ shape:'Main shape is the real-time lens. Thin line is timeframe, dashed is slow, white dotted is intent, gold dashed is your best trade template. Blur means low ML confidence; trembling means fast and slow disagree.',
+};
+const S=360,C=S/2,R=100,SEG=Math.PI*2/7;
+const AX=['TREND','DELTA','FLOW','OI','VOL','FUND','VOLAT','IMB','MOM','SENT','STRUCT','LIQ'],N=AX.length;
+const AXD=['trend strength across timeframes','aggressive buy vs sell delta','order flow pressure','open interest change','volume vs average','funding rate bias','volatility regime','order book imbalance','momentum','market sentiment','market structure','liquidation pressure'];
+const GN=['RISK','SPREAD','COOL','VOLAT','SESS','NOOPP','REGIME'];
+const GND=['risk limits','spread and slippage','cooldown after last trade','volatility window','trading session','no opposite position open','regime stability'];
+const MODECOL={LONG:[57,255,106],SHORT:[255,77,109],SQUEEZE:[192,139,255],RANGE:[95,212,255]};
+const MC={CALM:'#7fb8d6',ALERT:'#e6f56a',NERVOUS:'#ff9f6b',CONFUSED:'#c08bff',HESITANT:'#ffb347',ATTACK:'#ffffff',FOCUSED:'#9fe8ff',CONFIDENT:'#39ff6a',FEARFUL:'#ff4d6d',SLEEPING:'#5a6b85'};
+const MX={CALM:'nothing is building, the brain is relaxed',ALERT:'confluence is close to the threshold, getting ready',NERVOUS:'fast and slow lenses disagree, the market is jumpy',CONFUSED:'ML confidence is low, the brain cannot read this market',HESITANT:'it wants to enter but a safety gate is blocking',ATTACK:'signal confirmed, entering now',FOCUSED:'in a position, managing it',CONFIDENT:'the position is well in profit',FEARFUL:'the position is close to the stop-loss',SLEEPING:'the market is dead, the brain rests and renders slower to save battery'};
+const PRE_MOODS=['CALM','ALERT','NERVOUS','CONFUSED','HESITANT'];
+const MIN_DEJAVU=10,MIN_TEMPLATE=1,LOW_SAMPLE=30,JOURNAL_SHOW=4,REPLAY_KEEP=50,REC_HZ=4,PRE_SEC=12,POST_SEC=2;
+const LS_KEY='zeus.brain.ui';
+const SAT_SLOT=[[40,40],[S-40,40],[S-40,S-40]];
+
+// ================================= [DEMO-SIM] — DO NOT PORT =================================
+const DEMO={THR:72,REG:[
+{mode:'LONG',n:'LONG MODE',t:[.8,.6,.72,.5,.65,.3,.4,.7,.78,.6,.66,.35],ml:.88,gf:[],dir:1},
+{mode:'SHORT',n:'SHORT MODE',t:[.2,.75,.65,.7,.6,.75,.5,.3,.25,.7,.35,.8],ml:.8,gf:[],dir:-1},
+{mode:'SQUEEZE',n:'SQUEEZE',t:[.35,.85,.3,.92,.4,.8,.95,.45,.3,.4,.5,.9],ml:.5,gf:[6],dir:1},
+{mode:'RANGE',n:'CHOP / RANGE',t:[.15,.25,.2,.3,.2,.15,.2,.5,.2,.45,.4,.2],ml:.28,gf:[3,6],dir:0}]};
+const SYM=[{s:'BTC',reg:0},{s:'SOL',reg:0},{s:'ETH',reg:2},{s:'BNB',reg:1}];
+SYM.forEach(y=>{y.v=DEMO.REG[y.reg].t.slice();y.sw=Math.random()*8;y.sc=50;});
+const hist=[]; // closed trades with entry shape (production: loaded from journal storage)
+(function seedDemoHistory(){const W={CALM:.62,ALERT:.68,NERVOUS:.3,CONFUSED:.27,HESITANT:.44},MW=[.22,.34,.2,.1,.14];
+ for(let i=1;i<=60;i++){let r=Math.random(),m=0;while(m<4&&r>MW[m]){r-=MW[m];m++;}const pre=PRE_MOODS[m],win=Math.random()<W[pre],rg=DEMO.REG[Math.floor(Math.random()*3)];
+ hist.push({id:i,demo:true,pre,result:win?'TP':'SL',pnlPct:win?2.4:-1.2,confAtEntry:72+Math.floor(Math.random()*12),entryShape:rg.t.map(v=>Math.min(1,Math.max(0,v+(Math.random()-.5)*.25))),symbol:'BTC',side:rg.dir>=0?'LONG':'SHORT'});}})();
+let dm={main:0,auto:true,lastSw:0,prevOk:false,sigUntil:0,ml:.8,sleepT:0,pos:null,posMsg:'',posMsgUntil:0,tid:60};
+let rt=DEMO.REG[0].t.slice(),tf=rt.slice(),sl=rt.map(x=>x*.6),att=AX.map(()=>.5);const ph=AX.map(()=>Math.random()*6.28);
+const dreg=()=>SYM[dm.main].reg,others=()=>SYM.map((_,i)=>i).filter(i=>i!==dm.main);
+document.querySelectorAll('button[data-r]').forEach(b=>b.onclick=()=>{SYM[dm.main].reg=+b.dataset.r;dm.auto=false;});
+// demoTick() fakes what production reads from real ZeuS state. It returns RAW inputs + fires trade events.
+function demoTick(t,dt){
+ if(dm.auto&&t-dm.lastSw>9&&!dm.pos){SYM[dm.main].reg=(dreg()+1+Math.floor(Math.random()*2))%4;dm.lastSw=t;}
+ SYM.forEach((y,i)=>{if(i!==dm.main&&t-y.sw>11){y.reg=Math.floor(Math.random()*4);y.sw=t;}const tg=DEMO.REG[y.reg].t;for(let k=0;k<N;k++)y.v[k]+=(Math.min(1,Math.max(0,tg[k]+Math.sin(t*1.5+k+i*3)*.08))-y.v[k])*.05;y.sc=Math.round(y.v.reduce((a,b)=>a+b)/N*100+20);});
+ const rg=DEMO.REG[dreg()];
+ for(let i=0;i<N;i++){const n=Math.sin(t*1.3+ph[i])*.08+Math.sin(t*3.7+ph[i]*1.7)*.05;rt[i]+=(Math.min(1,Math.max(0,rg.t[i]+n))-rt[i])*.09;tf[i]+=(rt[i]-tf[i])*.025;sl[i]+=(tf[i]-sl[i])*.007;const at=.5+.5*Math.sin(t*.4+ph[i]*3)*(dreg()===3?.4:1)*rg.t[i];att[i]+=(at-att[i])*.02;}
+ dm.ml+=(Math.min(.98,Math.max(.1,rg.ml+Math.sin(t*.7)*.08))-dm.ml)*.02;
+ const fails=[...rg.gf],div=rt.reduce((a,x,i)=>a+Math.abs(x-sl[i]),0)/N;
+ const conf=Math.round(Math.min(99,rt.reduce((a,b)=>a+b)/N*100*(1-div*.8)+28+dm.ml*8));
+ if(dreg()===3&&!dm.pos)dm.sleepT+=dt;else dm.sleepT=0;const dead=dm.sleepT>4;
+ const ok=!dead&&conf>=DEMO.THR&&fails.length===0;
+ if(ok&&!dm.prevOk){dm.sigUntil=t+2.2;if(!dm.pos){dm.pos={id:++dm.tid,symbol:SYM[dm.main].s,side:rg.dir>=0?'LONG':'SHORT',dir:rg.dir||1,p:0,t0:t};REC.onEntry(dm.pos.id,dm.pos.symbol,dm.pos.side,conf,DEMO.THR,t);}}dm.prevOk=ok;
+ if(dm.pos){const drift=(rg.dir===dm.pos.dir?.12:rg.dir===0?-.02:-.18)*dm.ml;dm.pos.p+=(drift+(Math.random()-.5)*.9)*dt;let ex=null;
+  if(dm.pos.p>=1)ex=['TP',2.4];else if(dm.pos.p<=-1)ex=['SL',-1.2];else if(t-dm.pos.t0>20)ex=['MANUAL',dm.pos.p*(dm.pos.p>0?2.4:1.2)];
+  if(ex){dm.posMsg=(ex[0]==='MANUAL'?'CLOSED ':ex[0]+' HIT ')+(ex[1]>=0?'+':'')+ex[1].toFixed(2)+'%';dm.posMsgUntil=t+2.5;REC.onExit(dm.pos.id,ex[0],ex[1],t);dm.pos=null;}}
+ // RAW INPUT CONTRACT (production builds this from real ZeuS state — SPEC section 3)
+ return{rt:rt.slice(),tf:tf.slice(),sl:sl.slice(),att:att.slice(),ml:dm.ml,gatesFailing:fails,conf,thr:DEMO.THR,mode:rg.mode,modeLabel:rg.n,
+  signalActive:t<dm.sigUntil,dead,
+  position:dm.pos?{symbol:dm.pos.symbol,side:dm.pos.side,progress:dm.pos.p,pnlPct:dm.pos.p*(dm.pos.p>0?2.4:1.2)}:null,
+  closeMsg:t<dm.posMsgUntil?dm.posMsg:'',
+  main:SYM[dm.main].s,
+  sats:others().map(si=>({symbol:SYM[si].s,axes:SYM[si].v.slice(),score:SYM[si].sc,mode:DEMO.REG[SYM[si].reg].mode}))};
+}
+function demoSwitchMain(sym){const si=SYM.findIndex(o=>o.s===sym);if(si<0)return;dm.main=si;rt=DEMO.REG[dreg()].t.map(v=>v*.4);dm.pos=null;dm.auto=false;dm.sleepT=0;}
+
+// ================================= [RECORDER] =================================
+// Records 4 Hz frames (ring buffer), captures entry snapshot, builds trade records.
+// Production: onEntry/onExit are called from REAL engine/position events; storage = SPEC section 4.
+const REC={frames:[],n:0,lastRec:0,open:new Map(),closing:[],trades:[],pendingEvt:null,snapQ:null,
+ onEntry(id,symbol,side,conf,thr,t){const lastMood=DERIVED.lastPreMood;const tr={id,symbol,side,confAtEntry:conf,thrAtEntry:thr,pre:lastMood,entryShape:LIVE.rt.slice(),entryT:t,a:this.n,snapshot:null};this.open.set(id,tr);this.snapQ={tr,at:t+.35};},
+ onExit(id,result,pnlPct,t){const tr=this.open.get(id);if(!tr)return;this.open.delete(id);tr.result=result;tr.pnlPct=pnlPct;tr.exitT=t;tr.b=this.n+POST_SEC*REC_HZ;this.pendingEvt=result;this.closing.push(tr);},
+ tick(t,st){if(t-this.lastRec<1/REC_HZ)return;this.lastRec=t;this.frames.push(Object.assign({},st,{i:this.n++,evt:this.pendingEvt}));this.pendingEvt=null;if(this.frames.length>REC_HZ*60*20)this.frames.shift();
+  for(let q=this.closing.length-1;q>=0;q--){const tr=this.closing[q];if(this.n>=tr.b){tr.frames=this.frames.filter(f=>f.i>=tr.a-PRE_SEC*REC_HZ&&f.i<=tr.b);this.trades.unshift(tr);
+   this.trades.forEach((x,k)=>{if(k>=REPLAY_KEEP)x.frames=null;});hist.push(tr);this.closing.splice(q,1);pickBest();renderJournal();renderPsych();}}},
+ snap(t,canvas){if(this.snapQ&&t>=this.snapQ.at&&!UI.rep){const c=document.createElement('canvas');c.width=c.height=240;c.getContext('2d').drawImage(canvas,0,0,canvas.width,canvas.height,0,0,240,240);this.snapQ.tr.snapshot=c.toDataURL('image/png');this.snapQ=null;}}};
+
+// ================================= [DERIVED] (render-only, inputs = real data) =================================
+const LIVE={rt:rt.slice()};
+const DERIVED={lastPreMood:'CALM',
+ build(raw){LIVE.rt=raw.rt;
+  const div=raw.rt.reduce((a,x,i)=>a+Math.abs(x-raw.sl[i]),0)/N;
+  const nF=raw.gatesFailing.length,hes=!raw.dead&&raw.conf>=raw.thr-8&&nF>0;
+  const sats=raw.sats.map(s=>({s:s.symbol,v:s.axes,c:MODECOL[s.mode],sc:s.score,cons:s.mode!=='RANGE'&&dirOf(s.mode)===dirOf(raw.mode)}));
+  let mood;const p=raw.position;
+  if(raw.signalActive)mood='ATTACK';
+  else if(p)mood=p.progress>.35?'CONFIDENT':p.progress<-.5?'FEARFUL':'FOCUSED';
+  else if(raw.dead)mood='SLEEPING';else if(hes)mood='HESITANT';else if(raw.ml!=null&&raw.ml<.45)mood='CONFUSED';else if(div>.18)mood='NERVOUS';else if(raw.conf>=raw.thr-10)mood='ALERT';else mood='CALM';
+  if(PRE_MOODS.includes(mood))this.lastPreMood=mood;
+  return{rt:raw.rt,tf:raw.tf,sl:raw.sl,att:raw.att,ml:raw.ml,fails:raw.gatesFailing,conf:raw.conf,thr:raw.thr,hes,div,zz:raw.dead,c:MODECOL[raw.mode],n:raw.modeLabel,
+   pos:p?{sym:p.symbol,dir:p.side==='LONG'?1:-1,pnl:p.progress,pct:p.pnlPct}:null,posMsg:raw.closeMsg,mood:[mood,MC[mood]],cons:sats.filter(s=>s.cons).length,sats,main:raw.main,sig:raw.signalActive};}};
+function dirOf(m){return m==='SHORT'?-1:m==='RANGE'?0:1;}
+
+// ================================= [RENDER] — port exactly =================================
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),ms=document.getElementById('ms'),mx=ms.getContext('2d');
+const dpr=window.devicePixelRatio||1;cv.width=S*dpr;cv.height=S*dpr;ctx.scale(dpr,dpr);ms.width=S*dpr;ms.height=26*dpr;mx.scale(dpr,dpr);
+const ang=i=>-Math.PI/2+i*2*Math.PI/N;
+const rgba=(c,a)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+const simil=(a,b)=>Math.max(0,Math.min(1,1-a.reduce((s,x,i)=>s+Math.abs(x-b[i]),0)/a.length*2.2));
+const clamp01=x=>Math.max(0,Math.min(1,x==null?0:x));
+function pts(v,sc,wob,t,ox=0,oy=0,cx=C,cy=C,RR=R){return v.map((x,i)=>{const w=wob?Math.sin(t*7+i*2.1)*wob+Math.sin(t*11.3+i)*wob*.5:0;const r=RR*Math.max(.1,clamp01(x)+w)*sc;return[cx+ox+Math.cos(ang(i))*r,cy+oy+Math.sin(ang(i))*r];});}
+function spline(p){const n=p.length;ctx.beginPath();for(let i=0;i<n;i++){const p0=p[(i-1+n)%n],p1=p[i],p2=p[(i+1)%n],p3=p[(i+2)%n];if(i===0)ctx.moveTo(p1[0],p1[1]);ctx.bezierCurveTo(p1[0]+(p2[0]-p0[0])/6,p1[1]+(p2[1]-p0[1])/6,p2[0]-(p3[0]-p1[0])/6,p2[1]-(p3[1]-p1[1])/6,p2[0],p2[1]);}ctx.closePath();}
+const RS={drt:rt.slice(),dtf:rt.slice(),dsl:sl.slice(),datt:att.slice(),dcol:[57,255,106],dml:.8,aura:0,sec:1,dz:0,beatPh:0,skip:0,prevSig:false,prevMood:'',prevZz:false,lastI:-1,last:null,gvd:new Array(7).fill(1),flash:new Array(N).fill(0),waves:[],parts:[],hl:null};
+function render(st,t,dt,rp){const r=RS;r.last=st;const k=rp?.18:.5;
+ for(let i=0;i<N;i++){r.drt[i]+=(clamp01(st.rt[i])-r.drt[i])*k;r.dtf[i]+=(clamp01(st.tf[i])-r.dtf[i])*k;r.dsl[i]+=(clamp01(st.sl[i])-r.dsl[i])*k;r.datt[i]+=((st.att?st.att[i]:.5)-r.datt[i])*k;}
+ for(let c=0;c<3;c++)r.dcol[c]+=(st.c[c]-r.dcol[c])*.05;r.dml+=((st.ml==null?.7:st.ml)-r.dml)*.05;r.dz+=((st.zz?1:0)-r.dz)*.04;
+ const fs=new Set(st.fails);for(let g=0;g<7;g++)r.gvd[g]+=((fs.has(g)?0:1)-r.gvd[g])*.08;
+ r.aura+=((st.pos?Math.max(-1,Math.min(1,st.pos.pnl)):0)-r.aura)*.1;r.sec+=(((st.hes||st.pos)?.4:1)-r.sec)*.05;
+ const fresh=st.i===undefined||st.i!==r.lastI;r.lastI=st.i;
+ if(st.sig&&!r.prevSig){r.waves.push(t);FX.sound('attack');}r.prevSig=st.sig;
+ if(fresh&&st.evt){if(st.evt==='TP'){r.waves.push(t);FX.sound('tp');}else FX.sound(st.evt==='SL'?'sl':'close');}
+ if(st.mood[0]==='HESITANT'&&r.prevMood!=='HESITANT')FX.sound('hes');r.prevMood=st.mood[0];
+ if(r.prevZz&&!st.zz){r.waves.push(t);FX.sound('wake');if(!rp)UI.info(STR.woke);}r.prevZz=st.zz;
+ const col=r.dcol,hes=st.hes,conf=st.conf,mlv=r.dml,sleepy=r.dz>.5,focus=UI.focus;
+ const period=(5-3*r.drt[6])*(1-r.dz)+8*r.dz,br=1+(.02+r.dz*.03)*Math.sin(t*2*Math.PI/period);
+ ctx.clearRect(0,0,S,S);ctx.globalAlpha=r.sec;
+ // satellites + consensus beams
+ const bst=Math.max(...st.sats.map(q=>q.sc));
+ st.sats.forEach((y,kk)=>{const [sx,sy]=SAT_SLOT[kk],c=y.c,b=y.sc===bst;
+  if(y.cons){ctx.beginPath();ctx.moveTo(sx,sy);ctx.quadraticCurveTo((sx+C)/2+(sy-C)*.25,(sy+C)/2-(sx-C)*.25,C,C);ctx.setLineDash([2,6]);ctx.lineDashOffset=-t*25;ctx.strokeStyle=rgba(c,.45);ctx.lineWidth=1.2;ctx.stroke();ctx.setLineDash([]);}
+  ctx.beginPath();ctx.arc(sx,sy,30,0,7);ctx.strokeStyle=rgba(c,b?.55:.18);ctx.lineWidth=b?1.5:1;ctx.setLineDash(b?[]:[2,4]);ctx.stroke();ctx.setLineDash([]);
+  if(y.v){const sp=pts(y.v,1+.04*Math.sin(t*3+kk),0,t,0,0,sx,sy,24);spline(sp);ctx.fillStyle=rgba(c,.18);ctx.fill();ctx.save();if(b){ctx.shadowColor=rgba(c,1);ctx.shadowBlur=10;}ctx.strokeStyle=rgba(c,.85);ctx.lineWidth=1.2;spline(sp);ctx.stroke();ctx.restore();}
+  else{const rr=8+16*clamp01(y.sc/100);ctx.beginPath();ctx.arc(sx,sy,rr,0,7);ctx.fillStyle=rgba(c,.18);ctx.fill();ctx.strokeStyle=rgba(c,.85);ctx.lineWidth=1.2;ctx.stroke();}
+  ctx.fillStyle=rgba(c,.95);ctx.font='500 10px monospace';ctx.textAlign='center';ctx.fillText(y.s,sx,sy+3);
+  ctx.fillStyle='rgba(170,190,215,.7)';ctx.font='500 9px monospace';ctx.fillText(y.sc==null?'—':y.sc,sx,sy+(sy<C?44:-36));});
+ ctx.globalAlpha=1;
+ ctx.fillStyle=rgba(col,.9);ctx.font='500 14px monospace';ctx.textAlign='left';ctx.fillText(st.main,14,S-30);
+ ctx.fillStyle='rgba(170,190,215,.6)';ctx.font='500 9px monospace';ctx.fillText('main',14,S-17);
+ if(rp){ctx.fillStyle='rgba(255,255,255,.95)';ctx.font='500 11px monospace';ctx.textAlign='center';ctx.fillText('● REPLAY #'+rp.tr.id+' · x4',C,12);}
+ // grid rings
+ for(let q=1;q<=4;q++){ctx.beginPath();ctx.setLineDash([2,7]);ctx.strokeStyle='rgba(120,160,210,.09)';ctx.lineWidth=1;ctx.arc(C,C,R*q/4,0,7);ctx.stroke();}ctx.setLineDash([]);
+ // gate armor
+ const AR=R+12;
+ for(let g=0;g<7;g++){const a0=-Math.PI/2+g*SEG+.06,a1=a0+SEG-.12,v=r.gvd[g];
+  if(v>.5){ctx.beginPath();ctx.arc(C,C,AR,a0,a1);ctx.strokeStyle=rgba(col,(.25+.35*v)*(hes?.5:1));ctx.lineWidth=4;ctx.stroke();}
+  else{const fl=sleepy?.4:.35+.65*Math.random()*(Math.sin(t*20+g)>-.3?1:.2);for(let s=0;s<5;s++){const b0=a0+(a1-a0)*s/5+.02,b1=a0+(a1-a0)*(s+1)/5-.03,off=Math.sin(g*7+s*3)*3;ctx.beginPath();ctx.arc(C,C,AR+off,b0,b1);ctx.strokeStyle=`rgba(255,60,80,${fl*.85})`;ctx.lineWidth=hes?4:3;ctx.stroke();}}
+  const mid=(a0+a1)/2;ctx.save();ctx.translate(C+Math.cos(mid)*(AR-8),C+Math.sin(mid)*(AR-8));ctx.rotate(mid+Math.PI/2);ctx.fillStyle=v>.5?rgba(col,.45):'rgba(255,80,100,.95)';ctx.font='500 7px monospace';ctx.textAlign='center';ctx.fillText(GN[g],0,3);ctx.restore();}
+ // position aura between SL ring (inner) and TP ring (outer)
+ const SLr=R+20,TPr=R+34,ENr=(SLr+TPr)/2;
+ if(st.pos||Math.abs(r.aura)>.02){ctx.beginPath();ctx.arc(C,C,SLr,0,7);ctx.strokeStyle='rgba(255,77,109,.35)';ctx.lineWidth=1;ctx.setLineDash([1,4]);ctx.stroke();ctx.beginPath();ctx.arc(C,C,TPr,0,7);ctx.strokeStyle='rgba(57,255,106,.35)';ctx.stroke();ctx.setLineDash([]);
+  const ar=ENr+r.aura*(TPr-ENr),acl=r.aura>=0?[57,255,106]:[255,77,109];ctx.save();ctx.shadowColor=rgba(acl,1);ctx.shadowBlur=12+Math.abs(r.aura)*14;ctx.beginPath();ctx.arc(C,C,ar,0,7);ctx.strokeStyle=rgba(acl,.35+.5*Math.abs(r.aura));ctx.lineWidth=2+Math.abs(r.aura)*3;ctx.stroke();ctx.restore();}
+ // sweep beam
+ const sw=(t*1.1)%(Math.PI*2);ctx.globalAlpha=r.sec;
+ if(!focus&&!sleepy&&!FX.reduced&&ctx.createConicGradient){const g=ctx.createConicGradient(sw-.7,C,C);g.addColorStop(0,rgba(col,0));g.addColorStop(.11,rgba(col,.14));g.addColorStop(.112,rgba(col,0));g.addColorStop(1,rgba(col,0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(C,C,R,0,7);ctx.fill();}
+ ctx.globalAlpha=1;
+ // spokes (thickness = ML attention) + labels
+ for(let i=0;i<N;i++){const a=ang(i),x=C+Math.cos(a)*R,y=C+Math.sin(a)*R;
+  if(!focus&&!sleepy&&!FX.reduced){const d=Math.abs(((a+Math.PI*2.5)%(Math.PI*2))-((sw+Math.PI/2)%(Math.PI*2)));if(d<.08)r.flash[i]=1;}r.flash[i]*=.96;
+  const g=ctx.createLinearGradient(C,C,x,y);g.addColorStop(0,rgba(col,.12+r.datt[i]*.45));g.addColorStop(1,'rgba(120,170,230,.02)');ctx.strokeStyle=g;ctx.lineWidth=.5+r.datt[i]*3.2;ctx.beginPath();ctx.moveTo(C,C);ctx.lineTo(x,y);ctx.stroke();
+  const lx=C+Math.cos(a)*(R+50),ly=C+Math.sin(a)*(R+50),f=r.flash[i];ctx.textAlign='center';ctx.fillStyle=`rgba(${170+85*f|0},${190+65*f|0},${215+40*f|0},${.6+.4*f})`;ctx.font='500 9.5px sans-serif';ctx.fillText(AX[i],lx,ly-3);
+  ctx.fillStyle=rgba(col,.7+.3*f);ctx.font='500 9.5px monospace';ctx.fillText(st.rt[i]==null?'—':Math.round(r.drt[i]*100)+'%',lx,ly+8);}
+ const P=pts(r.drt,FX.reduced?1:br,(sleepy||FX.reduced)?0:st.div*.12,t);ctx.globalAlpha=r.sec;
+ // synapses, slow membrane, particles
+ if(!focus&&!sleepy){for(let i=0;i<N;i++)for(let j=i+2;j<N;j++){if(j-i===N-1)continue;const s=Math.min(r.drt[i],r.drt[j]);if(s<.6)continue;ctx.beginPath();ctx.moveTo(P[i][0],P[i][1]);ctx.quadraticCurveTo(C+(P[i][0]+P[j][0]-2*C)*.15,C+(P[i][1]+P[j][1]-2*C)*.15,P[j][0],P[j][1]);ctx.setLineDash([3,9]);ctx.lineDashOffset=FX.reduced?0:-t*30;ctx.strokeStyle=rgba(col,(s-.6)*1.4);ctx.lineWidth=1;ctx.stroke();ctx.setLineDash([]);}
+  spline(pts(r.dsl,1,0,t));ctx.setLineDash([4,5]);ctx.strokeStyle=rgba(col,.28);ctx.lineWidth=1;ctx.stroke();ctx.setLineDash([]);
+  if(!FX.reduced&&Math.random()<.6&&r.parts.length<36){const i=Math.floor(Math.random()*N);if(Math.random()<r.drt[i])r.parts.push({i,d:.12,s:.004+Math.random()*.007});}}
+ for(let j=r.parts.length-1;j>=0;j--){const p=r.parts[j];p.d+=p.s;if(focus||sleepy||p.d>r.drt[p.i]*br){r.parts.splice(j,1);continue;}const a=ang(p.i);ctx.fillStyle=rgba(col,.6*(1-p.d));ctx.beginPath();ctx.arc(C+Math.cos(a)*R*p.d,C+Math.sin(a)*R*p.d,1.5,0,7);ctx.fill();}
+ // best-trade template ghost
+ if(UI.best){spline(pts(UI.best.entryShape,1,0,t));ctx.setLineDash([6,4]);ctx.strokeStyle='rgba(255,200,90,.38)';ctx.lineWidth=1;ctx.stroke();ctx.setLineDash([]);}
+ ctx.globalAlpha=1;
+ // timeframe membrane
+ spline(pts(r.dtf,1,0,t));ctx.fillStyle=rgba(col,.05);ctx.fill();ctx.strokeStyle=rgba(col,.42);ctx.lineWidth=1.2;ctx.stroke();
+ // main shape: fill, ML blur, glow stroke
+ const blur=1-mlv,fg=ctx.createRadialGradient(C,C,0,C,C,R);fg.addColorStop(0,rgba(col,.3));fg.addColorStop(1,rgba(col,.06));spline(P);ctx.fillStyle=fg;ctx.fill();
+ if(!sleepy)for(let q=0;q<4;q++){const o=blur*7,a=q*1.57+(FX.reduced?0:t*.8);spline(pts(r.drt,br,FX.reduced?0:st.div*.12,t,Math.cos(a)*o,Math.sin(a)*o));ctx.strokeStyle=rgba(col,.22*blur);ctx.lineWidth=2+blur*3;ctx.stroke();}
+ ctx.save();ctx.shadowColor=rgba(col,.9);ctx.shadowBlur=6+mlv*14;spline(P);ctx.strokeStyle=rgba(col,.35+.6*mlv);ctx.lineWidth=1+mlv*1.4;ctx.stroke();ctx.restore();
+ // intent outline
+ if(!sleepy){const fc=r.drt.map((x,i)=>clamp01(x+(x-r.dtf[i])*2.5));spline(pts(fc,1,0,t));ctx.setLineDash([1,5]);ctx.strokeStyle=`rgba(230,240,255,${.2+.4*mlv})`;ctx.lineWidth=1.3;ctx.stroke();ctx.setLineDash([]);}
+ P.forEach((p,i)=>{ctx.fillStyle=rgba(col,.4+.6*mlv);ctx.beginPath();ctx.arc(p[0],p[1],(1.6+mlv*1.2)+r.flash[i]*1.8,0,7);ctx.fill();});
+ // shockwaves
+ for(let q=r.waves.length-1;q>=0;q--){const e=(t-r.waves[q])/1.4;if(e>1){r.waves.splice(q,1);continue;}ctx.beginPath();ctx.arc(C,C,R*(.2+e*1.3),0,7);ctx.strokeStyle=rgba(col,.8*(1-e));ctx.lineWidth=3*(1-e)+.5;ctx.stroke();}
+ // heart (lub-dub) + threshold ring
+ let rate=(48+conf*.7)/60*(1-r.dz*.6);if(hes&&!FX.reduced){rate*=.7+Math.random()*1.2;if(r.skip<=0&&Math.random()<.01)r.skip=.35;}
+ if(r.skip>0)r.skip-=dt;else r.beatPh=(r.beatPh+dt*rate)%1;
+ const p=r.beatPh,bt=Math.exp(-(p*p)/.0015)+Math.exp(-((p-1)**2)/.0015)+.55*Math.exp(-((p-.17)**2)/.0015);
+ const cr=7+bt*6,ca=hes&&!FX.reduced&&Math.random()<.12?.25:.95,cc=hes?[255,179,71]:col;
+ const cg=ctx.createRadialGradient(C,C,0,C,C,cr*3);cg.addColorStop(0,rgba(cc,ca));cg.addColorStop(.3,rgba(cc,.3*ca));cg.addColorStop(1,rgba(cc,0));ctx.fillStyle=cg;ctx.beginPath();ctx.arc(C,C,cr*3,0,7);ctx.fill();
+ const fr=Math.min(1,conf/st.thr);ctx.beginPath();ctx.arc(C,C,25,0,7);ctx.strokeStyle='rgba(120,160,210,.18)';ctx.lineWidth=2;ctx.stroke();
+ ctx.beginPath();ctx.arc(C,C,25,-Math.PI/2,-Math.PI/2+fr*Math.PI*2);ctx.strokeStyle=hes?'rgba(255,179,71,.95)':rgba(col,fr>=1?1:.8);ctx.lineWidth=fr>=1?3.5:2.5;ctx.lineCap='round';ctx.stroke();ctx.lineCap='butt';
+ // sleep overlay
+ if(r.dz>.02){ctx.fillStyle=`rgba(4,9,19,${r.dz*.55})`;ctx.fillRect(0,0,S,S);ctx.fillStyle=`rgba(150,170,200,${r.dz*.8})`;ctx.textAlign='center';[0,1,2].forEach(q=>{const ph2=(t*.35+q/3)%1;ctx.font=`500 ${10+q*3}px monospace`;ctx.globalAlpha=r.dz*(1-ph2);ctx.fillText('z',C+18+ph2*22+q*4,C-16-ph2*34);});ctx.globalAlpha=1;}
+ // tap highlight
+ if(r.hl){const e=(performance.now()/1000-r.hl.t)/1.6;if(e>1)r.hl=null;else{ctx.beginPath();ctx.arc(r.hl.x,r.hl.y,r.hl.r+e*10,0,7);ctx.strokeStyle=`rgba(255,255,255,${.85*(1-e)})`;ctx.lineWidth=2;ctx.stroke();}}
+ UI.dom(st,fs,col);}
+
+// ================================= [UI] =================================
+const $=id=>document.getElementById(id);
+const FX={snd:false,ac:null,reduced:window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches,
+ tone(f1,f2,d,type,v,dl=0){if(!this.ac)return;const o=this.ac.createOscillator(),g=this.ac.createGain(),t0=this.ac.currentTime+dl;o.type=type;o.frequency.setValueAtTime(f1,t0);o.frequency.exponentialRampToValueAtTime(f2,t0+d);g.gain.setValueAtTime(.0001,t0);g.gain.exponentialRampToValueAtTime(v,t0+.02);g.gain.exponentialRampToValueAtTime(.0001,t0+d);o.connect(g);g.connect(this.ac.destination);o.start(t0);o.stop(t0+d+.05);},
+ vib(p){try{navigator.vibrate&&navigator.vibrate(p);}catch(e){}},
+ sound(k){if(!this.snd)return;if(k==='attack'){this.tone(660,990,.12,'triangle',.12);this.tone(990,1320,.14,'triangle',.12,.14);this.vib([40,40,40]);}else if(k==='tp'){[523,659,784].forEach((f,i)=>this.tone(f,f*1.001,.2,'sine',.12,i*.12));this.vib(200);}else if(k==='sl'){this.tone(220,110,.45,'sawtooth',.05);this.vib(300);}else if(k==='close'){this.tone(440,441,.15,'sine',.08);}else if(k==='hes'){this.tone(180,160,.25,'sine',.05);this.vib(15);}else if(k==='wake'){this.tone(300,600,.3,'sine',.06);this.vib(30);}},
+ enable(on){this.snd=on;if(on&&!this.ac){try{this.ac=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}if(this.ac&&this.ac.state==='suspended')this.ac.resume();}};
+const UI={focus:false,rep:null,best:null,infoUntil:0,
+ info(m,h){$('info').textContent=m;this.infoUntil=performance.now()/1000+8;if(h)RS.hl=Object.assign(h,{t:performance.now()/1000});},
+ save(){try{localStorage.setItem(LS_KEY,JSON.stringify({focus:this.focus,snd:FX.snd}));}catch(e){}},
+ load(){let s=null;try{s=JSON.parse(localStorage.getItem(LS_KEY)||'null');}catch(e){}this.focus=s&&typeof s.focus==='boolean'?s.focus:window.innerWidth<600;FX.snd=false;/* sound needs a user tap each session (browser rule) */$('foc').textContent='Focus: '+(this.focus?'on':'off');},
+ dom(st,fs,col){const md=$('mood');md.textContent=st.mood[0]==='SLEEPING'?'SLEEPING · zZ':st.mood[0];md.style.color=st.mood[1];
+  const m=$('mode');m.textContent=st.n;m.style.color=rgba(st.c,1);
+  $('conf').textContent='CONF '+(st.conf==null?'—':st.conf)+' / '+st.thr;
+  const gt=$('gt');gt.textContent='GATES '+(7-fs.size)+'/7';gt.style.color=fs.size?'#ff5a6e':'#9fb3c8';
+  $('ml').textContent='ML '+(st.ml==null?'—':Math.round(st.ml*100)+'%');
+  const ce=$('cons');ce.textContent='consensus '+st.cons+'/'+st.sats.length;ce.style.color=st.cons>=2?rgba(col,1):'#7c8ea3';
+  const pe=$('pos'),pn=$('pnl');
+  if(st.pos){pe.textContent='POS '+st.pos.sym+' '+(st.pos.dir>0?'LONG':'SHORT');pe.style.color=st.pos.dir>0?'#39ff6a':'#ff4d6d';const v=st.pos.pct;pn.textContent=v==null?'—':(v>=0?'+':'')+v.toFixed(2)+'%';pn.style.color=v>=0?'#39ff6a':'#ff4d6d';}
+  else if(st.posMsg){pe.textContent=st.posMsg;pe.style.color=st.posMsg.startsWith('SL')?'#ff4d6d':'#39ff6a';pn.textContent='';}
+  else{pe.textContent='NO POSITION';pe.style.color='#7c8ea3';pn.textContent='';}
+  const s=$('sig');
+  if(st.sig){s.textContent='SIGNAL CONFIRMED · ENTERING';s.style.color=rgba(col,1);}
+  else if(st.zz){s.textContent='MARKET DEAD · resting at 20fps';s.style.color='#5a6b85';}
+  else if(st.hes){s.textContent='HESITATING · '+st.fails.map(g=>GN[g]).join(', ')+' blocked';s.style.color='#ffb347';}
+  else{s.textContent='WAIT · building';s.style.color='#7c8ea3';}}};
+$('snd').onclick=e=>{FX.enable(!FX.snd);e.target.textContent='Sound + haptics: '+(FX.snd?'on':'off');if(FX.snd)FX.tone(880,880,.08,'sine',.06);UI.save();};
+$('foc').onclick=e=>{UI.focus=!UI.focus;e.target.textContent='Focus: '+(UI.focus?'on':'off');UI.save();};
+$('rbar').onclick=()=>{if(UI.rep){UI.rep=null;UI.info(STR.back);}};
+$('mood').onclick=()=>{const m=RS.last?RS.last.mood[0]:'CALM';UI.info(m+': '+MX[m]+'. '+STR.moodNote);};
+$('dv').onclick=()=>UI.info(STR.dv);
+$('tp').onclick=()=>UI.info(STR.tpl,{x:C,y:C,r:R*.8});
+$('prh').onclick=()=>UI.info(STR.psych);
+function pickBest(){UI.best=hist.filter(h=>h.pnlPct>0&&h.entryShape).sort((a,b)=>b.pnlPct-a.pnlPct||b.confAtEntry-a.confAtEntry)[0]||null;}
+function updMatch(){const shaped=hist.filter(h=>h.entryShape);
+ if(shaped.length<MIN_DEJAVU)$('dv').innerHTML='DÉJÀ VU · <span style="color:#56657a">'+STR.collecting(shaped.length,MIN_DEJAVU)+'</span>';
+ else{const sc=shaped.map(h=>({h,s:simil(RS.drt,h.entryShape)})).sort((a,b)=>b.s-a.s).slice(0,2);
+  $('dv').innerHTML='DÉJÀ VU · '+sc.map(o=>`<span style="color:#d8e4f0">${Math.round(o.s*100)}%</span> like <span style="color:${o.h.pnlPct>0?'#39ff6a':'#ff4d6d'}">#${o.h.id} ${o.h.result} ${o.h.pnlPct>0?'+':''}${o.h.pnlPct.toFixed(2)}%</span>`).join(' · ')+` <span style="color:#56657a">n=${shaped.length}</span>`;}
+ $('tp').innerHTML=UI.best?`TEMPLATE · match <span style="color:#ffc85a">${Math.round(simil(RS.drt,UI.best.entryShape)*100)}%</span> with best trade <span style="color:#39ff6a">#${UI.best.id} +${UI.best.pnlPct.toFixed(2)}%</span>`:'TEMPLATE · <span style="color:#56657a">appears after your first winning trade</span>';}
+function renderPsych(){const rows=PRE_MOODS.map(m=>{const g=hist.filter(h=>h.pre===m),w=g.filter(h=>h.pnlPct>0).length;return{m,n:g.length,wr:g.length?w/g.length:0};}).filter(r=>r.n).sort((a,b)=>b.wr-a.wr);
+ const demoN=hist.filter(h=>h.demo).length;
+ $('pr').innerHTML=(rows.length?rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;"><span style="width:76px;color:${MC[r.m]};font-size:11px;">${r.m}</span><div style="flex:1;height:8px;background:#0e1a2a;border-radius:4px;overflow:hidden;"><div style="width:${Math.round(r.wr*100)}%;height:100%;background:${r.wr>=.5?'#39ff6a':'#ff4d6d'};opacity:.75;"></div></div><span style="width:104px;text-align:right;font-size:11px;color:#9fb3c8;">${Math.round(r.wr*100)}% · n=${r.n}${r.n<LOW_SAMPLE?' <span style="color:#56657a">low</span>':''}</span></div>`).join(''):'<div style="padding:4px 0;">No closed trades yet.</div>')
+ +`<div style="padding:6px 0 0;font-size:11px;color:#56657a;">Win rate by mood before entry · ${hist.length} trades${demoN?' ('+demoN+' demo)':''} · display only, never used by the engine.</div>`;}
+function rowHTML(tr){const c=tr.result==='TP'?'#39ff6a':tr.result==='SL'?'#ff4d6d':'#9fb3c8',lbl=tr.result==='MANUAL'?'CLOSED':tr.result;
+ return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #142235;">${tr.snapshot?`<img src="${tr.snapshot}" alt="Brain at entry" style="width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;background:#040913;">`:`<div style="width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;"></div>`}<div style="flex:1;min-width:0;"><div style="color:${c};font-size:12px;">#${tr.id} ${tr.symbol} ${tr.side} · ${lbl} ${tr.pnlPct>=0?'+':''}${tr.pnlPct.toFixed(2)}%</div><div style="color:#7c8ea3;font-size:11px;">before entry: ${tr.pre} · conf ${tr.confAtEntry}</div></div><div style="display:flex;flex-direction:column;gap:4px;"><button data-rp="${tr.id}" style="color:${tr.frames?'#d8e4f0':'#56657a'};border-color:#2a3a4d;padding:4px 10px;font-size:11px;">Replay</button><button data-sh="${tr.id}" style="color:#ffc85a;border-color:#4d3d1d;padding:4px 10px;font-size:11px;">Share</button></div></div>`;}
+function renderJournal(){const T=REC.trades;if(!T.length){$('jr').textContent=STR.noTrades;return;}
+ $('jr').innerHTML=T.slice(0,JOURNAL_SHOW).map(rowHTML).join('')+(T.length>JOURNAL_SHOW?`<button id="vall" style="width:100%;margin:8px 0 4px;color:#d8e4f0;border-color:#2a3a4d;">${STR.viewAll(T.length)}</button>`:'');
+ if($('allm').style.display==='flex')renderAll();}
+function renderAll(){$('allt').textContent=STR.allTitle(REC.trades.length);$('alll').innerHTML=REC.trades.map(rowHTML).join('');}
+function openAll(){renderAll();$('allm').style.display='flex';document.body.style.overflow='hidden';}
+function closeAll(){$('allm').style.display='none';document.body.style.overflow='';}
+$('allx').onclick=closeAll;
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('allm').style.display==='flex')closeAll();});
+function onListClick(e){const b=e.target.closest('[data-rp],[data-sh],#vall');if(!b)return;
+ if(b.id==='vall'){openAll();return;}
+ const tr=REC.trades.find(x=>x.id==(b.dataset.rp||b.dataset.sh));if(!tr)return;
+ if(b.dataset.sh){closeAll();makeCard(tr);UI.info(STR.shareReady);return;}
+ if(!tr.frames||!tr.frames.length){UI.info(STR.noReplay);return;}
+ closeAll();UI.rep={tr,idx:0};RS.prevSig=false;UI.info(STR.replayStart(tr.id));window.scrollTo({top:0,behavior:'smooth'});}
+$('jr').onclick=onListClick;$('alll').onclick=onListClick;
+function makeCard(tr){const W=720,H=900,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d'),col=tr.pnlPct>0?'#39ff6a':'#ff4d6d',lbl=tr.result==='MANUAL'?'CLOSED':tr.result;
+ const draw=im=>{x.fillStyle='#040913';x.fillRect(0,0,W,H);x.strokeStyle='#1d2c40';x.lineWidth=3;x.strokeRect(12,12,W-24,H-24);
+  x.fillStyle='#e8eef6';x.font='500 52px serif';x.fillText("ZEU'S",48,96);x.fillStyle='#7c8ea3';x.font='500 20px monospace';x.fillText('AI TRADING ANALYTICS',50,130);
+  if(im)x.drawImage(im,90,160,540,540);
+  x.fillStyle='#d8e4f0';x.font='500 30px monospace';x.fillText('#'+tr.id+' '+tr.symbol+' '+tr.side,48,752);
+  x.fillStyle=col;x.font='500 56px monospace';x.fillText(lbl+' '+(tr.pnlPct>=0?'+':'')+tr.pnlPct.toFixed(2)+'%',48,818);
+  x.fillStyle='#7c8ea3';x.font='500 22px monospace';x.fillText('mood before entry: '+tr.pre+' · conf '+tr.confAtEntry,48,858);
+  x.textAlign='right';x.fillStyle='#c08bff';x.fillText('@zeusterminal',W-48,96);
+  const url=c.toDataURL('image/png');$('share').innerHTML=`<div style="padding:10px 0;border-top:1px solid #142235;"><img src="${url}" alt="Share card for trade ${tr.id}" style="width:100%;border-radius:10px;display:block;"><div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;font-size:11px;color:#7c8ea3;"><span>Long-press the image to save or share</span><button id="shx" style="color:#9fb3c8;border-color:#2a3a4d;padding:4px 10px;font-size:11px;">Close</button></div></div>`;$('shx').onclick=()=>{$('share').innerHTML='';};};
+ if(tr.snapshot){const im=new Image();im.onload=()=>draw(im);im.src=tr.snapshot;}else draw(null);}
+function drawStrip(src,cur,slots){mx.clearRect(0,0,S,26);mx.fillStyle='rgba(120,160,210,.07)';mx.fillRect(0,4,S,18);const n=src.length;if(!n)return;const w=S/(slots||n);
+ for(let i=0;i<n;i++){const f=src[i],x=i*w;mx.globalAlpha=.75;mx.fillStyle=f.mood[1];mx.fillRect(x,4,w+.6,18);mx.globalAlpha=1;
+  if(f.sig&&(i===0||!src[i-1].sig)){mx.fillStyle='#ffffff';mx.fillRect(x,0,2,26);}
+  if(f.evt){mx.fillStyle=f.evt==='TP'?'#39ff6a':f.evt==='SL'?'#ff4d6d':'#9fb3c8';mx.fillRect(x,0,2,26);}}
+ if(cur!=null){mx.fillStyle='#ffffff';mx.fillRect(cur*S-1,0,2,26);}}
+const STRIP=REC_HZ*180;
+ms.onclick=e=>{const b=ms.getBoundingClientRect(),x=(e.clientX-b.left)*S/b.width;
+ if(UI.rep){const L=UI.rep.tr.frames.length,i=Math.max(0,Math.min(L-1,Math.floor(x/S*L)));UI.rep.idx=i;RS.prevSig=UI.rep.tr.frames[i].sig;UI.info('Jumped to '+Math.round(i/REC_HZ)+'s in the replay: '+UI.rep.tr.frames[i].mood[0]+'.');return;}
+ const src=REC.frames.slice(-STRIP),i=Math.floor(x/(S/STRIP));if(i>=src.length){UI.info('Mood strip: no history yet at this point. It fills from left to right.');return;}
+ const f=src[i],age=Math.round((src.length-1-i)/REC_HZ);UI.info((age?age+'s ago':'now')+': '+f.mood[0]+', conf '+f.conf+'. White ticks are entries, green and red are TP and SL.');};
+cv.onclick=e=>{const b=cv.getBoundingClientRect(),x=(e.clientX-b.left)*S/b.width,y=(e.clientY-b.top)*S/b.height,vs=RS.last;if(!vs)return;
+ for(let q=0;q<vs.sats.length;q++){const [sx,sy]=SAT_SLOT[q];if(Math.hypot(x-sx,y-sy)<32){if(UI.rep){UI.info(vs.sats[q].s+' satellite, score '+vs.sats[q].sc+'. Exit replay to switch.',{x:sx,y:sy,r:30});return;}
+  demoSwitchMain(vs.sats[q].s); // PRODUCTION: call the EXISTING ZeuS symbol-switch function instead
+  UI.info('Main brain switched to '+vs.sats[q].s+'. Satellites are the other scanned symbols; the brightest has the best score, beams show agreement.',{x:sx,y:sy,r:30});return;}}
+ const dx=x-C,dy=y-C,d=Math.hypot(dx,dy),a=Math.atan2(dy,dx),na=(((a+Math.PI/2)%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
+ if(d<32){UI.info('Core: heartbeat speed follows confluence ('+vs.conf+'). The ring fills toward the entry threshold ('+vs.thr+'). Amber and irregular means hesitating; slow and dim means sleeping.',{x:C,y:C,r:26});return;}
+ if(Math.abs(d-(R+12))<7){const g=Math.floor(na/SEG),mid=-Math.PI/2+g*SEG+SEG/2;UI.info('Gate '+GN[g]+': '+(vs.fails.includes(g)?'FAILING':'PASS')+' ('+GND[g]+'). Cracked red segments block entries.',{x:C+Math.cos(mid)*(R+12),y:C+Math.sin(mid)*(R+12),r:14});return;}
+ if(vs.pos&&d>R+16&&d<R+38){const v=vs.pos.pct;UI.info('Position aura: moves between the SL ring (inner, red) and TP ring (outer, green). Now '+(v==null?'—':(v>=0?'+':'')+v.toFixed(2)+'%')+'.',{x,y,r:10});return;}
+ const i=Math.round(na/(2*Math.PI/N))%N;
+ if(d>R+30){const pc=v=>v==null?STR.na:Math.round(v*100)+'%';UI.info(AX[i]+' '+pc(vs.rt[i])+': '+AXD[i]+'. ML attention '+(vs.att?pc(vs.att[i]):STR.na)+', slow lens '+pc(vs.sl[i])+'.',{x:C+Math.cos(ang(i))*(R+50),y:C+Math.sin(ang(i))*(R+50)+2,r:22});return;}
+ UI.info(STR.shape,{x,y,r:14});};
+
+// ================================= MAIN LOOP =================================
+let lastT=0,fN=0,acc=0,lastM=0,running=true;
+document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running){lastT=performance.now()/1000;requestAnimationFrame(loop);}});
+function loop(msT){if(!running)return;const t=msT/1000,dt=Math.min(.05,t-lastT);lastT=t;fN++;
+ const raw=demoTick(t,dt);            // PRODUCTION: raw = buildRawFromZeusState()
+ const st=DERIVED.build(raw);
+ REC.tick(t,st);
+ let view=st;
+ if(UI.rep){UI.rep.idx+=dt*REC_HZ*4;if(UI.rep.idx>=UI.rep.tr.frames.length){UI.rep=null;UI.info(STR.replayEnd);}else view=UI.rep.tr.frames[Math.floor(UI.rep.idx)];}
+ acc+=dt;
+ if(!(view.zz&&RS.dz>.9&&fN%3)){render(view,t,acc,UI.rep);acc=0;}
+ if(t-lastM>.5){lastM=t;updMatch();}
+ if(UI.rep){const L=UI.rep.tr.frames.length;drawStrip(UI.rep.tr.frames,UI.rep.idx/L);$('rbar').textContent='REPLAY #'+UI.rep.tr.id+' · '+Math.round(UI.rep.idx/REC_HZ)+'s / '+Math.round(L/REC_HZ)+'s · exit ✕';}
+ else if(fN%2===0){drawStrip(REC.frames.slice(-STRIP),null,STRIP);$('rbar').textContent='';}
+ REC.snap(t,cv);
+ if(UI.infoUntil>0&&performance.now()/1000>UI.infoUntil){UI.infoUntil=0;$('info').textContent=STR.idle;}
+ requestAnimationFrame(loop);}
+UI.load();$('info').textContent=STR.idle;pickBest();renderJournal();renderPsych();
+requestAnimationFrame(loop);
+</script></body></html>

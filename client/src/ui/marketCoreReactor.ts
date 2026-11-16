@@ -242,6 +242,9 @@ const w = window as any
   // ── Data Update (called from brain.js every 5s) ───────
   function update(data: any) {
     if (!data) return
+    // [2026-11-16] ZeuS Brain v7 citeste de aici axele pe care creierul le calculeaza
+    // deja (brain/brainAdapter.ts). Doar o copie pentru afisaj; nimic din motor nu o citeste.
+    try { w.__zeusBrainAxes = Object.assign({}, data, { __ts: Date.now() }) } catch (_) { /* afisaj */ }
     for (let i = 0; i < AXES.length; i++) {
       const k = AXES[i]
       if (data[k] != null) _target[k] = clamp(+data[k], 0, 1)

@@ -1,5 +1,6 @@
 import { useRef, useEffect, memo, useState } from 'react'
 import { resetProtectMode } from '../../engine/brain'
+import { BrainV7 } from './BrainV7'
 import { BlockReasonText } from './BlockReasonText'
 import { useBrainStatsStore, BRAIN_NEURON_IDS } from '../../stores/brainStatsStore'
 import { _ZI } from '../../constants/icons'
@@ -384,17 +385,12 @@ export const BrainCockpit = memo(function BrainCockpit() {
               radar canvas. In-memory state only (no localStorage as final
               truth, no server writes). Selecting any lens auto-enables the
               12-axis renderer via window.BRAIN_RADAR_12X_UI_ONLY. */}
-          <RadarLensBar />
-
-          {/* MARKET CORE REACTOR + SIGNAL RADAR — Canvas System */}
-          <div id="brainViz" className="mcr-wrap">
-            <div className="mcr-reactor-box">
-              <canvas id="mcrReactorCanvas"></canvas>
-            </div>
-            <div className="mcr-radar-box">
-              <canvas id="mcrRadarCanvas"></canvas>
-            </div>
-          </div>
+          {/* [2026-11-16] ZeuS Brain v7 inlocuieste tot blocul vechi: bara de lentile,
+              reactorul, radarul si busola (cerut de operator: „inlocuim tot blocul ca
+              radarul sa arate exact cum l-a desenat claude"). Legat la date reale prin
+              brain/brainAdapter.ts; doar citeste. Lentilele sunt acum desenate toate trei
+              (RT = forma, TIMEFRAME = linia subtire, SLOW = punctata). */}
+          <BrainV7 />
 
           {/* Hidden compat SVG */}
           <svg id="brainSvg" style={{ display: 'none', position: 'absolute', pointerEvents: 'none' }} viewBox="0 0 1 1">
