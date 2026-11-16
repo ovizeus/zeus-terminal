@@ -14898,3 +14898,9 @@ Urmatorul pas: citesc raportul din `data/logs` (CLIENT_ERR LAYOUT_TAIL) dupa ce 
 Cerut: „la maximizare sa fie doar chartul si indicatorii, fara ICHNOS — cu el chartul se vede mic". `#csec.fsm #ichnosPanel { display: none !important }`: inaltimea chartului in ecran complet se calculeaza scazand panourile VIZIBILE (`measureOccupiedHeight`), deci spatiul revine chartului; la iesire ICHNOS reapare.
 
 Raportat in acelasi mesaj: butonul Focus al creierului „nu mai apare deloc" si cu Focus pe off nu se vede unda radarului. Randat cu AMBELE foi de stil in ordinea aplicatiei si in containerul real (`.znc-left`): butoanele apar, unda se vede. Nicio regula nu le ascunde. Pista pentru unda: cu „Elimina animatiile" (accesibilitate Android) browserul cere `prefers-reduced-motion`, iar creierul opreste baleiajul (spec 8). Pentru butonul disparut — cerut o poza.
+
+## 📡 2026-11-16 (7) — Focus verificat; unda radarului facuta „ca la armata"
+
+Operatorul (prin Claude de pe telefon): butoanele exista, dar Focus „nu face nimic". Verificat in cod si cu poze la 390 px, inainte/dupa tap: butonul schimba ACEEASI variabila pe care o citeste bucla de desen la fiecare cadru (`UI.focus` → `env.focus`), eticheta si straturile se schimba pe loc, `localStorage` se citeste o data si se scrie doar la tap. Focus OFF arata unda, sinapsele, membrana lenta si particulele; sub reduce-motion raman sinapsele si membrana (doar unda, particulele si tremurul respecta setarea). De ce parea ca nu face nimic: pe ecran <600 px porneste ON; unda era o fasie ingusta de 14% opacitate, abia vizibila; sinapsele cer doua axe NEVECINE peste 60%; membrana lenta se suprapune cu forma pe piata calma.
+
+Cerut apoi: „ca un radar de armata in spate". Unda e acum o dara de ~72° care se stinge in urma, pe tot discul pana la armura, cu o linie stralucitoare in fata (aliniata cu aprinderea etichetelor). Doar desen (`brainRender.ts`).

@@ -161,9 +161,16 @@ export class BrainRenderer {
     const sw = (t * 1.1) % (Math.PI * 2)
     ctx.globalAlpha = r.sec
     if (!focus && !sleepy && !RED && (ctx as any).createConicGradient) {
-      const g = (ctx as any).createConicGradient(sw - 0.7, C, C)
-      g.addColorStop(0, rgba(col, 0)); g.addColorStop(0.11, rgba(col, 0.14)); g.addColorStop(0.112, rgba(col, 0)); g.addColorStop(1, rgba(col, 0))
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(C, C, R, 0, 7); ctx.fill()
+      // [2026-11-16] Unda de radar militar, ceruta de operator: o dara de ~72° care se
+      // stinge in urma, peste tot discul, si o linie stralucitoare in fata. Inainte era o
+      // fasie ingusta de 14% opacitate, abia vizibila pe telefon.
+      const TRAIL = 1.25, frac = TRAIL / (Math.PI * 2), RS = R + 12
+      const g = (ctx as any).createConicGradient(sw - TRAIL, C, C)
+      g.addColorStop(0, rgba(col, 0)); g.addColorStop(frac * 0.6, rgba(col, 0.07)); g.addColorStop(frac, rgba(col, 0.30)); g.addColorStop(frac + 0.0015, rgba(col, 0)); g.addColorStop(1, rgba(col, 0))
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(C, C, RS, 0, 7); ctx.fill()
+      ctx.save(); ctx.shadowColor = rgba(col, 1); ctx.shadowBlur = 8
+      ctx.strokeStyle = rgba(col, 0.85); ctx.lineWidth = 1.6
+      ctx.beginPath(); ctx.moveTo(C, C); ctx.lineTo(C + Math.cos(sw) * RS, C + Math.sin(sw) * RS); ctx.stroke(); ctx.restore()
     }
     ctx.globalAlpha = 1
     // spitele (grosime = atentia ML) + etichete
