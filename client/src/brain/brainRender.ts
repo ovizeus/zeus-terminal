@@ -160,14 +160,19 @@ export class BrainRenderer {
     // fascicul de baleiaj
     const sw = (t * 1.1) % (Math.PI * 2)
     ctx.globalAlpha = r.sec
-    if (!focus && !sleepy && !RED && (ctx as any).createConicGradient) {
-      // [2026-11-16] Unda de radar militar, ceruta de operator: o dara de ~72° care se
-      // stinge in urma, peste tot discul, si o linie stralucitoare in fata. Inainte era o
-      // fasie ingusta de 14% opacitate, abia vizibila pe telefon.
-      const TRAIL = 1.25, frac = TRAIL / (Math.PI * 2), RS = R + 12
-      const g = (ctx as any).createConicGradient(sw - TRAIL, C, C)
-      g.addColorStop(0, rgba(col, 0)); g.addColorStop(frac * 0.6, rgba(col, 0.07)); g.addColorStop(frac, rgba(col, 0.30)); g.addColorStop(frac + 0.0015, rgba(col, 0)); g.addColorStop(1, rgba(col, 0))
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(C, C, RS, 0, 7); ctx.fill()
+    if (!focus && !sleepy && !RED) {
+      // [2026-11-16] Unda de radar militar: dara de ~72° care se stinge in urma, pe tot
+      // discul pana la armura, si o linie stralucitoare in fata. Desenata din FELII (nu
+      // createConicGradient): WebView-ul Android al aplicatiei poate fi mai vechi decat
+      // functia, iar codul vechi sarea atunci peste unda fara nicio eroare — pe telefon
+      // nu se vedea, in Claude da.
+      const TRAIL = 1.25, SLICES = 24, RS = R + 12, step = TRAIL / SLICES
+      for (let k = 0; k < SLICES; k++) {
+        const a0 = sw - TRAIL + k * step, a1 = a0 + step + 0.004
+        const f = (k + 1) / SLICES
+        ctx.fillStyle = rgba(col, 0.30 * Math.pow(f, 1.8))
+        ctx.beginPath(); ctx.moveTo(C, C); ctx.arc(C, C, RS, a0, a1); ctx.closePath(); ctx.fill()
+      }
       ctx.save(); ctx.shadowColor = rgba(col, 1); ctx.shadowBlur = 8
       ctx.strokeStyle = rgba(col, 0.85); ctx.lineWidth = 1.6
       ctx.beginPath(); ctx.moveTo(C, C); ctx.lineTo(C + Math.cos(sw) * RS, C + Math.sin(sw) * RS); ctx.stroke(); ctx.restore()

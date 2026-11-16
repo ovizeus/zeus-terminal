@@ -421,6 +421,16 @@ export function startBrain(root: HTMLElement): () => void {
   }
   document.addEventListener('visibilitychange', onVis)
 
+  // [2026-11-16] O singura data: ce suporta telefonul (unda radarului nu aparea pe
+  // telefonul operatorului, desi in Claude da). Doar diagnostic, prin /api/client-error.
+  try {
+    if (!sessionStorage.getItem('zb7_env')) {
+      sessionStorage.setItem('zb7_env', '1')
+      const env = { reduced: FX.reduced, conic: typeof (ctx as any).createConicGradient === 'function', focus: UI.focus, dpr: window.devicePixelRatio, w: window.innerWidth, ua: navigator.userAgent.slice(0, 160) }
+      fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', keepalive: true,
+        body: JSON.stringify({ reason: 'BRAIN_ENV ' + JSON.stringify(env), kind: 'diag', url: location.pathname }) }).catch(() => {})
+    }
+  } catch { /* diagnostic */ }
   refresh()
   void REC.load().then(() => REC.reconcile()).then(refresh)
   raf = requestAnimationFrame(loop)
