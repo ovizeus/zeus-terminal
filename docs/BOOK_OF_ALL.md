@@ -14929,3 +14929,6 @@ Cerut (cu specificatia lipita, pasii A si B + 4 reguli). Pasul A raspuns cu fisi
 - Gasit pe drum: fereastra de detalii nu se deschidea (cautarea `$` nu includea fereastra) — prins pe captura, reparat, test.
 
 Teste: client 2.260, server 10.880 (in worktree, cu `.env` legat). Capturi la 390 px pe istoricul REAL al contului 1 (200 de randuri, 103 DEMO pe monedele radarului).
+
+### 🚀 b389 LIVRAT (2026-11-16 18:11) — jurnalul radarului
+Ramura `brain-v7` unita in `main` (fast-forward la `940e3ffb`), versiunea 1.7.363 / b389, aplicatia construita, serverul repornit O DATA (`sudo -u zeus pm2 reload zeus`). La pornire serverul a reincarcat un ban Binance **TESTNET** pus la 12:52, valabil pana la 20:48 — **anterior livrarii, nu cauzat de ea**. Gresit la mine: verificarea dinainte de repornire am rulat-o pe `pm2` al lui root (gol) — **pm2-ul Zeus e al utilizatorului `zeus`**; verificarea corecta e `sudo -u zeus pm2 logs zeus`.
