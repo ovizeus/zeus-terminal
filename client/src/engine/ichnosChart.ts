@@ -18,7 +18,7 @@ import { deriveCandle, bigLevels, kfmt, sumFmt, type FpCandle } from './indicato
 
 const w = window as any
 const SUPPORTED_TF = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h'])
-const POLL_MS = 3000
+const POLL_MS = 5000
 const COL_W = 96, ROW_H = 22, AXIS_W = 66, HEAD_H = 22, TIME_H = 18, STRIP = 7
 const BG = '#0a0f16', GRID = '#121b26'
 const GREEN = [57, 255, 106], RED = [255, 77, 109]
@@ -28,12 +28,12 @@ const FONT = '"IBM Plex Mono", ui-monospace, Menlo, monospace'
 type State = {
     symbol: string; tf: string; bin: number | null; candles: FpCandle[]
     status: 'idle' | 'loading' | 'ok' | 'unsupported' | 'error'
-    msg: string; timer: any; inflight: boolean; lastFull: number
+    msg: string; timer: any; inflight: boolean; lastFull: number; holdUntil: number
     el: HTMLElement | null; cv: HTMLCanvasElement | null; ro: ResizeObserver | null
     colOff: number; priceOff: number; follow: boolean
 }
 const st: State = {
-    symbol: '', tf: '', bin: null, candles: [], status: 'idle', msg: '', timer: null, inflight: false, lastFull: 0,
+    symbol: '', tf: '', bin: null, candles: [], status: 'idle', msg: '', timer: null, inflight: false, lastFull: 0, holdUntil: 0,
     el: null, cv: null, ro: null, colOff: 0, priceOff: 0, follow: true,
 }
 
@@ -73,7 +73,7 @@ export function renderIchnos(): void {
     ctx.fillText('sold x bought · $k · Bybit', W - 8, HEAD_H / 2)
     ctx.fillStyle = '#142235'; ctx.fillRect(0, HEAD_H - 1, W, 1)
 
-    const msg = st.status === 'ok' ? '' : st.status === 'loading' ? 'Collecting trades… the footprint fills from the moment the server started.' : st.msg
+    const msg = st.status === 'ok' ? '' : st.status === 'loading' ? (st.msg || 'Collecting trades… the footprint fills from the moment the server started.') : st.msg
     if (msg || !st.candles.length || !st.bin) {
         ctx.textAlign = 'center'; ctx.fillStyle = '#7c8ea3'; ctx.font = `500 11px ${FONT}`
         ctx.fillText(msg || 'Waiting for trades…', W / 2, H / 2)
@@ -260,22 +260,39 @@ function wireGestures(el: HTMLElement): void {
 
 // ── datele ──
 async function fetchFp(full: boolean): Promise<void> {
-    if (st.inflight) return
+    if (st.inflight || Date.now() < st.holdUntil) return
     const sym = chartSym(), tf = chartTf()
     if (!SUPPORTED_TF.has(tf)) { st.status = 'unsupported'; st.msg = `ICHNOS works on 1m–4h. Switch the chart timeframe.`; st.candles = []; renderIchnos(); return }
     st.inflight = true
+    // [2026-11-16] Un refuz de moment (429 „prea multe cereri", 5xx, retea) NU mai sterge
+    // panoul: datele raman, iar cererea urmatoare asteapta (Retry-After sau 15 s). Inainte,
+    // un singur 429 la pornirea aplicatiei golea panoul si scria „Connection lost" pana la refresh.
+    const transient = (why: string, waitS: number) => {
+        st.holdUntil = Date.now() + waitS * 1000
+        if (st.candles.length && st.symbol === sym && st.tf === tf) { st.status = 'ok'; st.msg = '' }
+        else { st.status = 'loading'; st.msg = why }
+    }
     try {
-        const r = await fetch(`/api/market/footprint?symbol=${encodeURIComponent(sym)}&tf=${encodeURIComponent(tf)}&limit=${full ? 150 : 3}`, { credentials: 'same-origin' })
-        const j = r.ok ? await r.json() : null
+        const r = await fetch(`/api/market/footprint?symbol=${encodeURIComponent(sym)}&tf=${encodeURIComponent(tf)}&limit=${full || st.symbol !== sym || st.tf !== tf || !st.candles.length ? 150 : 3}`,
+            { credentials: 'same-origin', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined })
         if (sym !== chartSym() || tf !== chartTf()) return
-        if (!j || !j.ok) {
+        if (!r.ok) {
+            const ra = Number(r.headers.get('Retry-After'))
+            transient('Server busy — retrying shortly…', ra > 0 ? Math.min(60, ra) : 15)
+            return
+        }
+        const j = await r.json()
+        if (j && j.ok === false && j.error === 'unsupported') {
             st.status = 'unsupported'
-            st.msg = j && j.error === 'unsupported' ? `No trade data for ${sym.replace(/USDT$/, '')} — ICHNOS covers BTC, ETH, SOL and BNB.` : 'Footprint unavailable right now.'
+            st.msg = `No trade data for ${sym.replace(/USDT$/, '')} — ICHNOS covers BTC, ETH, SOL and BNB.`
             st.candles = []
+        } else if (!j || !j.ok) {
+            transient('Footprint unavailable — retrying shortly…', 15)
         } else {
             st.bin = j.bin
             const incoming: FpCandle[] = Array.isArray(j.candles) ? j.candles : []
-            if (full || st.symbol !== sym || st.tf !== tf) { st.candles = incoming; if (st.symbol !== sym || st.tf !== tf) { st.colOff = 0; st.priceOff = 0; st.follow = true } }
+            if (st.symbol !== sym || st.tf !== tf) { st.candles = incoming; st.colOff = 0; st.priceOff = 0; st.follow = true }
+            else if (full || incoming.length > 3) st.candles = incoming
             else {
                 const map = new Map(st.candles.map((c) => [c.t, c]))
                 for (const c of incoming) map.set(c.t, c)
@@ -286,7 +303,7 @@ async function fetchFp(full: boolean): Promise<void> {
             st.msg = ''
         }
     } catch (_) {
-        st.status = 'error'; st.msg = 'Connection lost, retrying…'
+        transient('Connection lost — retrying shortly…', 10)
     } finally {
         st.inflight = false
         renderIchnos()
@@ -330,7 +347,7 @@ export function clearIchnos(): void {
     if (st.timer) { clearInterval(st.timer); st.timer = null }
     const el = document.getElementById('ichnosPanel')
     if (el) el.style.display = 'none'
-    st.candles = []; st.status = 'idle'; st.symbol = ''; st.tf = ''; st.colOff = 0; st.priceOff = 0; st.follow = true
+    st.candles = []; st.status = 'idle'; st.symbol = ''; st.tf = ''; st.colOff = 0; st.priceOff = 0; st.follow = true; st.holdUntil = 0
 }
 
 export const _ichnosStateForTest = st

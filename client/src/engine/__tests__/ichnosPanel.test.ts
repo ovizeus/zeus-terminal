@@ -49,4 +49,30 @@ describe('ICHNOS — panoul', () => {
         await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0))
         expect(texts.some((t) => t.includes('No trade data for XRP'))).toBe(true)
     })
+    it('⛔ un 429 de moment NU sterge panoul si nu scrie eroare; asteapta Retry-After', async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+        document.body.innerHTML = '<div id="ichnosPanel"></div>'
+        HTMLCanvasElement.prototype.getContext = (() => fakeCtx()) as any
+        w.S = { symbol: 'BTCUSDT', chartTf: '5m' }
+        let n = 0
+        const f = vi.fn(async () => (++n === 1
+            ? { ok: true, json: async () => FP }
+            : { ok: false, status: 429, headers: { get: () => '30' }, json: async () => ({ error: 'Too many requests' }) }))
+        vi.stubGlobal('fetch', f)
+        texts.length = 0
+        initIchnos()
+        await vi.advanceTimersByTimeAsync(10)
+        const { _ichnosStateForTest: st } = await import('../ichnosChart')
+        expect(st.candles.length).toBe(1)
+        await vi.advanceTimersByTimeAsync(5100)          // urmatoarea cerere: 429
+        expect(f).toHaveBeenCalledTimes(2)
+        expect(st.candles.length).toBe(1)                 // datele raman
+        expect(st.status).toBe('ok')
+        expect(texts.some((t) => t.includes('Connection lost'))).toBe(false)
+        await vi.advanceTimersByTimeAsync(20000)          // in cele 30 s de Retry-After: nicio cerere
+        expect(f).toHaveBeenCalledTimes(2)
+        await vi.advanceTimersByTimeAsync(15000)
+        expect(f.mock.calls.length).toBeGreaterThan(2)    // dupa: reincearca
+        vi.useRealTimers()
+    })
 })
