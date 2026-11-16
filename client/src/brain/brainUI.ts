@@ -11,7 +11,7 @@ import { Recorder, type Frame } from './brainRecorder'
 import { brainStorage, type TradeRecord } from './brainStorage'
 import { buildRawFromZeusState, switchMain, currentEnv, currentPositions, shortSym } from './brainAdapter'
 import { buildJournal, brainCaptured, ENV_COLOR, type Env, type JRow, type ServerRow, type OpenPos } from './brainJournal'
-import { radarCoins, MAX_SATS } from './brainPrefs'
+import { radarCoins, MAX_SATS, chosen, addCoin, removeCoin } from './brainPrefs'
 import { MSCAN_SYMS } from '../core/config'
 import { loadPref, savePref } from './brainPrefs'
 
@@ -215,16 +215,17 @@ export function startBrain(root: HTMLElement): () => void {
   }
   let coinsSig = ''
   function renderCoins(): void {
-    const main = mainSym(), coins = pref.coins
+    const coins = chosen(pref.coins)
     // Doar cand lista se schimba: altfel un meniu deschis s-ar inchide la fiecare reimprospatare.
-    const sig = main + '|' + coins.join(',')
+    const sig = coins.join(',')
     if (sig === coinsSig) return
     coinsSig = sig
-    const chip = (sym: string) => { const isMain = sym === main; return `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid ${isMain ? '#39ff6a66' : '#2a3a4d'};border-radius:999px;color:${isMain ? '#39ff6a' : '#d8e4f0'};">${esc(shortSym(sym))}${isMain ? ' <span style="color:#56657a;font-size:10px;">main</span>' : `<button type="button" data-rmsat="${esc(sym)}" aria-label="Remove ${esc(shortSym(sym))}" style="padding:0 4px!important;border:0!important;color:#ff7a8f;font-size:13px!important;">✕</button>`}</span>` }
+    // [2026-11-16, cerut de operator] Toate trei se pot schimba, si BTC; fara „main" aici
+    // (principala se vede pe radar). Ultima moneda nu se poate scoate: radarul ar ramane gol.
+    const chip = (sym: string) => `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid #2a3a4d;border-radius:999px;color:#d8e4f0;">${esc(shortSym(sym))}${coins.length > 1 ? `<button type="button" data-rmsat="${esc(sym)}" aria-label="Remove ${esc(shortSym(sym))}" style="padding:0 4px!important;border:0!important;color:#ff7a8f;font-size:13px!important;">✕</button>` : ''}</span>`
     const opts = MSCAN_SYMS.filter((x: string) => !coins.includes(x))
     $('coins').innerHTML = coins.map(chip).join('')
-      + (coins.includes(main) ? '' : `<span style="display:inline-flex;align-items:center;padding:4px 10px;border:1px solid #39ff6a66;border-radius:999px;color:#39ff6a;">${esc(shortSym(main))} <span style="color:#56657a;font-size:10px;margin-left:6px;">main · chart</span></span>`)
-      + (coins.length < MAX_SATS && opts.length ? `<select data-addsat aria-label="Add satellite" style="background:#060c16;color:#9fb3c8;border:1px dashed #2a3a4d;border-radius:999px;padding:4px 8px;font:inherit;font-size:12px;"><option value="">+ satellite</option>${opts.map((x: string) => `<option value="${x}">${shortSym(x)}</option>`).join('')}</select>` : '')
+      + (coins.length < MAX_SATS && opts.length ? `<select data-addsat aria-label="Add coin" style="background:#060c16;color:#9fb3c8;border:1px dashed #2a3a4d;border-radius:999px;padding:4px 8px;font:inherit;font-size:12px;"><option value="">+ coin</option>${opts.map((x: string) => `<option value="${x}">${shortSym(x)}</option>`).join('')}</select>` : '')
   }
   function thumb(r: JRow): string {
     const k = r.rec && r.rec.hasSnapshot ? r.rec.key : null
@@ -386,11 +387,11 @@ export function startBrain(root: HTMLElement): () => void {
   })
   $('coins').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('[data-rmsat]') as HTMLElement | null
-    if (b) { pref.coins = pref.coins.filter((x) => x !== b.dataset.rmsat); savePref(pref); rebuild() }
+    if (b) { pref.coins = removeCoin(pref.coins, b.dataset.rmsat as string); savePref(pref); rebuild() }
   })
   $('coins').addEventListener('change', (e) => {
     const t = e.target as HTMLSelectElement
-    if (t && t.dataset && 'addsat' in t.dataset && t.value) { if (pref.coins.length < MAX_SATS && !pref.coins.includes(t.value)) { pref.coins = pref.coins.concat(t.value); savePref(pref) } rebuild() }
+    if (t && t.dataset && 'addsat' in t.dataset && t.value) { pref.coins = addCoin(pref.coins, t.value); savePref(pref); rebuild() }
   })
 
   async function makeCard(r: JRow): Promise<void> {

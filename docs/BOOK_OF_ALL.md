@@ -14945,3 +14945,6 @@ Backup: tag `pre-sats-snap`. Teste noi: `brainPrefs.test.ts` (4).
 
 ## 📌 2026-11-16 (13) — Colturi FIXE pe radar (corectie la (12), cerut de operator)
 „Designul nu-l schimba": BTC stanga sus, ETH dreapta sus, SOL dreapta jos — toate trei MEREU vizibile, pe locul lor; principala doar se MARCHEAZA. Varianta din (12) muta fosta principala in coltul celei atinse — nu asta se ceruse. Acum: `satsOf` = toata lista (principala inclusa), `isMain` pe satelitul principalei → inel plin in culoarea modului + „MAIN" in cerc; razele de consens nu pornesc din principala; atingerea principalei nu schimba nimic. Lista salvata in ordinea veche (BTC, SOL, ETH sau `sats`) se rescrie la BTC, ETH, SOL. Max 3 monede (trei colturi). Backup: tag `pre-fixed-corners`.
+
+## 🪙 2026-11-16 (14) — RADAR COINS: si BTC se poate schimba
+Cerut: „lasa si BTC sa se poata schimba… poate vrea cineva alte 3 monede, nu-l mai pune pe main". In editor toate monedele au ✕ (si BTC), fara eticheta „main" (principala se vede pe radar). Lista e pe COLTURI: scoti o moneda → coltul ei ramane gol (celelalte NU aluneca), moneda adaugata („+ coin") intra in primul colt gol. Ultima moneda nu se poate scoate. `brainPrefs`: `addCoin` / `removeCoin` / `chosen`, '' = colt gol.

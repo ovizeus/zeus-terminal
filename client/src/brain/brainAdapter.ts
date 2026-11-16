@@ -55,6 +55,7 @@ export function satsFrom(scan: any, main: string, sats: string[]): RawSat[] {
   const m = String(main || '').toUpperCase()
   const out: RawSat[] = []
   sats.slice(0, 3).forEach((full, slot) => {
+    if (!full) return                          // colt gol (moneda scoasa din lista)
     const r = scan && typeof scan === 'object' ? scan[full] : null
     const sc = r ? Number(r.score) : NaN
     const mode: Mode = r && r.dir === 'bull' ? 'LONG' : r && r.dir === 'bear' ? 'SHORT' : 'RANGE'

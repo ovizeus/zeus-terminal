@@ -13,14 +13,16 @@ const MAX_COINS = MAX_SATS
 
 export type Pref = { focus: boolean; snd: boolean; coins: string[] }
 
+/** Lista pe colturi: pozitia = coltul; '' = colt gol (moneda scoasa, colturile nu aluneca). */
 export function normalizeCoins(x: unknown): string[] {
   if (!Array.isArray(x)) return DEFAULT_COINS.slice()
   const out: string[] = []
   for (const s of x) {
-    const v = String(s || '').toUpperCase().trim()
-    if (/^[A-Z0-9]{2,20}USDT$/.test(v) && !out.includes(v)) out.push(v)
     if (out.length >= MAX_COINS) break
+    const v = String(s || '').toUpperCase().trim()
+    out.push(/^[A-Z0-9]{2,20}USDT$/.test(v) && !out.includes(v) ? v : '')
   }
+  while (out.length && out[out.length - 1] === '') out.pop()
   return out
 }
 
@@ -49,8 +51,22 @@ export function savePref(p: Pref): void {
 }
 /** Lista radarului (din cache; citita o data). */
 export function currentCoins(): string[] { return (_cache || loadPref()).coins.slice() }
+/** Monedele alese (fara colturile goale). */
+export const chosen = (coins: string[]) => coins.filter(Boolean)
+/** Adauga in primul colt gol (sau la capat). */
+export function addCoin(coins: string[], sym: string): string[] {
+  if (coins.includes(sym) || chosen(coins).length >= MAX_SATS) return coins
+  const out = coins.slice(), i = out.indexOf('')
+  if (i >= 0) out[i] = sym; else out.push(sym)
+  return out
+}
+/** Scoate o moneda; coltul ei ramane gol. Ultima nu se scoate. */
+export function removeCoin(coins: string[], sym: string): string[] {
+  if (chosen(coins).length <= 1) return coins
+  return normalizeCoins(coins.map((c) => (c === sym ? '' : c)))
+}
 
-/** Satelitii: TOATA lista, fiecare in coltul lui (principala inclusa, marcata la desen). */
+/** Satelitii: TOATA lista pe colturi ('' = colt gol), principala inclusa, marcata la desen. */
 export function satsOf(_main: string, coins: string[] = currentCoins()): string[] {
   return coins.slice(0, MAX_SATS)
 }
@@ -59,6 +75,6 @@ export function satsOf(_main: string, coins: string[] = currentCoins()): string[
 export function radarCoins(main: string, coins: string[] = currentCoins()): string[] {
   const m = String(main || '').toUpperCase()
   const out = m ? [m] : []
-  for (const c of satsOf(m, coins)) if (!out.includes(c)) out.push(c)
+  for (const c of satsOf(m, coins)) if (c && !out.includes(c)) out.push(c)
   return out
 }
