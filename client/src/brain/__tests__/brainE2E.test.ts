@@ -9,11 +9,13 @@ import { useATStore } from '../../stores/atStore'
 // sa arate motivul si PnL-ul REALE; nimic inventat.
 const w = window as any
 
+let clears = 0
 function fakeCtx(): any {
   const grad = { addColorStop() {} }
   return new Proxy({}, {
     get(t: any, k) {
       if (k in t) return t[k]
+      if (k === 'clearRect') return () => { clears++ }
       if (k === 'createLinearGradient' || k === 'createRadialGradient' || k === 'createConicGradient') return () => grad
       if (k === 'measureText') return () => ({ width: 10 })
       return () => {}
@@ -107,6 +109,24 @@ describe('creierul v7 — intrare si iesire reale', () => {
     frames(10)
     expect((fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('/api/journal')).length).toBe(0)
     useATStore.setState({ mode: 'demo' } as any)
+  })
+
+  it('[2026-11-16] nu deseneaza cand nu e pe ecran, dar inregistreaza mai departe', () => {
+    stop(); root.innerHTML = ''
+    let cb: any = null
+    vi.stubGlobal('IntersectionObserver', class { constructor(f: any) { cb = f } observe() {} disconnect() {} })
+    stop = startBrain(root)
+    frames(10)
+    cb([{ isIntersecting: false }])
+    const before = clears
+    frames(60)
+    expect(clears).toBe(before)                          // niciun cadru desenat
+    usePositionsStore.setState({ demoPositions: [{ id: 5, sym: 'BTCUSDT', side: 'LONG', entry: 100, sl: 95, tp: 110, size: 1000, pnl: 0, openTs: Date.now(), autoTrade: true }] } as any)
+    frames(40)
+    expect(clears).toBeGreaterThan(before)               // dar poza de la intrare tot se face
+    cb([{ isIntersecting: true }])
+    const b2 = clears; frames(5)
+    expect(clears).toBeGreaterThan(b2)
   })
 
   it('mai mult de 4 tranzactii: View all deschide fereastra, ✕ si Escape o inchid', async () => {

@@ -247,13 +247,10 @@ export function updateBrainState(): void {
   _pushBrainEngineState(state)
   updateBrainArc(score)
 
-  // State badge
-  const badge = el('brainStateBadge')
-  if (badge) {
-    const labels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: _ZI.bolt + ' READY', blocked: _ZI.noent + ' BLOCKED', trading: _ZI.dRed + ' TRADING' }
-    badge.innerHTML = labels[state] || state.toUpperCase()
-    badge.className = 'brain-state-badge ' + state
-  }
+  // [2026-11-16] Badge-ul de stare (#brainStateBadge) il scrie DOAR renderBrainCockpit
+  // (clasa znc-state). Aici il rescria cu clasa `brain-state-badge`, fara stil: text
+  // mare „TRADING" care alterna cu cel mic la fiecare ciclu, rupea randul din antetul
+  // creierului si impingea aplicatia. Starea pentru store (_pushBrainEngineState) ramane.
 
   // Ticker
   { const _oe = el('brainTickerText'); if (_oe) _oe.textContent = ticker }
@@ -1172,7 +1169,8 @@ export function checkProtectMode(): void {
 
   const banner = el('protectBanner')
   const bannerTxt = el('protectBannerTxt')
-  if (banner) banner.className = 'protect-banner' + (BM.protectMode ? ' show' : '')
+  // [2026-11-16] Aceeasi clasa ca renderBrainCockpit: `protect-banner` n-avea stil.
+  if (banner) banner.className = 'znc-protect' + (BM.protectMode ? ' show' : '')
   if (bannerTxt && BM.protectMode) bannerTxt.textContent = BM.protectReason
 }
 
@@ -1182,7 +1180,7 @@ export function resetProtectMode(): void {
   if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[BRAIN PROTECT] OFF')
   BM.lossStreak = 0
   const banner = el('protectBanner')
-  if (banner) banner.className = 'protect-banner'
+  if (banner) banner.className = 'znc-protect'
   brainThink('ok', _ZI.ok + ' Protect mode reset manually')
   toast('Protect mode reset', 3000, _ZI.ok)
 }

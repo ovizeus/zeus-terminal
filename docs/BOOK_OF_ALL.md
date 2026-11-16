@@ -14827,3 +14827,14 @@ Raportate de operator cu poze, dupa livrarea Brain v7.
 **Ecranul de PIN ramanea auriu, cu fontul Cinzel.** Refacerea din 15 nov era corecta in `app.css`, dar `bridge/legacyLoader.ts` incarca DUPA ea `public/css/main.css`, care are aceleasi clase `.pin-lock-*` in auriu, si le suprascria. Acum toate regulile sunt legate de `#pinLockScreen` (prioritate mai mare), iar stralucirile aurii vechi (filtrul de pe logo, umbra titlului, umbra butonului) sunt anulate explicit. ⚠️ Lectie: in aplicatia asta o foaie veche se incarca dupa `app.css`; o clasa noua care are acelasi nume ca una veche pierde.
 
 Teste: `pinAndMtfStyle.test.ts` (3). Client 2.215 verzi.
+
+## ⬛ 2026-11-16 — Badge-ul „TRADING" care ticaia + zona neagra de jos (doar client)
+
+**Badge-ul de stare din antetul creierului („🔴 TRADING") ticaia si rupea aplicatia.** Acelasi tipar ca bara MTF: `updateBrainState` scria `#brainStateBadge` cu clasa `brain-state-badge` (fara stil, text mare), `renderBrainCockpit` cu `znc-state` (mic, cu chenar). Alternau la fiecare ciclu, randul din antet se rupea. Scos scriitorul fara stil (starea pentru store ramane); badge-ul are acum latime constanta (`min-width: 11ch`, fara rupere), ca SCANNING / TRADING / ARMED sa nu mai schimbe latimea. Cautand tot tiparul in cod (acelasi id, clase de baza diferite) a mai iesit unul: bannerul PROTECT primea in doua locuri clasa `protect-banner`, fara stil — acum `znc-protect` peste tot.
+
+**Zona neagra jos la intrarea in aplicatie (pana la scroll sus de tot).** Nu am putut reproduce pe telefon. Din poze: taietura e dreapta, prin mijlocul iconitelor — zone de pagina NEDESENATE, nu continut lipsa. Asta face Chrome pe Android cand memoria grafica pentru desen nu ajunge. Ce ocupa memoria si am redus:
+- creierul v7 redesena canvas-ul (1080×1080 pe un telefon 3×, cu umbre si blur) la 60 de cadre pe secunda si cand nu era pe ecran — acum nu deseneaza deloc in afara ecranului (inregistrarea merge; o poza la intrare se face oricum) si densitatea e plafonata la 2×;
+- stratul de linii de scanare al cockpit-ului (`.znc-scanlines`, cat tot cockpit-ul, mii de px) era mutat la infinit cu `translateY` — acum static.
+Verificat si exclus: pull-to-refresh muta continutul doar in jos; cockpit-ul taie ce iese din el (`overflow: hidden`), deci liniile nu lungeau pagina; problema veche (BUG-T8, scroll blocat in spatele modalelor) e reparata de `scrollLock`. ⚠️ Daca negrul mai apare, urmatorii suspecti sunt cele 16 `backdrop-filter` si cele ~130 de animatii infinite din cele doua foi de stil.
+
+Teste noi: 6 (antet, banner, straturi grafice, creierul oprit in afara ecranului). Client 2.221 verzi.

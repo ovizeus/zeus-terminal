@@ -111,7 +111,10 @@ export function startBrain(root: HTMLElement): () => void {
   const $ = (k: string) => (wrap.querySelector(`[data-k="${k}"]`) || modal.querySelector(`[data-k="${k}"]`)) as HTMLElement
   const cv = $('cv') as HTMLCanvasElement, ms = $('ms') as HTMLCanvasElement
   const ctx = cv.getContext('2d') as CanvasRenderingContext2D, mx = ms.getContext('2d') as CanvasRenderingContext2D
-  const dpr = window.devicePixelRatio || 1
+  // [2026-11-16] Densitate plafonata la 2×: pe un telefon 3× canvas-ul ar fi 1080×1080
+  // redesenat la fiecare cadru; memoria grafica ocupata lasa restul paginii nedesenat
+  // (zona neagra raportata de operator). La 2× diferenta nu se vede.
+  const dpr = Math.min(2, window.devicePixelRatio || 1)
   cv.width = S * dpr; cv.height = S * dpr; ctx.scale(dpr, dpr)
   ms.width = S * dpr; ms.height = 26 * dpr; mx.scale(dpr, dpr)
 
@@ -367,6 +370,15 @@ export function startBrain(root: HTMLElement): () => void {
 
   // ── bucla ──
   let raf = 0, lastT = 0, fN = 0, acc = 0, lastM = 0, running = !document.hidden, alive = true, lastEvtI = -1
+  // [2026-11-16] Cand creierul nu e pe ecran NU se mai deseneaza (inregistrarea continua).
+  // Redesenarea continua a canvas-ului cand pagina era derulata in alta parte lua timpul si
+  // memoria grafica de care telefonul avea nevoie ca sa deseneze restul paginii.
+  let onScreen = true
+  let io: IntersectionObserver | null = null
+  try {
+    io = new IntersectionObserver((ents) => { for (const e of ents) onScreen = e.isIntersecting }, { rootMargin: '120px 0px' })
+    io.observe(cv)
+  } catch { io = null }
   function loop(msT: number): void {
     if (!running || !alive) return
     const t = msT / 1000, dt = Math.min(0.05, lastT ? t - lastT : 0.016); lastT = t; fN++
@@ -385,14 +397,16 @@ export function startBrain(root: HTMLElement): () => void {
         else { view = UI.rep.frames[Math.floor(UI.rep.idx)]; rp = { id: UI.rep.tr.id } }
       }
       acc += dt
-      if (!(view.zz && RS.dz > 0.9 && fN % 3)) {
+      // fara ecran: desenam doar cand trebuie facuta poza de la intrare
+      const mustDraw = onScreen || (REC.snapQ != null && nowMs >= REC.snapQ.at - 200)
+      if (mustDraw && !(view.zz && RS.dz > 0.9 && fN % 3)) {
         RS.render(view, t, acc, rp, { focus: UI.focus, reduced: FX.reduced, best: UI.best, sound: (k) => FX.sound(k), info: (m) => info(m) })
         dom(view)
         acc = 0
       }
-      if (t - lastM > 0.5) { lastM = t; updMatch() }
+      if (onScreen && t - lastM > 0.5) { lastM = t; updMatch() }
       if (UI.rep) { const L = UI.rep.frames.length; drawStrip(UI.rep.frames, UI.rep.idx / L); $('rbar').textContent = 'REPLAY #' + UI.rep.tr.id + ' · ' + Math.round(UI.rep.idx / REC_HZ) + 's / ' + Math.round(L / REC_HZ) + 's · exit ✕' }
-      else if (fN % 2 === 0) { drawStrip(REC.frames.slice(-STRIP), null, STRIP); $('rbar').textContent = '' }
+      else if (onScreen && fN % 2 === 0) { drawStrip(REC.frames.slice(-STRIP), null, STRIP); $('rbar').textContent = '' }
       REC.snap(nowMs, cv, !!UI.rep)
       if (UI.infoUntil > 0 && performance.now() / 1000 > UI.infoUntil) { UI.infoUntil = 0; $('info').textContent = STR.idle }
     } catch (e) {
@@ -414,6 +428,7 @@ export function startBrain(root: HTMLElement): () => void {
   return () => {
     alive = false
     cancelAnimationFrame(raf)
+    try { io && io.disconnect() } catch { /* deja */ }
     document.removeEventListener('visibilitychange', onVis)
     document.removeEventListener('keydown', onKey)
     closeAll()

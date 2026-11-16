@@ -2694,6 +2694,13 @@ select.zac-select optgroup {
   animation: zScan 8s linear infinite
 }
 
+/* [2026-11-16] Liniile de scanare raman, dar NU se mai misca: era un strat cat tot
+   cockpit-ul (mii de px) mutat la infinit cu translateY, adica una dintre cele mai mari
+   texturi grafice din pagina, redesenata permanent. Pe telefon memoria grafica nu mai
+   ajungea pentru restul paginii → zone nedesenate, negre, jos. (main.css le anima la fel;
+   id-ul da prioritate.) */
+#zeusBrain .znc-scanlines { animation: none; transform: none; will-change: auto }
+
 .znc-noise {
   position: absolute;
   inset: 0;
@@ -2754,7 +2761,7 @@ select.zac-select optgroup {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end
 }
 
@@ -2764,8 +2771,15 @@ select.zac-select optgroup {
   border-radius: 2px;
   letter-spacing: 2px;
   font-weight: 700;
-  transition: all .3s;
-  border: 1px solid transparent
+  transition: color .3s, border-color .3s, background .3s;
+  border: 1px solid transparent;
+  /* [2026-11-16] Latime constanta: SCANNING / TRADING / ARMED au lungimi diferite si,
+     la fiecare schimbare, randul din antet se rupea si impingea aplicatia. */
+  display: inline-block;
+  min-width: 11ch;
+  text-align: center;
+  white-space: nowrap;
+  box-sizing: border-box
 }
 .znc-state.scanning { color:#44aaff; border-color:#44aaff44; background:#44aaff0d; animation:zBlink 2s infinite }
 .znc-state.analyzing { color:var(--gold); border-color:#f0c04044; background:#f0c0400d; animation:zBlink 1s infinite }

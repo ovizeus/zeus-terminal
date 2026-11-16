@@ -34,3 +34,32 @@ describe('bara MTF', () => {
     expect(fn).not.toMatch(/className|textContent/)
   })
 })
+
+// [2026-11-16] Badge-ul de stare („TRADING") din antetul creierului sarea intre doua
+// forme si rupea randul; bannerul PROTECT primea o clasa fara stil.
+describe('antetul creierului', () => {
+  it('⛔ badge-ul de stare are un singur scriitor de afisaj, cu clasa znc-state', () => {
+    const b = read('engine/brain.ts')
+    expect(b).not.toContain("'brain-state-badge '")
+    const writers = b.split('\n').filter((l) => /el\('brainStateBadge'\)/.test(l))
+    expect(writers.length).toBe(2)          // ledul „WAITING FOR FEED" + renderBrainCockpit, ambele znc-state
+  })
+  it('⛔ bannerul PROTECT primeste mereu clasa cu stil', () => {
+    expect(read('engine/brain.ts')).not.toContain("'protect-banner'")
+  })
+  it('badge-ul are latime constanta', () => {
+    expect(read('app.css')).toMatch(/\.znc-state \{[^}]*min-width: 11ch/)
+  })
+})
+
+// [2026-11-16] Zona neagra jos: straturi grafice uriase in miscare permanenta.
+describe('memoria grafica', () => {
+  it('liniile de scanare ale cockpit-ului nu se mai misca', () => {
+    expect(read('app.css')).toMatch(/#zeusBrain \.znc-scanlines \{ animation: none; transform: none/)
+  })
+  it('creierul v7: densitate plafonata si oprit cand nu e pe ecran', () => {
+    const ui = read('brain/brainUI.ts')
+    expect(ui).toContain('Math.min(2, window.devicePixelRatio || 1)')
+    expect(ui).toContain('IntersectionObserver')
+  })
+})
