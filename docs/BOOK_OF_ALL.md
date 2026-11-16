@@ -14867,3 +14867,18 @@ Operatorul: „il activez si nu apare nimic pe chart… exact acelasi design cu 
 Acum (`engine/ichnosChart.ts`, rescris): panou propriu sub chart (`#ichnosPanel`, 460 px, in PanelShell), desenat pe canvas: coloane de 96 px (~3-4 pe telefon), un rand de 22 px pe fiecare nivel de pret, casute „vandut x cumparat" ($k) verzi/roz cu intensitatea dupa volum, POC incadrat gros alb, cele 3 celule cu cel mai mare volum din ecran umplute si incadrate, dezechilibre aldine (albastru cumparatori, rosu vanzatori), Σ si Δ deasupra si dedesubt, lumanare subtire in stanga coloanei, banda aurie/albastra pentru dezechilibre stivuite, linie albastra BIG pentru ordine mari, pretul curent pe axa, orele dedesubt. Tras cu degetul: stanga/dreapta prin timp, sus/jos prin pret; dublu-tap = live. Fara bucla continua: deseneaza la date noi si la gesturi. Celulele se opresc exact pe ultimul rand intreg, ca Σ/Δ de dedesubt sa nu fie acoperite (prins pe captura de proba).
 
 Vazut desenat pe datele REALE salvate de server (128 de minute Bybit, unite pe 5m). Teste: `ichnosPanel.test.ts` (2). Client 2.237.
+
+## 👆 2026-11-16 (4) — Gesturile pe telefon: sus-jos deruleaza pagina (doar client)
+
+Operatorul: „daca pun multi indicatori sub chart nu mai merge scroll-ul, gesturile se duc in charturi". Am propus, el a ales: „da, fa asa, fa backup, daca nu-mi place revenim". Backup: tag `pre-touch-scroll` (= `0672b44f`).
+
+Cauza: chartul principal (`TradingChart.tsx`, `marketDataChart.ts`) avea `vertTouchDrag: true`, panourile de indicatori (`_createSubChart`, MACD) aveau implicitul bibliotecii (tot `true`), iar panoul ICHNOS `touch-action: none`. Orice tragere sus-jos pe un chart muta pretul in loc sa derulezi pagina; cu multe panouri nu mai ramanea loc liber.
+
+Acum (`core/chartTouch.ts`):
+- pe orice chart, sus-jos cu un deget deruleaza PAGINA; stanga-dreapta muta chartul in timp; doua degete = zoom (neschimbat);
+- **capcana gasita in biblioteca:** aceeasi setare se aplica si AXEI de pret (o tragere pe axa ar fi derulat pagina). `installAxisVerticalDrag` aprinde `vertTouchDrag` doar pe durata unei atingeri care porneste pe axa din dreapta, apoi il stinge — deci pretul se muta tot tragand de axa, ca la TradingView;
+- ICHNOS: `touch-action: pan-y`, doar orizontal prin timp; pretul cu butoanele ▲ ▼ de pe axa, LIVE / dublu-tap inapoi la ultima lumanare;
+- uneltele de desen isi suspenda singure gesturile si la final restaureaza optiunile CURENTE (verificat in `drawingTools._restorePan`), deci revin la noua regula;
+- butonul plutitor ⇅ (`ScrollJumpButton`): apare doar cand pagina e mai lunga de doua ecrane si nu e blocata de o fereastra; un tap duce jos, apoi sus.
+
+Teste: `chartTouch.test.ts` (4). Client 2.241. ⚠️ Neverificat pe telefon — gesturile reale le confirma el.

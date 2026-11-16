@@ -41,7 +41,8 @@ export function initCharts(): void {
     rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: .05, bottom: .15 } },
     timeScale: { borderColor: '#1e2530', timeVisible: false, secondsVisible: false, ticksVisible: false, rightOffset: 12 },
     crosshair: { mode: w.LightweightCharts.CrosshairMode.Normal },
-    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+    // [2026-11-16] Sus-jos pe chart deruleaza pagina (core/chartTouch.ts).
+    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
   })
   // [batch3-D] REUSE the chart created by React TradingChart.tsx. #mc has

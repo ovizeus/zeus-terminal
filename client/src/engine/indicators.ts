@@ -1027,7 +1027,8 @@ function _createSubChart(containerId: string, height?: number): any {
     rightPriceScale: { borderColor: '#1e2530', visible: true, width: 70, scaleMargins: { top: 0.1, bottom: 0.1 } },
     timeScale: { visible: false, rightOffset: 12 },
     crosshair: { mode: w.LightweightCharts.CrosshairMode.Normal },
-    handleScroll: { mouseWheel: true, pressedMouseMove: true },
+    // [2026-11-16] Sus-jos pe panou deruleaza pagina; stanga-dreapta muta panoul.
+    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { mouseWheel: true, pinch: true },
   })
   chart.applyOptions({ localization: { timeFormatter: (ts: number) => fmtTime(ts), dateFormatter: (ts: number) => fmtDate(ts) } })
@@ -3816,7 +3817,8 @@ export function initMACDChart(): void {
     rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: 0.1, bottom: 0.1 } },
     timeScale: { borderColor: '#1e2530', timeVisible: true, secondsVisible: false, rightOffset: 12 },
     crosshair: { mode: w.LightweightCharts.CrosshairMode.Normal },
-    handleScroll: { mouseWheel: true, pressedMouseMove: true },
+    // [2026-11-16] Sus-jos pe panou deruleaza pagina; stanga-dreapta muta panoul.
+    handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { mouseWheel: true, pinch: true },
   })
   _macdChart.applyOptions({ localization: { timeFormatter: (ts: number) => fmtTime(ts), dateFormatter: (ts: number) => fmtDate(ts) } })

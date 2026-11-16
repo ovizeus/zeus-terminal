@@ -8365,3 +8365,10 @@ select option {
 .ztz-time { font-variant-numeric: tabular-nums; color: #e9eef4; }
 .ztz-off { font-size: 10.5px; color: #7f93a6; text-align: right; font-variant-numeric: tabular-nums; }
 .ztz-empty { padding: 18px; text-align: center; color: #7f93a6; font-size: 12px; }
+
+/* [2026-11-16] Butonul plutitor ⇅ (pagina lunga cu multi indicatori) */
+.zscroll-jump { position: fixed; right: 12px; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); z-index: 850; width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: rgba(12,18,27,.88); color: #c4d5e8; border: 1px solid #2a3b4b;
+  box-shadow: 0 6px 18px rgba(0,0,0,.45); cursor: pointer; -webkit-tap-highlight-color: transparent }
+.zscroll-jump:active { transform: scale(.94) }
+.zscroll-jump:focus-visible { outline: 2px solid #8fb4d9; outline-offset: 2px }

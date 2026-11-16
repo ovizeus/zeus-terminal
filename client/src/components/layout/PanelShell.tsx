@@ -562,7 +562,7 @@ export function PanelShell() {
           <div id="hypnosChart" style={{ display: 'none', width: '100%', height: '64px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           <div id="notosChart" style={{ display: 'none', width: '100%', height: '60px', background: '#0a0f16', borderTop: '1px solid var(--brd)' }}></div>
           {/* [2026-11-16] ICHNOS — footprint pe panou propriu (engine/ichnosChart.ts), ca in capturile cerute. */}
-          <div id="ichnosPanel" style={{ display: 'none', width: '100%', height: '460px', background: '#0a0f16', borderTop: '1px solid var(--brd)', position: 'relative', touchAction: 'none' }}></div>
+          <div id="ichnosPanel" style={{ display: 'none', width: '100%', height: '460px', background: '#0a0f16', borderTop: '1px solid var(--brd)', position: 'relative', touchAction: 'pan-y' }}></div>
           {/* ── Time & Sales tape ── */}
           <div id="ts-wrap" style={{ display: 'none' }}></div>
         </section>

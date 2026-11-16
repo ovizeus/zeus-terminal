@@ -1,3 +1,4 @@
+import { installAxisVerticalDrag } from '../../core/chartTouch'
 import { useEffect, useRef, useCallback } from 'react'
 import {
   createChart,
@@ -128,10 +129,12 @@ export function TradingChart() {
       rightPriceScale: { borderColor: COLORS.border, scaleMargins: { top: 0.05, bottom: 0.15 } },
       timeScale: { borderColor: COLORS.border, timeVisible: false, secondsVisible: false, rightOffset: 12 },
       crosshair: { mode: CrosshairMode.Normal },
-      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
+      // [2026-11-16] Sus-jos pe chart deruleaza PAGINA; pretul se muta tragand de axa (core/chartTouch.ts).
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
     })
     chartRef.current = chart
+    const _offAxisDrag = installAxisVerticalDrag(chart, containerRef.current)
 
     // Candlestick
     candleRef.current = chart.addCandlestickSeries({
@@ -247,6 +250,7 @@ export function TradingChart() {
     ro.observe(containerRef.current)
 
     return () => {
+      _offAxisDrag()
       unregisterChart()
       ro.disconnect()
       chart.remove()

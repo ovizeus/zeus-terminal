@@ -10,8 +10,10 @@
 // in stanga coloanei, banda aurie pentru dezechilibre stivuite, linie albastra
 // pentru ordine mari. Aceeasi asezare, pe fundal intunecat (ales de el).
 //
-// Derulare: tras cu degetul stanga/dreapta (timp) si sus/jos (pret); dublu-tap
-// = inapoi la live. Fara bucla continua: se deseneaza la date noi si la gesturi.
+// Gesturi [2026-11-16, cerut]: sus-jos cu degetul deruleaza PAGINA (ca peste tot);
+// stanga-dreapta = prin timp; pretul se muta cu butoanele ▲ ▼ de pe axa, LIVE /
+// dublu-tap = inapoi la ultima lumanare. Fara bucla continua: se deseneaza la date
+// noi si la gesturi.
 import { deriveCandle, bigLevels, kfmt, sumFmt, type FpCandle } from './indicatorCalcIchnos'
 
 const w = window as any
@@ -68,7 +70,7 @@ export function renderIchnos(): void {
     const sym = chartSym().replace(/USDT$/, '')
     ctx.fillText(`ICHNOS · FOOTPRINT · ${sym} · ${chartTf()}`, 8, HEAD_H / 2)
     ctx.textAlign = 'right'; ctx.fillStyle = '#56657a'; ctx.font = `500 9px ${FONT}`
-    ctx.fillText('sold x bought · $k · Bybit trades', W - 8, HEAD_H / 2)
+    ctx.fillText('sold x bought · $k · Bybit', W - 8, HEAD_H / 2)
     ctx.fillStyle = '#142235'; ctx.fillRect(0, HEAD_H - 1, W, 1)
 
     const msg = st.status === 'ok' ? '' : st.status === 'loading' ? 'Collecting trades… the footprint fills from the moment the server started.' : st.msg
@@ -214,29 +216,46 @@ export function renderIchnos(): void {
     }
     if (!st.follow || st.colOff > 0) {
         ctx.textAlign = 'left'; ctx.font = `600 9px ${FONT}`; ctx.fillStyle = '#ffc85a'
-        ctx.fillText('double-tap: back to live', 8, H - TIME_H / 2)
+        ctx.fillText('LIVE or double-tap: back to the last candle', 8, H - TIME_H / 2)
     }
 }
 
 // ── gesturile ──
+const live = () => { st.colOff = 0; st.priceOff = 0; st.follow = true; renderIchnos() }
+
 function wireGestures(el: HTMLElement): void {
-    let sx = 0, sy = 0, c0 = 0, p0 = 0, down = false, lastTap = 0
+    // Doar ORIZONTAL: panoul are `touch-action: pan-y`, deci sus-jos il ia browserul
+    // (derulare de pagina) si ne trimite pointercancel.
+    let sx = 0, c0 = 0, down = false, lastTap = 0
     el.addEventListener('pointerdown', (e) => {
-        down = true; sx = e.clientX; sy = e.clientY; c0 = st.colOff; p0 = st.priceOff
-        try { el.setPointerCapture(e.pointerId) } catch { /* */ }
+        if ((e.target as HTMLElement)?.closest?.('.ichnos-btn')) return
+        down = true; sx = e.clientX; c0 = st.colOff
         const now = Date.now()
-        if (now - lastTap < 300) { st.colOff = 0; st.priceOff = 0; st.follow = true; renderIchnos() }
+        if (now - lastTap < 300) live()
         lastTap = now
     })
     el.addEventListener('pointermove', (e) => {
         if (!down) return
-        const dc = Math.round((e.clientX - sx) / COL_W), dr = Math.round((e.clientY - sy) / ROW_H)
+        const dc = Math.round((e.clientX - sx) / COL_W)
         const nc = Math.max(0, Math.min(Math.max(0, st.candles.length - 1), c0 + dc))
-        const np = p0 + dr
-        if (nc !== st.colOff || np !== st.priceOff) { st.colOff = nc; st.priceOff = np; st.follow = nc === 0 && np === 0; renderIchnos() }
+        if (nc !== st.colOff) { st.colOff = nc; st.follow = nc === 0 && st.priceOff === 0; renderIchnos() }
     })
     const up = () => { down = false }
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up)
+    // Butoanele de pe axa: pretul sus / jos (cate 4 randuri) si LIVE
+    const bar = document.createElement('div')
+    bar.style.cssText = 'position:absolute;right:4px;top:26px;display:flex;flex-direction:column;gap:4px;z-index:2'
+    const mk = (txt: string, label: string, fn: () => void) => {
+        const b = document.createElement('button')
+        b.type = 'button'; b.className = 'ichnos-btn'; b.textContent = txt; b.setAttribute('aria-label', label)
+        b.style.cssText = 'width:58px;height:26px;border-radius:6px;border:1px solid #2a3a4d;background:rgba(10,15,22,.92);color:#c4d5e8;font:600 11px "IBM Plex Mono",monospace;cursor:pointer'
+        b.addEventListener('click', (ev) => { ev.stopPropagation(); fn() })
+        bar.appendChild(b)
+    }
+    mk('▲', 'Price up', () => { st.priceOff += 4; st.follow = false; renderIchnos() })
+    mk('▼', 'Price down', () => { st.priceOff -= 4; st.follow = false; renderIchnos() })
+    mk('LIVE', 'Back to live', live)
+    el.appendChild(bar)
 }
 
 // ── datele ──

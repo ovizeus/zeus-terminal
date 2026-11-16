@@ -1,3 +1,4 @@
+import { ScrollJumpButton } from './components/layout/ScrollJumpButton'
 import { useEffect } from 'react'
 import { LoginPage } from './components/auth/LoginPage'
 import { FlipHeader } from './components/layout/FlipHeader'
@@ -138,6 +139,7 @@ export function App() {
         <SecurityNudgeModal />
         <ConfirmDialog />
         <AppUpdateChecker />
+        <ScrollJumpButton />
       </div>
     </ErrorBoundary>
   )
