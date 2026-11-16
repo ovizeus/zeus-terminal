@@ -11,7 +11,7 @@ export interface RawPosition {
   progress: Num          // −1..+1; null = fara SL → aura ascunsa
   noTp: boolean
 }
-export interface RawSat { symbol: string; full: string; axes: Num[] | null; score: Num; mode: Mode }
+export interface RawSat { symbol: string; full: string; axes: Num[] | null; score: Num; mode: Mode; slot?: number }
 export interface Raw {
   rt: Num[]; tf: Num[]; sl: Num[]
   att: Num[] | null
@@ -30,7 +30,7 @@ export interface Raw {
   sats: RawSat[]
 }
 
-export interface StSat { s: string; full: string; v: Num[] | null; c: Rgb; sc: Num; cons: boolean }
+export interface StSat { s: string; full: string; v: Num[] | null; c: Rgb; sc: Num; cons: boolean; slot: number }
 export interface St {
   rt: Num[]; tf: Num[]; sl: Num[]; att: Num[] | null; ml: Num
   fails: number[]; unk: number[]
@@ -155,7 +155,7 @@ export class Derived {
     const hes = !raw.dead && raw.conf != null && raw.thr != null && raw.conf >= raw.thr - 8 && nF > 0
     const mainDir = dirOf(raw.mode)
     const sats: StSat[] = raw.sats.map((x) => ({
-      s: x.symbol, full: x.full, v: x.axes, c: MODECOL[x.mode], sc: x.score,
+      s: x.symbol, full: x.full, v: x.axes, c: MODECOL[x.mode], sc: x.score, slot: x.slot ?? 0,
       cons: x.mode !== 'RANGE' && mainDir !== 0 && dirOf(x.mode) === mainDir,
     }))
     let mood: Mood

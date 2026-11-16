@@ -104,7 +104,7 @@ export class BrainRenderer {
     const scs = st.sats.map((q) => (q.sc == null ? -Infinity : q.sc))
     const bst = scs.length ? Math.max(...scs) : -Infinity
     st.sats.forEach((y, kk) => {
-      const [sx, sy] = SAT_SLOT[kk], c = y.c, b = y.sc != null && y.sc === bst
+      const [sx, sy] = SAT_SLOT[y.slot ?? kk] || SAT_SLOT[kk], c = y.c, b = y.sc != null && y.sc === bst
       if (y.cons) {
         ctx.beginPath(); ctx.moveTo(sx, sy)
         ctx.quadraticCurveTo((sx + C) / 2 + (sy - C) * 0.25, (sy + C) / 2 - (sx - C) * 0.25, C, C)

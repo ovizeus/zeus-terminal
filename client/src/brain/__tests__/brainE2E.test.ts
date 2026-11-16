@@ -59,7 +59,7 @@ describe('creierul v7 — intrare si iesire reale', () => {
     root = document.createElement('div'); document.body.appendChild(root)
     stop = startBrain(root)
   })
-  afterEach(() => { stop(); root.remove(); vi.useRealTimers(); vi.unstubAllGlobals() })
+  afterEach(() => { stop(); root.remove(); vi.useRealTimers(); vi.unstubAllGlobals(); useATStore.setState({ mode: 'demo' } as any) })
 
   const q = (k: string) => document.querySelector(`[data-k="${k}"]`) as HTMLElement
 
@@ -96,7 +96,7 @@ describe('creierul v7 — intrare si iesire reale', () => {
     frames(10)
     await vi.advanceTimersByTimeAsync(6000)
     frames(10)
-    expect(q('jr').textContent).toBe('No trades yet. Each entry is captured automatically.')
+    expect(q('jr').textContent).toBe('No DEMO trades on the radar coins yet. Each entry is captured automatically.')
   })
 
   it('⛔ trecerea demo → live nu e o inchidere (pozitiile demo doar ies din lista)', async () => {
@@ -107,8 +107,8 @@ describe('creierul v7 — intrare si iesire reale', () => {
     frames(30)
     await vi.advanceTimersByTimeAsync(6000)
     frames(10)
-    expect((fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('/api/journal')).length).toBe(0)
-    useATStore.setState({ mode: 'demo' } as any)
+    // inregistratorul nu cauta o inchidere (cererea lui e limit=60; jurnalul cere istoricul separat)
+    expect((fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('/api/journal?limit=60')).length).toBe(0)
   })
 
   it('[2026-11-16] nu deseneaza cand nu e pe ecran, dar inregistreaza mai departe', () => {
@@ -148,11 +148,75 @@ describe('creierul v7 — intrare si iesire reale', () => {
     expect(modal.style.display).toBe('flex')
     expect(modal.getAttribute('role')).toBe('dialog')
     expect(document.body.style.overflow).toBe('hidden')
-    expect(q('allt').textContent).toBe('ALL TRADES (6)')
+    expect(q('allt').textContent).toBe('DEMO ALL TRADES (6)')
     q('allx').click()
     expect(modal.style.display).toBe('none')
     vall.click()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(modal.style.display).toBe('none')
   })
+
+  it('[pas B] intrare pe SOL cu BTC pe ecran: rand cu motivul, fara poza si fara replay; DOGE nu intra', async () => {
+    frames(10)
+    usePositionsStore.setState({ demoPositions: [
+      { id: 701, sym: 'SOLUSDT', side: 'LONG', entry: 70, sl: 68, tp: 75, size: 500, pnl: 4, openTs: Date.now(), autoTrade: true },
+      { id: 702, sym: 'DOGEUSDT', side: 'LONG', entry: 0.05912, sl: 0.058, tp: 0.061, size: 100, pnl: 1, openTs: Date.now(), autoTrade: true },
+    ] } as any)
+    frames(40)
+    await vi.advanceTimersByTimeAsync(10)
+    frames(140)                                   // reconstruirea jurnalului (~2 s)
+    const jr = q('jr').textContent || ''
+    expect(jr).toContain('DEMO #701 SOL LONG · OPEN')
+    expect(jr).toContain('+0.80%')                // PnL viu: 4 / 500
+    expect(jr).toContain('other symbol on screen (BTC)')
+    expect(jr).not.toContain('DOGE')
+  })
+
+  it('[pas B] o pozitie deschisa dinainte (aplicatia era inchisa) apare adoptata, cu motivul', async () => {
+    usePositionsStore.setState({ demoPositions: [{ id: 801, sym: 'ETHUSDT', side: 'SHORT', entry: 1800, sl: 1850, tp: 1700, size: 1000, pnl: -5, openTs: Date.now() - 3600_000, autoTrade: true }] } as any)
+    frames(140)
+    await vi.advanceTimersByTimeAsync(10)
+    frames(10)
+    const jr = q('jr').textContent || ''
+    expect(jr).toContain('DEMO #801 ETH SHORT · OPEN')
+    expect(jr).toContain('app closed at entry')
+  })
+
+  it('[pas B] istoricul de pe server intra pe monedele radarului, din mediul activ, marcat „added from history"', async () => {
+    journalRows = [
+      { seq: 901, symbol: 'ETHUSDT', side: 'LONG', mode: 'demo', env: 'DEMO', size: 1000, pnl: 12, exitReason: 'HIT_TP', openTs: 1000, closeTs: 2000 },
+      { seq: 902, symbol: 'ETHUSDT', side: 'LONG', mode: 'live', env: 'TESTNET', size: 1000, pnl: 12, exitReason: 'HIT_TP', openTs: 1000, closeTs: 2000 },
+      { seq: 903, symbol: 'XRPUSDT', side: 'LONG', mode: 'demo', env: 'DEMO', size: 1000, pnl: 12, exitReason: 'HIT_TP', openTs: 1000, closeTs: 2000 },
+    ]
+    stop(); root.innerHTML = ''
+    stop = startBrain(root)
+    await vi.advanceTimersByTimeAsync(10)
+    frames(140)
+    const jr = q('jr').textContent || ''
+    expect(jr).toContain('DEMO #901 ETH LONG · TP +1.20%')
+    expect(jr).toContain('added from history')
+    expect(jr).not.toContain('#902')              // alt mediu
+    expect(jr).not.toContain('#903')              // in afara radarului
+  })
+
+  it('[pas B] tap pe un rand deschide fereastra de detalii cu valorile reale; ✕ o inchide', async () => {
+    journalRows = [{ seq: 911, symbol: 'BTCUSDT', side: 'LONG', mode: 'demo', env: 'DEMO', entryPrice: 100, exitPrice: 102.4, size: 1000, leverage: 5, sl: 95, tp: 110, pnl: 24, exitReason: 'HIT_TP', openTs: 1000, closeTs: 61000, serverScore: 77 }]
+    stop(); root.innerHTML = ''
+    stop = startBrain(root)
+    await vi.advanceTimersByTimeAsync(10)
+    frames(140)
+    ;(document.querySelector('[data-det="c:911"]') as HTMLElement).click()
+    await vi.advanceTimersByTimeAsync(10)
+    const d = document.querySelector('.zb7-det') as HTMLElement
+    expect(d.style.display).toBe('flex')
+    const t = d.textContent || ''
+    expect(t).toContain('#911 BTC LONG')
+    expect(t).toContain('102.4 calc')
+    expect(t).toContain('Server score at entry77')
+    expect(t).toContain('+2.40%')
+    ;(d.querySelector('[data-k="detx"]') as HTMLElement).click()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(d.style.display).toBe('none')
+  })
 })
+

@@ -8,6 +8,7 @@ import { useBrainStore } from '../stores/brainStore'
 import { getATMode } from '../services/stateAccessors'
 import { getSymPrice } from '../data/marketDataPositions'
 import { N, type Mode } from './brainStrings'
+import { currentSats } from './brainPrefs'
 import { modeOf, progressOf, emaStep, DeadDetector, type Num, type Raw, type RawSat } from './brainDerived'
 
 const w = window as any
@@ -47,24 +48,28 @@ export function gatesFrom(cache: any): { failing: number[]; unknown: number[] } 
   return { failing, unknown }
 }
 
-// [2026-11-16] Satelitii sunt FICSI, ceruti de operator: BTC, ETH, SOL (in loc de primii 3
-// dupa scor, unde intra si XRP). Daca moneda din chart e una din ele, locul ei il ia BNB.
-// Scorul si directia raman cele reale din scaner; o moneda nescanata arata „—".
-export const SAT_SYMS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
-const SAT_FALLBACK = 'BNBUSDT'
-
-export function satsFrom(results: any, main: string): RawSat[] {
+// [2026-11-16] Satelitii = lista FIXA din preferintele radarului (brainPrefs), nu primele
+// din scaner. Fiecare isi pastreaza coltul (indexul din lista). Scorul si directia se iau in
+// continuare din scaner (`MSCAN.data[sym]`); o moneda nescanata arata „—".
+export function satsFrom(scan: any, main: string, sats: string[]): RawSat[] {
   const m = String(main || '').toUpperCase()
-  const list = SAT_SYMS.filter((x) => x !== m)
-  if (list.length < 3 && m !== SAT_FALLBACK) list.push(SAT_FALLBACK)
-  const rows = Array.isArray(results) ? results : []
-  return list.slice(0, 3).map((full) => {
-    const r = rows.find((x: any) => x && String(x.sym || '').toUpperCase() === full)
+  const out: RawSat[] = []
+  sats.slice(0, 3).forEach((full, slot) => {
+    if (full === m) return                     // principala nu e si satelit; coltul ramane gol
+    const r = scan && typeof scan === 'object' ? scan[full] : null
     const sc = r ? Number(r.score) : NaN
     const mode: Mode = r && r.dir === 'bull' ? 'LONG' : r && r.dir === 'bear' ? 'SHORT' : 'RANGE'
     // Scanerul nu calculeaza cele 12 axe pe moneda → satelit desenat ca cerc (spec 3).
-    return { symbol: shortSym(full), full, axes: null, score: Number.isFinite(sc) ? sc : null, mode }
+    out.push({ symbol: shortSym(full), full, axes: null, score: Number.isFinite(sc) ? sc : null, mode, slot })
   })
+  return out
+}
+
+export type Env = 'DEMO' | 'TESTNET' | 'REAL'
+/** Mediul activ acum: DEMO, sau pentru live TESTNET / REAL (din `_executionEnv`). */
+export function currentEnv(): Env {
+  if (getATMode() !== 'live') return 'DEMO'
+  return w._executionEnv === 'REAL' ? 'REAL' : 'TESTNET'
 }
 
 /** Pozitiile reale din modul curent (demo sau live). */
@@ -152,7 +157,7 @@ export function buildRawFromZeusState(nowMs: number = Date.now()): Raw {
     position,
     closeMsg: nowMs < _closeUntil ? _closeMsg : '',
     main: shortSym(main),
-    sats: satsFrom(w.MSCAN?.sortedResults, main),
+    sats: satsFrom(w.MSCAN?.data, main, currentSats()),
   }
 }
 

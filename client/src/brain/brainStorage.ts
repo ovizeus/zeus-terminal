@@ -25,6 +25,16 @@ export interface TradeRecord {
   hasSnapshot: boolean
   hasFrames: boolean
   status: 'open' | 'closing' | 'closed'
+  // [2026-11-16] Jurnalul radarului (pasul B). Toate optionale: inregistrarile vechi nu le au.
+  env?: 'DEMO' | 'TESTNET' | 'REAL' | null     // mediul REAL al tranzactiei, la intrare
+  radarCoin?: boolean                            // moneda era a radarului la intrare
+  radarCoins?: string[]                          // lista radarului de atunci
+  onMain?: boolean                               // era moneda de pe chart (poza + replay posibile)
+  noSnapReason?: string | null                   // de ce nu exista poza
+  meta?: {
+    radarMode: string | null; regime: string | null; focus: boolean | null; lens: string
+    gatesFailing: number[]; gatesUnknown: number[]; ml: number | null
+  }
 }
 
 const DB = 'zeus_brain'

@@ -40,6 +40,9 @@ router.get('/', (req, res) => {
                     holdMs: d.closeTs && d.ts ? d.closeTs - d.ts : 0,
                     tier: d.tier,
                     confluence: d.confluence,
+                    // [2026-11-16] Scorul SERVERULUI la intrare (jurnalul creierului il arata langa
+                    // confluenta din cockpit; cele doua pot diferi).
+                    serverScore: Number.isFinite(Number(d.confluenceScore)) ? Number(d.confluenceScore) : null,
                     regime: d.regime,
                     closedAt: r.closed_at,
                     isLive: !!(d.live && d.live.status && d.live.status !== 'ERROR'),

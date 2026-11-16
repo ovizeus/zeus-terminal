@@ -24,18 +24,20 @@ describe('adaptorul citeste valorile reale', () => {
   it('fara cache de porti: toate necunoscute, niciuna picata', () => {
     expect(gatesFrom(undefined)).toEqual({ failing: [], unknown: [0, 1, 2, 3, 4, 5, 6] })
   })
-  it('satelitii sunt ficsi: BTC, ETH, SOL — XRP nu mai intra, chiar cu scor mai mare', () => {
-    const scan = [{ sym: 'XRPUSDT', score: 95, dir: 'bull' }, { sym: 'SOLUSDT', score: 88, dir: 'bull' }, { sym: 'ETHUSDT', score: 81, dir: 'bear' }, { sym: 'BTCUSDT', score: 70, dir: 'neutral' }]
-    const s = satsFrom(scan, 'BNBUSDT')
-    expect(s.map((x) => x.symbol)).toEqual(['BTC', 'ETH', 'SOL'])
-    expect(s.map((x) => x.score)).toEqual([70, 81, 88])
-    expect(s.map((x) => x.mode)).toEqual(['RANGE', 'SHORT', 'LONG'])
+  it('satelitii = lista FIXA din setari (nu scanerul); scorul si directia din MSCAN.data', () => {
+    const data = { XRPUSDT: { score: 95, dir: 'bull' }, SOLUSDT: { score: 88, dir: 'bull' }, ETHUSDT: { score: 81, dir: 'bear' } }
+    const s = satsFrom(data, 'BTCUSDT', ['SOLUSDT', 'ETHUSDT'])
+    expect(s.map((x) => x.symbol)).toEqual(['SOL', 'ETH'])           // XRP nu intra, desi are scor mai mare
+    expect(s.map((x) => x.score)).toEqual([88, 81])
+    expect(s.map((x) => x.mode)).toEqual(['LONG', 'SHORT'])
+    expect(s.map((x) => x.slot)).toEqual([0, 1])                     // fiecare in coltul lui
     expect(s.every((x) => x.axes === null)).toBe(true)
     expect(shortSym('ethusdt')).toBe('ETH')
   })
-  it('moneda din chart e una din ele → locul ei il ia BNB; nescanata = scor null', () => {
-    expect(satsFrom([], 'BTCUSDT').map((x) => x.symbol)).toEqual(['ETH', 'SOL', 'BNB'])
-    expect(satsFrom([], 'BTCUSDT').every((x) => x.score === null)).toBe(true)
+  it('principala nu e si satelit; coltul ei ramane gol; nescanata = scor null', () => {
+    const s = satsFrom({}, 'SOLUSDT', ['SOLUSDT', 'ETHUSDT', 'BNBUSDT'])
+    expect(s.map((x) => [x.symbol, x.slot])).toEqual([['ETH', 1], ['BNB', 2]])
+    expect(s.every((x) => x.score === null)).toBe(true)
   })
   it('contractul complet: conf si prag reale (confMin), ML si atentia lipsa = null', () => {
     ;(BM as any).confluenceScore = 61; (BM as any).confMin = 65

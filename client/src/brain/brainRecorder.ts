@@ -6,7 +6,9 @@
 import { REC_HZ, PRE_SEC, POST_SEC, REPLAY_KEEP, type Mood } from './brainStrings'
 import { entryShapeOf, resultOf, closeMsgOf, roundFrame, type St } from './brainDerived'
 import { brainStorage, type TradeRecord } from './brainStorage'
-import { currentPositions, currentUid, currentProfile, setCloseMsg } from './brainAdapter'
+import { currentPositions, currentUid, currentProfile, setCloseMsg, currentEnv, shortSym } from './brainAdapter'
+import { radarCoins } from './brainPrefs'
+import { BRAIN } from '../core/config'
 import { getATMode } from '../services/stateAccessors'
 
 const RING = REC_HZ * 60 * 20
@@ -62,6 +64,8 @@ export class Recorder {
   private started = 0
   private uid: string | null = null
   lastPreMood: () => Mood = () => 'CALM'
+  /** Focus la intrare (din interfata). */
+  focusNow: () => boolean | null = () => null
   lastSt: St | null = null
   onChange: () => void = () => {}
 
@@ -101,11 +105,16 @@ export class Recorder {
     const list = currentPositions()
     const now = new Map<string, any>()
     for (const p of list) if (p && p.id != null) now.set(String(p.id), p)
-    // intrari: o pozitie noua, deschisa de curand (nu una gasita la pornire)
+    // intrari: o pozitie noua, deschisa de curand (nu una gasita la pornire), si DOAR pe
+    // monedele radarului de acum (principala + satelitii). Apartenenta se fixeaza aici.
+    const main = String((window as any).S?.symbol || 'BTCUSDT').toUpperCase()
+    const coins = radarCoins(main)
     for (const [id, p] of now) {
       if (this.seen.has(id) || this.open.has(id)) continue
+      const sym = String(p.sym || '').toUpperCase()
+      if (!coins.includes(sym)) continue
       const openTs = Number(p.openTs) || 0
-      if (openTs && nowMs - openTs < NEW_ENTRY_MAX_AGE_MS) this.onEntry(p, nowMs)
+      if (openTs && nowMs - openTs < NEW_ENTRY_MAX_AGE_MS) this.onEntry(p, nowMs, main, coins)
     }
     // iesiri: o pozitie pe care o urmaream a disparut — doar din modul curent:
     // la trecerea demo ↔ live pozitiile celuilalt mod dispar din lista fara sa fie inchise.
@@ -125,9 +134,14 @@ export class Recorder {
     this.seen = now
   }
 
-  onEntry(p: any, nowMs: number): void {
+  onEntry(p: any, nowMs: number, main: string = String((window as any).S?.symbol || 'BTCUSDT').toUpperCase(), coins: string[] = radarCoins(main)): void {
     const st = this.lastSt
     const symbol = String(p.sym || '').toUpperCase().replace(/USDT$/, '')
+    const onMain = String(p.sym || '').toUpperCase() === main
+    const visible = typeof document === 'undefined' || !document.hidden
+    // Poza si replay-ul arata RADARUL de pe ecran: au sens doar pentru moneda de pe chart,
+    // cu aplicatia vizibila. Altfel spunem de ce lipsesc — niciodata alta moneda in poza.
+    const noSnapReason = !onMain ? `other symbol on screen (${shortSym(main)})` : !visible ? 'app closed at entry' : null
     const tr: TradeRecord & { a: number } = {
       key: `${this.uid}:${p.id}`, uid: String(this.uid), id: String(p.id),
       isDemo: getATMode() !== 'live',
@@ -137,10 +151,16 @@ export class Recorder {
       result: null, pnlPct: null, pnlAbs: null,
       confAtEntry: st ? st.conf : null, thrAtEntry: st ? st.thr : null, profile: currentProfile(),
       pre: this.lastPreMood(), entryShape: entryShapeOf(st ? st.rt : []),
-      hasSnapshot: false, hasFrames: false, status: 'open', a: this.n,
+      hasSnapshot: false, hasFrames: false, status: 'open', a: onMain ? this.n : -2,
+      env: currentEnv(), radarCoin: true, radarCoins: coins.slice(), onMain, noSnapReason,
+      meta: {
+        radarMode: st ? st.n : null, regime: (BRAIN as any)?.regime ? String((BRAIN as any).regime).toUpperCase() : null,
+        focus: this.focusNow(), lens: 'v7 (RT + TIMEFRAME + SLOW)',
+        gatesFailing: st ? st.fails.slice() : [], gatesUnknown: st ? (st.unk || []).slice() : [], ml: st ? st.ml : null,
+      },
     }
     this.open.set(tr.id, tr)
-    this.snapQ = { key: tr.key, at: nowMs + 350 }
+    if (!noSnapReason) this.snapQ = { key: tr.key, at: nowMs + 350 }
     void brainStorage.putTrade(strip(tr))
   }
 
@@ -192,7 +212,7 @@ export class Recorder {
   }
 
   private async finishFrames(tr: TradeRecord & { a: number }, b: number): Promise<void> {
-    if (tr.a < 0) return
+    if (tr.a < 0 || tr.onMain === false) return       // replay doar pentru moneda de pe chart
     const fr = capFrames(this.frames.filter((f) => f.i >= tr.a - PRE_SEC * REC_HZ && f.i <= b))
     if (!fr.length) return
     await brainStorage.putFrames(tr.key, fr)

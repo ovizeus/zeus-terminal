@@ -3,13 +3,17 @@
 // intoarce functia de oprire. Fara niciunul din controalele demo ale referintei (spec 7).
 import {
   STR, S, C, R, SEG, AX, AXD, N, GN, GND, MC, MX, PRE_MOODS, MIN_DEJAVU, LOW_SAMPLE, JOURNAL_SHOW,
-  REC_HZ, LS_KEY, SAT_SLOT, PAGE, type Mood,
+  REC_HZ, SAT_SLOT, PAGE, type Mood,
 } from './brainStrings'
 import { Derived, simil, type St } from './brainDerived'
 import { BrainRenderer, rgba } from './brainRender'
 import { Recorder, type Frame } from './brainRecorder'
 import { brainStorage, type TradeRecord } from './brainStorage'
-import { buildRawFromZeusState, switchMain } from './brainAdapter'
+import { buildRawFromZeusState, switchMain, currentEnv, currentPositions, shortSym } from './brainAdapter'
+import { buildJournal, brainCaptured, ENV_COLOR, type Env, type JRow, type ServerRow, type OpenPos } from './brainJournal'
+import { radarCoins, MAX_SATS } from './brainPrefs'
+import { MSCAN_SYMS } from '../core/config'
+import { loadPref, savePref } from './brainPrefs'
 
 const STRIP = REC_HZ * 180
 
@@ -23,6 +27,14 @@ const CSS = `
 .zb7-allm .in{width:100%;max-width:420px;height:100%;display:flex;flex-direction:column;padding:12px 8px;box-sizing:border-box}
 .zb7-allm button{font-family:monospace;font-size:13px;padding:8px;border:1px solid;border-radius:8px;background:transparent;cursor:pointer}
 .zb7-alll{flex:1;overflow-y:auto;font-size:12px;color:#7c8ea3}
+.zb7-env{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;border:1px solid currentColor;vertical-align:1px}
+.zb7-chip{font-size:11px!important;padding:3px 8px!important;border-radius:999px!important}
+.zb7-det{position:fixed;inset:0;background:rgba(2,6,16,.98);z-index:10060;display:none;flex-direction:column;align-items:center;font-family:monospace}
+.zb7-det .in{width:100%;max-width:420px;height:100%;overflow-y:auto;padding:12px 10px 24px;box-sizing:border-box;color:#9fb3c8;font-size:12px}
+.zb7-det button{font-family:monospace;font-size:13px;padding:8px;border:1px solid;border-radius:8px;background:transparent;cursor:pointer}
+.zb7-det .kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #0f1b2b}
+.zb7-det .kv span:last-child{color:#d8e4f0;text-align:right}
+.zb7-ph{width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;display:flex;align-items:center;justify-content:center;text-align:center;font-size:8px;line-height:1.2;color:#56657a;padding:3px;box-sizing:border-box;background:#060c16}
 `
 
 const HTML = `
@@ -42,7 +54,9 @@ const HTML = `
 <button type="button" data-k="snd" style="color:#9fb3c8;border-color:#2a3a4d;">Sound + haptics: off</button>
 <button type="button" data-k="foc" style="color:#9fb3c8;border-color:#2a3a4d;">Focus: off</button>
 </div>
-<div class="sec">TRADE JOURNAL</div>
+<div class="sec">RADAR COINS</div>
+<div data-k="coins" style="display:flex;flex-wrap:wrap;gap:6px;padding:0 8px;font-size:12px;"></div>
+<div class="sec" style="display:flex;justify-content:space-between;align-items:center;"><span>TRADE JOURNAL</span><span data-k="envchips" style="display:flex;gap:4px;letter-spacing:0;"></span></div>
 <div data-k="jr" style="padding:0 8px;font-size:12px;color:#7c8ea3;"></div>
 <div data-k="share" style="padding:0 8px;"></div>
 <div data-k="prh" class="sec" style="cursor:pointer;">PSYCH REPORT</div>
@@ -88,18 +102,6 @@ class Fx {
   }
 }
 
-type Pref = { focus: boolean; snd: boolean; demo: boolean }
-function loadPref(): Pref {
-  let s: any = null
-  try { s = JSON.parse(localStorage.getItem(LS_KEY) || 'null') } catch { s = null }
-  return {
-    focus: s && typeof s.focus === 'boolean' ? s.focus : window.innerWidth < 600,
-    snd: !!(s && s.snd),
-    demo: !!(s && s.demo),
-  }
-}
-function savePref(p: Pref): void { try { localStorage.setItem(LS_KEY, JSON.stringify(p)) } catch { /* privat */ } }
-
 export function startBrain(root: HTMLElement): () => void {
   // ── DOM ──
   const style = document.createElement('style'); style.textContent = CSS
@@ -124,10 +126,10 @@ export function startBrain(root: HTMLElement): () => void {
   const DER = new Derived()
   const REC = new Recorder()
   REC.lastPreMood = () => DER.lastPreMood
+  REC.focusNow = () => UI.focus
   const snapCache = new Map<string, string>()
   const UI = {
     focus: pref.focus,
-    demo: pref.demo,
     rep: null as null | { tr: TradeRecord; frames: Frame[]; idx: number },
     best: null as TradeRecord | null,
     infoUntil: 0,
@@ -146,130 +148,261 @@ export function startBrain(root: HTMLElement): () => void {
   const armOnce = () => { if (pref.snd && !FX.snd) FX.enable(true) }
   wrap.addEventListener('pointerdown', armOnce)
 
-  // ── istoricul (doar live, sau si demo cu comutatorul) ──
-  const hist = () => REC.trades.filter((t) => t.status === 'closed' && t.pnlPct != null && (UI.demo || !t.isDemo))
+  // ── JURNALUL RADARULUI (pasul B, 2026-11-16) ──
+  // Doar monedele radarului (principala + satelitii), doar mediul activ, fiecare cu eticheta lui.
+  // Istoricul vine de la server (/api/journal), datele creierului din IndexedDB (legate prin seq),
+  // pozitiile deschise din store. Nimic inventat: ce lipseste spune DE CE lipseste.
+  const JS = {
+    env: currentEnv() as Env,           // mediul activ
+    view: currentEnv() as Env,          // mediul afisat (urmeaza mediul activ la schimbare)
+    rows: [] as ServerRow[],
+    list: [] as JRow[],
+    lastFetch: 0,
+    fetching: false,
+  }
+  const mainSym = () => String((window as any).S?.symbol || 'BTCUSDT').toUpperCase()
+  const fmtP = (v: number | null) => (v == null ? '—' : v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 1 }) : String(+v.toPrecision(6)))
+  const fmtPct = (v: number | null) => (v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%')
+  const fmtT = (t: number | null) => { if (!t) return '—'; const d = new Date(t); return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) }
+  const envBadge = (e: Env, big = false) => `<span class="zb7-env" style="color:${ENV_COLOR[e]};${big ? 'font-size:12px;padding:2px 8px;' : ''}">${e}</span>`
+  async function fetchHistory(force = false): Promise<void> {
+    if (JS.fetching || (!force && Date.now() - JS.lastFetch < 60000)) return
+    JS.fetching = true
+    try {
+      const r = await fetch('/api/journal?limit=500', { credentials: 'same-origin' })
+      if (r.ok) { const j = await r.json(); if (j && Array.isArray(j.trades)) JS.rows = j.trades; JS.lastFetch = Date.now() }
+    } catch { /* fara retea: ramane ce aveam */ } finally { JS.fetching = false; rebuild() }
+  }
+  function openPositions(): OpenPos[] {
+    // Pozitiile deschise exista doar pentru mediul ACTIV (store-ul clientului).
+    if (JS.view !== JS.env) return []
+    return currentPositions().map((p: any) => ({ id: p.id, sym: p.sym, side: p.side, entry: p.entry, sl: p.sl, tp: p.tp, size: p.size, lev: p.lev, pnl: p.pnl, openTs: p.openTs }))
+  }
+  function rebuild(): void {
+    JS.list = buildJournal({ rows: JS.rows, recs: [...REC.trades, ...REC.open.values()], open: openPositions(), env: JS.view, coins: radarCoins(mainSym()) })
+    pickBest(); renderJournal(); renderPsych(); renderCoins(); renderChips()
+  }
+  const hist = () => brainCaptured(JS.list)
   function pickBest(): void {
     UI.best = hist().filter((h) => (h.pnlPct as number) > 0 && h.entryShape).sort((a, b) => (b.pnlPct as number) - (a.pnlPct as number) || (Number(b.confAtEntry) || 0) - (Number(a.confAtEntry) || 0))[0] || null
   }
   function updMatch(): void {
     const shaped = hist().filter((h) => h.entryShape)
-    if (shaped.length < MIN_DEJAVU) $('dv').innerHTML = 'DÉJÀ VU · <span style="color:#56657a">' + STR.collecting(shaped.length, MIN_DEJAVU) + '</span>'
+    const tag = `<span style="color:#56657a">${JS.view}</span> `
+    if (shaped.length < MIN_DEJAVU) $('dv').innerHTML = 'DÉJÀ VU · ' + tag + '<span style="color:#56657a">' + STR.collecting(shaped.length, MIN_DEJAVU) + '</span>'
     else {
       const sc = shaped.map((h) => ({ h, s: simil(RS.drt, h.entryShape) })).sort((a, b) => b.s - a.s).slice(0, 2)
-      $('dv').innerHTML = 'DÉJÀ VU · ' + sc.map((o) => `<span style="color:#d8e4f0">${Math.round(o.s * 100)}%</span> like <span style="color:${(o.h.pnlPct as number) > 0 ? '#39ff6a' : '#ff4d6d'}">#${esc(o.h.id)} ${esc(o.h.result)} ${(o.h.pnlPct as number) > 0 ? '+' : ''}${(o.h.pnlPct as number).toFixed(2)}%</span>`).join(' · ') + ` <span style="color:#56657a">n=${shaped.length}</span>`
+      $('dv').innerHTML = 'DÉJÀ VU · ' + tag + sc.map((o) => `<span style="color:#d8e4f0">${Math.round(o.s * 100)}%</span> like <span style="color:${(o.h.pnlPct as number) > 0 ? '#39ff6a' : '#ff4d6d'}">#${esc(o.h.id)} ${esc(o.h.result)} ${fmtPct(o.h.pnlPct)}</span>`).join(' · ') + ` <span style="color:#56657a">n=${shaped.length}</span>`
     }
     $('tp').innerHTML = UI.best
-      ? `TEMPLATE · match <span style="color:#ffc85a">${Math.round(simil(RS.drt, UI.best.entryShape) * 100)}%</span> with best trade <span style="color:#39ff6a">#${esc(UI.best.id)} +${(UI.best.pnlPct as number).toFixed(2)}%</span>`
-      : 'TEMPLATE · <span style="color:#56657a">appears after your first winning trade</span>'
+      ? `TEMPLATE · ${tag}match <span style="color:#ffc85a">${Math.round(simil(RS.drt, UI.best.entryShape) * 100)}%</span> with best trade <span style="color:#39ff6a">#${esc(UI.best.id)} ${fmtPct(UI.best.pnlPct)}</span>`
+      : 'TEMPLATE · ' + tag + '<span style="color:#56657a">appears after your first winning trade</span>'
   }
   function renderPsych(): void {
     const H = hist()
+    const closedN = JS.list.filter((r) => r.status === 'closed').length
+    const without = closedN - H.length
     const rows = PRE_MOODS.map((m) => { const g = H.filter((h) => h.pre === m), w = g.filter((h) => (h.pnlPct as number) > 0).length; return { m, n: g.length, wr: g.length ? w / g.length : 0 } })
       .filter((r) => r.n).sort((a, b) => b.wr - a.wr)
-    const demoN = H.filter((h) => h.isDemo).length
-    $('pr').innerHTML = (rows.length
-      ? rows.map((r) => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;"><span style="width:76px;color:${MC[r.m as Mood]};font-size:11px;">${r.m}</span><div style="flex:1;height:8px;background:#0e1a2a;border-radius:4px;overflow:hidden;"><div style="width:${Math.round(r.wr * 100)}%;height:100%;background:${r.wr >= 0.5 ? '#39ff6a' : '#ff4d6d'};opacity:.75;"></div></div><span style="width:104px;text-align:right;font-size:11px;color:#9fb3c8;">${Math.round(r.wr * 100)}% · n=${r.n}${r.n < LOW_SAMPLE ? ' <span style="color:#56657a">low</span>' : ''}</span></div>`).join('')
-      : `<div style="padding:4px 0;">${UI.demo ? 'No closed trades yet.' : STR.noClosed}</div>`)
-      + `<div style="padding:6px 0 0;font-size:11px;color:#56657a;">Win rate by mood before entry · ${H.length} trades${demoN ? ' (' + demoN + ' demo)' : ''} · display only, never used by the engine.</div>`
-      + `<label style="display:flex;align-items:center;gap:8px;padding:8px 0 0;font-size:11px;color:#7c8ea3;cursor:pointer;"><input type="checkbox" data-k="incdemo" ${UI.demo ? 'checked' : ''}> ${STR.includeDemo}</label>`
+    $('pr').innerHTML = `<div style="padding:0 0 6px;font-size:11px;color:#7c8ea3;">${envBadge(JS.view)} trades · n=${H.length}</div>`
+      + (rows.length
+        ? rows.map((r) => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;"><span style="width:76px;color:${MC[r.m as Mood]};font-size:11px;">${r.m}</span><div style="flex:1;height:8px;background:#0e1a2a;border-radius:4px;overflow:hidden;"><div style="width:${Math.round(r.wr * 100)}%;height:100%;background:${r.wr >= 0.5 ? '#39ff6a' : '#ff4d6d'};opacity:.75;"></div></div><span style="width:104px;text-align:right;font-size:11px;color:#9fb3c8;">${Math.round(r.wr * 100)}% · n=${r.n}${r.n < LOW_SAMPLE ? ' <span style="color:#56657a">low</span>' : ''}</span></div>`).join('')
+        : `<div style="padding:4px 0;">No closed ${JS.view} trades with brain data yet.</div>`)
+      + `<div style="padding:6px 0 0;font-size:11px;color:#56657a;">Win rate by mood before entry · ${H.length} trades${without > 0 ? ' · ' + without + ' trades without brain data not counted' : ''} · display only, never used by the engine.</div>`
   }
-  function rowHTML(tr: TradeRecord): string {
-    const c = tr.result === 'TP' ? '#39ff6a' : tr.result === 'SL' ? '#ff4d6d' : '#9fb3c8'
-    const lbl = tr.result === 'MANUAL' ? 'CLOSED' : (tr.result || 'OTHER')
-    const pct = tr.pnlPct == null ? '—' : (tr.pnlPct >= 0 ? '+' : '') + tr.pnlPct.toFixed(2) + '%'
-    const snap = snapCache.get(tr.key)
-    const img = snap
-      ? `<img src="${snap}" alt="Brain at entry" style="width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;background:#040913;">`
-      : `<div data-snap="${esc(tr.key)}" style="width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;"></div>`
-    return `<div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #142235;">${img}<div style="flex:1;min-width:0;"><div style="color:${c};font-size:12px;">#${esc(tr.id)} ${esc(tr.symbol)} ${tr.side} · ${lbl} ${pct}${tr.isDemo ? ' <span style="color:#56657a">demo</span>' : ''}</div><div style="color:#7c8ea3;font-size:11px;">before entry: ${esc(tr.pre)} · conf ${tr.confAtEntry == null ? '—' : tr.confAtEntry}</div></div><div style="display:flex;flex-direction:column;gap:4px;"><button type="button" data-rp="${esc(tr.id)}" style="color:${tr.hasFrames ? '#d8e4f0' : '#56657a'};border-color:#2a3a4d;padding:4px 10px;font-size:11px;">Replay</button><button type="button" data-sh="${esc(tr.id)}" style="color:#ffc85a;border-color:#4d3d1d;padding:4px 10px;font-size:11px;">Share</button></div></div>`
+  function renderChips(): void {
+    $('envchips').innerHTML = (['DEMO', 'TESTNET', 'REAL'] as Env[]).map((e) => `<button type="button" class="zb7-chip" data-env="${e}" aria-pressed="${JS.view === e}" style="color:${JS.view === e ? '#07101a' : ENV_COLOR[e]};background:${JS.view === e ? ENV_COLOR[e] : 'transparent'};border-color:${ENV_COLOR[e]};">${e[0] + e.slice(1).toLowerCase()}</button>`).join('')
+  }
+  let coinsSig = ''
+  function renderCoins(): void {
+    const main = mainSym(), sats = pref.sats
+    // Doar cand lista se schimba: altfel un meniu deschis s-ar inchide la fiecare reimprospatare.
+    const sig = main + '|' + sats.join(',')
+    if (sig === coinsSig) return
+    coinsSig = sig
+    const chip = (sym: string, isMain: boolean) => `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid ${isMain ? '#39ff6a66' : '#2a3a4d'};border-radius:999px;color:${isMain ? '#39ff6a' : '#d8e4f0'};">${esc(shortSym(sym))}${isMain ? ' <span style="color:#56657a;font-size:10px;">main</span>' : `<button type="button" data-rmsat="${esc(sym)}" aria-label="Remove ${esc(shortSym(sym))}" style="padding:0 4px!important;border:0!important;color:#ff7a8f;font-size:13px!important;">✕</button>`}</span>`
+    const opts = MSCAN_SYMS.filter((x: string) => x !== main && !sats.includes(x))
+    $('coins').innerHTML = chip(main, true) + sats.filter((x) => x !== main).map((x) => chip(x, false)).join('')
+      + (sats.length < MAX_SATS && opts.length ? `<select data-addsat aria-label="Add satellite" style="background:#060c16;color:#9fb3c8;border:1px dashed #2a3a4d;border-radius:999px;padding:4px 8px;font:inherit;font-size:12px;"><option value="">+ satellite</option>${opts.map((x: string) => `<option value="${x}">${shortSym(x)}</option>`).join('')}</select>` : '')
+  }
+  function thumb(r: JRow): string {
+    const k = r.rec && r.rec.hasSnapshot ? r.rec.key : null
+    const snap = k ? snapCache.get(k) : null
+    if (snap) return `<img src="${snap}" alt="Brain at entry" style="width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;background:#040913;">`
+    if (k) return `<div data-snap="${esc(k)}" class="zb7-ph"></div>`
+    const why = r.rec ? (r.rec.noSnapReason || 'no snapshot') : (r.reason || 'no brain data')
+    return `<div class="zb7-ph">${esc(why)}</div>`
+  }
+  function rowHTML(r: JRow): string {
+    const open = r.status === 'open'
+    const c = open ? '#9fe8ff' : r.result === 'TP' ? '#39ff6a' : r.result === 'SL' ? '#ff4d6d' : '#9fb3c8'
+    const lbl = open ? 'OPEN' : r.result === 'MANUAL' ? 'CLOSED' : (r.result || 'OTHER')
+    const pc = r.pnlPct == null ? '' : ` <span style="color:${r.pnlPct >= 0 ? '#39ff6a' : '#ff4d6d'}">${fmtPct(r.pnlPct)}</span>`
+    const b = r.rec
+    const l2 = b ? `before entry: ${esc(b.pre)} · conf ${b.confAtEntry == null ? '—' : b.confAtEntry} / ${b.thrAtEntry == null ? '—' : b.thrAtEntry} · ${esc(b.meta?.radarMode || '—')} · ${esc(b.profile || '—')}`
+      : `<span style="color:#56657a">${esc(r.reason || 'no brain data')}</span>`
+    const canRp = !!(b && b.hasFrames)
+    return `<div data-det="${esc(r.key)}" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #142235;cursor:pointer;">${thumb(r)}<div style="flex:1;min-width:0;"><div style="color:${c};font-size:12px;">${envBadge(r.env)} #${esc(r.seq)} ${esc(r.symbol)} ${r.side} · ${lbl}${pc}</div><div style="color:#7c8ea3;font-size:11px;">${l2}</div></div><div style="display:flex;flex-direction:column;gap:4px;"><button type="button" data-rp="${esc(r.key)}" style="color:${canRp ? '#d8e4f0' : '#56657a'};border-color:#2a3a4d;padding:4px 10px;font-size:11px;">Replay</button><button type="button" data-sh="${esc(r.key)}" style="color:#ffc85a;border-color:#4d3d1d;padding:4px 10px;font-size:11px;">Share</button></div></div>`
   }
   /** Pozele se citesc din IndexedDB doar pentru randurile afisate. */
   function fillSnaps(scope: HTMLElement): void {
     scope.querySelectorAll('[data-snap]').forEach((el) => {
       const key = (el as HTMLElement).dataset.snap as string
-      const tr = REC.trades.find((t) => t.key === key)
-      if (!tr || !tr.hasSnapshot) return
       void brainStorage.getSnapshot(key).then((url) => {
-        if (!url) return
+        if (!url) { (el as HTMLElement).textContent = 'no snapshot'; return }
         snapCache.set(key, url)
         const img = document.createElement('img'); img.src = url; img.alt = 'Brain at entry'
-        img.style.cssText = 'width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;background:#040913;'
+        img.style.cssText = (el as HTMLElement).dataset.big ? 'width:100%;border-radius:10px;display:block;' : 'width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;background:#040913;'
         el.replaceWith(img)
       })
     })
   }
   function renderJournal(): void {
-    const T = REC.trades
-    if (!T.length) { $('jr').textContent = STR.noTrades; return }
+    const T = JS.list
+    if (!T.length) { $('jr').textContent = `No ${JS.view} trades on the radar coins yet. Each entry is captured automatically.`; return }
     $('jr').innerHTML = T.slice(0, JOURNAL_SHOW).map(rowHTML).join('')
       + (T.length > JOURNAL_SHOW ? `<button type="button" data-vall="1" style="width:100%;margin:8px 0 4px;color:#d8e4f0;border-color:#2a3a4d;">${STR.viewAll(T.length)}</button>` : '')
     fillSnaps($('jr'))
     if (modal.style.display === 'flex') renderAll()
   }
   function renderAll(): void {
-    const T = REC.trades
-    $('allt').textContent = STR.allTitle(T.length)
+    const T = JS.list
+    $('allt').innerHTML = envBadge(JS.view) + ' ' + STR.allTitle(T.length)
     $('alll').innerHTML = T.slice(0, UI.allShown).map(rowHTML).join('')
       + (T.length > UI.allShown ? `<button type="button" data-more="1" style="width:100%;margin:8px 0;color:#d8e4f0;border-color:#2a3a4d;">${STR.loadMore} (${T.length - UI.allShown})</button>` : '')
     fillSnaps($('alll'))
   }
   let prevOverflow = ''
-  function openAll(): void { UI.allShown = PAGE; renderAll(); modal.style.display = 'flex'; prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; ($('allx') as HTMLButtonElement).focus() }
-  function closeAll(): void { if (modal.style.display !== 'flex') return; modal.style.display = 'none'; document.body.style.overflow = prevOverflow }
-  const refresh = () => { pickBest(); renderJournal(); renderPsych() }
-  REC.onChange = refresh
+  function lockBody(): void { prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden' }
+  function unlockBody(): void { if (modal.style.display !== 'flex' && det.style.display !== 'flex') document.body.style.overflow = prevOverflow }
+  function openAll(): void { UI.allShown = PAGE; renderAll(); modal.style.display = 'flex'; lockBody(); ($('allx') as HTMLButtonElement).focus() }
+  function closeAll(): void { if (modal.style.display !== 'flex') return; modal.style.display = 'none'; unlockBody() }
 
+  // ── fereastra de detalii a unei tranzactii ──
+  const det = document.createElement('div'); det.className = 'zb7-det'
+  det.setAttribute('role', 'dialog'); det.setAttribute('aria-modal', 'true'); det.setAttribute('aria-label', 'Trade detail')
+  det.innerHTML = '<div class="in" data-k="detin"></div>'; document.body.appendChild(det)
+  function closeDet(): void { if (det.style.display !== 'flex') return; det.style.display = 'none'; unlockBody() }
+  function miniRadar(shape: number[]): string {
+    const c = 60, rr = 48, pts = shape.map((v, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N, r = rr * Math.max(0.1, Math.min(1, v)); return `${(c + Math.cos(a) * r).toFixed(1)},${(c + Math.sin(a) * r).toFixed(1)}` }).join(' ')
+    const spokes = AX.map((_, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / N; return `<line x1="${c}" y1="${c}" x2="${(c + Math.cos(a) * rr).toFixed(1)}" y2="${(c + Math.sin(a) * rr).toFixed(1)}" stroke="#1d2c40"/>` }).join('')
+    return `<svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">${spokes}<circle cx="60" cy="60" r="48" fill="none" stroke="#1d2c40"/><polygon points="${pts}" fill="rgba(57,255,106,.18)" stroke="#39ff6a" stroke-width="1.2"/></svg>`
+  }
+  function openDet(r: JRow): void {
+    const b = r.rec, kv = (k: string, v: string) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`
+    const dur = r.entryTime && r.exitTime ? Math.round((r.exitTime - r.entryTime) / 60000) + ' min' : r.status === 'open' && r.entryTime ? Math.round((Date.now() - r.entryTime) / 60000) + ' min (open)' : '—'
+    const gates = b && b.meta ? GN.map((g, i) => `${g} ${b.meta!.gatesUnknown.includes(i) ? '<span style="color:#7c8ea3">unknown</span>' : b.meta!.gatesFailing.includes(i) ? '<span style="color:#ff5a6e">failing</span>' : '<span style="color:#39ff6a">pass</span>'}`).join('<br>') : '—'
+    const k = b && b.hasSnapshot ? b.key : null
+    const snap = k ? snapCache.get(k) : null
+    const pic = snap ? `<img src="${snap}" alt="Brain at entry" style="width:100%;border-radius:10px;display:block;">`
+      : k ? `<div data-snap="${esc(k)}" data-big="1" class="zb7-ph" style="width:100%;height:240px;font-size:12px;"></div>`
+      : `<div class="zb7-ph" style="width:100%;height:240px;font-size:12px;">${esc(b ? (b.noSnapReason || 'no snapshot') : (r.reason || 'no brain data'))}</div>`
+    ;(det.querySelector('[data-k="detin"]') as HTMLElement).innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 0 10px;"><span style="font-size:13px;color:#d8e4f0;letter-spacing:1px;">${envBadge(r.env, true)} #${esc(r.seq)} ${esc(r.symbol)} ${r.side}</span><button type="button" data-k="detx" aria-label="Close" style="color:#d8e4f0;border-color:#2a3a4d;padding:4px 12px;font-size:16px;">✕</button></div>
+      ${pic}
+      <div style="padding:10px 0 4px;">
+      ${kv('Environment', envBadge(r.env))}${kv('Status', r.status === 'open' ? 'OPEN' : esc(r.result || 'OTHER') + (r.closeReason ? ' <span style="color:#56657a">(' + esc(r.closeReason) + ')</span>' : ''))}
+      ${kv('Entry price', fmtP(r.entryPrice))}${kv('Exit price', r.exitPrice == null ? '—' : fmtP(r.exitPrice) + (r.exitCalc ? ' <span style="color:#56657a">calc</span>' : ''))}
+      ${kv('SL / TP', fmtP(r.sl) + ' / ' + fmtP(r.tp))}${kv('Size · leverage', (r.size == null ? '—' : '$' + fmtP(r.size)) + ' · ' + (r.lev == null ? '—' : r.lev + 'x'))}
+      ${kv('Entry / exit time', fmtT(r.entryTime) + ' → ' + fmtT(r.exitTime))}${kv('Duration', dur)}
+      ${kv(r.status === 'open' ? 'Unrealized PnL' : 'Realized PnL', fmtPct(r.pnlPct) + ' · ' + (r.pnlAbs == null ? '—' : (r.pnlAbs >= 0 ? '+$' : '−$') + Math.abs(r.pnlAbs).toFixed(2)))}
+      ${kv('Cockpit confluence at entry', b && b.confAtEntry != null ? String(b.confAtEntry) : '—')}${kv('Server score at entry', r.serverScore == null ? '—' : String(r.serverScore))}
+      ${kv('Threshold at entry', b && b.thrAtEntry != null ? String(b.thrAtEntry) : '—')}
+      ${kv('Radar mode', esc(b?.meta?.radarMode || '—'))}${kv('Regime', esc(b?.meta?.regime || r.regime || '—'))}${kv('Profile', esc(b?.profile || '—'))}
+      ${kv('Lens', esc(b?.meta?.lens || '—'))}${kv('Focus at entry', b?.meta?.focus == null ? '—' : b.meta.focus ? 'on' : 'off')}
+      ${kv('Mood before entry', esc(b ? b.pre : '—'))}${kv('ML', b?.meta ? (b.meta.ml == null ? 'coming soon' : Math.round(b.meta.ml * 100) + '%') : '—')}
+      ${kv('Gates at entry', gates)}
+      ${kv('Brain data', r.origin === 'brain' ? 'captured' : esc(r.reason || '—'))}
+      </div>
+      ${b && b.entryShape ? `<div style="display:flex;gap:12px;align-items:center;padding:8px 0;"><div>${miniRadar(b.entryShape)}</div><div style="font-size:11px;line-height:1.5;">${AX.map((a, i) => `${a} ${Math.round((b.entryShape[i] || 0) * 100)}%`).join('<br>')}</div></div>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:8px;"><button type="button" data-rp="${esc(r.key)}" style="color:${b && b.hasFrames ? '#d8e4f0' : '#56657a'};border-color:#2a3a4d;">Replay</button><button type="button" data-sh="${esc(r.key)}" style="color:#ffc85a;border-color:#4d3d1d;">Share</button></div>`
+    fillSnaps(det)
+    det.style.display = 'flex'; lockBody()
+    ;(det.querySelector('[data-k="detx"]') as HTMLElement)?.focus()
+  }
+  const refresh = () => rebuild()
+  REC.onChange = () => { void fetchHistory(true); rebuild() }
+
+  const findRow = (key: string) => JS.list.find((x) => x.key === key)
   async function onListClick(e: Event): Promise<void> {
-    const b = (e.target as HTMLElement).closest('[data-rp],[data-sh],[data-vall],[data-more]') as HTMLElement | null
+    const tgt = e.target as HTMLElement
+    if (tgt.closest('[data-k="detx"]')) { closeDet(); return }
+    const b = tgt.closest('[data-rp],[data-sh],[data-vall],[data-more],[data-det]') as HTMLElement | null
     if (!b) return
     if (b.dataset.vall) { openAll(); return }
     if (b.dataset.more) { UI.allShown += PAGE; renderAll(); return }
-    const id = b.dataset.rp || b.dataset.sh
-    const tr = REC.trades.find((x) => x.id === id)
-    if (!tr) return
-    if (b.dataset.sh) { closeAll(); void makeCard(tr); info(STR.shareReady); return }
-    const frames = tr.hasFrames ? ((await brainStorage.getFrames(tr.key)) as Frame[] | null) : null
+    if (b.dataset.det && !b.dataset.rp && !b.dataset.sh) { const r = findRow(b.dataset.det); if (r) { closeAll(); openDet(r) } return }
+    const r = findRow((b.dataset.rp || b.dataset.sh) as string)
+    if (!r) return
+    if (b.dataset.sh) { closeAll(); closeDet(); void makeCard(r); info(STR.shareReady); return }
+    const tr = r.rec
+    if (!tr || !tr.hasFrames) {
+      info(!tr ? 'Replay not available: ' + (r.reason || 'no brain data') + '.' : tr.onMain === false ? 'Replay not available: ' + (tr.noSnapReason || 'other symbol on screen') + '.' : STR.noReplay)
+      return
+    }
+    const frames = (await brainStorage.getFrames(tr.key)) as Frame[] | null
     if (!frames || !frames.length) { info(STR.noReplay); return }
-    closeAll(); UI.rep = { tr, frames, idx: 0 }; RS.prevSig = false; info(STR.replayStart(tr.id))
+    closeAll(); closeDet(); UI.rep = { tr, frames, idx: 0 }; RS.prevSig = false; info(STR.replayStart(tr.id))
     try { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch { /* vechi */ }
   }
   $('jr').addEventListener('click', (e) => { void onListClick(e) })
   $('alll').addEventListener('click', (e) => { void onListClick(e) })
+  det.addEventListener('click', (e) => { void onListClick(e) })
   $('allx').addEventListener('click', closeAll)
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeAll() }
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (det.style.display === 'flex') closeDet(); else closeAll() } }
   document.addEventListener('keydown', onKey)
-  $('pr').addEventListener('change', (e) => {
-    const t = e.target as HTMLInputElement
-    if (t && t.dataset.k === 'incdemo') { UI.demo = !!t.checked; pref.demo = UI.demo; savePref(pref); refresh() }
+  $('envchips').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('[data-env]') as HTMLElement | null
+    if (b) { JS.view = b.dataset.env as Env; rebuild() }
+  })
+  $('coins').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('[data-rmsat]') as HTMLElement | null
+    if (b) { pref.sats = pref.sats.filter((x) => x !== b.dataset.rmsat); savePref(pref); rebuild() }
+  })
+  $('coins').addEventListener('change', (e) => {
+    const t = e.target as HTMLSelectElement
+    if (t && t.dataset && 'addsat' in t.dataset && t.value) { if (pref.sats.length < MAX_SATS && !pref.sats.includes(t.value)) { pref.sats = pref.sats.concat(t.value); savePref(pref) } rebuild() }
   })
 
-  async function makeCard(tr: TradeRecord): Promise<void> {
+  async function makeCard(r: JRow): Promise<void> {
     const W = 720, H = 900, c = document.createElement('canvas'); c.width = W; c.height = H
     const x = c.getContext('2d'); if (!x) return
-    const col = (tr.pnlPct || 0) > 0 ? '#39ff6a' : '#ff4d6d', lbl = tr.result === 'MANUAL' ? 'CLOSED' : (tr.result || 'OTHER')
-    const draw = (im: HTMLImageElement | null) => {
+    const tr = r.rec
+    const pnl = r.pnlPct
+    const col = (pnl || 0) > 0 ? '#39ff6a' : '#ff4d6d', lbl = r.status === 'open' ? 'OPEN' : r.result === 'MANUAL' ? 'CLOSED' : (r.result || 'OTHER')
+    const draw = (im: HTMLImageElement | null, isLogo: boolean) => {
       x.fillStyle = '#040913'; x.fillRect(0, 0, W, H); x.strokeStyle = '#1d2c40'; x.lineWidth = 3; x.strokeRect(12, 12, W - 24, H - 24)
       x.fillStyle = '#e8eef6'; x.font = '500 52px serif'; x.fillText("ZEU'S", 48, 96); x.fillStyle = '#7c8ea3'; x.font = '500 20px monospace'; x.fillText('AI TRADING ANALYTICS', 50, 130)
-      if (im) x.drawImage(im, 90, 160, 540, 540)
-      x.fillStyle = '#d8e4f0'; x.font = '500 30px monospace'; x.fillText('#' + tr.id + ' ' + tr.symbol + ' ' + tr.side, 48, 752)
-      x.fillStyle = col; x.font = '500 56px monospace'; x.fillText(lbl + ' ' + (tr.pnlPct == null ? '—' : (tr.pnlPct >= 0 ? '+' : '') + tr.pnlPct.toFixed(2) + '%'), 48, 818)
-      x.fillStyle = '#7c8ea3'; x.font = '500 22px monospace'; x.fillText('mood before entry: ' + tr.pre + ' · conf ' + (tr.confAtEntry == null ? '—' : tr.confAtEntry), 48, 858)
-      x.textAlign = 'right'; x.fillStyle = '#c08bff'; x.fillText('@zeusterminal', W - 48, 96)
+      x.textAlign = 'right'; x.fillStyle = '#c08bff'; x.font = '500 22px monospace'; x.fillText('@zeusterminal', W - 48, 96); x.textAlign = 'left'
+      // ETICHETA MEDIULUI: mare si clara — un card DEMO/TESTNET nu exista fara ea.
+      const ec = ENV_COLOR[r.env]
+      x.font = '700 30px monospace'; const ew = x.measureText(r.env).width + 36
+      x.fillStyle = ec; x.globalAlpha = 0.16; x.fillRect(W - 48 - ew, 116, ew, 48); x.globalAlpha = 1
+      x.strokeStyle = ec; x.lineWidth = 3; x.strokeRect(W - 48 - ew, 116, ew, 48)
+      x.fillStyle = ec; x.fillText(r.env, W - 48 - ew + 18, 151)
+      if (im) { if (isLogo) x.drawImage(im, 210, 220, 300, 300); else x.drawImage(im, 90, 180, 540, 540) }
+      x.fillStyle = '#d8e4f0'; x.font = '500 30px monospace'; x.fillText('#' + r.seq + ' ' + r.symbol + ' ' + r.side, 48, 760)
+      x.fillStyle = col; x.font = '500 52px monospace'; x.fillText(lbl + ' ' + fmtPct(pnl), 48, 822)
+      x.fillStyle = '#7c8ea3'; x.font = '500 20px monospace'
+      x.fillText((tr ? 'mood ' + tr.pre + ' · conf ' + (tr.confAtEntry == null ? '—' : tr.confAtEntry) + ' · ' + (tr.meta?.radarMode || '—') + ' · ' + (tr.profile || '—') : 'no brain data · ' + (r.reason || '')), 48, 862)
       const url = c.toDataURL('image/png')
       const canShare = typeof navigator !== 'undefined' && typeof (navigator as any).canShare === 'function'
-      $('share').innerHTML = `<div style="padding:10px 0;border-top:1px solid #142235;"><img src="${url}" alt="Share card for trade ${esc(tr.id)}" style="width:100%;border-radius:10px;display:block;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:8px;font-size:11px;color:#7c8ea3;"><span>${STR.longPress}</span><span style="display:flex;gap:6px;">${canShare ? `<button type="button" data-k="shs" style="color:#ffc85a;border-color:#4d3d1d;padding:4px 10px;font-size:11px;">${STR.share}</button>` : ''}<button type="button" data-k="shx" style="color:#9fb3c8;border-color:#2a3a4d;padding:4px 10px;font-size:11px;">${STR.close}</button></span></div></div>`
+      $('share').innerHTML = `<div style="padding:10px 0;border-top:1px solid #142235;"><img src="${url}" alt="Share card for ${r.env} trade ${esc(r.seq)}" style="width:100%;border-radius:10px;display:block;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:8px;font-size:11px;color:#7c8ea3;"><span>${STR.longPress}</span><span style="display:flex;gap:6px;">${canShare ? `<button type="button" data-k="shs" style="color:#ffc85a;border-color:#4d3d1d;padding:4px 10px;font-size:11px;">${STR.share}</button>` : ''}<button type="button" data-k="shx" style="color:#9fb3c8;border-color:#2a3a4d;padding:4px 10px;font-size:11px;">${STR.close}</button></span></div></div>`
       $('shx').addEventListener('click', () => { $('share').innerHTML = '' })
       const shs = $('shs')
       if (shs) shs.addEventListener('click', () => {
         c.toBlob((blob) => {
           if (!blob) return
-          const file = new File([blob], `zeus-trade-${tr.id}.png`, { type: 'image/png' })
-          try { if ((navigator as any).canShare({ files: [file] })) void (navigator as any).share({ files: [file], title: 'Zeus Terminal trade #' + tr.id }) } catch { /* anulat */ }
+          const file = new File([blob], `zeus-${r.env.toLowerCase()}-trade-${r.seq}.png`, { type: 'image/png' })
+          try { if ((navigator as any).canShare({ files: [file] })) void (navigator as any).share({ files: [file], title: 'Zeus Terminal ' + r.env + ' trade #' + r.seq }) } catch { /* anulat */ }
         }, 'image/png')
       })
     }
-    const snap = snapCache.get(tr.key) || (tr.hasSnapshot ? await brainStorage.getSnapshot(tr.key) : null)
-    if (snap) { const im = new Image(); im.onload = () => draw(im); im.onerror = () => draw(null); im.src = snap } else draw(null)
+    const key = tr && tr.hasSnapshot ? tr.key : null
+    const snap = key ? (snapCache.get(key) || await brainStorage.getSnapshot(key)) : null
+    const im = new Image()
+    im.onload = () => draw(im, !snap); im.onerror = () => draw(null, false)
+    im.src = snap || ((import.meta as any).env?.BASE_URL || '/app/') + 'zeus-logo.png'
   }
 
   $('snd').addEventListener('click', () => {
@@ -313,7 +446,7 @@ export function startBrain(root: HTMLElement): () => void {
     const b = cv.getBoundingClientRect(), x = (e.clientX - b.left) * S / b.width, y = (e.clientY - b.top) * S / b.height, vs = RS.last
     if (!vs) return
     for (let q = 0; q < vs.sats.length; q++) {
-      const [sx, sy] = SAT_SLOT[q]
+      const [sx, sy] = SAT_SLOT[vs.sats[q].slot ?? q] || SAT_SLOT[q]
       if (Math.hypot(x - sx, y - sy) < 32) {
         const sc = vs.sats[q].sc == null ? '—' : vs.sats[q].sc
         if (UI.rep) { info(vs.sats[q].s + ' satellite, score ' + sc + '. Exit replay to switch.', { x: sx, y: sy, r: 30 }); return }
@@ -404,7 +537,14 @@ export function startBrain(root: HTMLElement): () => void {
         dom(view)
         acc = 0
       }
-      if (onScreen && t - lastM > 0.5) { lastM = t; updMatch() }
+      if (onScreen && t - lastM > 0.5) {
+        lastM = t; updMatch()
+        // mediul s-a schimbat (DEMO / TESTNET / REAL): jurnalul trece imediat pe noul mediu
+        const e = currentEnv()
+        if (e !== JS.env) { JS.env = e; JS.view = e; void fetchHistory(true) }
+        if (fN % 4 === 0) rebuild()        // PnL viu pe pozitiile deschise
+        else void fetchHistory()
+      }
       if (UI.rep) { const L = UI.rep.frames.length; drawStrip(UI.rep.frames, UI.rep.idx / L); $('rbar').textContent = 'REPLAY #' + UI.rep.tr.id + ' · ' + Math.round(UI.rep.idx / REC_HZ) + 's / ' + Math.round(L / REC_HZ) + 's · exit ✕' }
       else if (onScreen && fN % 2 === 0) { drawStrip(REC.frames.slice(-STRIP), null, STRIP); $('rbar').textContent = '' }
       REC.snap(nowMs, cv, !!UI.rep)
@@ -433,6 +573,7 @@ export function startBrain(root: HTMLElement): () => void {
   } catch { /* diagnostic */ }
   refresh()
   void REC.load().then(() => REC.reconcile()).then(refresh)
+  void fetchHistory(true)
   raf = requestAnimationFrame(loop)
 
   return () => {
@@ -441,7 +582,7 @@ export function startBrain(root: HTMLElement): () => void {
     try { io && io.disconnect() } catch { /* deja */ }
     document.removeEventListener('visibilitychange', onVis)
     document.removeEventListener('keydown', onKey)
-    closeAll()
-    try { modal.remove(); wrap.remove(); style.remove() } catch { /* deja scos */ }
+    closeAll(); closeDet()
+    try { modal.remove(); det.remove(); wrap.remove(); style.remove() } catch { /* deja scos */ }
   }
 }
