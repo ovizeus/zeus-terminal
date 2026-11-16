@@ -55,12 +55,12 @@ export function satsFrom(scan: any, main: string, sats: string[]): RawSat[] {
   const m = String(main || '').toUpperCase()
   const out: RawSat[] = []
   sats.slice(0, 3).forEach((full, slot) => {
-    if (full === m) return                     // principala nu e si satelit; coltul ramane gol
     const r = scan && typeof scan === 'object' ? scan[full] : null
     const sc = r ? Number(r.score) : NaN
     const mode: Mode = r && r.dir === 'bull' ? 'LONG' : r && r.dir === 'bear' ? 'SHORT' : 'RANGE'
     // Scanerul nu calculeaza cele 12 axe pe moneda → satelit desenat ca cerc (spec 3).
-    out.push({ symbol: shortSym(full), full, axes: null, score: Number.isFinite(sc) ? sc : null, mode, slot })
+    // principala ramane in coltul ei, doar marcata (colturi fixe, cerut de operator)
+    out.push({ symbol: shortSym(full), full, axes: null, score: Number.isFinite(sc) ? sc : null, mode, slot, isMain: full === m })
   })
   return out
 }

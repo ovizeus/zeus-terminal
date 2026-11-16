@@ -111,6 +111,8 @@ export class BrainRenderer {
         ctx.setLineDash([2, 6]); ctx.lineDashOffset = -t * 25; ctx.strokeStyle = rgba(c, 0.45); ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([])
       }
       ctx.beginPath(); ctx.arc(sx, sy, 30, 0, 7); ctx.strokeStyle = rgba(c, b ? 0.55 : 0.18); ctx.lineWidth = b ? 1.5 : 1; ctx.setLineDash(b ? [] : [2, 4]); ctx.stroke(); ctx.setLineDash([])
+      // principala: inel plin in culoarea modului, ca sa se vada care e (colturile nu se schimba)
+      if (y.main) { ctx.beginPath(); ctx.arc(sx, sy, 34, 0, 7); ctx.strokeStyle = rgba(col, 0.9); ctx.lineWidth = 2; ctx.stroke() }
       if (y.v) {
         const sp = this.pts(y.v, 1 + 0.04 * Math.sin(t * 3 + kk), 0, t, 0, 0, sx, sy, 24)
         this.spline(sp); ctx.fillStyle = rgba(c, 0.18); ctx.fill()
@@ -122,6 +124,7 @@ export class BrainRenderer {
       }
       ctx.fillStyle = rgba(c, 0.95); ctx.font = '500 10px monospace'; ctx.textAlign = 'center'; ctx.fillText(y.s, sx, sy + 3)
       ctx.fillStyle = 'rgba(170,190,215,.7)'; ctx.font = '500 9px monospace'; ctx.fillText(y.sc == null ? '—' : String(y.sc), sx, sy + (sy < C ? 44 : -36))
+      if (y.main) { ctx.fillStyle = rgba(col, 0.95); ctx.font = '700 7px monospace'; ctx.fillText('MAIN', sx, sy + 14) }
     })
     ctx.globalAlpha = 1
     ctx.fillStyle = rgba(col, 0.9); ctx.font = '500 14px monospace'; ctx.textAlign = 'left'; ctx.fillText(st.main, 14, S - 30)

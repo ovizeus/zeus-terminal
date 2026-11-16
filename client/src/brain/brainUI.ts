@@ -11,7 +11,7 @@ import { Recorder, type Frame } from './brainRecorder'
 import { brainStorage, type TradeRecord } from './brainStorage'
 import { buildRawFromZeusState, switchMain, currentEnv, currentPositions, shortSym } from './brainAdapter'
 import { buildJournal, brainCaptured, ENV_COLOR, type Env, type JRow, type ServerRow, type OpenPos } from './brainJournal'
-import { radarCoins, satsOf, MAX_SATS } from './brainPrefs'
+import { radarCoins, MAX_SATS } from './brainPrefs'
 import { MSCAN_SYMS } from '../core/config'
 import { loadPref, savePref } from './brainPrefs'
 
@@ -215,15 +215,16 @@ export function startBrain(root: HTMLElement): () => void {
   }
   let coinsSig = ''
   function renderCoins(): void {
-    const main = mainSym(), sats = satsOf(main, pref.coins)
+    const main = mainSym(), coins = pref.coins
     // Doar cand lista se schimba: altfel un meniu deschis s-ar inchide la fiecare reimprospatare.
-    const sig = main + '|' + pref.coins.join(',')
+    const sig = main + '|' + coins.join(',')
     if (sig === coinsSig) return
     coinsSig = sig
-    const chip = (sym: string, isMain: boolean) => `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid ${isMain ? '#39ff6a66' : '#2a3a4d'};border-radius:999px;color:${isMain ? '#39ff6a' : '#d8e4f0'};">${esc(shortSym(sym))}${isMain ? ' <span style="color:#56657a;font-size:10px;">main</span>' : `<button type="button" data-rmsat="${esc(sym)}" aria-label="Remove ${esc(shortSym(sym))}" style="padding:0 4px!important;border:0!important;color:#ff7a8f;font-size:13px!important;">✕</button>`}</span>`
-    const opts = MSCAN_SYMS.filter((x: string) => x !== main && !pref.coins.includes(x))
-    $('coins').innerHTML = chip(main, true) + sats.map((x) => chip(x, false)).join('')
-      + (sats.length < MAX_SATS && opts.length ? `<select data-addsat aria-label="Add satellite" style="background:#060c16;color:#9fb3c8;border:1px dashed #2a3a4d;border-radius:999px;padding:4px 8px;font:inherit;font-size:12px;"><option value="">+ satellite</option>${opts.map((x: string) => `<option value="${x}">${shortSym(x)}</option>`).join('')}</select>` : '')
+    const chip = (sym: string) => { const isMain = sym === main; return `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid ${isMain ? '#39ff6a66' : '#2a3a4d'};border-radius:999px;color:${isMain ? '#39ff6a' : '#d8e4f0'};">${esc(shortSym(sym))}${isMain ? ' <span style="color:#56657a;font-size:10px;">main</span>' : `<button type="button" data-rmsat="${esc(sym)}" aria-label="Remove ${esc(shortSym(sym))}" style="padding:0 4px!important;border:0!important;color:#ff7a8f;font-size:13px!important;">✕</button>`}</span>` }
+    const opts = MSCAN_SYMS.filter((x: string) => !coins.includes(x))
+    $('coins').innerHTML = coins.map(chip).join('')
+      + (coins.includes(main) ? '' : `<span style="display:inline-flex;align-items:center;padding:4px 10px;border:1px solid #39ff6a66;border-radius:999px;color:#39ff6a;">${esc(shortSym(main))} <span style="color:#56657a;font-size:10px;margin-left:6px;">main · chart</span></span>`)
+      + (coins.length < MAX_SATS && opts.length ? `<select data-addsat aria-label="Add satellite" style="background:#060c16;color:#9fb3c8;border:1px dashed #2a3a4d;border-radius:999px;padding:4px 8px;font:inherit;font-size:12px;"><option value="">+ satellite</option>${opts.map((x: string) => `<option value="${x}">${shortSym(x)}</option>`).join('')}</select>` : '')
   }
   function thumb(r: JRow): string {
     const k = r.rec && r.rec.hasSnapshot ? r.rec.key : null
@@ -389,7 +390,7 @@ export function startBrain(root: HTMLElement): () => void {
   })
   $('coins').addEventListener('change', (e) => {
     const t = e.target as HTMLSelectElement
-    if (t && t.dataset && 'addsat' in t.dataset && t.value) { if (satsOf(mainSym(), pref.coins).length < MAX_SATS && !pref.coins.includes(t.value)) { pref.coins = pref.coins.concat(t.value); savePref(pref) } rebuild() }
+    if (t && t.dataset && 'addsat' in t.dataset && t.value) { if (pref.coins.length < MAX_SATS && !pref.coins.includes(t.value)) { pref.coins = pref.coins.concat(t.value); savePref(pref) } rebuild() }
   })
 
   async function makeCard(r: JRow): Promise<void> {
@@ -478,8 +479,9 @@ export function startBrain(root: HTMLElement): () => void {
       if (Math.hypot(x - sx, y - sy) < 32) {
         const sc = vs.sats[q].sc == null ? '—' : vs.sats[q].sc
         if (UI.rep) { info(vs.sats[q].s + ' satellite, score ' + sc + '. Exit replay to switch.', { x: sx, y: sy, r: 30 }); return }
+        if (vs.sats[q].main) { info(vs.sats[q].s + ' is the main brain. Tap another coin to switch.', { x: sx, y: sy, r: 30 }); return }
         switchMain(vs.sats[q].full)
-        info('Main brain switched to ' + vs.sats[q].s + '. Satellites are the other scanned symbols; the brightest has the best score, beams show agreement.', { x: sx, y: sy, r: 30 }); return
+        info('Main brain switched to ' + vs.sats[q].s + '. Coins stay in their corners; the main one is ringed, beams show agreement.', { x: sx, y: sy, r: 30 }); return
       }
     }
     const dx = x - C, dy = y - C, d = Math.hypot(dx, dy), a = Math.atan2(dy, dx), na = (((a + Math.PI / 2) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)

@@ -34,9 +34,9 @@ describe('adaptorul citeste valorile reale', () => {
     expect(s.every((x) => x.axes === null)).toBe(true)
     expect(shortSym('ethusdt')).toBe('ETH')
   })
-  it('principala nu e si satelit; coltul ei ramane gol; nescanata = scor null', () => {
+  it('[16 nov] principala RAMANE in coltul ei, doar marcata; nescanata = scor null', () => {
     const s = satsFrom({}, 'SOLUSDT', ['SOLUSDT', 'ETHUSDT', 'BNBUSDT'])
-    expect(s.map((x) => [x.symbol, x.slot])).toEqual([['ETH', 1], ['BNB', 2]])
+    expect(s.map((x) => [x.symbol, x.slot, !!x.isMain])).toEqual([['SOL', 0, true], ['ETH', 1, false], ['BNB', 2, false]])
     expect(s.every((x) => x.score === null)).toBe(true)
   })
   it('contractul complet: conf si prag reale (confMin), ML si atentia lipsa = null', () => {
