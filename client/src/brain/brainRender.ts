@@ -93,6 +93,10 @@ export class BrainRenderer {
     if (r.prevZz && !st.zz) { r.waves.push(t); env.sound('wake'); if (!rp) env.info('Woke up: the market started moving again.') }
     r.prevZz = st.zz
     const col = r.dcol, hes = st.hes, conf = st.conf == null ? 0 : st.conf, mlv = r.dml, sleepy = r.dz > 0.5, focus = env.focus, RED = env.reduced
+    // [2026-11-16] Focus OFF e alegerea EXPLICITA a omului: unda si particulele se vad si
+    // cu „animatii reduse" in telefon (masurat pe telefonul operatorului: reduced=true,
+    // deci unda nu aparea niciodata). Setarea telefonului decide doar ca Focus porneste
+    // ON si opreste tremurul, respiratia si rotirea cetii.
     const period = (5 - 3 * r.drt[6]) * (1 - r.dz) + 8 * r.dz, br = 1 + (0.02 + r.dz * 0.03) * Math.sin(t * 2 * Math.PI / period)
     ctx.clearRect(0, 0, S, S)
     ctx.globalAlpha = r.sec
@@ -160,7 +164,7 @@ export class BrainRenderer {
     // fascicul de baleiaj
     const sw = (t * 1.1) % (Math.PI * 2)
     ctx.globalAlpha = r.sec
-    if (!focus && !sleepy && !RED) {
+    if (!focus && !sleepy) {
       // [2026-11-16] Unda de radar militar: dara de ~72° care se stinge in urma, pe tot
       // discul pana la armura, si o linie stralucitoare in fata. Desenata din FELII (nu
       // createConicGradient): WebView-ul Android al aplicatiei poate fi mai vechi decat
@@ -181,7 +185,7 @@ export class BrainRenderer {
     // spitele (grosime = atentia ML) + etichete
     for (let i = 0; i < N; i++) {
       const a = ang(i), x = C + Math.cos(a) * R, y = C + Math.sin(a) * R
-      if (!focus && !sleepy && !RED) {
+      if (!focus && !sleepy) {
         const d = Math.abs(((a + Math.PI * 2.5) % (Math.PI * 2)) - ((sw + Math.PI / 2) % (Math.PI * 2)))
         if (d < 0.08) r.flash[i] = 1
       }
@@ -204,7 +208,7 @@ export class BrainRenderer {
         ctx.setLineDash([3, 9]); ctx.lineDashOffset = RED ? 0 : -t * 30; ctx.strokeStyle = rgba(col, (s - 0.6) * 1.4); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([])
       }
       this.spline(this.pts(r.dsl, 1, 0, t)); ctx.setLineDash([4, 5]); ctx.strokeStyle = rgba(col, 0.28); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([])
-      if (!RED && Math.random() < 0.6 && r.parts.length < 36) { const i = Math.floor(Math.random() * N); if (Math.random() < r.drt[i]) r.parts.push({ i, d: 0.12, s: 0.004 + Math.random() * 0.007 }) }
+      if (Math.random() < 0.6 && r.parts.length < 36) { const i = Math.floor(Math.random() * N); if (Math.random() < r.drt[i]) r.parts.push({ i, d: 0.12, s: 0.004 + Math.random() * 0.007 }) }
     }
     for (let j = r.parts.length - 1; j >= 0; j--) {
       const p = r.parts[j]; p.d += p.s
