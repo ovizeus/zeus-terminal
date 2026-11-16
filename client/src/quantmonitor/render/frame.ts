@@ -26,7 +26,7 @@ function liqMap(): string[] {
   const bidK = Object.keys(bidB).map(Number).sort((a, b) => b - a).slice(0, 6)
   const askK = Object.keys(askB).map(Number).sort((a, b) => a - b).slice(0, 6)
   const maxV = Math.max(...bidK.map(k => bidB[k]), ...askK.map(k => askB[k]), 0.001)
-  const price = S?.price || 0
+  const price = S?._qmPrice || S?.price || 0
   const spread = S?._qmSpread || 0
   const askWalls: any[] = S?._qmAskWalls || []
   const bidWalls: any[] = S?._qmBidWalls || []
@@ -48,7 +48,7 @@ function liqMap(): string[] {
 // --- helper: liqChart (liquidation map chart) ---
 function liqChart(): string[] {
   const S = w.S
-  const price = S?.price || 0
+  const price = S?._qmPrice || S?.price || 0
   if (!price) return ['  <span class="dg">Waiting for price data...</span>']
 
   const dec = 0
@@ -174,7 +174,7 @@ export function renderFrame(): string {
   const wsOK = !!S._qmWsOK
 
   // Alias all b.xxx reads to S / S._qmXxx
-  const price: number = S.price || 0
+  const price: number = S._qmPrice || S.price || 0
   const chgP: number = S._qmChgP || 0
   const h24: number = S._qmH24 || 0
   const l24: number = S._qmL24 || 0
@@ -359,7 +359,9 @@ export function renderFrame(): string {
   left.push(`<span class="dg">PRICE</span>  : <span class="w">$${price.toFixed(2)}</span> ${chgP >= 0 ? `<span class="g">+${chgP.toFixed(2)}%\u25B2</span>` : `<span class="r">${chgP.toFixed(2)}%\u25BC</span>`}`)
   left.push(`<span class="dg">HIGH</span>   : $${h24.toFixed(2)}`)
   left.push(`<span class="dg">LOW</span>    : $${l24.toFixed(2)}`)
-  left.push(`<span class="dg">VOL</span>    : ${vol.toLocaleString(undefined, { maximumFractionDigits: 0 })}`)
+  // [2026-11-15] Volumul pe 24h, in dolari (scurt), cu cantitatea in moneda alaturi.
+  const qv: number = S._qmQuoteVol || 0
+  left.push(`<span class="dg">VOL</span>    : ${qv > 0 ? (qv >= 1e9 ? '$' + (qv / 1e9).toFixed(2) + 'B' : qv >= 1e6 ? '$' + (qv / 1e6).toFixed(1) + 'M' : '$' + Math.round(qv).toLocaleString()) + ' <span class="dg">(' + vol.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ')</span>' : vol.toLocaleString(undefined, { maximumFractionDigits: 0 })}`)
   left.push(`<span class="dg">BID</span>: $${bid.toFixed(2)} <span class="dg">ASK</span>: $${ask.toFixed(2)}`)
   left.push(`<span class="dg">SPREAD</span> : $${spread.toFixed(2)}`)
   left.push(``)

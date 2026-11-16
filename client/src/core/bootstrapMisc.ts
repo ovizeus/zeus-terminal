@@ -17,6 +17,7 @@ import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
 import { useBrainStore } from '../stores/brainStore'
 import { usePinLockStore } from '../stores/pinLockStore'
+import { pinHintSet, currentUid } from './pinHint'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 
 // ===== PIN LOCK =====
@@ -65,7 +66,12 @@ export async function _pinIsSet(): Promise<boolean> {
 }
 
 export async function _pinCheckLock(): Promise<void> {
-  const isSet = await _pinIsSet(); if (!isSet) return
+  const isSet = await _pinIsSet()
+  // [2026-11-15] Raspunsul serverului tine la zi semnul de pe dispozitiv
+  // (core/pinHint.ts). Daca lacatul fusese pus devreme pe baza semnului si
+  // serverul spune ca nu exista PIN, il ridicam.
+  pinHintSet(currentUid(), isSet)
+  if (!isSet) { if (usePinLockStore.getState().visible) usePinLockStore.getState().setVisible(false); return }
   if (_pinIsUnlocked()) return
   // [BATCH3-Q] Show the React-rendered lock screen via Zustand store.
   // The legacy #pinLockScreen div was never in the React tree, so the old
@@ -127,6 +133,7 @@ export async function pinActivate(): Promise<void> {
     if (d.ok) {
       inp.value = ''; conf.value = ''; if (curEl) curEl.value = ''
       _pinSetCache = true
+      pinHintSet(currentUid(), true)
       if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + (alreadySet ? ' PIN changed!' : ' PIN activated!') }
       _pinUpdateUI(); _pinMarkUnlocked()
     }
@@ -148,6 +155,7 @@ export async function pinRemove(): Promise<void> {
     const d = await r.json()
     if (d.ok) {
       _pinSetCache = false; _pinClearUnlocked()
+      pinHintSet(currentUid(), false)
       try { localStorage.removeItem('zeus_pin_hash') } catch (_) { }
       if (curEl) curEl.value = ''
       if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN disabled.' }

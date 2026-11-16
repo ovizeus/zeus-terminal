@@ -10,6 +10,7 @@ import { normalizeKlines } from './engines/klinesNorm'
 import { calcWyckoff, calcCVDDivergence, calcVolumeProfile } from './engines/wyckoff'
 import { buildLiqEstimate, fetchTopTraderPositionRatio, fetchLiqHistory } from './engines/liqMap'
 import { fetchBasisRate } from '../data/basisRate'
+import { fetchTicker24 } from './engines/ticker24'
 import { fetchCrossExchangeFR } from '../data/crossExchangeFR'
 import { fetchBTCDominance, fetchStablecoins } from '../data/btcDominance'
 import { fetchWeeklyKlines, fetchDailyKlines, calcS2F, calcLogRegression, calcMarketCycle } from '../data/onChainMetrics'
@@ -142,12 +143,20 @@ export function _syncQmVars(): void {
   S._qmLongRatio = S.ls?.l ? S.ls.l / 100 : 0
   S._qmShortRatio = S.ls?.s ? S.ls.s / 100 : 0
   S._qmWsOK = !!(S.bnbOk || S.bybOk)
-  S._qmChgP = S.chg24hPct || 0
-  S._qmH24 = S.high24h || 0
-  S._qmL24 = S.low24h || 0
-  S._qmVol = S.vol24h || 0
+  // [2026-11-15] Datele de 24h sunt ale monedei din chart — daca moneda s-a
+  // schimbat si ticker-ul inca e al celei vechi, nu le aratam (0 = „inca nu").
+  const _t24ok = !S.ticker24Sym || String(S.symbol || 'BTCUSDT').toUpperCase() === S.ticker24Sym
+  S._qmChgP = _t24ok ? (S.chg24hPct || 0) : 0
+  S._qmH24 = _t24ok ? (S.high24h || 0) : 0
+  S._qmL24 = _t24ok ? (S.low24h || 0) : 0
+  S._qmVol = _t24ok ? (S.vol24h || 0) : 0
+  S._qmQuoteVol = _t24ok ? (S.quoteVol24h || 0) : 0
   S._qmBid = S.bids?.[0]?.p || 0
   S._qmAsk = S.asks?.[0]?.p || 0
+  // PRICE: pretul viu; pana soseste (sau dupa o schimbare de moneda, cand e
+  // pus pe 0) mijlocul carte de ordine, apoi pretul de marcaj, apoi ultimul
+  // pret din ticker. Inainte panoul arata PRICE 0.00 langa BID/ASK reale.
+  S._qmPrice = qmDisplayPrice(S)
   S._qmSpread = S._qmAsk > 0 && S._qmBid > 0 ? S._qmAsk - S._qmBid : 0
   // FR from server funding cache (basisRate.ts populates S.fr)
   if (S.fr && S.fr !== 0) S._qmFr = S.fr
@@ -198,16 +207,42 @@ export function _syncQmVars(): void {
   S._qmCycleDaysRemain = S.cycleDaysRemain || 0
 }
 
+// [2026-11-15] „Pe telefon, daca intru, se blocheaza." Bucla rescria tot ecranul
+// (sute de randuri de text cu culori) la fiecare 500 ms, si in fundal, si cand
+// panoul nu se vedea; o exceptie dintr-un calcul iesea necaptata in fiecare tic.
+// Acum: nu deseneaza cand pagina e ascunsa sau panoul nu e pe ecran, nu rescrie
+// DOM-ul cand nu s-a schimbat nimic, prinde erorile, iar pe ecrane inguste
+// (telefon) deseneaza o data pe secunda.
+let _lastHtml = ''
 function startRenderLoop(screenId: string): void {
+  const every = (typeof window !== 'undefined' && window.innerWidth && window.innerWidth < 760) ? 1000 : 500
   renderIv = setInterval(() => {
     if (_destroyed) return
+    if (typeof document !== 'undefined' && document.hidden) return
     const el = document.getElementById(screenId)
-    if (!el) return
-    _syncQmVars()
-    runAllEngines()
-    el.innerHTML = renderFrame()
-  }, 500)
+    if (!el || (el as HTMLElement).offsetParent === null && el.getClientRects().length === 0) return
+    try {
+      _syncQmVars()
+      runAllEngines()
+      const html = renderFrame()
+      if (html !== _lastHtml) { el.innerHTML = html; _lastHtml = html }
+    } catch (e: any) {
+      console.warn('[QM] render tick failed:', e?.message || e)
+    }
+  }, every)
   intervals.push(renderIv)
+}
+
+/** Pretul afisat: viu, apoi mijlocul cartii, apoi marcajul, apoi ultimul din ticker. */
+export function qmDisplayPrice(S: any): number {
+  const live = Number(S?.price)
+  if (live > 0) return live
+  const b = Number(S?.bids?.[0]?.p), a = Number(S?.asks?.[0]?.p)
+  if (b > 0 && a > 0 && a >= b) return (a + b) / 2
+  const mark = Number(S?.markPrice)
+  if (mark > 0) return mark
+  const last = Number(S?.last24h)
+  return last > 0 ? last : 0
 }
 
 export async function init(screenId: string, _canvasId?: string): Promise<void> {
@@ -262,6 +297,7 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
 
   // Fetch new data sources
   await Promise.all([
+    fetchTicker24(),
     fetchBasisRate(),
     fetchCrossExchangeFR(),
     fetchBTCDominance(),
@@ -286,6 +322,7 @@ export async function init(screenId: string, _canvasId?: string): Promise<void> 
 
   // Start periodic fetches
   intervals.push(setInterval(fetchBasisRate, 5000))
+  intervals.push(setInterval(fetchTicker24, 30000))
   intervals.push(setInterval(fetchCrossExchangeFR, 30000))
   intervals.push(setInterval(fetchBTCDominance, 300000))
   intervals.push(setInterval(fetchStablecoins, 600000))
@@ -320,6 +357,7 @@ export function destroy(): void {
   stopLiqPersist()
   intervals.forEach(iv => clearInterval(iv))
   intervals.length = 0
+  _lastHtml = ''
   if (renderIv) { clearInterval(renderIv); renderIv = null }
   if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0 }
   disconnectOKXLiq()

@@ -92,6 +92,13 @@ export function App() {
   // Brain computation engine (runs on kline updates)
   // NOTE: When bridge is active, old brain.js runs instead (more complete).
   // React brain still runs as fallback — old brain overwrites its DOM output.
+  // [2026-11-15] PIN: intrebam serverul imediat dupa autentificare, nu la
+  // capatul pornirii motorului (acolo raspunsul venea dupa 1,5–2 s).
+  useEffect(() => {
+    if (!authenticated) return
+    import('./core/bootstrapMisc').then((m) => { void m._pinCheckLock() }).catch(() => {})
+  }, [authenticated])
+
   useBrainEngine(authenticated)
 
   // Forecast engine — QEB, probability score, scenarios (runs after brain)

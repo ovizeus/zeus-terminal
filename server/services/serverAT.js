@@ -2624,6 +2624,9 @@ function _enqueueEmergencyClose(userId, pos, exitType) {
     }
 }
 
+// Inchideri cerute de utilizator (buton Close / Close all), nu de motor.
+const MANUAL_EXIT_TYPES = new Set(['MANUAL_CLIENT']);
+
 function _closePosition(idx, pos, exitType, price, pnl) {
     // [MULTI-USER] Hard guard — no fallback to user 1
     if (!pos.userId) { logger.error('AT_ENGINE', '_closePosition without pos.userId seq=' + pos.seq + ' — aborting'); return; }
@@ -3065,7 +3068,12 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     else { us.dailyPnLDemo = +(us.dailyPnLDemo + pnl).toFixed(2); }
     // [Task S8-P1-4 2026-05-28] Update streak counters for brain-gate parity.
     _updateStreakCounters(us, pnl);
-    _checkKillSwitch(userId);
+    // [2026-11-15] O inchidere facuta de OM nu declanseaza kill switch-ul.
+    // Operatorul: „dau close all si sare din prima kill switch-ul — e manual,
+    // nu conteaza ca le-a deschis AT". Pierderea ramane in dailyPnL (deci o
+    // inchidere AUTOMATA de dupa o vede), dar decizia de a te inchide singur nu
+    // se pedepseste blocandu-te.
+    if (!MANUAL_EXIT_TYPES.has(exitType)) _checkKillSwitch(userId);
 
     // [RE-ENTRY + S5] Set close cooldown DEADLINE (now + CLOSE_COOLDOWN_MS) and
     // persist it per-user so PM2 reload does not weaken the [RE-ENTRY] gate.
@@ -5276,6 +5284,31 @@ function patchPositionFill(userId, seq, patch) {
     return { ok: true, seq, position: pos };
 }
 
+/**
+ * [2026-11-15] Inchide toate pozitiile AutoTrade ale utilizatorului din modul in
+ * care ruleaza acum (demo sau live). NU porneste kill switch-ul — asta face
+ * oprirea de urgenta (`activateKillSwitch`), nu butonul „Close all".
+ * Fiecare inchidere trece prin `closeBySeq` (aceeasi taxa, aceeasi garda).
+ */
+function closeAllForUser(userId) {
+    if (!userId) return { ok: false, error: 'userId required' };
+    const us = _uState(userId);
+    const mode = us.engineMode === 'live' ? 'live' : 'demo';
+    const seqs = _positions
+        .filter((p) => p && p.userId === userId && p.autoTrade === true && (p.mode || 'demo') === mode && !p._livePending)
+        .map((p) => p.seq);
+    let closed = 0, pnl = 0;
+    const failed = [];
+    for (const seq of seqs) {
+        const r = closeBySeq(userId, seq);
+        if (r && r.ok) { closed++; pnl += Number(r.pnl) || 0; } else failed.push(seq);
+    }
+    audit.record('AT_CLOSE_ALL', { userId, mode, closed, failed: failed.length, pnl: +pnl.toFixed(2) }, 'user');
+    logger.info('AT_ENGINE', `Close all uid=${userId} mode=${mode} closed=${closed} failed=${failed.length} pnl=${pnl.toFixed(2)}`);
+    _notifyChange(userId);
+    return { ok: true, mode, closed, failed, pnl: +pnl.toFixed(2), killActive: !!us.killActive };
+}
+
 function closeBySeq(userId, seq) {
     const gk = `${userId}:${seq}`;
     if (_closingGuard.has(gk)) {
@@ -7159,6 +7192,7 @@ module.exports = {
     _resolveExecutionEnv,
     patchPositionFill,
     closeBySeq,
+    closeAllForUser,
     addOnPosition,
     updateControlMode,
     updateDslParams,

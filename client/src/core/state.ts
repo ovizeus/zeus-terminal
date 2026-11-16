@@ -1455,7 +1455,7 @@ export const ZState = (() => {
     if (typeof state.atActive === 'boolean' && typeof AT !== 'undefined') {
       if (AT.enabled !== state.atActive) {
         AT.enabled = state.atActive
-        if (typeof _applyATToggleUI === 'function') _applyATToggleUI(state.atActive)
+        if (typeof _applyATToggleUI === 'function') _applyATToggleUI(state.atActive, { silent: true })
       }
     }
     // [BUG-T7 2026-05-17] Mirror per-mode atActive into uiStore for ModeBar

@@ -25,9 +25,16 @@ describe('confirmarile simple nu mai raman lipite pe ecran', () => {
         const sticky = read(f).split('\n').filter((l) => /toast\([^\n]*, 0[,)]/.test(l) && !/^\s*\/\//.test(l))
         expect(sticky).toEqual([])
     })
-    it('⛔ mesajele de BLOCARE din trading raman lipite, dinadins', () => {
+    it('⛔ pozitia NEPROTEJATA ramane lipita, dinadins', () => {
         const at = read('../../trading/autotrade.ts')
-        expect(at).toMatch(/toast\('Kill switch active[^']*', 0,/)
         expect(at).toMatch(/UNPROTECTED — ' \+ pos\._unprotectedReason, 0,/)
+    })
+    // [2026-11-15] Operatorul a cerut explicit ca „Kill switch active — press
+    // RESET…" sa dispara singur: starea ramane vizibila in panoul AT (KILL
+    // ACTIVE + butonul RESET), deci mesajul nu mai are nevoie sa stea pe ecran.
+    it('mesajul de kill switch dispare singur', () => {
+        const at = read('../../trading/autotrade.ts')
+        expect(at).not.toMatch(/toast\('Kill switch active[^']*', 0,/)
+        expect(at).toMatch(/toast\('Kill switch active[^']*', 6000,/)
     })
 })

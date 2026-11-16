@@ -144,7 +144,7 @@ function _isServerDemoATActive(): boolean {
 // AT UI helpers
 export function toggleAutoTrade(): void {
   if (getATKillTriggered()) {
-    toast('Kill switch active — press RESET in status bar or wait', 0, _ZI.noent)
+    toast('Kill switch active — press RESET in status bar or wait', 6000, _ZI.noent)
     if (useATStore.getState().ui.status.action !== 'resetKill') {
       var _lossExtra = (AT.killLoss && AT.killLimit) ? ` (loss $${(+AT.killLoss).toFixed(2)} / limit $${(+AT.killLimit).toFixed(2)})` : ''
       _atUI({ status: { icon: 'siren', text: `KILL ACTIVE${_lossExtra}`, action: 'resetKill' } })
@@ -232,7 +232,12 @@ export function _doEnableAT(): void {
   })
 }
 
-export function _applyATToggleUI(enabled: any): void {
+// [2026-11-15] `silent`: chemat din sincronizarea cu serverul. Acolo, cu kill
+// switch-ul activ, serverul spune „AT pornit", clientul il opreste local, iar la
+// urmatoarea sincronizare diferenta reapare — deci mesajul „Kill switch active…"
+// se reafisa la fiecare ciclu si parea lipit pe ecran pana la RESET. Mesajul
+// apare acum doar cand OMUL incearca sa porneasca AT.
+export function _applyATToggleUI(enabled: any, opts?: { silent?: boolean }): void {
   if (enabled) {
     // FIX v118: reset zi dacă s-a schimbat data
     _bmResetDailyIfNeeded()
@@ -257,7 +262,7 @@ export function _applyATToggleUI(enabled: any): void {
     // Kill switch is cleared ONLY by: 1) resetKillSwitch() user action, 2) UTC day change (server-side)
     if (getATKillTriggered()) {
       AT.enabled = false
-      toast('Kill switch active — press RESET or wait for next day', 0, _ZI.noent)
+      if (!opts?.silent) toast('Kill switch active — press RESET or wait for next day', 6000, _ZI.noent)
       return
     }
     _atUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Active — scan every 30s', action: null } })
@@ -1885,7 +1890,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   const _lossStr = (reason === 'daily_loss' && Number.isFinite(+realPnL)) ? ` (loss $${(+realPnL).toFixed(2)} / ${(+(killPct2) || 5).toFixed(1)}% of $${(+(bal2) || 0).toFixed(0)})` : ''
   _atUI({ btnClass: 'at-main-btn off', btnText: 'AUTO TRADE OFF', killBtnTriggered: true, status: { icon: 'siren', text: `KILL ACTIVE${_lossStr}`, action: 'resetKill' } })
   atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} positions closed | PnL: ${pnlStr}`)
-  toast(closedCount + ' positions closed | PnL: ' + pnlStr, 0, _ZI.siren)
+  toast(closedCount + ' positions closed | PnL: ' + pnlStr, 8000, _ZI.siren)
   if (w.S.alerts?.enabled) sendAlert('Zeus Kill Switch', msg, 'kill')
   // [FIX UI] Update banners immediately after kill trigger
   if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()

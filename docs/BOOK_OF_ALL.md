@@ -14786,3 +14786,20 @@ Cerute printr-un `/goal`, cu „spune-mi întâi ce ai înţeles"; operatorul a 
 **Teste:** noi `supportEntry` (11), `autoUpdate` (9), `alertsToast` (10), `recenterPrice` (4), `timezones` (9), `setTZ` (4). Două teste din `bookRender` citeau desenul fără să-l aştepte şi cădeau intermitent sub suita completă; acum aşteaptă. Client 2.160, de două ori la rând, typecheck curat.
 
 **Neverificat:** nimic nu a fost văzut randat; confirmă operatorul pe telefon şi pe calculator.
+
+## 🛑 2026-11-16 — b387: Close all fără kill switch, Quantitative Monitor, PIN înainte de aplicaţie
+
+Raportate de operator după ce a confirmat cele 8 puncte („da merge").
+
+**1. „Dau Close all şi sare din prima kill switch-ul."** Butonul „Close all" din panoul AutoTrade chema `/api/at/kill`, adică OPRIREA DE URGENŢĂ (`activateKillSwitch`): pune kill switch-ul şi blochează intrările până la RESET, indiferent de profit. Nu era o pierdere care declanşa, era butonul greşit. Acum: `POST /api/at/close-all` → `serverAT.closeAllForUser` închide pozițiile AT din modul curent (demo sau live/testnet), fiecare prin `closeBySeq`, cu confirmare înainte, şi nu atinge kill switch-ul. În plus, o închidere cerută de om (`MANUAL_CLIENT`, `MANUAL_EXIT_TYPES`) nu mai rulează `_checkKillSwitch`: pierderea rămâne socotită în `dailyPnL`, deci o închidere a motorului de după o vede, dar decizia omului de a ieşi nu-l blochează. Testele `at-close-all.test.js` (7); mutaţia care scoate garda e prinsă de 2.
+
+**2. „Kill switch active — press RESET or wait for next day" nu dispărea.** Cu kill switch-ul activ, serverul raportează `atActive=true`, clientul îl opreşte local (`AT.enabled=false`) şi la următoarea sincronizare diferenţa reapare — `state.ts` chema `_applyATToggleUI` şi mesajul se afişa din nou la fiecare ciclu. Acum sincronizarea e tăcută (`{ silent: true }`); mesajul apare doar la o apăsare a omului, 6 s. Starea rămâne vizibilă în panoul AT (KILL ACTIVE + RESET).
+
+**3. Quantitative Monitor: PRICE 0.00, LOW $0.00, VOL 0 lângă BID/ASK reale.** HIGH/LOW/VOL/schimbarea citeau `S.high24h/low24h/vol24h/chg24hPct` — nicio linie din aplicaţie nu le scria, deci erau mereu 0 (HIGH arăta ceva doar din întâmplare, nu). Acum `quantmonitor/engines/ticker24.ts` le ia din `/api/market/ticker24hr` la 30 s, cu aceeaşi cerere ca lista de urmărire când moneda e în ea (acelaşi cache pe server, zero trafic nou spre bursă); un răspuns sosit după o schimbare de monedă se aruncă. PRICE: `qmDisplayPrice` — preţul viu, apoi mijlocul cărţii, apoi marcajul, apoi ultimul din ticker (după o schimbare de monedă preţul viu e 0 câteva clipe). VOL arată acum dolarii pe 24h, cu cantitatea alături.
+**Blocajul pe telefon:** bucla rescria tot panoul (sute de rânduri colorate) la 500 ms, şi în fundal, şi cu panoul ascuns; o excepţie dintr-un calcul ieşea necaptată la fiecare tic. Acum nu desenează cu pagina ascunsă sau panoul în afara ecranului, nu rescrie DOM-ul dacă textul e acelaşi, prinde erorile şi pe ecran îngust desenează la 1 s. ⚠️ Nu am reprodus blocajul pe un telefon; e reparaţia cauzelor vizibile în cod, confirmă operatorul.
+
+**4. PIN-ul apărea după aplicaţie (1,5–2 s).** Verificarea întreba serverul abia la capătul `startApp`, după mai multe cereri. Acum `core/pinHint.ts` ţine pe dispozitiv, per cont (`zeus_pin_hint:<uid>`), că acel cont are PIN; la autentificare (`authStore`) lacătul se pune odată cu aplicaţia, iar serverul e întrebat imediat după autentificare (`App.tsx`). Serverul rămâne cel care decide: fără PIN, lacătul se ridică şi semnul se şterge. Semnul nu poate deschide nimic, doar închide mai devreme. Prima intrare după actualizare încă vine cu întârzierea veche (semnul se scrie la ea).
+
+**Test vechi schimbat dinadins:** `alertsToast.test.ts` (scris de mine pe 15 nov) cerea ca mesajul de kill switch să rămână lipit; operatorul a cerut explicit să dispară. Mesajul de poziţie NEPROTEJATĂ rămâne lipit, dinadins.
+
+Teste: client 2.176, server 10.865 pe 4 sharduri (3 sărite), typecheck curat. Repornire cu ban activ doar pe TESTNET (până la 04:45 UTC); mainnet curat.

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { authApi } from '../services/api'
+import { lockEarlyIfKnown } from '../core/pinHint'
 import { accessLevelFrom, setAccessLevel as applyAccessLevel, resetAccessLevel, type AccessLevel } from '../core/betaGate'
 
 interface AuthStore {
@@ -44,6 +45,8 @@ export const useAuthStore = create<AuthStore>()((set) => ({
       if (res.ok && data.id) {
         const accessLevel = accessLevelFrom(data as { role?: unknown; accessLevel?: unknown })
         applyAccessLevel(accessLevel)
+        // [2026-11-15] Lacatul de PIN se pune ODATA cu aplicatia, nu dupa ea.
+        lockEarlyIfKnown(String(data.id))
         set({
           accessLevel,
           accessKnown: true,

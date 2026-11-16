@@ -3,6 +3,7 @@ import { useATStore, useSettingsStore, useUiStore } from '../../stores'
 import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
 import { toast } from '../../data/marketDataHelpers'
+import { appConfirm } from '../common/confirmDialog'
 // [Phase 8D1] mscan state is server-owned — initial value comes from the
 // already-loaded settingsStore. The settingsStore._syncToWindow writes the
 // LS mirror that legacy engines (data/klines.ts::_mscanGetActive) read, so
@@ -226,8 +227,37 @@ export function AutoTradePanel() {
     }
   }
 
-  async function handleKill() {
-    await api.post('/api/at/kill', { reason: 'manual' })
+  // [2026-11-15] „Close all" inchide pozitiile AutoTrade din modul curent si
+  // ATAT. Pana azi chema /api/at/kill — oprirea de urgenta, care porneste kill
+  // switch-ul si blocheaza intrarile pana la RESET. Operatorul: „dau close all
+  // si sare din prima kill switch-ul; e manual, nu trebuie sa sara".
+  const [closingAll, setClosingAll] = useState(false)
+  async function handleCloseAll() {
+    if (closingAll) return
+    const { confirmed } = await appConfirm({
+      title: 'Close all AutoTrade positions',
+      body: 'Every open AutoTrade position in the current mode is closed at the market price. AutoTrade stays armed and the kill switch is not touched.',
+      tone: 'danger', confirmLabel: 'Close all', cancelLabel: 'Cancel',
+    })
+    if (!confirmed) return
+    setClosingAll(true)
+    try {
+      const r: any = await api.raw('POST', '/api/at/close-all', {})
+      if (r && r.ok) {
+        const n = Number(r.closed) || 0
+        const pnl = Number(r.pnl) || 0
+        toast(n === 0 ? 'No AutoTrade positions open'
+          : `Closed ${n} position${n === 1 ? '' : 's'} · PnL ${pnl >= 0 ? '+' : '−'}$${Math.abs(pnl).toFixed(2)}`
+          + (r.failed && r.failed.length ? ` · ${r.failed.length} still closing` : ''), 4000)
+      } else {
+        toast('Close all failed: ' + ((r && r.error) || 'unknown'), 5000)
+      }
+    } catch (e: any) {
+      toast('Close all failed: ' + (e?.message || 'network error'), 5000)
+    } finally {
+      setClosingAll(false)
+      try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) { /* afisaj */ }
+    }
   }
 
   const [toggling, setToggling] = useState(false)
@@ -360,11 +390,12 @@ export function AutoTradePanel() {
         {/* EMERGENCY STOP — always in the panel, never behind the drawer */}
         <button
           type="button"
-          onClick={handleKill}
+          onClick={handleCloseAll}
+          disabled={closingAll}
           className={`zi-kill${killed ? ' triggered' : ''}`}
           style={{ ...ACTION_BTN, background: 'none', border: `1px solid ${killed ? 'var(--zi-neg)' : '#4a2630'}`, color: 'var(--zi-neg)', width: 'auto', margin: 0 }}
         >
-          Close all
+          {closingAll ? 'Closing…' : 'Close all'}
         </button>
       </div>
     </ZiPanel>

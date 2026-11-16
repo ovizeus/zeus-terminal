@@ -741,6 +741,13 @@ app.post('/api/at/close', atCriticalLimit, (req, res) => {
   const result = serverAT.closeBySeq(req.user.id, seq);
   res.json(result);
 });
+// [2026-11-15] „Close all" din panoul AutoTrade: inchide pozitiile AT din modul
+// curent si atat. Butonul chema pana acum /api/at/kill, adica oprirea de urgenta
+// care porneste kill switch-ul — de aici „dau close all si sare kill switch-ul".
+app.post('/api/at/close-all', atCriticalLimit, (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Auth required' });
+  res.json(serverAT.closeAllForUser(req.user.id));
+});
 // [BUG3 FIX] Client-initiated controlMode update (Take Control / Release)
 app.post('/api/at/control', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Auth required' });
