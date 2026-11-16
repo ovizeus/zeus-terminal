@@ -5504,20 +5504,34 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* ═══════════════════════════════════════════════════════════════
    PIN LOCK SCREEN — 1:1 from main.css lines 11271-11390
    ═══════════════════════════════════════════════════════════════ */
-#pinLockScreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(165deg, #060a10 0%, #0a1018 40%, #080e16 100%); z-index: 99999; display: flex; align-items: center; justify-content: center }
-.pin-lock-inner { text-align: center; width: 320px; animation: wlcSlideIn .5s ease-out }
-.pin-lock-logo { font-size: 48px; margin-bottom: 12px; filter: drop-shadow(0 0 20px var(--gold-a40)) }
-.pin-lock-title { font-family: 'Cinzel', serif; font-size: 22px; color: var(--gold); letter-spacing: 4px; margin-bottom: 6px; text-shadow: 0 0 30px #f0c04022 }
-.pin-lock-sub { font-size: 12px; color: #556; margin-bottom: 28px; letter-spacing: 1px }
-.pin-lock-field { display: block; width: 200px; margin: 0 auto 16px; padding: 14px; background: #0b1120; border: 2px solid #1a2a3a; border-radius: 12px; color: #d0d8e0; font-size: 22px; text-align: center; letter-spacing: 8px; font-family: var(--ff); outline: none; transition: border-color .2s }
-.pin-lock-field:focus { border-color: var(--gold-a40) }
-.pin-lock-btn { display: block; width: 200px; margin: 0 auto 12px; padding: 13px; background: linear-gradient(135deg, var(--gold), #e0a820); color: #0a0f18; border: none; border-radius: 10px; font-family: 'Cinzel', serif; font-size: 13px; font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: all .2s; box-shadow: 0 4px 16px var(--gold-a20) }
-.pin-lock-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px var(--gold-a33) }
-.pin-lock-msg { min-height: 20px; font-size: 11px; color: #ff4455; margin-bottom: 8px }
-.pin-lock-hint { font-size: 9px; color: #333; letter-spacing: 1px }
+/* [2026-11-15] Ecranul de PIN refacut: sobru, institutional, fara galben.
+   Fond de ardezie, un singur accent rece, logo-ul Zeus sus. Functiile sunt
+   neschimbate (PinLockScreen.tsx). */
+#pinLockScreen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: radial-gradient(120% 80% at 50% 0%, #121b27 0%, #080d14 55%, #05080d 100%) }
+.pin-lock-inner { text-align: center; width: 100%; max-width: 340px; padding: 30px 26px 24px; border-radius: 16px;
+  background: linear-gradient(180deg, rgba(18,26,37,.92) 0%, rgba(11,17,25,.92) 100%); border: 1px solid #223144;
+  box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04); animation: wlcSlideIn .45s ease-out;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif }
+.pin-lock-logo { display: flex; justify-content: center; margin-bottom: 14px }
+.pin-lock-logo img { width: 56px; height: 56px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(143,180,217,.25), 0 8px 26px rgba(0,0,0,.45) }
+.pin-lock-title { font-family: 'IBM Plex Sans', sans-serif; font-size: 17px; font-weight: 600; color: #e9eef4; letter-spacing: 3px; margin-bottom: 6px }
+.pin-lock-sub { font-size: 13px; color: #8a9bae; margin-bottom: 24px }
+.pin-lock-field { display: block; width: 100%; max-width: 230px; box-sizing: border-box; margin: 0 auto 14px; padding: 13px 14px; background: #070b11; border: 1px solid #2a3b4b; border-radius: 10px;
+  color: #e9eef4; font-size: 22px; text-align: center; letter-spacing: 10px; font-family: 'IBM Plex Mono', ui-monospace, monospace; outline: none; transition: border-color .15s, box-shadow .15s }
+.pin-lock-field::placeholder { color: #3d4d5e; letter-spacing: 8px }
+.pin-lock-field:focus { border-color: #8fb4d9; box-shadow: 0 0 0 3px rgba(143,180,217,.16) }
+.pin-lock-btn { display: block; width: 100%; max-width: 230px; margin: 0 auto 10px; padding: 12px; border-radius: 10px; cursor: pointer;
+  background: #8fb4d9; color: #07101a; border: 1px solid #8fb4d9; font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: .4px; transition: background .15s, transform .15s }
+.pin-lock-btn:hover { background: #a7c5e4 }
+.pin-lock-btn:active { transform: translateY(1px) }
+.pin-lock-btn:focus-visible { outline: 2px solid #e9eef4; outline-offset: 2px }
+.pin-lock-msg { min-height: 18px; font-size: 12px; color: #ff6b7d; margin: 4px 0 6px }
+.pin-lock-hint { font-size: 11px; color: #5d6d80; margin-top: 4px }
 .pin-lock-shake { animation: pinShake .4s ease-in-out }
-.pin-lock-bio-btn { display: block; width: 200px; margin: 0 auto 10px; padding: 10px; background: transparent; color: var(--gold); border: 1px solid var(--gold-a40); border-radius: 10px; font-family: 'Cinzel', serif; font-size: 11px; font-weight: 600; letter-spacing: 2px; cursor: pointer; transition: all .2s }
-.pin-lock-bio-btn:hover { background: var(--gold-a20); border-color: var(--gold) }
+.pin-lock-bio-btn { display: block; width: 100%; max-width: 230px; margin: 0 auto 10px; padding: 10px; background: transparent; color: #c4d5e8;
+  border: 1px solid #2f4257; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s }
+.pin-lock-bio-btn:hover { background: rgba(143,180,217,.08); border-color: #8fb4d9 }
 .zsn-backdrop { position: fixed; inset: 0; background: rgba(4,8,14,0.78); backdrop-filter: blur(4px); z-index: 99998; display: flex; align-items: center; justify-content: center; animation: zsnFade .25s ease-out }
 .zsn-card { width: min(340px, 90vw); background: linear-gradient(165deg, #0a1018 0%, #0c1420 100%); border: 1px solid var(--gold-a40); border-radius: 14px; padding: 24px 22px; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 40px rgba(240,192,64,0.08); animation: zsnRise .3s ease-out }
 .zsn-icon { margin-bottom: 12px; filter: drop-shadow(0 0 14px rgba(240,192,64,0.25)) }
@@ -5784,7 +5798,7 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   .adm-card > div { flex-direction: column !important; align-items: flex-start !important; gap: 6px !important }
   .adm-btn { font-size: 8px !important; padding: 3px 6px !important }
   .adm-badge { font-size: 8px !important; padding: 1px 4px !important }
-  :is(#msettings,#malerts,#mnotifications,#mcharts) .modal { max-width: calc(100vw - 12px) !important }
+  :is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .modal { max-width: calc(100vw - 12px) !important }
 }
 
 /* ── AUB on phones ── */
@@ -7735,14 +7749,14 @@ select option {
 
 /* ══════════════════════════════════════════════════════════════════
  * SETTINGS HUB — Amethyst / Royal premium skin   [2026-06-13]
- * Scoped to :is(#msettings,#malerts,#mnotifications,#mcharts) ONLY — the global --gold (used app-wide: brain,
+ * Scoped to :is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) ONLY — the global --gold (used app-wide: brain,
  * chart, etc.) is untouched. Replaces the "poor yellow" look with a
  * refined violet-on-obsidian luxury treatment: deep radial panel, soft
  * amethyst glow, glass header, fine violet hairlines, accent primaries.
  * ══════════════════════════════════════════════════════════════════ */
 
 /* Flip class-based gold → amethyst, scoped */
-:is(#msettings,#malerts,#mnotifications,#mcharts) {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) {
   --gold:      #b07cff;
   --gold-a20:  #b07cff24;
   --gold-a33:  #b07cff44;
@@ -7751,10 +7765,10 @@ select option {
 }
 
 /* Backdrop — deeper, faint violet wash */
-:is(#msettings,#malerts,#mnotifications,#mcharts).mover { background: radial-gradient(120% 90% at 50% 30%, #120a20cc 0%, #000000e6 70%); }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport).mover { background: radial-gradient(120% 90% at 50% 30%, #120a20cc 0%, #000000e6 70%); }
 
 /* Panel — obsidian-violet depth + amethyst aura */
-:is(#msettings,#malerts,#mnotifications,#mcharts) .modal {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .modal {
   background:
     radial-gradient(130% 80% at 50% -15%, #1c1430 0%, #0e0a18 52%, #0b0712 100%);
   border: 1px solid #b07cff3a;
@@ -7766,87 +7780,87 @@ select option {
 }
 
 /* Glass header */
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mhdr {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mhdr {
   background: linear-gradient(180deg, #1a1230f2, #14102699);
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   border-bottom: 1px solid #b07cff2e;
   padding: 15px 18px 12px;
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mtitle {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mtitle {
   color: #e4d6ff;
   letter-spacing: 3px;
   font-weight: 800;
   text-shadow: 0 0 22px #b07cff77;
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mclose { color: #7c6f96; transition: .18s; border-radius: 6px; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mclose:hover { color: #c9a8ff; background: #b07cff1a; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mclose { color: #7c6f96; transition: .18s; border-radius: 6px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mclose:hover { color: #c9a8ff; background: #b07cff1a; }
 
 /* Tabs */
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mtabs { border-bottom: 1px solid #b07cff1f; padding: 0 6px; gap: 2px; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mtab {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mtabs { border-bottom: 1px solid #b07cff1f; padding: 0 6px; gap: 2px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mtab {
   color: #7e7197; letter-spacing: 1.6px; font-weight: 600;
   border-bottom: 2px solid transparent; transition: .2s; border-radius: 6px 6px 0 0;
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mtab:hover { color: #c9b8e8; background: #b07cff10; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mtab.act {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mtab:hover { color: #c9b8e8; background: #b07cff10; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mtab.act {
   color: #e7dcff; border-bottom-color: #b07cff;
   text-shadow: 0 0 16px #b07cff66;
   background: linear-gradient(180deg, #b07cff14, transparent);
 }
 
 /* Section dividers */
-:is(#msettings,#malerts,#mnotifications,#mcharts) .msec {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .msec {
   color: #c2acf0; letter-spacing: 2.6px; font-weight: 700;
   border-bottom: 1px solid #b07cff26; margin: 16px 0 8px;
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mrow { border-bottom: 1px solid #ffffff08; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mlbl { color: #d4c9e8; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mchk { color: #cfc3e6; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .mchk input { accent-color: #b07cff; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-disabled-notice { color: #6f6388; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mrow { border-bottom: 1px solid #ffffff08; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mlbl { color: #d4c9e8; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mchk { color: #cfc3e6; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .mchk input { accent-color: #b07cff; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .hub-disabled-notice { color: #6f6388; }
 
 /* Inputs / selects — violet-tinted, focus glow (override inline styles) */
-:is(#msettings,#malerts,#mnotifications,#mcharts) input:not([type=checkbox]):not([type=radio]),
-:is(#msettings,#malerts,#mnotifications,#mcharts) select,
-:is(#msettings,#malerts,#mnotifications,#mcharts) textarea {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) input:not([type=checkbox]):not([type=radio]),
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) select,
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) textarea {
   background: #130d22 !important;
   border: 1px solid #b07cff30 !important;
   color: #e6dbfa !important;
   border-radius: 7px !important;
   transition: border-color .15s, box-shadow .15s !important;
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) input:not([type=checkbox]):not([type=radio]):focus,
-:is(#msettings,#malerts,#mnotifications,#mcharts) select:focus,
-:is(#msettings,#malerts,#mnotifications,#mcharts) textarea:focus {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) input:not([type=checkbox]):not([type=radio]):focus,
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) select:focus,
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) textarea:focus {
   border-color: #b07cff99 !important;
   box-shadow: 0 0 0 3px #b07cff22, 0 0 18px -6px #b07cff88 !important;
   outline: none !important;
 }
 
 /* Buttons — glass violet; primary = accent (was green); danger stays inline red */
-:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .hub-sbtn {
   background: linear-gradient(180deg, #1b1430, #140e24);
   border: 1px solid #b07cff2e; color: #c8b8ea;
   border-radius: 8px; transition: .16s;
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn:hover {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .hub-sbtn:hover {
   border-color: #b07cff8c; color: #efe6ff;
   box-shadow: 0 0 20px -5px #b07cff80; transform: translateY(-1px);
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn.pri {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .hub-sbtn.pri {
   background: linear-gradient(180deg, #2c1e4c, #1d1432);
   border-color: #b07cff5c; color: #efe4ff;
 }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .hub-sbtn.pri:hover {
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .hub-sbtn.pri:hover {
   border-color: #c9a8ff; background: linear-gradient(180deg, #36275c, #241838);
   box-shadow: 0 0 26px -5px #b07cffb0;
 }
 
 /* Premium thin scrollbar inside the panel */
-:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar { width: 7px; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar-thumb:hover { background: #b07cff77; }
-:is(#msettings,#malerts,#mnotifications,#mcharts) .modal *::-webkit-scrollbar-track { background: transparent; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .modal *::-webkit-scrollbar { width: 7px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .modal *::-webkit-scrollbar-thumb { background: #b07cff44; border-radius: 4px; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .modal *::-webkit-scrollbar-thumb:hover { background: #b07cff77; }
+:is(#msettings,#malerts,#mnotifications,#mcharts,#msupport) .modal *::-webkit-scrollbar-track { background: transparent; }
 
 /* [2026-06-13] Alerts / Notifications / Chart-settings use .sbtn2 (+ .sndbtn)
  * instead of .hub-sbtn — refine them to match the Amethyst skin. The --gold flip
@@ -8110,8 +8124,9 @@ select option {
 #adminBtn .hdr-support-badge { position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; }
 
 /* ── Support unread badges (user side): Settings icon + SUPPORT tab ── */
-.sbtn-badge { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; pointer-events: none; box-shadow: 0 0 0 2px #0b0712; }
-.mtab-badge { display: inline-block; margin-left: 5px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: #ff4d6d; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; vertical-align: middle; }
+/* [2026-11-15] Rosu plin, cerut de operator: bulinele albastre nu se vedeau. */
+.sbtn-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; background: #ff2d4a; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; pointer-events: none; box-shadow: 0 0 0 2px #0b0712; }
+.mtab-badge { display: inline-block; margin-left: 5px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; background: #ff2d4a; color: #fff; font-size: 9px; line-height: 15px; text-align: center; font-weight: 700; vertical-align: middle; }
 
 /* ── DSL DRIVE panel (ML-DSL shadow) ── */
 .dsldrive-panel { font: 11px/1.5 ui-monospace, Menlo, monospace; color: #cfe; padding: 0 0 12px }
@@ -8315,3 +8330,24 @@ select option {
 @keyframes psetIn { from { opacity: 0; transform: translateY(8px) scale(.99); } to { opacity: 1; transform: none; } }
 .pset-row { transition: background .15s ease; }
 .pset-row:hover, .pset-row:active { background: rgba(255,255,255,0.05); }
+
+/* ── [2026-11-15] Alegerea fusului orar (Chart Settings → Timezone) ── */
+.ztz { display: flex; flex-direction: column; gap: 8px; }
+.ztz-cur { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid #2a3b4b; border-radius: 8px; background: #0b1219; }
+.ztz-cur-l { font-size: 10px; color: #7f93a6; }
+.ztz-cur-v { font-size: 13px; color: #e9eef4; font-weight: 600; margin-top: 2px; }
+.ztz-cur-r { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.ztz-clock { font-size: 18px; color: #e9eef4; font-variant-numeric: tabular-nums; font-weight: 600; }
+.ztz-search { width: 100%; box-sizing: border-box; padding: 9px 11px; border-radius: 7px; border: 1px solid #2a3b4b; background: #070b11; color: #e9eef4; font-size: 13px; }
+.ztz-search:focus { outline: none; border-color: #8fb4d9; box-shadow: 0 0 0 2px rgba(143,180,217,.18); }
+.ztz-list { max-height: min(52vh, 420px); overflow-y: auto; border: 1px solid #1d2937; border-radius: 8px; background: #080d13; -webkit-overflow-scrolling: touch; }
+.ztz-region { position: sticky; top: 0; z-index: 1; padding: 6px 11px; font-size: 10px; letter-spacing: .06em; color: #7f93a6; background: #0d141c; border-bottom: 1px solid #1d2937; }
+.ztz-row { display: grid; grid-template-columns: 46px 1fr auto 62px; align-items: center; gap: 8px; width: 100%; padding: 9px 11px; border: 0; border-bottom: 1px solid #121b25; background: transparent; color: #c4cfda; font-size: 12.5px; text-align: left; cursor: pointer; }
+.ztz-row:hover { background: #0f1822; }
+.ztz-row.act { background: rgba(143,180,217,.12); color: #e9eef4; box-shadow: inset 3px 0 0 #8fb4d9; }
+.ztz-row:focus-visible { outline: 2px solid #8fb4d9; outline-offset: -2px; }
+.ztz-code { font-size: 10.5px; font-weight: 700; color: #8fb4d9; font-variant-numeric: tabular-nums; }
+.ztz-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ztz-time { font-variant-numeric: tabular-nums; color: #e9eef4; }
+.ztz-off { font-size: 10.5px; color: #7f93a6; text-align: right; font-variant-numeric: tabular-nums; }
+.ztz-empty { padding: 18px; text-align: center; color: #7f93a6; font-size: 12px; }

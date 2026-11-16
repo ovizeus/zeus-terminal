@@ -59,10 +59,10 @@ export function PinLockScreen() {
   return (
     <div id="pinLockScreen" style={{ display: 'flex' }}>
       <div className="pin-lock-inner">
+        {/* [2026-11-15] Logo-ul Zeus in locul fulgerului; aspect sobru, fara
+            galben (cerut de operator). Functiile ecranului nu s-au schimbat. */}
         <div className="pin-lock-logo">
-          <svg className="z-i z-i--xl" viewBox="0 0 16 16" style={{ color: '#f0c040', width: 28, height: 28 }}>
-            <path d="M9 1L4 9h4l-1 6 5-8H8l1-6" />
-          </svg>
+          <img src={import.meta.env.BASE_URL + 'zeus-logo.png'} alt="Zeus Terminal" width={56} height={56} />
         </div>
         <div className="pin-lock-title">ZEUS TERMINAL</div>
         <div className="pin-lock-sub">Enter PIN to unlock</div>
@@ -76,22 +76,17 @@ export function PinLockScreen() {
           className={'pin-lock-field' + (shaking ? ' pin-lock-shake' : '')}
           onKeyDown={onKeyDown}
         />
-        <button onClick={() => pinUnlock()} className="pin-lock-btn">
-          UNLOCK{' '}
-          <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#f0c040' }}>
-            <path d="M9 1L4 9h4l-1 6 5-8H8l1-6" />
-          </svg>
-        </button>
+        <button onClick={() => pinUnlock()} className="pin-lock-btn">Unlock</button>
         {bioReady && (
           <button onClick={runBiometric} className="pin-lock-bio-btn" type="button">
-            <svg className="z-i" viewBox="0 0 24 24" style={{ color: '#f0c040', width: 18, height: 18, verticalAlign: 'middle' }} fill="none" stroke="currentColor" strokeWidth="1.6">
+            <svg className="z-i" viewBox="0 0 24 24" style={{ width: 18, height: 18, verticalAlign: 'middle' }} fill="none" stroke="currentColor" strokeWidth="1.6">
               <path d="M12 3c-3 0-5.5 1.2-7.5 3M12 3c3 0 5.5 1.2 7.5 3M4.2 9.3C4.7 6.7 7.5 5 12 5s7.3 1.7 7.8 4.3M6 14c.3-3 2.5-5 6-5s5.7 2 6 5M9 17c0-2 1.2-3.5 3-3.5s3 1.5 3 3.5M11 20.5c0-1.5.5-2.5 1-3" strokeLinecap="round"/>
             </svg>
-            &nbsp;USE FINGERPRINT
+            &nbsp;Use fingerprint
           </button>
         )}
         <div id="pinLockMsg" className="pin-lock-msg">{message}</div>
-        <div className="pin-lock-hint">PIN configured from Settings → Account &amp; Security</div>
+        <div className="pin-lock-hint">PIN is managed in Settings → Account &amp; Security</div>
       </div>
     </div>
   )

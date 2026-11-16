@@ -1024,7 +1024,7 @@ export function toggleOviLiquid(btn: any) {
   if (S.oviOn) {
     oviReadSettings();
     renderOviLiquid();
-    toast('OVI LIQUID ON', 0, _ZI.drop);
+    toast('OVI LIQUID ON', 3000, _ZI.drop);
   } else {
     clearOviLiquid();
     toast('OVI LIQUID OFF');

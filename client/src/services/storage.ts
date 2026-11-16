@@ -89,7 +89,7 @@ export function exportJournalCSV(): void {
   const blob = new Blob([hdr + rows], { type: 'text/csv' })
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
   a.download = `zeus_journal_${new Date().toISOString().slice(0, 10)}.csv`
-  a.click(); toast('Journal exported!', 0, _ZI?.ok)
+  a.click(); toast('Journal exported!', 3000, _ZI?.ok)
 }
 
 export function startFRCountdown(): void {

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
 import { BetaBadge } from '../common/BetaNotice'
 import { useSupportStore } from '../../stores/supportStore'
+import { useAdminStore } from '../../stores/adminStore'
+import { supportTarget, supportBadge, badgeText } from '../../core/supportEntry'
 
 export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
   const connected = useUiStore((s) => s.connected)
@@ -41,20 +43,41 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
   // its poller left with the admin shield; both now live in ZeusDock.tsx.
   const [confirmLogout, setConfirmLogout] = useState(false)
   const setSupportUnread = useSupportStore((s) => s.setAdminUnread)
+  const adminUnread = useSupportStore((s) => s.adminUnread)
   const userUnread = useSupportStore((s) => s.userUnread)
   const setUserUnread = useSupportStore((s) => s.setUserUnread)
+  // [2026-11-15] Pictograma de suport din antet. La admin oglindeste casuta din
+  // Admin → Support / Ops; la ceilalti deschide fereastra lor de suport.
+  const supportCount = supportBadge(role, adminUnread, userUnread)
+  function openSupport() {
+    const t = supportTarget(role)
+    if (t.section) useAdminStore.getState().setEntrySection(t.section)
+    openModal(t.modal)
+  }
 
   // Seed admin support badge on mount (best-effort, never breaks the header).
+  // [2026-11-15] …si apoi la un minut. Mesajele vii vin prin WebSocket, dar daca
+  // legatura a fost cazuta exact cand a scris un utilizator, cadrul se pierde si
+  // bulina ar ramane in urma pana la urmatoarea reincarcare. Operatorul:
+  // „mesajele live de la useri trebuie sa ajunga toate".
   useEffect(() => {
     if (role !== 'admin') return
-    fetch('/api/support/inbox', { credentials: 'include' })
-      .then((r) => r.json())
-      .then((j) => { if (j && j.ok) setSupportUnread(j.totalUnread || 0) })
-      .catch(() => {})
+    let alive = true
+    const pull = () => {
+      fetch('/api/support/inbox', { credentials: 'include' })
+        .then((r) => r.json())
+        .then((j) => { if (alive && j && j.ok) setSupportUnread(j.totalUnread || 0) })
+        .catch(() => {})
+    }
+    pull()
+    const iv = setInterval(pull, 60_000)
+    const onVis = () => { if (!document.hidden) pull() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', onVis) }
   }, [role, setSupportUnread])
 
   // Seed the USER's own unread-reply badge on mount (every logged-in user) so a
-  // reply that arrived while they were offline still shows on the Settings icon.
+  // reply that arrived while they were offline still shows on the Support icon.
   // Live increments come via the support.message WS frame (useServerSync).
   useEffect(() => {
     if (!role) return
@@ -190,16 +213,26 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
             {/* [BUG6] Bell removed — Notifications reachable via Alerts modal and Alt+N.
                 Search moved into the bell's old slot (right of Decision Log). */}
             <button className="sbtn" title="Decision Log" id="dlogBtn" onClick={() => openModal('decisionlog')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></button>
+            {/* [2026-11-15] Suport — castile, inaintea cautarii si a setarilor, aceeasi
+                marime de pictograma. Bulina rosie: mesaje necitite. */}
+            <button className="sbtn" id="supportBtn" onClick={openSupport} style={{ position: 'relative' }}
+              title={supportCount > 0 ? (role === 'admin' ? `Support — ${supportCount} unread from users` : 'Support — you have a reply') : 'Support'}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+              </svg>
+              {supportCount > 0 && <span className="sbtn-badge">{badgeText(supportCount)}</span>}
+            </button>
             <button className="sbtn" title="Search (Ctrl+K)" id="cmdPaletteBtn" onClick={() => openModal('cmdpalette')}><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
               strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg></button>
-            <button className="sbtn" onClick={() => openModal('settings')} title={userUnread > 0 ? 'Settings — support replied' : 'Settings Hub'} style={{ position: 'relative' }}><svg width="16"
+            <button className="sbtn" onClick={() => openModal('settings')} title="Settings Hub"><svg width="16"
               height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>{userUnread > 0 && <span className="sbtn-badge">{userUnread > 9 ? '9+' : userUnread}</span>}</button>
+            </svg></button>
             {/* [2026-11-06] The Admin Control Center shield used to sit here. It
                 moved to a full-size, role-gated first icon in the dock, along with
                 its pending-approvals badge. .hdr-btns is flex with a gap, so the

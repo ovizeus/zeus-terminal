@@ -58,6 +58,7 @@ import { LLVSettingsModal } from '../modals/LLVSettingsModal'
 import { SupremusModal } from '../modals/SupremusModal'
 import { SRSettingsModal } from '../modals/SRSettingsModal'
 import { SettingsHubModal } from '../modals/SettingsHubModal'
+import { SupportModal } from '../modals/SupportModal'
 import { OVIPanel } from '../modals/OVIPanel'
 import { WelcomeModal } from '../modals/WelcomeModal'
 import { AdminModal } from '../modals/AdminModal'
@@ -459,6 +460,7 @@ export function PanelShell() {
       <SupremusModal visible={activeModal === 'supremus'} onClose={closeModal} />
       <SRSettingsModal visible={activeModal === 'sr'} onClose={closeModal} />
       <SettingsHubModal visible={activeModal === 'settings'} onClose={closeModal} />
+      <SupportModal visible={activeModal === 'support'} onClose={closeModal} />
       <OVIPanel visible={activeModal === 'ovi'} onClose={closeModal} />
       <WelcomeModal visible={activeModal === 'welcome'} onClose={closeModal} />
       <AdminModal visible={activeModal === 'admin'} onClose={closeModal} />

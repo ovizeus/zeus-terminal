@@ -14762,3 +14762,27 @@ Cadrul de preţ vine din puntea serverului (`wsMarketProxy`, independentă de fs
 **Măsurat după pornire:** „OKX contract values loaded: 543" înaintea conectării; lichidările OKX noi au în medie 4.151 $ (2 evenimente în 3 minute — puţine, dar de ordinul corect); BTC pe 24h: bybit 75,8 M$ (medie 9.901 $), gate 63,0 M$ (12.728 $), okx 32,0 M$ (20.558 $) — înainte OKX singur arăta peste 2 miliarde. `quick_check` ok; 7 simboluri pornite; `brain_decisions` curge pentru uid 1, 5, 12–15; nicio eroare nouă.
 
 **Neverificat:** cadranele şi radarul nu au fost văzute randate (fără browser pe server). Confirmă operatorul.
+
+## 🧰 2026-11-15/16 — Opt puncte cerute de operator înainte să aprobe conturile noi (doar client, fără repornire)
+
+Cerute printr-un `/goal`, cu „spune-mi întâi ce ai înţeles"; operatorul a răspuns „dacă ai înţeles, fă-le şi anunţă-mă la fiecare punct". Toate sunt în aplicaţie; serverul nu a fost atins.
+
+**1. Mesajele de suport „nu ajung".** Ajungeau. Măsurat: 14 nov 19:38:17–28 contul de probă a trimis 3 mesaje (`POST /api/support/send` 200, salvate), iar adminul (uid 1) era conectat din 19:37:32, deci cadrul viu a plecat. Numărul de necitite însă se afişa DOAR în panoul de Admin (pe dala Support / Ops) — în afara lui nu exista niciun semn. Reparat: pictograma de suport din antet (punctul 2) poartă la admin numărul de mesaje necitite de la utilizatori şi deschide direct Admin → Support / Ops (`adminStore.entrySection`); la sosirea unui mesaj viu apare şi o notificare de 5 secunde; numărul se reîmprospătează la un minut şi la revenirea în aplicaţie (dacă legătura a fost căzută exact când a scris cineva, cadrul se pierdea). Bulinele din Admin sunt acum ROŞII (`.zac-tile-count`, erau cyan).
+
+**2. Suportul scos din Settings.** Pictogramă cu căşti în antet, înaintea căutării şi a setărilor, aceeaşi mărime. La utilizatori deschide `SupportModal` (conţinutul fostului tab SUPPORT, neschimbat: contact, chat, categorii); la admin deschide Admin → Support / Ops. Bulina de pe Settings a plecat pe căşti. Un răspuns sosit cât chatul e deschis e marcat citit pe loc.
+
+**3. Actualizare automată la toţi.** `core/autoUpdate.ts`: la un minut aplicaţia citeşte pagina-coajă (servită fără cache) şi compară numele pachetului (`assets/index-<hash>.js`) cu cel încărcat. Dacă e altul se reîncarcă singură — în fundal pe loc; în faţă doar după 20 s fără nicio atingere, fără câmp în care scrie omul şi fără fereastră deschisă; altfel o bandă discretă „Update now". O reîncărcare care nu a adus pachetul nou nu se repetă (fără buclă). Fereastra veche „Update — INSTALL / Later" (cerea apăsare la fiecare versiune de SERVER) a fost scoasă. ⚠️ Fiecare utilizator trebuie să încarce O DATĂ pachetul acesta; de la următorul build încolo actualizarea e automată.
+
+**4. „Alerte ON / OFF" care nu mai dispărea.** `toast(…, 0)` înseamnă „rămâi până te înlocuieşte altceva". Acum „Alerts ON / OFF", 2,5 s. Pe drum: încă 16 confirmări simple cu aceeaşi durată 0 (setări salvate, export, NOVA, Blackbox…) primesc 3 s; mesajele de BLOCARE din trading (kill switch, UNPROTECTED, API căzut) rămân lipite dinadins. Două texte în română („Culori aplicate", „Culori price axis aplicate") traduse.
+
+**5. Chartul rămânea la 65.000 după trecerea de pe BTC pe BNB.** Când omul trage de axa de preţ, biblioteca scoate scara de pe automat. Acum, la o monedă NOUĂ, scara din dreapta revine pe automat (`recenterPriceOnSymbolChange`); la schimbarea intervalului un zoom făcut cu bună ştiinţă rămâne.
+
+**6. Pictograma de ieşire din ecran complet** era caracterul ⊑ („un C cu o dungă dedesubt"), scris direct în buton de codul vechi (`marketDataFeeds.ts`), peste ce desena React. Acum patru colţuri strânse spre centru, desenate de React; codul vechi doar anunţă.
+
+**7. „Engine error" la schimbarea fusului orar.** Cauza: fereastra trimitea „RO" / „US" / „JP" / „UK" ca fus, iar `Intl.DateTimeFormat` aruncă RangeError la orice nume care nu e IANA — ora se formatează peste tot, deci cădea motorul. Valoarea greşită se şi SALVA în setări şi revenea la pornire. Reparat: `core/timezones.ts` (115 ţări/zone, verificare, traducerea codurilor vechi) folosit de `setTZ`, de încărcarea setărilor şi de ciclul brain. Fereastra are acum o listă de ţări cu căutare, grupată pe regiuni, cu ora şi decalajul UTC pe fiecare rând. Antetul chartului arată fusul fiecărui utilizator (cod de ţară, sau „UTC+5:30").
+
+**8. Ecranul de PIN:** sobru, fără galben — fond de ardezie, un accent albastru-oţel, logo-ul Zeus în locul fulgerului, IBM Plex. Funcţiile neschimbate.
+
+**Teste:** noi `supportEntry` (11), `autoUpdate` (9), `alertsToast` (10), `recenterPrice` (4), `timezones` (9), `setTZ` (4). Două teste din `bookRender` citeau desenul fără să-l aştepte şi cădeau intermitent sub suita completă; acum aşteaptă. Client 2.160, de două ori la rând, typecheck curat.
+
+**Neverificat:** nimic nu a fost văzut randat; confirmă operatorul pe telefon şi pe calculator.

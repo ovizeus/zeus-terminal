@@ -492,11 +492,12 @@
 }
 
 /* A count is a call to act, so it is loud and the tile answers to it. */
-.zac-tile.has-count { border-color: #00d4ff55; }
+/* [2026-11-15] Notificarile din Admin sunt ROSII (erau cyan si nu se vedeau). */
+.zac-tile.has-count { border-color: #ff2d4a77; }
 .zac-tile-count {
   position: absolute; top: 8px; right: 8px;
   min-width: 19px; height: 19px; padding: 0 5px;
-  background: var(--ac-accent); color: #04121a;
+  background: #ff2d4a; color: #fff; box-shadow: 0 0 0 2px #0b0712;
   border-radius: 10px;
   font-size: 11px; font-weight: 700; line-height: 19px; text-align: center;
 }

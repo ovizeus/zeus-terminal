@@ -101,6 +101,11 @@ interface AdminStore {
   lastRefresh: number
 
   setSection: (s: AdminSection) => void
+  /** [2026-11-15] Sectiunea cu care se deschide Admin data viitoare (o singura
+   *  data). Fara ea, intrarea duce mereu la lansator — iar pictograma de
+   *  suport din antet trebuie sa duca direct la Support / Ops. */
+  entrySection: AdminSection | null
+  setEntrySection: (s: AdminSection | null) => void
   setSelectedUser: (id: number | null) => void
   setSearch: (q: string) => void
   setUserFilters: (p: Partial<UserFilters>) => void
@@ -149,6 +154,8 @@ export const useAdminStore = create<AdminStore>()((set, get) => ({
   lastRefresh: 0,
 
   setSection: (s) => set({ currentSection: s, selectedUserId: null }),
+  entrySection: null,
+  setEntrySection: (s) => set({ entrySection: s }),
   setSelectedUser: (id) => set({ selectedUserId: id }),
   setSearch: (q) => set({ search: q }),
   setUserFilters: (p) => set((s) => ({ userFilters: { ...s.userFilters, ...p } })),

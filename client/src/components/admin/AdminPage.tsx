@@ -30,7 +30,11 @@ export function AdminPage({ visible, onClose }: { visible: boolean; onClose: () 
     // zustand store outlives the modal, so without this a re-open resumed on
     // whatever sub-page was last visited (phone UX complaint: had to refresh
     // the whole app to get the panel's first page back).
-    setSection('home')
+    // [2026-11-15] …in afara de cazul in care cineva a cerut o sectiune anume
+    // (pictograma de suport din antet → Support / Ops). Cererea se consuma.
+    const entry = useAdminStore.getState().entrySection
+    setSection(entry || 'home')
+    if (entry) useAdminStore.getState().setEntrySection(null)
     loadUsers()
   }, [visible])
 

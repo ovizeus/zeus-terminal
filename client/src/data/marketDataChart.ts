@@ -142,6 +142,8 @@ export async function fetchKlines(tf: any): Promise<void> {
     if (!w.S.klines.length) { console.warn('[fetchKlines] all candles failed sanity'); return }
     _resetKlineWatchdog()
     renderChart()
+    // [2026-11-15] La o moneda NOUA, scara de pret revine pe automat (vezi functia).
+    recenterPriceOnSymbolChange(sym)
     const symLow = sym.toLowerCase()
     const _klineGen = w.__wsGen
     // [Phase 2 S3.1d] ALT_WS_FEEDS — when @kline_<tf> is throttled, poll via
@@ -226,6 +228,23 @@ export async function fetchKlines(tf: any): Promise<void> {
 }
 
 // ===== RENDER CHART =====
+// ── Centrarea pe pret la schimbarea monedei ────────────────────────────────
+// [2026-11-15] Cand omul trage de axa de pret, biblioteca scoate scara de pe
+// automat si o tine acolo. La trecerea de pe BTC (65.000) pe BNB (600), scara
+// ramanea la 65.000 si lumanarile noii monede erau undeva jos, in afara
+// ecranului — trebuia tras chartul cu mana.
+// Se readuce pe automat DOAR cand s-a schimbat moneda. La schimbarea
+// intervalului (5m → 1h) pretul e acelasi, deci un zoom facut cu buna stiinta
+// ramane cum l-a lasat omul.
+let _scaledSymbol: string | null = null
+export function recenterPriceOnSymbolChange(sym: string, chart: any = w.mainChart): boolean {
+  if (!sym || _scaledSymbol === sym) return false
+  _scaledSymbol = sym
+  if (!chart) return false
+  try { chart.priceScale('right').applyOptions({ autoScale: true }); return true } catch (_) { return false }
+}
+export function _resetRecenterForTest(): void { _scaledSymbol = null }
+
 export function renderChart(): void {
   if (!w.cSeries || !w.S.klines.length) return
   try {

@@ -1,3 +1,4 @@
+import { tzLabel, normalizeTz } from '../../core/timezones'
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useMarketStore, useUiStore, useAuthStore } from '../../stores'
@@ -759,6 +760,17 @@ export function ChartControls() {
   const overlays = useMarketStore((s) => s.market.overlays)
   const patch = useMarketStore((s) => s.patch)
   const openModal = useUiStore((s) => s.openModal)
+  // Eticheta fusului orar din antetul chartului. Se citeste la pornire (setarile
+  // salvate se incarca dupa prima randare, deci se reciteste o data) si la
+  // fiecare schimbare (`zeusTzChanged`, trimis de setTZ).
+  const [tzCode, setTzCode] = useState(() => tzLabel((window as any).S?.tz))
+  const [tzName, setTzName] = useState(() => normalizeTz((window as any).S?.tz))
+  useEffect(() => {
+    const sync = () => { const t = (window as any).S?.tz; setTzCode(tzLabel(t)); setTzName(normalizeTz(t)) }
+    window.addEventListener('zeusTzChanged', sync)
+    const t1 = setTimeout(sync, 1500), t2 = setTimeout(sync, 6000)
+    return () => { window.removeEventListener('zeusTzChanged', sync); clearTimeout(t1); clearTimeout(t2) }
+  }, [])
   // [BETA-GATE 2026-11-13] Lacat vizibil pe butoanele care deschid ferestre
   // inchise pentru un cont view-only (BYOI, Exposure). Apasarea arata mesajul
   // de beta — asta o face deja `openModal`; aici e doar semnul de pe usa.
@@ -1171,7 +1183,8 @@ export function ChartControls() {
       {/* ── Section label ── */}
       <div className="slbl" style={{ justifyContent: 'space-between' }}>
         <span>&#128200; <span id="chartTitleLbl">{symbol}</span> &#8212; LIVE CHART</span>
-        <span id="chartTZLbl" style={{ color: '#44aaff', fontSize: '7px' }}><span style={{ fontWeight: 700 }}>RO</span></span>
+        {/* [2026-11-15] Fusul ales de FIECARE utilizator, nu „RO" scris de mana. */}
+        <span id="chartTZLbl" title={tzName} style={{ color: '#44aaff', fontSize: '7px', fontWeight: 700 }}>{tzCode}</span>
       </div>
 
       {/* ── Controls container ── */}
@@ -1193,7 +1206,16 @@ export function ChartControls() {
             </div>
           </div>
           <span style={{ width: '4px' }}></span>
-          <button className="tfb ztf-sibling" id="fsbtn" title="Fullscreen" onClick={toggleFS}>{fsMode ? '\u2291' : '\u26F6'}</button>
+          <button className="tfb ztf-sibling" id="fsbtn" title={fsMode ? 'Exit fullscreen' : 'Fullscreen'} onClick={toggleFS}>
+            {/* [2026-11-15] Iesirea din ecran complet era un caracter (U+2291) care
+                arata ca un „C" cu o dunga dedesubt. Acum e pictograma obisnuita:
+                patru colturi stranse spre centru. Marirea ramane cum era. */}
+            {fsMode ? (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: '-2px' }}>
+                <path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" />
+              </svg>
+            ) : '\u26F6'}
+          </button>
           <button className="tfb ztf-sibling" title="Chart Settings" onClick={() => openModal('charts')}>&#9881;</button>
           <div className={`ztf-wrap${ctOpen ? ' open' : ''}`} ref={ctRef} style={{ position: 'relative' }}>
             <button className="tfb ztf-sibling" title="Chart Type" onClick={() => setCtOpen(o => !o)}>

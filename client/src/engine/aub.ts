@@ -235,14 +235,14 @@ export function aubBBExport(): void {
     a.href = URL.createObjectURL(blob)
     a.download = 'zeus_blackbox_' + new Date().toISOString().slice(0, 10) + '.json'
     a.click()
-    toast('Blackbox exported!', 0, _ZI.clip)
+    toast('Blackbox exported!', 3000, _ZI.clip)
   } catch (e) { console.warn('[AUB BB export]', e) }
 }
 export function aubBBClear(): void {
   AUB.bb = []
   try { localStorage.removeItem('aub_bb') } catch (_) { }
   _aubUpdateBBCard()
-  toast('Blackbox cleared', 0, _ZI.trash)
+  toast('Blackbox cleared', 3000, _ZI.trash)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -360,7 +360,7 @@ export function aubMacroClear(): void {
   AUB.macroEvents = []
   try { localStorage.removeItem('aub_macro') } catch (_) { }
   _aubRenderMacroEvents()
-  toast('Macro events cleared', 0, _ZI.trash)
+  toast('Macro events cleared', 3000, _ZI.trash)
 }
 export function aubMacroFileLoad(input: any): void {
   const file = input?.files?.[0]; if (!file) return
@@ -381,7 +381,7 @@ export function aubMacroFileLoad(input: any): void {
         _aubRenderMacroEvents()
         toast('Macro events loaded: ' + AUB.macroEvents.length)
       }
-    } catch (e) { toast('Invalid JSON', 0, _ZI.x) }
+    } catch (e) { toast('Invalid JSON', 3000, _ZI.x) }
   }
   reader.readAsText(file)
   input.value = ''

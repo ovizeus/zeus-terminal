@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSupportStore } from '../../stores/supportStore'
 
-/** Live text chat with the operator. Used inside the Settings SUPPORT tab.
+/** Live text chat with the operator. Used inside SupportModal (opened from the header headset icon).
  *  Reuses /api/support REST + the live support.message WS frame (handled in
  *  useServerSync → supportStore). Amethyst-themed via #supportChat in app.css. */
 export function SupportChat({ active }: { active: boolean }) {
@@ -28,6 +28,16 @@ export function SupportChat({ active }: { active: boolean }) {
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
   }, [thread, active])
+
+  // [2026-11-15] Un raspuns sosit CAT chatul e deschis e deja citit: fara asta
+  // bulina de pe pictograma urca desi omul se uita la mesaj. Serverul il
+  // marcheaza citit la cererea firului.
+  const lastAdminId = thread.length && thread[thread.length - 1].sender === 'admin' ? thread[thread.length - 1].id : 0
+  useEffect(() => {
+    if (!active || !lastAdminId) return
+    clearUserUnread()
+    fetch('/api/support/thread', { credentials: 'include' }).catch(() => {})
+  }, [active, lastAdminId, clearUserUnread])
 
   const send = async () => {
     const msg = text.trim()

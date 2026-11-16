@@ -4,6 +4,7 @@
  * Phase 7E — HIGH RISK foundation file
  */
 
+import { normalizeTz } from './timezones'
 import { getATObject, getTimezone, getKlines, getPrice, getATMode } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
 import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced } from '../engine/brain'
@@ -2107,7 +2108,9 @@ export function _usApply() {
         }
       })
     }
-    if (USER_SETTINGS.chart.tz) S.tz = USER_SETTINGS.chart.tz
+    // [2026-11-15] Valorile vechi salvate („US", „JP"…) nu sunt fusuri si
+    // daramau motorul la fiecare pornire. Se traduc aici.
+    if (USER_SETTINGS.chart.tz) S.tz = normalizeTz(USER_SETTINGS.chart.tz)
     if (USER_SETTINGS.chart.heatmap) Object.assign(S.heatmapSettings, USER_SETTINGS.chart.heatmap)
     if (USER_SETTINGS.chart.colors) {
       const c = USER_SETTINGS.chart.colors

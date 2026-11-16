@@ -815,7 +815,7 @@ export function applyIndSettings(id: string): void {
     if (typeof w.renderChart === 'function') w.renderChart()
     applyIndVisibility(id, true)
   }
-  toast(id.toUpperCase() + ' settings updated', 0, _ZI.bolt)
+  toast(id.toUpperCase() + ' settings updated', 3000, _ZI.bolt)
 }
 
 // ═══════════════════════════════════════════════════════════════

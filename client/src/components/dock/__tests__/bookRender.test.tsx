@@ -578,6 +578,9 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
       liqs: [{ ts: NOW - 6_000_000, price: 80030, usd: 500000, sell: true }],
     }))
     await openBook()
+    // [2026-11-15] Se asteapta desenul: sub suita completa el vine o clipa mai
+    // tarziu si testul citea o panza goala (cadea intermitent).
+    await waitFor(() => expect(drawn.flatMap((d: any) => d.arcs || []).length).toBeGreaterThan(0))
     const arcs = drawn.flatMap((d: any) => d.arcs || [])
     expect(arcs.length).toBe(1)                       // doar cea din fereastra
     expect(arcs.every((a: any) => a[0] > 1)).toBe(true)
@@ -687,7 +690,7 @@ describe('⛔ BULELE si LICHIDARILE chiar se DESENEAZA', () => {
     mockFetch(mkBook({ trades: [], liqs: [] }))
     const { container } = await openBook()
     expect(container.querySelector('.zbk-canvas canvas')).toBeTruthy()
-    expect(drawn.some((d: any) => d.fills > 5)).toBe(true)
+    await waitFor(() => expect(drawn.some((d: any) => d.fills > 5)).toBe(true))
   })
 
   it('COB-ul deseneaza bare IN DREAPTA hartii', async () => {

@@ -12,6 +12,7 @@ import { _ZI } from '../constants/icons'
 import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , DSL_PRESETS, _NEURO_SYMS, BM, BRAIN as BR } from '../core/config'
 import { calcConfluenceScore } from './confluence'
 import { projectedVolume } from './fusionMath'
+import { normalizeTz } from '../core/timezones'
 import { recentLiqs, pulseOf, liqPulseScore, longSharePct, baselineOf, refreshBaseline, fmtUsdShort, PULSE_WINDOW_MS, BALANCE_WINDOW_MS } from './liqPulse'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
@@ -707,7 +708,7 @@ export function _calcAtrPct(entry: any): number {
 
 // ── TIMEZONE FIX ─────────────────────────────────────────────────
 export function applyTimezone(tz: any): void {
-  tz = tz || w.S.tz || 'Europe/Bucharest'
+  tz = normalizeTz(tz || w.S.tz)
   w.S.tz = tz
   // Re-apply localization to all charts so crosshair + labels use new TZ
   const lf = { timeFormatter: (ts: any) => fmtTime(ts), dateFormatter: (ts: any) => fmtDate(ts) };
@@ -1184,7 +1185,7 @@ export function resetProtectMode(): void {
   const banner = el('protectBanner')
   if (banner) banner.className = 'protect-banner'
   brainThink('ok', _ZI.ok + ' Protect mode reset manually')
-  toast('Protect mode reset', 0, _ZI.ok)
+  toast('Protect mode reset', 3000, _ZI.ok)
 }
 
 // ── DSL TELEMETRY UPDATE ──────────────────────────────────────────

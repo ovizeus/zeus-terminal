@@ -165,7 +165,9 @@ export function toggleAlerts(en: any): void {
     try { Notification.requestPermission(); } catch (_) { }
   }
   if (en) playAlertSound();
-  toast(en ? 'Alerte ON' : 'Alerte OFF', 0, en ? _ZI.bell : _ZI.bellX);
+  // [2026-11-15] Era in romana si cu durata 0, care in toast inseamna „ramai pe
+  // ecran pana te inlocuieste altceva" — de aici mesajul care nu mai disparea.
+  toast(en ? 'Alerts ON' : 'Alerts OFF', 2500, en ? _ZI.bell : _ZI.bellX);
 }
 
 
@@ -186,7 +188,7 @@ export function applyChartColors(): void {
   if (w.cSeries) { w.cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bw + '77', wickDownColor: brw + '77' }); }
   if (w.mainChart) { w.mainChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText }, rightPriceScale: { textColor: pText } }); }
   if (w.cvdChart) { w.cvdChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
-  closeM('mcharts'); toast('Culori aplicate \u2713');
+  closeM('mcharts'); toast('Colors applied \u2713');
   // Save + IMMEDIATE push to server (no debounce — explicit user action)
   _usSave();
   _userCtxPushNow();
@@ -265,7 +267,7 @@ export function applyPriceAxisColors(): void {
       rightPriceScale: { borderColor: gh }
     });
   });
-  closeM('mcharts'); toast('Culori price axis aplicate \u2713');
+  closeM('mcharts'); toast('Price axis colors applied \u2713');
 }
 // ===== TRADE JOURNAL =====
 // IIFE: guarded — TP may not exist yet at import time

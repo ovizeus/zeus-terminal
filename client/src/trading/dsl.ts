@@ -156,7 +156,7 @@ export function toggleDSL(): void {
   try {
     const _mode = (w.S?.mode || 'assist').toLowerCase()
     if (_mode === 'auto') {
-      toast('AUTO: DSL is controlled by AI', 0, _ZI?.robot)
+      toast('AUTO: DSL is controlled by AI', 3000, _ZI?.robot)
       return
     }
     if (typeof DSL === 'undefined') return

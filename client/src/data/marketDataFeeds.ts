@@ -122,10 +122,10 @@ export function applyChartLayout(): void {
   if (cc && !fullscreen) {
     cc.style.display = (w.S && w.S.activeInds && w.S.activeInds.cvd) ? '' : 'none'
   }
-  const btn = el('fsbtn') || el('fsBtn')
-  if (btn) btn.textContent = fullscreen ? '\u2291' : '\u26F6'
-  // React tine propriul `fsMode` pentru glifa butonului; il anuntam ca sa nu
-  // rămână desincronizat cand se iese cu Esc sau F11.
+  // [2026-11-15] Aici se scria direct in buton (`btn.textContent = '⊑'`), peste
+  // ce desenase React — de acolo venea „C-ul cu o dunga dedesubt", si tot de
+  // acolo riscul ca React sa piarda nodul. Butonul e al lui React: il anuntam
+  // doar, ca sa nu ramana desincronizat cand se iese cu Esc sau F11.
   try {
     window.dispatchEvent(new CustomEvent('zeusChartFullscreen', { detail: { fullscreen } }))
   } catch (_) { /* CustomEvent lipsa in medii foarte vechi */ }

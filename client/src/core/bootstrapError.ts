@@ -104,27 +104,15 @@ function _pollForUpdate(): void {
     console.log('[UPDATE] Server:', data.version, '| Local:', current)
     if (!current) { localStorage.setItem('zeus_app_version', data.version); return }
     if (current === data.version) return
-    if (_updateCheckInterval) { clearInterval(_updateCheckInterval); _updateCheckInterval = null }
-    _showUpdateBanner(data)
+    // [2026-11-15] Fereastra „Update — INSTALL / Later" cerea o apasare la
+    // fiecare versiune de SERVER, chiar si cand aplicatia nu se schimbase. Acum
+    // versiunea noua doar se noteaza (si apare in centrul de notificari);
+    // reincarcarea pe pachetul nou o face singura `core/autoUpdate.ts`.
+    localStorage.setItem('zeus_app_version', data.version)
+    try { if (typeof w.ncAdd === 'function') w.ncAdd('info', 'system', 'Zeus Terminal ' + data.version + (data.changelog ? ' \u2014 ' + String(data.changelog).slice(0, 180) : '')) } catch (_) { /* afisaj */ }
   }).catch(function (e: any) { console.log('[UPDATE] Poll failed:', e.message) })
 }
 
-function _showUpdateBanner(data: any): void {
-  if (document.getElementById('zeus-update-banner')) return
-  const overlay = document.createElement('div'); overlay.id = 'zeus-update-banner'
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease'
-  const box = document.createElement('div'); box.style.cssText = 'background:linear-gradient(135deg,#0a1628,#132040);border:1px solid #1e3a5f;border-radius:16px;padding:20px 24px;max-width:360px;width:90vw;max-height:85vh;display:flex;flex-direction:column;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7)'
-  const icon = document.createElement('div'); icon.style.cssText = 'font-size:40px;margin-bottom:8px;flex-shrink:0'; icon.textContent = '\u26A1'
-  const title = document.createElement('div'); title.style.cssText = 'color:#fff;font-size:17px;font-weight:700;margin-bottom:10px;flex-shrink:0'; title.textContent = 'Update ' + data.version
-  const desc = document.createElement('div'); desc.style.cssText = 'color:#8899bb;font-size:12px;margin-bottom:16px;line-height:1.5;flex:1 1 auto;overflow-y:auto;min-height:0;text-align:left;padding:0 4px'; desc.textContent = data.changelog || 'New version available'
-  const btn = document.createElement('button'); btn.style.cssText = 'background:linear-gradient(135deg,#1565c0,#0d47a1);color:#fff;border:none;border-radius:10px;padding:14px 40px;font-size:15px;font-weight:700;cursor:pointer;width:100%;letter-spacing:.5px;text-transform:uppercase;flex-shrink:0'
-  btn.textContent = '\uD83D\uDD04 INSTALL'; btn.onclick = function () { btn.textContent = 'Updating...'; btn.style.opacity = '0.6'; localStorage.setItem('zeus_app_version', data.version); setTimeout(function () { location.reload() }, 500) }
-  const skip = document.createElement('div'); skip.style.cssText = 'color:#556;font-size:11px;margin-top:10px;cursor:pointer;flex-shrink:0'; skip.textContent = 'Later'
-  skip.onclick = function () { overlay.remove(); _updateCheckInterval = setInterval(_pollForUpdate, 300000) }
-  box.appendChild(icon); box.appendChild(title); box.appendChild(desc); box.appendChild(btn); box.appendChild(skip)
-  overlay.appendChild(box); document.body.appendChild(overlay)
-  if (typeof w.ncAdd === 'function') w.ncAdd('info', 'system', '\uD83C\uDD95 Update ' + data.version + (data.changelog ? ' \u2014 ' + data.changelog : ''))
-}
 
 // ===== STATUS BAR =====
 // [R8] StatusBar is React/store-owned. This loop polls AT/TP/_SAFETY every 2s

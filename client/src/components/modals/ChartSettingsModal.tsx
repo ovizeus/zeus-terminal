@@ -3,6 +3,8 @@ import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { toast } from '../../data/marketDataHelpers'
 import { renderOviLiquid } from '../../ui/panels'
 import { setTZ } from '../../data/marketDataWS'
+import { normalizeTz } from '../../core/timezones'
+import { TimezonePicker } from './TimezonePicker'
 import { USER_SETTINGS, _usSave } from '../../core/config'
 
 const w = window as any
@@ -11,7 +13,7 @@ interface Props { visible: boolean; onClose: () => void }
 export function ChartSettingsModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('csm')
   const [candleStyle, setCandleStyle] = useState('Candlestick')
-  const [tz, setTz] = useState('RO')
+  const [tz, setTz] = useState<string>(() => normalizeTz(w.S && w.S.tz))
   const initialWidth = (USER_SETTINGS?.chart?.axisWidth as number) || 60
   const [axisWidth, setAxisWidth] = useState<number>(initialWidth)
 
@@ -111,21 +113,9 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
       {/* TIMEZONE TAB */}
       <div className="mbody" id="cst" style={{ display: tab === 'cst' ? 'block' : 'none' }}>
         <div className="msec">TIMEZONE</div>
-        <div className="qbs">
-          {[
-            { k: 'RO', label: 'Romania', color: '#f0c040' },
-            { k: 'UTC', label: 'UTC', color: '#ccc' },
-            { k: 'US', label: 'NY', color: '#00d97a' },
-            { k: 'JP', label: 'Tokyo', color: '#ff44aa' },
-            { k: 'UK', label: 'London', color: '#4488ff' },
-          ].map(z => (
-            <div key={z.k} className={`qb${tz === z.k ? ' act' : ''}`} onClick={() => applyTimezone(z.k)}>
-              <span style={{ color: z.color, fontWeight: 700 }}>{z.k}</span> {z.label}
-            </div>
-          ))}
-        </div>
-        <div className="mrow" style={{ marginTop: '10px' }}><span className="mlbl">Current time:</span><span style={{ color: 'var(--gold)' }} id="roTimeDisplay">—</span></div>
-        <div className="mrow"><span className="mlbl">UTC offset:</span><span style={{ color: 'var(--txt)' }} id="roOffsetDisplay">UTC+2/+3</span></div>
+        {/* [2026-11-15] Lista de tari cu cautare, in locul celor cinci casute care
+            trimiteau coduri („RO", „US"…) si daramau motorul. */}
+        <TimezonePicker value={tz} onPick={applyTimezone} />
       </div>
 
       {/* HEATMAP TAB */}

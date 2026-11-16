@@ -707,7 +707,7 @@ export function hubSaveAll(): void {
       hubTgSave()
     }
 
-    toast('All settings saved', 0, _ZI?.ok)
+    toast('All settings saved', 3000, _ZI?.ok)
     devLog('Settings saved via Hub', 'info')
 
   } catch (e) {
@@ -721,7 +721,7 @@ export function hubLoadAll(): void {
   try {
     if (typeof w.loadUserSettings === 'function') w.loadUserSettings()
     hubPopulate()
-    toast('Settings loaded', 0, _ZI?.fold)
+    toast('Settings loaded', 3000, _ZI?.fold)
   } catch (e) {
     console.warn('[Hub] hubLoadAll error:', e)
   }
@@ -743,7 +743,7 @@ export function hubTgSave(): void {
   telegramApi.save(token, chatId).then(function (d) {
     if (d.ok) {
       if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Saved + sent to server</span>'
-      toast('Telegram saved', 0, _ZI?.ok)
+      toast('Telegram saved', 3000, _ZI?.ok)
     } else {
       if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Server: ' + (d.error || 'error') + '</span>'
     }

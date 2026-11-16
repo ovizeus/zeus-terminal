@@ -48,6 +48,9 @@ const DEVICE_WIDE = new Set([
   // [2026-10-27] Alegerea tabului-lider e despre DISPOZITIV, nu despre cont:
   // doua taburi ale aceluiasi browser aleg un lider indiferent cine e logat.
   'zeus_tab_leader',
+  // [2026-11-15] Actualizarea automata tine minte ce PACHET a incarcat tabul
+  // (si in sessionStorage, nu localStorage): e despre browser, nu despre cont.
+  'zeus_autoupdate_done', 'zeus_autoupdate_tried',
 ])
 
 // ⚠️ DATORIE CUNOSCUTA — scade, nu creste niciodata.

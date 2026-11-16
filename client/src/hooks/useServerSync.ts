@@ -285,6 +285,13 @@ export function useServerSync(authenticated: boolean) {
         import('../stores/supportStore').then(({ useSupportStore }) => {
           useSupportStore.getState().onIncoming(msg.data)
         }).catch(() => {})
+        // [2026-11-15] Mesajul viu se si VEDE. Pana acum numarul se afisa doar in
+        // panoul de Admin, deci un mesaj de la un utilizator trecea neobservat.
+        // Serverul trimite mesajele utilizatorilor doar adminilor, iar raspunsurile
+        // doar utilizatorului lor — fiecare primeste deci exact notificarea lui.
+        import('../data/marketDataHelpers').then(({ toast }) => {
+          toast(msg.data.sender === 'user' ? 'New support message from a user' : 'Support replied to you', 5000)
+        }).catch(() => {})
       }
       if (msg.type === 'sync') {
         // Cross-device sync signal — re-pull balance only; positions via state.ts bridge

@@ -3,6 +3,8 @@
 // WS connections, liq processing, symbol switch, order book, feed,
 // modals, alerts, cloud, chart settings, sound
 
+import { normalizeTz, tzLabel, utcOffsetLabel } from '../core/timezones'
+import { applyTimezone } from '../engine/brain'
 import { fetchBasisRate } from './basisRate'
 import { readAlertControls, alertControlValues } from './alertFields'
 import { checkWhaleAlerts } from './whaleAlerts'
@@ -616,7 +618,19 @@ export function updateMainMetrics(): void {
 // was removed in ZT8.
 export function applyChartColors(): void { const uc = el('ccBull')?.value || '#00d97a'; const dc = el('ccBear')?.value || '#ff3355'; const uw = el('ccBullW')?.value || '#00d97a77'; const dw = el('ccBearW')?.value || '#ff335577'; if (w.cSeries) w.cSeries.applyOptions({ upColor: uc, downColor: dc, borderUpColor: uc, borderDownColor: dc, wickUpColor: uw, wickDownColor: dw }); toast('Colors applied'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 export function setCandleStyle(style: string, btn: any): void { document.querySelectorAll('#ct-candles .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); toast('Style: ' + style) }
-export function setTZ(tz: string, btn: any): void { w.S.tz = tz; document.querySelectorAll('#cst .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); const n: any = { 'Europe/Bucharest': 'RO', 'UTC': 'UTC', 'America/New_York': 'NY', 'Asia/Tokyo': 'TK', 'Europe/London': 'LN' }; const lbl = el('chartTZLbl'); if (lbl) lbl.textContent = n[tz] || tz; toast('Timezone: ' + tz); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+// [2026-11-15] Fusul orar se verifica AICI, la intrare: un nume pe care `Intl`
+// nu-l stie arunca la fiecare formatare de ora si darama motorul (vezi
+// core/timezones.ts). Codurile vechi („RO", „US"…) sunt traduse.
+export function setTZ(tz: string, btn: any): void {
+  const zone = normalizeTz(tz)
+  w.S.tz = zone
+  document.querySelectorAll('#cst .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act')
+  const lbl = el('chartTZLbl'); if (lbl) lbl.textContent = tzLabel(zone)
+  try { applyTimezone(zone) } catch (_) { /* chartul se reface la urmatorul ciclu */ }
+  try { window.dispatchEvent(new CustomEvent('zeusTzChanged', { detail: { tz: zone } })) } catch (_) { /* fara CustomEvent */ }
+  toast('Timezone: ' + zone.replace(/_/g, ' ') + ' (' + utcOffsetLabel(zone) + ')', 2500)
+  if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
+}
 export function applyHeatmapSettings(): void { const hs = w.S.heatmapSettings; const gv = (id: string) => +(el(id)?.value ?? '') || 0; hs.lookback = gv('hmLookback') || 400; hs.pivotWidth = gv('hmPivotW') || 1; hs.atrLen = gv('hmAtrLen') || 121; hs.atrBandPct = gv('hmAtrBand') || 0.05; hs.extendUnhit = gv('hmExtend') || 30; hs.heatContrast = gv('hmContrast') || 0.3; hs.minWeight = 0; hs.keepTouched = el('hmKeepTouched')?.checked !== false; hs.longCol = el('hmLongCol')?.value || '#01c4fe'; hs.shortCol = el('hmShortCol')?.value || '#ffe400'; if (w.S.overlays.liq) renderHeatmapOverlay(); closeM('mcharts'); toast('Heatmap updated'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 
 // ===== ALERTS =====
