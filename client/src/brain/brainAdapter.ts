@@ -47,20 +47,24 @@ export function gatesFrom(cache: any): { failing: number[]; unknown: number[] } 
   return { failing, unknown }
 }
 
+// [2026-11-16] Satelitii sunt FICSI, ceruti de operator: BTC, ETH, SOL (in loc de primii 3
+// dupa scor, unde intra si XRP). Daca moneda din chart e una din ele, locul ei il ia BNB.
+// Scorul si directia raman cele reale din scaner; o moneda nescanata arata „—".
+export const SAT_SYMS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']
+const SAT_FALLBACK = 'BNBUSDT'
+
 export function satsFrom(results: any, main: string): RawSat[] {
-  if (!Array.isArray(results)) return []
   const m = String(main || '').toUpperCase()
-  return results
-    .filter((r: any) => r && r.sym && String(r.sym).toUpperCase() !== m)
-    .slice()
-    .sort((a: any, b: any) => (Number(b.score) || 0) - (Number(a.score) || 0))
-    .slice(0, 3)
-    .map((r: any) => {
-      const sc = Number(r.score)
-      const mode: Mode = r.dir === 'bull' ? 'LONG' : r.dir === 'bear' ? 'SHORT' : 'RANGE'
-      // Scanerul nu calculeaza cele 12 axe pe moneda → satelit desenat ca cerc (spec 3).
-      return { symbol: shortSym(r.sym), full: String(r.sym).toUpperCase(), axes: null, score: Number.isFinite(sc) ? sc : null, mode }
-    })
+  const list = SAT_SYMS.filter((x) => x !== m)
+  if (list.length < 3 && m !== SAT_FALLBACK) list.push(SAT_FALLBACK)
+  const rows = Array.isArray(results) ? results : []
+  return list.slice(0, 3).map((full) => {
+    const r = rows.find((x: any) => x && String(x.sym || '').toUpperCase() === full)
+    const sc = r ? Number(r.score) : NaN
+    const mode: Mode = r && r.dir === 'bull' ? 'LONG' : r && r.dir === 'bear' ? 'SHORT' : 'RANGE'
+    // Scanerul nu calculeaza cele 12 axe pe moneda → satelit desenat ca cerc (spec 3).
+    return { symbol: shortSym(full), full, axes: null, score: Number.isFinite(sc) ? sc : null, mode }
+  })
 }
 
 /** Pozitiile reale din modul curent (demo sau live). */
