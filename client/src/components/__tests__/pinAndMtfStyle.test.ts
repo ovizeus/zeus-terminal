@@ -63,3 +63,10 @@ describe('memoria grafica', () => {
     expect(ui).toContain('IntersectionObserver')
   })
 })
+
+describe('ecran complet', () => {
+  it('ICHNOS e ascuns in ecran complet (chartul si indicatorii raman)', () => {
+    expect(read('app.css')).toMatch(/#csec\.fsm #ichnosPanel \{ display: none !important; \}/)
+    expect(read('components/layout/PanelShell.tsx')).toMatch(/id="csec"[\s\S]*id="ichnosPanel"/)
+  })
+})

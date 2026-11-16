@@ -14892,3 +14892,9 @@ Din cod nu se vede ce o lungeste (verificate si excluse: panourile ascunse din `
 - Butonul ⇅: apare doar cat derulezi, dispare dupa 1,5 s; „jos" duce la capatul CONTINUTULUI (`.bot`), nu al documentului.
 
 Urmatorul pas: citesc raportul din `data/logs` (CLIENT_ERR LAYOUT_TAIL) dupa ce operatorul deruleaza o data pana jos, si tai cauza.
+
+## 🖥️ 2026-11-16 (6) — Ecranul complet fara ICHNOS; butonul Focus de verificat
+
+Cerut: „la maximizare sa fie doar chartul si indicatorii, fara ICHNOS — cu el chartul se vede mic". `#csec.fsm #ichnosPanel { display: none !important }`: inaltimea chartului in ecran complet se calculeaza scazand panourile VIZIBILE (`measureOccupiedHeight`), deci spatiul revine chartului; la iesire ICHNOS reapare.
+
+Raportat in acelasi mesaj: butonul Focus al creierului „nu mai apare deloc" si cu Focus pe off nu se vede unda radarului. Randat cu AMBELE foi de stil in ordinea aplicatiei si in containerul real (`.znc-left`): butoanele apar, unda se vede. Nicio regula nu le ascunde. Pista pentru unda: cu „Elimina animatiile" (accesibilitate Android) browserul cere `prefers-reduced-motion`, iar creierul opreste baleiajul (spec 8). Pentru butonul disparut — cerut o poza.
