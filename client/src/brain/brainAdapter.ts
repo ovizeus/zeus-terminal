@@ -8,7 +8,7 @@ import { useBrainStore } from '../stores/brainStore'
 import { getATMode } from '../services/stateAccessors'
 import { getSymPrice } from '../data/marketDataPositions'
 import { N, type Mode } from './brainStrings'
-import { currentSats } from './brainPrefs'
+import { satsOf } from './brainPrefs'
 import { modeOf, progressOf, emaStep, DeadDetector, type Num, type Raw, type RawSat } from './brainDerived'
 
 const w = window as any
@@ -157,7 +157,7 @@ export function buildRawFromZeusState(nowMs: number = Date.now()): Raw {
     position,
     closeMsg: nowMs < _closeUntil ? _closeMsg : '',
     main: shortSym(main),
-    sats: satsFrom(w.MSCAN?.data, main, currentSats()),
+    sats: satsFrom(w.MSCAN?.data, main, satsOf(main)),
   }
 }
 

@@ -230,15 +230,15 @@ export class Recorder {
   }
 
   /** Poza la 350 ms dupa intrare; nu in timpul unui replay. */
-  snap(nowMs: number, canvas: HTMLCanvasElement, replaying: boolean): void {
+  // [2026-11-16 seara] Poza nu mai e o copie de 240 px a canvas-ului (iesea neclara, cerut
+  // de operator „sa se vada clar"): `capture` redeseneaza cadrul la rezolutie mare (brainUI).
+  snap(nowMs: number, capture: () => string | null, replaying: boolean): void {
     if (!this.snapQ || nowMs < this.snapQ.at || replaying) return
     const key = this.snapQ.key
     this.snapQ = null
     try {
-      const c = document.createElement('canvas'); c.width = c.height = 240
-      const x = c.getContext('2d'); if (!x) return
-      x.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 240, 240)
-      const url = c.toDataURL('image/png')
+      const url = capture()
+      if (!url) return
       void brainStorage.putSnapshot(key, url)
       for (const t of [...this.open.values(), ...this.trades]) if (t.key === key) { t.hasSnapshot = true; void brainStorage.putTrade(strip(t)) }
       this.onChange()

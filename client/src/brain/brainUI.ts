@@ -11,7 +11,7 @@ import { Recorder, type Frame } from './brainRecorder'
 import { brainStorage, type TradeRecord } from './brainStorage'
 import { buildRawFromZeusState, switchMain, currentEnv, currentPositions, shortSym } from './brainAdapter'
 import { buildJournal, brainCaptured, ENV_COLOR, type Env, type JRow, type ServerRow, type OpenPos } from './brainJournal'
-import { radarCoins, MAX_SATS } from './brainPrefs'
+import { radarCoins, satsOf, MAX_SATS } from './brainPrefs'
 import { MSCAN_SYMS } from '../core/config'
 import { loadPref, savePref } from './brainPrefs'
 
@@ -29,7 +29,7 @@ const CSS = `
 .zb7-alll{flex:1;overflow-y:auto;font-size:12px;color:#7c8ea3}
 .zb7-env{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;border:1px solid currentColor;vertical-align:1px}
 .zb7-chip{font-size:11px!important;padding:3px 8px!important;border-radius:999px!important}
-.zb7-det{position:fixed;inset:0;background:rgba(2,6,16,.98);z-index:10060;display:none;flex-direction:column;align-items:center;font-family:monospace}
+.zb7-det{position:fixed;inset:0;background:#02060f;z-index:10060;display:none;flex-direction:column;align-items:center;font-family:monospace}
 .zb7-det .in{width:100%;max-width:420px;height:100%;overflow-y:auto;padding:12px 10px 24px;box-sizing:border-box;color:#9fb3c8;font-size:12px}
 .zb7-det button{font-family:monospace;font-size:13px;padding:8px;border:1px solid;border-radius:8px;background:transparent;cursor:pointer}
 .zb7-det .kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #0f1b2b}
@@ -215,14 +215,14 @@ export function startBrain(root: HTMLElement): () => void {
   }
   let coinsSig = ''
   function renderCoins(): void {
-    const main = mainSym(), sats = pref.sats
+    const main = mainSym(), sats = satsOf(main, pref.coins)
     // Doar cand lista se schimba: altfel un meniu deschis s-ar inchide la fiecare reimprospatare.
-    const sig = main + '|' + sats.join(',')
+    const sig = main + '|' + pref.coins.join(',')
     if (sig === coinsSig) return
     coinsSig = sig
     const chip = (sym: string, isMain: boolean) => `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid ${isMain ? '#39ff6a66' : '#2a3a4d'};border-radius:999px;color:${isMain ? '#39ff6a' : '#d8e4f0'};">${esc(shortSym(sym))}${isMain ? ' <span style="color:#56657a;font-size:10px;">main</span>' : `<button type="button" data-rmsat="${esc(sym)}" aria-label="Remove ${esc(shortSym(sym))}" style="padding:0 4px!important;border:0!important;color:#ff7a8f;font-size:13px!important;">✕</button>`}</span>`
-    const opts = MSCAN_SYMS.filter((x: string) => x !== main && !sats.includes(x))
-    $('coins').innerHTML = chip(main, true) + sats.filter((x) => x !== main).map((x) => chip(x, false)).join('')
+    const opts = MSCAN_SYMS.filter((x: string) => x !== main && !pref.coins.includes(x))
+    $('coins').innerHTML = chip(main, true) + sats.map((x) => chip(x, false)).join('')
       + (sats.length < MAX_SATS && opts.length ? `<select data-addsat aria-label="Add satellite" style="background:#060c16;color:#9fb3c8;border:1px dashed #2a3a4d;border-radius:999px;padding:4px 8px;font:inherit;font-size:12px;"><option value="">+ satellite</option>${opts.map((x: string) => `<option value="${x}">${shortSym(x)}</option>`).join('')}</select>` : '')
   }
   function thumb(r: JRow): string {
@@ -320,6 +320,34 @@ export function startBrain(root: HTMLElement): () => void {
     det.style.display = 'flex'; lockBody()
     ;(det.querySelector('[data-k="detx"]') as HTMLElement)?.focus()
   }
+  /**
+   * Poza de la intrare la 2160 × 2160 (clasa 4K): acelasi cadru, redesenat de un al doilea
+   * desenator cu starea celui de pe ecran copiata (dt = 0, deci nu avanseaza nimic), pe fond
+   * OPAC. WebP 0,95 (JPEG daca WebP lipseste): ~0,5 MB in loc de cativa MB in PNG.
+   * Canvas-urile mari se elibereaza imediat (memoria grafica pe telefon, vezi zona neagra).
+   */
+  const SNAP_PX = 2160
+  function hiResSnap(view: any, t: number): string | null {
+    const big = document.createElement('canvas'), out = document.createElement('canvas')
+    try {
+      big.width = big.height = out.width = out.height = SNAP_PX
+      const bx = big.getContext('2d'), ox = out.getContext('2d')
+      if (!bx || !ox) return null
+      bx.scale(SNAP_PX / S, SNAP_PX / S)
+      const R2 = new BrainRenderer(bx) as any, src = RS as any
+      for (const k of Object.keys(src)) {
+        if (k === 'ctx') continue
+        const v = src[k]
+        R2[k] = Array.isArray(v) ? v.map((e: any) => (e && typeof e === 'object' ? { ...e } : e)) : v
+      }
+      R2.render(view, t, 0, null, { focus: UI.focus, reduced: FX.reduced, best: UI.best, sound: () => {}, info: () => {} })
+      ox.fillStyle = '#040913'; ox.fillRect(0, 0, SNAP_PX, SNAP_PX)
+      ox.drawImage(big, 0, 0)
+      let url = out.toDataURL('image/webp', 0.95)
+      if (!url.startsWith('data:image/webp')) url = out.toDataURL('image/jpeg', 0.95)
+      return url
+    } catch { return null } finally { big.width = big.height = 0; out.width = out.height = 0 }
+  }
   const refresh = () => rebuild()
   REC.onChange = () => { void fetchHistory(true); rebuild() }
 
@@ -357,11 +385,11 @@ export function startBrain(root: HTMLElement): () => void {
   })
   $('coins').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('[data-rmsat]') as HTMLElement | null
-    if (b) { pref.sats = pref.sats.filter((x) => x !== b.dataset.rmsat); savePref(pref); rebuild() }
+    if (b) { pref.coins = pref.coins.filter((x) => x !== b.dataset.rmsat); savePref(pref); rebuild() }
   })
   $('coins').addEventListener('change', (e) => {
     const t = e.target as HTMLSelectElement
-    if (t && t.dataset && 'addsat' in t.dataset && t.value) { if (pref.sats.length < MAX_SATS && !pref.sats.includes(t.value)) { pref.sats = pref.sats.concat(t.value); savePref(pref) } rebuild() }
+    if (t && t.dataset && 'addsat' in t.dataset && t.value) { if (satsOf(mainSym(), pref.coins).length < MAX_SATS && !pref.coins.includes(t.value)) { pref.coins = pref.coins.concat(t.value); savePref(pref) } rebuild() }
   })
 
   async function makeCard(r: JRow): Promise<void> {
@@ -547,7 +575,7 @@ export function startBrain(root: HTMLElement): () => void {
       }
       if (UI.rep) { const L = UI.rep.frames.length; drawStrip(UI.rep.frames, UI.rep.idx / L); $('rbar').textContent = 'REPLAY #' + UI.rep.tr.id + ' · ' + Math.round(UI.rep.idx / REC_HZ) + 's / ' + Math.round(L / REC_HZ) + 's · exit ✕' }
       else if (onScreen && fN % 2 === 0) { drawStrip(REC.frames.slice(-STRIP), null, STRIP); $('rbar').textContent = '' }
-      REC.snap(nowMs, cv, !!UI.rep)
+      REC.snap(nowMs, () => hiResSnap(view, t), !!UI.rep)
       if (UI.infoUntil > 0 && performance.now() / 1000 > UI.infoUntil) { UI.infoUntil = 0; $('info').textContent = STR.idle }
     } catch (e) {
       // un cadru stricat nu opreste bucla
