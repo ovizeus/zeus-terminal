@@ -751,7 +751,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'notos',    ico: '\u{1FA81}', name: 'NOTOS',          desc: 'Perp premium — mark vs index in basis points plus funding alignment; flags the divergence that fuels a squeeze', hasGenericSettings: true },
   { id: 'pulsar',   ico: '\u{1F4A5}', name: 'PULSAR',          desc: 'Compression box, measured move and candle recolour — draws the coil on the chart, projects the box height as target on release, marks the invalidation', hasGenericSettings: true },
   { id: 'autotrend', ico: '\u{1F4C8}', name: 'AUTOTRENDLINE', desc: 'Automatic trendline fans — green support lines from the major low through each higher low, red resistance lines from the major high, all from real pivots and extended to the last bar', hasGenericSettings: true },
-  { id: 'ichnos',   ico: '\u{1F463}', name: 'ICHNOS',          desc: 'Footprint — sold x bought at every price level inside each candle, with Σ volume, Δ delta, POC box, diagonal imbalances, stacked imbalance zones and big-order levels (Bybit trades, $k). Zoom in to read the cells', hasGenericSettings: true },
+  { id: 'ichnos',   ico: '\u{1F463}', name: 'ICHNOS',          desc: 'Footprint panel under the chart — sold x bought at every price level of each candle, Σ volume, Δ delta, POC box, diagonal imbalances, stacked imbalance zones and big-order levels (Bybit trades, $k). Swipe to scroll, double-tap for live', hasGenericSettings: true },
   { id: 'arachne',  ico: '\u{1F578}\uFE0F', name: 'ARACHNE',         desc: 'Auto trendlines and S/R — diagonal lines through real pivots, horizontal levels by touch count, each labelled, with break and entry markers', hasGenericSettings: true },
 ]
 

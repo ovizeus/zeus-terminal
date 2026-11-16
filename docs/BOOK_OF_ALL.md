@@ -14859,3 +14859,11 @@ Dupa reparatia de dimineata (desenul creierului oprit in afara ecranului, liniil
 Reparat: `core/scrollBoot.ts`, chemat in `main.tsx` — restaurarea pe `manual`, sus la pornire, la `load` si la revenirea dintr-o pagina tinuta in cache (`pageshow.persisted`). Reparatiile de dimineata raman (reduc memoria grafica), dar nu erau cauza. ⚠️ Lectie: am tratat simptomul („zone nedesenate") fara sa intreb UNDE era pagina la intrare; poza a doua o arata limpede.
 
 Teste: `scrollBoot.test.ts` (3). Client 2.235.
+
+## 👣 2026-11-16 (3) — ICHNOS refacut: panou propriu, casutele ca in capturi (doar client)
+
+Operatorul: „il activez si nu apare nimic pe chart… exact acelasi design cu casetele". Masurat: aplicatia cerea footprint-ul (BTC 30m, la 3 s, raspuns 200) — datele ajungeau. Prima versiune desena PESTE lumanarile chartului principal; pe 30m, cu zeci de lumanari pe ecran, fiecare avea cativa pixeli, deci celulele erau dungi abia vizibile, fara numere. Footprint-ul din capturi e un chart SEPARAT.
+
+Acum (`engine/ichnosChart.ts`, rescris): panou propriu sub chart (`#ichnosPanel`, 460 px, in PanelShell), desenat pe canvas: coloane de 96 px (~3-4 pe telefon), un rand de 22 px pe fiecare nivel de pret, casute „vandut x cumparat" ($k) verzi/roz cu intensitatea dupa volum, POC incadrat gros alb, cele 3 celule cu cel mai mare volum din ecran umplute si incadrate, dezechilibre aldine (albastru cumparatori, rosu vanzatori), Σ si Δ deasupra si dedesubt, lumanare subtire in stanga coloanei, banda aurie/albastra pentru dezechilibre stivuite, linie albastra BIG pentru ordine mari, pretul curent pe axa, orele dedesubt. Tras cu degetul: stanga/dreapta prin timp, sus/jos prin pret; dublu-tap = live. Fara bucla continua: deseneaza la date noi si la gesturi. Celulele se opresc exact pe ultimul rand intreg, ca Σ/Δ de dedesubt sa nu fie acoperite (prins pe captura de proba).
+
+Vazut desenat pe datele REALE salvate de server (128 de minute Bybit, unite pe 5m). Teste: `ichnosPanel.test.ts` (2). Client 2.237.
