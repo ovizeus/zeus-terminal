@@ -1,3 +1,4 @@
+import { bootScrollTop } from './core/scrollBoot'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
@@ -7,6 +8,7 @@ import { startAutoUpdate } from './core/autoUpdate'
 // [BETA-GATE 2026-11-13] Inainte de orice cerere: un cont 'viewer' nu trimite
 // cereri catre zonele inchise. Poarta adevarata ramane pe server.
 installBetaFetchGuard()
+bootScrollTop()
 
 // [2026-11-15] Dupa un build nou, aplicatia se reincarca singura pe versiunea
 // curenta, la toti utilizatorii (vezi core/autoUpdate.ts).

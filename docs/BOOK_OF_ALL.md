@@ -14851,3 +14851,11 @@ Ceruti de operator cu 16 capturi (`data/book_uploads/1794737903931__*`): 3 de pe
 - **Client:** `indicatorCalcIchnos.ts` (Σ, Δ, POC; dezechilibru DIAGONAL 3× — cumparatorii de la p contra vanzatorilor de dedesubt, cu volum minim 2% din lumanare; nivelurile de la capete nu au cu ce se compara — un test a prins „infinitul"; stivuite = 3 niveluri alaturate; ordine mari = 4× mediana celulelor), `ichnosChart.ts` (strat propriu `attachPrimitive`, redesenat la pan/zoom; la zoom celulele „vandut x cumparat", altfel doar culorile si POC; cerere completa la deschidere, apoi ultimele 3 lumanari la 3 s).
 
 Teste: server 13 noi, client 11 noi. Server 10.880, client 2.232. Vazut desenat pe date reale Bybit intr-o pagina locala (300 de lumanari pentru linii; 2 minute de tranzactii pentru footprint — Bybit da doar ultimele 1.000).
+
+## ⬛ 2026-11-16 (2) — zona neagra la intrare: cauza era restaurarea scroll-ului
+
+Dupa reparatia de dimineata (desenul creierului oprit in afara ecranului, liniile de scanare statice) operatorul a trimis o poza noua: tot negru jos, „la intrare". Detaliul care lipsea: **la intrare pagina nu era sus**, ci pe chart, la jumatatea ei. Browserul RESTAURA singur pozitia de scroll de la vizita anterioara (`history.scrollRestoration` era pe `auto`, nimic nu-l controla), iar din 15 nov actualizarea automata reincarca aplicatia singura. Restaurarea se facea inainte ca restul paginii sa fie construit si desenat; zona de sub ce era gata ramanea neagra, iar urcand pana sus pagina se redesena — exact simptomul descris („nu se duce pana nu dau scroll sus de tot").
+
+Reparat: `core/scrollBoot.ts`, chemat in `main.tsx` — restaurarea pe `manual`, sus la pornire, la `load` si la revenirea dintr-o pagina tinuta in cache (`pageshow.persisted`). Reparatiile de dimineata raman (reduc memoria grafica), dar nu erau cauza. ⚠️ Lectie: am tratat simptomul („zone nedesenate") fara sa intreb UNDE era pagina la intrare; poza a doua o arata limpede.
+
+Teste: `scrollBoot.test.ts` (3). Client 2.235.
