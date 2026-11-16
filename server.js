@@ -1836,6 +1836,13 @@ try {
   logger.warn('BOOKMAP', 'trade feed start failed: ' + (e && e.message));
 }
 
+// [2026-11-16] ICHNOS — footprint din tranzactiile Bybit (gratuit, timp real).
+try {
+  require('./server/services/footprintService').start();
+} catch (e) {
+  logger.warn('ICHNOS', 'start failed: ' + (e && e.message));
+}
+
 // Retentia instantaneelor de predictie. Aceeasi lectie ca la G-5: lotizata,
 // fiindca better-sqlite3 e SINCRON si un DELETE nelimitat ingheata bucla.
 const _runLiqPredictPrune = () => {

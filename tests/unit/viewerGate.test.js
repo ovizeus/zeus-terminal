@@ -237,7 +237,7 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
         expect(allowed).toEqual([
             'GET /api/byoi/config', 'GET /api/byoi/indicators', 'GET /api/fng',
             'GET /api/indicators/usage', 'GET /api/liq/recent',
-            'GET /api/market/bookmap', 'GET /api/market/depth', 'GET /api/market/funding',
+            'GET /api/market/bookmap', 'GET /api/market/depth', 'GET /api/market/footprint', 'GET /api/market/funding',
             'GET /api/market/klines', 'GET /api/market/liq-map', 'GET /api/market/liq-panel',
             'GET /api/market/liq-predict', 'GET /api/market/markprice', 'GET /api/market/oi',
             'GET /api/market/sentiment', 'GET /api/market/spot/klines', 'GET /api/market/symbol/:symbol',

@@ -17,6 +17,8 @@ import { IND_ICONS } from '../constants/indicatorIcons'
 import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets, flowBucketTime, flowAnchorSeries, flowTrailKey } from './indicatorCalcFlow'
 import { pulsar, pulsarCandleColor } from './indicatorCalcPulsar'
 import { arachne, lineValueAt } from './indicatorCalcArachne'
+import { autoTrendlines, lineAt as autoLineAt } from './indicatorCalcAutoTrend'
+import { initIchnos, updateIchnos, clearIchnos } from './ichnosChart'
 import { canTintCandles, nextTintOwner, isCandleTinter, tintRivals } from './candleTint'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
@@ -434,6 +436,14 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     // [ARACHNE 2026-10-19] Tot chart principal: linii si marcaje, fara panou.
     case 'arachne':
       { if (show) { initArachneSeries(); updateArachne() } else clearArachne() }
+      break
+    // [2026-11-16] AUTOTRENDLINE: evantaie de linii din pivoti reali, chart principal.
+    case 'autotrend':
+      { if (show) updateAutoTrend(); else clearAutoTrend() }
+      break
+    // [2026-11-16] ICHNOS: footprint desenat peste lumanari (tranzactii Bybit).
+    case 'ichnos':
+      { if (show) initIchnos(); else clearIchnos() }
       break
     case 'eos':
       if (show) initEosSeries()
@@ -3686,6 +3696,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.notos && w._notosInited) safe(updateNotos)
   if (w.S.activeInds.pulsar) safe(updatePulsar)
   if (w.S.activeInds.arachne) safe(updateArachne)
+  if (w.S.activeInds.autotrend) safe(updateAutoTrend)
+  if (w.S.activeInds.ichnos) safe(updateIchnos)
   if (w.S.activeInds.eos) safe(updateEos)
   if (w.S.activeInds.pantheon && w._pantheonInited) safe(updatePantheon)
   if (w.S.activeInds.aegis) safe(updateAegis)
@@ -5085,4 +5097,71 @@ export function clearArachne(): void {
   try { _arachneClear() } catch (_) { /* */ }
   try { if (w._arachneMarkS) w._arachneMarkS.setMarkers([]) } catch (_) { /* */ }
   w._arachnePanel = null
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// [2026-11-16] AUTOTRENDLINE — evantaiele de linii (calculul: indicatorCalcAutoTrend.ts)
+// Linii verzi de suport din fundul major spre minimele urmatoare, rosii de
+// rezistenta din varful major spre maximele urmatoare, prelungite pana la bara
+// curenta; punct pe ancora. Fara etichete — ca in capturi.
+// ═══════════════════════════════════════════════════════════════════════════
+function _autoTrendClear(): void {
+  const segs = (w._autoTrendSeries = w._autoTrendSeries || [])
+  for (const s of segs) { try { w.mainChart.removeSeries(s) } catch (_) { } }
+  w._autoTrendSeries = []
+  if (w._autoTrendMarkS) { try { w._autoTrendMarkS.setMarkers([]) } catch (_) { } }
+}
+
+export function updateAutoTrend(): void {
+  if (!w.mainChart || !w.S?.klines?.length) return
+  const kl = w.S.klines
+  const cfg = (w.IND_SETTINGS && w.IND_SETTINGS.autotrend) || {}
+  const r = autoTrendlines(kl.map((b: any) => b.high), kl.map((b: any) => b.low), {
+    majorWidth: Math.round(cfg.majorWidth) || 8,
+    minorWidth: Math.round(cfg.minorWidth) || 3,
+    anchorsPerSide: Math.round(cfg.anchorsPerSide) || 2,
+    linesPerAnchor: Math.round(cfg.linesPerAnchor) || 3,
+    tolAtr: cfg.tolAtr > 0 ? cfg.tolAtr : 0.15,
+  })
+  // Nimic nu s-a schimbat: nu reconstruim seriile la fiecare tic.
+  const sig = kl.length + ':' + kl[kl.length - 1].time + ':' + r.lines.map((l) => l.kind[0] + l.fromIndex + '-' + l.toIndex).join(',')
+  if (sig === w._autoTrendSig && (w._autoTrendSeries || []).length === r.lines.length) {
+    const last = kl.length - 1
+    for (let k = 0; k < r.lines.length; k++) {
+      try { w._autoTrendSeries[k].update({ time: kl[last].time, value: autoLineAt(r.lines[k], last) }) } catch (_) { }
+    }
+    return
+  }
+  w._autoTrendSig = sig
+  try {
+    _autoTrendClear()
+    for (const l of r.lines) {
+      const pts: any[] = []
+      for (let i = l.fromIndex; i < kl.length; i++) pts.push({ time: kl[i].time, value: autoLineAt(l, i) })
+      if (pts.length < 2) continue
+      const s = w.mainChart.addLineSeries({
+        color: l.kind === 'support' ? 'rgba(57,255,106,0.92)' : 'rgba(255,61,110,0.92)',
+        lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      })
+      s.setData(pts)
+      w._autoTrendSeries.push(s)
+    }
+    if (!w._autoTrendMarkS) {
+      w._autoTrendMarkS = w.mainChart.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+    }
+    w._autoTrendMarkS.setData(kl.map((b: any) => ({ time: b.time, value: b.close })))
+    // Punct doar pe ancorele din care chiar porneste o linie.
+    const used = new Set(r.lines.map((l) => l.fromIndex))
+    w._autoTrendMarkS.setMarkers(r.anchors.filter((a) => kl[a.index] && used.has(a.index)).map((a) => ({
+      time: kl[a.index].time, position: a.kind === 'low' ? 'belowBar' : 'aboveBar', shape: 'circle',
+      color: a.kind === 'low' ? '#39ff6a' : '#ff3d6e', size: 0.6,
+    })).sort((x: any, y: any) => x.time - y.time))
+  } catch (_) { /* chartul poate fi in mijlocul unei reconstructii */ }
+}
+
+export function clearAutoTrend(): void {
+  _autoTrendClear()
+  w._autoTrendSig = ''
+  if (w._autoTrendMarkS) { try { w.mainChart.removeSeries(w._autoTrendMarkS) } catch (_) { } w._autoTrendMarkS = null }
 }

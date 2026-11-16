@@ -99,6 +99,19 @@ router.get('/liq-predict', async (req, res) => {
 // in alocari, deci o cerere cu rows=1e9 ar fi o cale de a inghetat serverul.
 // `band` accepta 'auto' — si auto chiar inseamna banda care EXISTA (lectia
 // b326/b327), nu una presupusa.
+// [2026-11-16] ICHNOS — footprint (volumul pe niveluri in fiecare lumanare), din
+// tranzactiile Bybit. Doar citire din memoria serviciului; fara cerere spre bursa.
+router.get('/footprint', (req, res) => {
+    try {
+        const fp = require('../services/footprintService');
+        const r = fp.get(req.query.symbol, String(req.query.tf || '5m'), req.query.limit);
+        res.json(r);
+    } catch (e) {
+        // Conventia rutelor de piata: 200 cu raspuns gol, nu 500 — un panou gol e onest.
+        res.status(200).json({ ok: false, error: 'unavailable', candles: [] });
+    }
+});
+
 router.get('/bookmap', (req, res) => {
     try {
         const BM = require('../services/bookMap');

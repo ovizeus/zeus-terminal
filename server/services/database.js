@@ -10572,6 +10572,20 @@ migrate('424_byoi_requests', () => {
 // 'viewer' ca valoare implicita (orice cont NOU porneste viewer), iar conturile
 // deja aprobate si adminii sunt ridicati la 'full' o singura data, aici —
 // pentru ei nu se schimba nimic. Conturile inca neaprobate raman 'viewer'.
+migrate('427_footprint_1m', () => {
+    // [2026-11-16] ICHNOS (footprint): lumanarile de 1 minut cu volumul pe niveluri
+    // de pret, din tranzactiile Bybit. `t` = inceputul minutului, INTEGER ms.
+    // `data` = {o,h,l,c,lv:[[pret,bid,ask],...]} (USD). Retentie 48h, lotizata.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS footprint_1m (
+            symbol TEXT    NOT NULL,
+            t      INTEGER NOT NULL,
+            data   TEXT    NOT NULL,
+            PRIMARY KEY (symbol, t)
+        )
+    `);
+});
+
 migrate('426_user_access_level', () => {
     db.exec("ALTER TABLE users ADD COLUMN access_level TEXT NOT NULL DEFAULT 'viewer'");
     db.exec("UPDATE users SET access_level = 'full' WHERE approved = 1 OR role = 'admin'");
