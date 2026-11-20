@@ -2942,6 +2942,9 @@ module.exports = {
     // [LEVER-A 2026-06-10] test-only — pure shadow-parity formula, no runtime
     // path calls this export (_runShadowCycle uses the local symbol).
     _calcConfluenceParity,
+    // [2026-11-20] radarul de pe server (radarAxes) numara semnalele bull/bear cu
+    // ACEEASI functie pura ca decizia, ca sa nu existe doua formule. Doar citire.
+    _calcConfluence,
     _belowSmallBar,
     _resolveSoakFloor,
     _soakConfFloorFor,

@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.364',
-    build: 390,
+    version: '1.7.365',
+    build: 391,
     date: '2026-11-20',
     changelog: [
+        'b391 v1.7.365 - Radarul creierului pe SERVER, 2026-11-20 (server + client). Cele 12 axe se calculeaza pe server pentru monedele radarului tuturor utilizatorilor; fiecare intrare se inregistreaza (forma, 30 s inainte, toata tranzactia) si cu telefonul inchis: poza, replay, deja vu, sablon, share. Lista RADAR COINS salvata pe server; tranzactiile vechi primesc decizia serverului de la intrare.',
         'b390 v1.7.364 - NEREUS banda WIDE, 2026-11-20 (server + client). Cartea de ordine pana la ±2.5K pe BTC: totalul Binance + OKX + Gate pe trepte de 50 $, cu linia unde se termina fiecare bursa si linia magnetului pe harta. Benzile vechi neschimbate.',
         'b389 v1.7.363 - Jurnalul radarului (pasul B), 2026-11-16 (server + client). Doar monedele radarului (principala + satelitii, lista fixa, max 3), doar mediul activ cu eticheta lui (DEMO/TESTNET/REAL), fereastra de detalii, card de share cu eticheta mediului, psych/deja vu pe mediu. /api/journal da si serverScore.',
         'b388 v1.7.362 - Doi indicatori noi in lista de deasupra chartului, 2026-11-16 (server + client). AUTOTRENDLINE: evantaie de linii de trend trase singure din pivoti reali - verzi de suport din fundul major spre minimele urmatoare, rosii de rezistenta din varful major, prelungite pana la bara curenta, valide cat timp pretul nu le-a rupt dupa al doilea pivot. ICHNOS (footprint): in fiecare lumanare, pe fiecare nivel de pret, cat s-a vandut x cat s-a cumparat agresiv (mii de dolari), cu Σ volum, Δ delta, POC incadrat, dezechilibre diagonale aldine (albastru cumparatori, rosu vanzatori), zone de dezechilibre stivuite si niveluri cu ordine mari. Datele: fiecare tranzactie Bybit (BTC, ETH, SOL, BNB), gratuit si in timp real; serverul le strange pe minut (footprintService, tabela footprint_1m, 48h) si le uneste pe intervalul chartului (1m-4h). Ruta /api/market/footprint, permisa si conturilor beta.',

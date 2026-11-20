@@ -112,6 +112,18 @@ router.get('/footprint', (req, res) => {
     }
 });
 
+// [2026-11-20] Axele radarului calculate pe SERVER, pentru afisaj (aceeasi sursa ca
+// inregistrarile din jurnal, deci deja vu compara mere cu mere). Din memorie, fara
+// cerere spre bursa. ?symbols=BTCUSDT,ETHUSDT (max 6).
+router.get('/radar', (req, res) => {
+    try {
+        const syms = String(req.query.symbols || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 6);
+        res.json({ ok: true, axes: require('../services/radarCapture').liveFor(syms) });
+    } catch (e) {
+        res.status(200).json({ ok: false, error: 'unavailable', axes: {} });
+    }
+});
+
 router.get('/bookmap', (req, res) => {
     try {
         const BM = require('../services/bookMap');

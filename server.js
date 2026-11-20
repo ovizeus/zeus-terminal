@@ -1288,6 +1288,8 @@ app.use('/api/journal', journalRoutes);
 // mount itself is inert when the flag is off (current default).
 const brainParityRoutes = require('./server/routes/brainParity');
 app.use('/api/brain/parity', brainParityRoutes);
+// [2026-11-20] Radarul de pe server: monedele radarului + inregistrarile intrarilor.
+app.use('/api/brain/radar', require('./server/routes/brainRadar'));
 
 // ─── [OMEGA Wave 1 UI 2026-05-15] Read-only OMEGA UI feed ───
 // Mounts GET /api/omega/{voice,mood,health} + POST /api/omega/chat. Read
@@ -1842,6 +1844,14 @@ try {
 } catch (e) {
   logger.warn('ICHNOS', 'start failed: ' + (e && e.message));
 }
+
+// [2026-11-20] Radarul creierului pe SERVER: cele 12 axe + inregistrarea fiecarei
+// intrari pe monedele radarului (poza, replay, deja vu, sablon si cu telefonul inchis).
+// Porneste dupa 45 s, cand serverState are deja lumanari. Doar afisaj si jurnal.
+setTimeout(() => {
+  try { require('./server/services/radarCapture').start(); }
+  catch (e) { logger.warn('RADAR', 'start failed: ' + (e && e.message)); }
+}, 45000).unref();
 
 // Retentia instantaneelor de predictie. Aceeasi lectie ca la G-5: lotizata,
 // fiindca better-sqlite3 e SINCRON si un DELETE nelimitat ingheata bucla.

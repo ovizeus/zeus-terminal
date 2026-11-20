@@ -85,6 +85,29 @@ router.get('/', (req, res) => {
             trades = trades.filter(t => t.openTs < toTs);
         }
 
+        // [2026-11-20] Ce a retinut SERVERUL la intrare (brain_decisions legat prin seq):
+        // increderea, scorul, regimul, portile, profilul. Jurnalul creierului le arata si
+        // pentru tranzactiile intrate cu telefonul inchis (inainte: „—" peste tot).
+        try {
+            const seqs = trades.map(t => Number(t.seq)).filter(Number.isFinite);
+            if (seqs.length) {
+                const RC = require('../services/radarCapture');
+                const meta = new Map();
+                const q = db.db.prepare(`SELECT linked_seq, data FROM brain_decisions WHERE user_id = ? AND linked_seq IN (${seqs.map(() => '?').join(',')}) ORDER BY ts ASC`);
+                for (const r of q.all(userId, ...seqs)) {
+                    let d = null; try { d = JSON.parse(r.data); } catch (_) { continue; }
+                    meta.set(Number(r.linked_seq), {
+                        conf: Number.isFinite(+d.confScore) ? +d.confScore : null,
+                        finalConf: Number.isFinite(+d.finalConfidence) ? +d.finalConfidence : null,
+                        regime: d.regime || null, tier: d.finalTier || null,
+                        gates: RC.gatesFrom(Array.isArray(d.gateReasons) ? d.gateReasons : []),
+                        trendBias: d.trendBias || null, volatility: d.volatilityState || null,
+                    });
+                }
+                for (const t of trades) { const m = meta.get(Number(t.seq)); if (m) t.entryMeta = m; }
+            }
+        } catch (_) { /* fara meta: randurile raman cum erau */ }
+
         // Stats
         const wins = trades.filter(t => t.pnl > 0);
         const losses = trades.filter(t => t.pnl < 0);

@@ -10572,6 +10572,38 @@ migrate('424_byoi_requests', () => {
 // 'viewer' ca valoare implicita (orice cont NOU porneste viewer), iar conturile
 // deja aprobate si adminii sunt ridicati la 'full' o singura data, aici —
 // pentru ei nu se schimba nimic. Conturile inca neaprobate raman 'viewer'.
+migrate('428_brain_radar_server', () => {
+    // [2026-11-20] Radarul creierului pe SERVER (radarAxes + radarCapture).
+    // brain_radar_prefs: monedele radarului fiecarui utilizator (pana acum doar pe
+    //   telefon, deci serverul nu stia ce sa urmareasca). `coins` = JSON, pozitia = coltul.
+    // brain_captures: pentru fiecare intrare pe o moneda a radarului — forma de la
+    //   intrare (`entry`, JSON) si cadrele de replay (`frames`, JSON comprimat deflate),
+    //   ca poza, replay-ul, deja vu si sablonul sa existe si cu telefonul inchis.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS brain_radar_prefs (
+            user_id    INTEGER PRIMARY KEY,
+            coins      TEXT    NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS brain_captures (
+            user_id    INTEGER NOT NULL,
+            seq        INTEGER NOT NULL,
+            symbol     TEXT    NOT NULL,
+            env        TEXT,
+            side       TEXT,
+            entry_ts   INTEGER NOT NULL,
+            exit_ts    INTEGER,
+            status     TEXT    NOT NULL DEFAULT 'open',
+            entry      TEXT    NOT NULL,
+            frames     BLOB,
+            n_frames   INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (user_id, seq)
+        );
+        CREATE INDEX IF NOT EXISTS idx_brain_captures_user_ts ON brain_captures(user_id, entry_ts);
+    `);
+});
+
 migrate('427_footprint_1m', () => {
     // [2026-11-16] ICHNOS (footprint): lumanarile de 1 minut cu volumul pe niveluri
     // de pret, din tranzactiile Bybit. `t` = inceputul minutului, INTEGER ms.

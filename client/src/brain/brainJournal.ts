@@ -14,6 +14,12 @@ export interface ServerRow {
   entryPrice?: number; exitPrice?: number | null; size?: number; margin?: number; leverage?: number
   sl?: number; tp?: number; pnl?: number; exitReason?: string; openTs?: number; closeTs?: number
   serverScore?: number | null; regime?: string | null
+  entryMeta?: EntryMeta | null
+}
+/** [2026-11-20] Ce a retinut SERVERUL la intrare (brain_decisions legat prin seq). */
+export interface EntryMeta {
+  conf: number | null; finalConf: number | null; regime: string | null; tier: string | null
+  gates: { failing: number[]; unknown: number[] } | null; trendBias: string | null; volatility: string | null
 }
 export interface OpenPos { id: string | number; sym: string; side: string; entry?: number; sl?: number; tp?: number; size?: number; lev?: number; pnl?: number; openTs?: number }
 export interface JRow {
@@ -25,6 +31,7 @@ export interface JRow {
   result: string | null; closeReason: string | null
   pnlPct: number | null; pnlAbs: number | null
   serverScore: number | null; regime: string | null
+  entryMeta: EntryMeta | null
   origin: 'brain' | 'history' | 'adopted'
   reason: string | null          // de ce lipsesc datele creierului / poza
   rec: TradeRecord | null
@@ -63,7 +70,7 @@ export function buildJournal(i: { rows: ServerRow[]; recs: TradeRecord[]; open: 
       entryTime: num(p.openTs), exitTime: null, entryPrice: num(p.entry), exitPrice: null, exitCalc: false,
       sl: num(p.sl), tp: num(p.tp), size: num(p.size), lev: num(p.lev), result: null, closeReason: null,
       pnlPct: pnlPctOf(p.pnl, p.size), pnlAbs: Number.isFinite(Number(p.pnl)) ? +Number(p.pnl).toFixed(2) : null,
-      serverScore: null, regime: null,
+      serverScore: null, regime: null, entryMeta: null,
       origin: rec ? 'brain' : 'adopted', reason: rec ? (rec.noSnapReason || null) : 'app closed at entry', rec,
     })
   }
@@ -80,7 +87,7 @@ export function buildJournal(i: { rows: ServerRow[]; recs: TradeRecord[]; open: 
       entryTime: num(r.openTs), exitTime: num(r.closeTs), entryPrice: num(r.entryPrice), exitPrice: num(r.exitPrice), exitCalc: r.exitPrice != null,
       sl: num(r.sl), tp: num(r.tp), size: num(r.size), lev: num(r.leverage), result: resultOf(r.exitReason), closeReason: r.exitReason || null,
       pnlPct: pnlPctOf(r.pnl, r.size), pnlAbs: Number.isFinite(Number(r.pnl)) ? +Number(r.pnl).toFixed(2) : null,
-      serverScore: r.serverScore == null ? null : Number(r.serverScore), regime: r.regime || null,
+      serverScore: r.serverScore == null ? null : Number(r.serverScore), regime: r.regime || null, entryMeta: r.entryMeta || null,
       origin: rec ? 'brain' : 'history', reason: rec ? (rec.noSnapReason || null) : 'added from history', rec,
     })
   }
@@ -93,7 +100,7 @@ export function buildJournal(i: { rows: ServerRow[]; recs: TradeRecord[]; open: 
       key: 'c:' + rec.id, seq: String(rec.id), env: i.env, symbol: rec.symbol, full: full(rec.symbol), side: rec.side, status: 'closed',
       entryTime: rec.entryTime, exitTime: rec.exitTime, entryPrice: rec.entryPrice, exitPrice: rec.exitPrice, exitCalc: rec.exitPrice != null,
       sl: null, tp: null, size: null, lev: null, result: rec.result, closeReason: null, pnlPct: rec.pnlPct, pnlAbs: rec.pnlAbs,
-      serverScore: null, regime: rec.meta?.regime || null, origin: 'brain', reason: rec.noSnapReason || null, rec,
+      serverScore: null, regime: rec.meta?.regime || null, entryMeta: null, origin: 'brain', reason: rec.noSnapReason || null, rec,
     })
   }
 

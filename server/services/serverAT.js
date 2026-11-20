@@ -3908,6 +3908,17 @@ function getOpenPositions(userId) {
 
 function getOpenCount(userId) { return _positions.filter(p => p.userId === userId).length; }
 
+// [2026-11-20] Radarul de pe server (radarCapture) urmareste intrarile si iesirile
+// TUTUROR utilizatorilor ca sa salveze forma radarului. DOAR CITIRE: copii plate cu
+// campurile de care are nevoie; nimic din pozitia reala nu se atinge.
+function getAllOpenLite() {
+    return _positions.map(p => ({
+        userId: p.userId, seq: p.seq, symbol: p.symbol, side: p.side, mode: p.mode, env: p.env || null,
+        price: p.price, sl: p.sl, tp: p.tp, size: p.size, lev: p.lev, ts: p.ts,
+        autoTrade: p.autoTrade, owner: p.owner || null,
+    }));
+}
+
 // [S5] Persist this user's close-cooldown rows. Shape: { 'uid:symbol': deadlineMs }.
 // Called after every set so the live PM2 process and any restart are coherent.
 function _persistCloseCooldownsForUser(userId) {
@@ -7123,6 +7134,7 @@ module.exports = {
     // Getters
     getOpenPositions,
     getOpenCount,
+    getAllOpenLite,          // [2026-11-20] radarul de pe server — doar citire
     isCloseCooldownActive, // [RE-ENTRY] Check post-close cooldown
     getLog,
     getStats,

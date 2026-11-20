@@ -35,6 +35,8 @@ export interface TradeRecord {
     radarMode: string | null; regime: string | null; focus: boolean | null; lens: string
     gatesFailing: number[]; gatesUnknown: number[]; ml: number | null
   }
+  // [2026-11-20] 'server' = inregistrata de radarul de pe server (si cu telefonul inchis)
+  source?: 'server' | 'device'
 }
 
 const DB = 'zeus_brain'

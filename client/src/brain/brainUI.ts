@@ -12,6 +12,7 @@ import { brainStorage, type TradeRecord } from './brainStorage'
 import { buildRawFromZeusState, switchMain, currentEnv, currentPositions, shortSym } from './brainAdapter'
 import { buildJournal, brainCaptured, ENV_COLOR, type Env, type JRow, type ServerRow, type OpenPos } from './brainJournal'
 import { radarCoins, MAX_SATS, chosen, addCoin, removeCoin } from './brainPrefs'
+import { startServerAxes, getServerCoins, putServerCoins, fetchCaptures, fetchCaptureFrames, capToRec, framesToStates, entryState, type ServerCapture, type ServerEntry } from './brainServer'
 import { MSCAN_SYMS } from '../core/config'
 import { loadPref, savePref } from './brainPrefs'
 
@@ -130,7 +131,7 @@ export function startBrain(root: HTMLElement): () => void {
   const snapCache = new Map<string, string>()
   const UI = {
     focus: pref.focus,
-    rep: null as null | { tr: TradeRecord; frames: Frame[]; idx: number },
+    rep: null as null | { tr: TradeRecord; frames: Frame[]; idx: number; hz?: number },
     best: null as TradeRecord | null,
     infoUntil: 0,
     allShown: PAGE,
@@ -157,6 +158,9 @@ export function startBrain(root: HTMLElement): () => void {
     view: currentEnv() as Env,          // mediul afisat (urmeaza mediul activ la schimbare)
     rows: [] as ServerRow[],
     list: [] as JRow[],
+    // [2026-11-20] inregistrarile RADARULUI DE PE SERVER (si cu telefonul inchis)
+    capRecs: [] as TradeRecord[],
+    capEntry: new Map<string, ServerEntry>(),
     lastFetch: 0,
     fetching: false,
   }
@@ -169,8 +173,9 @@ export function startBrain(root: HTMLElement): () => void {
     if (JS.fetching || (!force && Date.now() - JS.lastFetch < 60000)) return
     JS.fetching = true
     try {
-      const r = await fetch('/api/journal?limit=500', { credentials: 'same-origin' })
+      const [r, caps] = await Promise.all([fetch('/api/journal?limit=500', { credentials: 'same-origin' }), fetchCaptures()])
       if (r.ok) { const j = await r.json(); if (j && Array.isArray(j.trades)) JS.rows = j.trades; JS.lastFetch = Date.now() }
+      if (caps) setCaptures(caps)
     } catch { /* fara retea: ramane ce aveam */ } finally { JS.fetching = false; rebuild() }
   }
   function openPositions(): OpenPos[] {
@@ -178,8 +183,27 @@ export function startBrain(root: HTMLElement): () => void {
     if (JS.view !== JS.env) return []
     return currentPositions().map((p: any) => ({ id: p.id, sym: p.sym, side: p.side, entry: p.entry, sl: p.sl, tp: p.tp, size: p.size, lev: p.lev, pnl: p.pnl, openTs: p.openTs }))
   }
+  function setCaptures(caps: ServerCapture[]): void {
+    const uid = String((window as any)._zeusUserId ?? '')
+    const recs: TradeRecord[] = []
+    JS.capEntry.clear()
+    for (const c of caps) { const r = capToRec(c, uid); if (r) { recs.push(r); if (c.entry) JS.capEntry.set(r.key, c.entry) } }
+    JS.capRecs = recs
+  }
+  /**
+   * O tranzactie poate avea si inregistrarea telefonului si pe a serverului. Castiga cea a
+   * telefonului DOAR daca are poza sau replay (a fost vazuta pe ecran); altfel a serverului,
+   * care exista mereu. Asa nu se pierde nimic din ce era inainte.
+   */
+  function mergedRecs(): TradeRecord[] {
+    const dev = [...REC.trades, ...REC.open.values()]
+    const byId = new Map<string, TradeRecord>()
+    for (const r of JS.capRecs) byId.set(String(r.id), r)
+    for (const r of dev) { const sv = byId.get(String(r.id)); if (!sv || r.hasSnapshot || r.hasFrames) byId.set(String(r.id), r) }
+    return [...byId.values()]
+  }
   function rebuild(): void {
-    JS.list = buildJournal({ rows: JS.rows, recs: [...REC.trades, ...REC.open.values()], open: openPositions(), env: JS.view, coins: radarCoins(mainSym()) })
+    JS.list = buildJournal({ rows: JS.rows, recs: mergedRecs(), open: openPositions(), env: JS.view, coins: radarCoins(mainSym()) })
     pickBest(); renderJournal(); renderPsych(); renderCoins(); renderChips()
   }
   const hist = () => brainCaptured(JS.list)
@@ -242,6 +266,7 @@ export function startBrain(root: HTMLElement): () => void {
     const pc = r.pnlPct == null ? '' : ` <span style="color:${r.pnlPct >= 0 ? '#39ff6a' : '#ff4d6d'}">${fmtPct(r.pnlPct)}</span>`
     const b = r.rec
     const l2 = b ? `before entry: ${esc(b.pre)} · conf ${b.confAtEntry == null ? '—' : b.confAtEntry} / ${b.thrAtEntry == null ? '—' : b.thrAtEntry} · ${esc(b.meta?.radarMode || '—')} · ${esc(b.profile || '—')}`
+      : r.entryMeta ? `server decision: conf ${r.entryMeta.conf == null ? '—' : r.entryMeta.conf} · ${esc(r.entryMeta.regime || '—')}${r.entryMeta.tier ? ' · ' + esc(r.entryMeta.tier) : ''} <span style="color:#56657a">· ${esc(r.reason || '')}</span>`
       : `<span style="color:#56657a">${esc(r.reason || 'no brain data')}</span>`
     const canRp = !!(b && b.hasFrames)
     return `<div data-det="${esc(r.key)}" style="display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #142235;cursor:pointer;">${thumb(r)}<div style="flex:1;min-width:0;"><div style="color:${c};font-size:12px;">${envBadge(r.env)} #${esc(r.seq)} ${esc(r.symbol)} ${r.side} · ${lbl}${pc}</div><div style="color:#7c8ea3;font-size:11px;">${l2}</div></div><div style="display:flex;flex-direction:column;gap:4px;"><button type="button" data-rp="${esc(r.key)}" style="color:${canRp ? '#d8e4f0' : '#56657a'};border-color:#2a3a4d;padding:4px 10px;font-size:11px;">Replay</button><button type="button" data-sh="${esc(r.key)}" style="color:#ffc85a;border-color:#4d3d1d;padding:4px 10px;font-size:11px;">Share</button></div></div>`
@@ -250,7 +275,7 @@ export function startBrain(root: HTMLElement): () => void {
   function fillSnaps(scope: HTMLElement): void {
     scope.querySelectorAll('[data-snap]').forEach((el) => {
       const key = (el as HTMLElement).dataset.snap as string
-      void brainStorage.getSnapshot(key).then((url) => {
+      void snapFor(key).then((url) => {
         if (!url) { (el as HTMLElement).textContent = 'no snapshot'; return }
         snapCache.set(key, url)
         const img = document.createElement('img'); img.src = url; img.alt = 'Brain at entry'
@@ -258,6 +283,29 @@ export function startBrain(root: HTMLElement): () => void {
         el.replaceWith(img)
       })
     })
+  }
+  /**
+   * Poza unei inregistrari: IndexedDB; pentru cele ale serverului (fara poza facuta pe
+   * ecran) se DESENEAZA din forma de la intrare, o singura data, apoi se pastreaza.
+   * Desenarea merge pe rand (coada), ca memoria grafica a telefonului sa nu sara.
+   */
+  let snapQueue: Promise<unknown> = Promise.resolve()
+  async function snapFor(key: string): Promise<string | null> {
+    const c = snapCache.get(key); if (c) return c
+    const stored = await brainStorage.getSnapshot(key)
+    if (stored) { snapCache.set(key, stored); return stored }
+    const entry = JS.capEntry.get(key)
+    if (!entry) return null
+    const job = snapQueue.then(async () => {
+      if (snapCache.has(key)) return snapCache.get(key) as string
+      const st = entryState(entry)
+      const url = st ? stateSnap(st, performance.now() / 1000, 80) : null
+      if (url) { snapCache.set(key, url); void brainStorage.putSnapshot(key, url) }
+      await new Promise((r) => setTimeout(r, 30))
+      return url
+    })
+    snapQueue = job.catch(() => null)
+    return job as Promise<string | null>
   }
   function renderJournal(): void {
     const T = JS.list
@@ -293,7 +341,12 @@ export function startBrain(root: HTMLElement): () => void {
   function openDet(r: JRow): void {
     const b = r.rec, kv = (k: string, v: string) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`
     const dur = r.entryTime && r.exitTime ? Math.round((r.exitTime - r.entryTime) / 60000) + ' min' : r.status === 'open' && r.entryTime ? Math.round((Date.now() - r.entryTime) / 60000) + ' min (open)' : '—'
-    const gates = b && b.meta ? GN.map((g, i) => `${g} ${b.meta!.gatesUnknown.includes(i) ? '<span style="color:#7c8ea3">unknown</span>' : b.meta!.gatesFailing.includes(i) ? '<span style="color:#ff5a6e">failing</span>' : '<span style="color:#39ff6a">pass</span>'}`).join('<br>') : '—'
+    // [2026-11-20] Fara inregistrare de creier: ce a retinut SERVERUL la intrare (brain_decisions).
+    const em = !b ? r.entryMeta : null
+    const gs = b && b.meta ? { failing: b.meta.gatesFailing, unknown: b.meta.gatesUnknown } : em && em.gates ? em.gates : null
+    const gates = gs ? GN.map((g, i) => `${g} ${gs.unknown.includes(i) ? '<span style="color:#7c8ea3">unknown</span>' : gs.failing.includes(i) ? '<span style="color:#ff5a6e">failing</span>' : '<span style="color:#39ff6a">pass</span>'}`).join('<br>') : '—'
+    const brainData = r.origin === 'brain' ? (b && b.source === 'server' ? 'captured by the server radar' : 'captured on this device')
+      : esc(r.reason || '—') + (em ? ' · server decision kept' : '')
     const k = b && b.hasSnapshot ? b.key : null
     const snap = k ? snapCache.get(k) : null
     const pic = snap ? `<img src="${snap}" alt="Brain at entry" style="width:100%;border-radius:10px;display:block;">`
@@ -308,13 +361,13 @@ export function startBrain(root: HTMLElement): () => void {
       ${kv('SL / TP', fmtP(r.sl) + ' / ' + fmtP(r.tp))}${kv('Size · leverage', (r.size == null ? '—' : '$' + fmtP(r.size)) + ' · ' + (r.lev == null ? '—' : r.lev + 'x'))}
       ${kv('Entry / exit time', fmtT(r.entryTime) + ' → ' + fmtT(r.exitTime))}${kv('Duration', dur)}
       ${kv(r.status === 'open' ? 'Unrealized PnL' : 'Realized PnL', fmtPct(r.pnlPct) + ' · ' + (r.pnlAbs == null ? '—' : (r.pnlAbs >= 0 ? '+$' : '−$') + Math.abs(r.pnlAbs).toFixed(2)))}
-      ${kv('Cockpit confluence at entry', b && b.confAtEntry != null ? String(b.confAtEntry) : '—')}${kv('Server score at entry', r.serverScore == null ? '—' : String(r.serverScore))}
+      ${kv(b && b.source === 'server' || em ? 'Confluence at entry' : 'Cockpit confluence at entry', b && b.confAtEntry != null ? String(b.confAtEntry) : em && em.conf != null ? String(em.conf) : '—')}${em && em.finalConf != null ? kv('Final confidence at entry', String(em.finalConf) + (em.tier ? ' · ' + esc(em.tier) : '')) : ''}${kv('Server score at entry', r.serverScore == null ? '—' : String(r.serverScore))}
       ${kv('Threshold at entry', b && b.thrAtEntry != null ? String(b.thrAtEntry) : '—')}
-      ${kv('Radar mode', esc(b?.meta?.radarMode || '—'))}${kv('Regime', esc(b?.meta?.regime || r.regime || '—'))}${kv('Profile', esc(b?.profile || '—'))}
+      ${kv('Radar mode', esc(b?.meta?.radarMode || '—'))}${kv('Regime', esc(b?.meta?.regime || r.regime || em?.regime || '—'))}${kv('Profile', esc(b?.profile || '—'))}
       ${kv('Lens', esc(b?.meta?.lens || '—'))}${kv('Focus at entry', b?.meta?.focus == null ? '—' : b.meta.focus ? 'on' : 'off')}
       ${kv('Mood before entry', esc(b ? b.pre : '—'))}${kv('ML', b?.meta ? (b.meta.ml == null ? 'coming soon' : Math.round(b.meta.ml * 100) + '%') : '—')}
       ${kv('Gates at entry', gates)}
-      ${kv('Brain data', r.origin === 'brain' ? 'captured' : esc(r.reason || '—'))}
+      ${kv('Brain data', brainData)}
       </div>
       ${b && b.entryShape ? `<div style="display:flex;gap:12px;align-items:center;padding:8px 0;"><div>${miniRadar(b.entryShape)}</div><div style="font-size:11px;line-height:1.5;">${AX.map((a, i) => `${a} ${Math.round((b.entryShape[i] || 0) * 100)}%`).join('<br>')}</div></div>` : ''}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:8px;"><button type="button" data-rp="${esc(r.key)}" style="color:${b && b.hasFrames ? '#d8e4f0' : '#56657a'};border-color:#2a3a4d;">Replay</button><button type="button" data-sh="${esc(r.key)}" style="color:#ffc85a;border-color:#4d3d1d;">Share</button></div>`
@@ -329,7 +382,13 @@ export function startBrain(root: HTMLElement): () => void {
    * Canvas-urile mari se elibereaza imediat (memoria grafica pe telefon, vezi zona neagra).
    */
   const SNAP_PX = 2160
-  function hiResSnap(view: any, t: number): string | null {
+  function hiResSnap(view: any, t: number): string | null { return stateSnap(view, t, 0) }
+  /**
+   * `warm` = 0: copiaza starea desenatorului de pe ecran (poza de la intrare, live).
+   * `warm` > 0: desenator NOU, incalzit cu `warm` cadre (desenatorul netezeste 50%/cadru),
+   * pentru o stare refacuta din datele serverului.
+   */
+  function stateSnap(view: any, t: number, warm: number): string | null {
     const big = document.createElement('canvas'), out = document.createElement('canvas')
     try {
       big.width = big.height = out.width = out.height = SNAP_PX
@@ -337,18 +396,29 @@ export function startBrain(root: HTMLElement): () => void {
       if (!bx || !ox) return null
       bx.scale(SNAP_PX / S, SNAP_PX / S)
       const R2 = new BrainRenderer(bx) as any, src = RS as any
-      for (const k of Object.keys(src)) {
-        if (k === 'ctx') continue
-        const v = src[k]
-        R2[k] = Array.isArray(v) ? v.map((e: any) => (e && typeof e === 'object' ? { ...e } : e)) : v
+      const env = { focus: UI.focus, reduced: FX.reduced, best: UI.best, sound: () => {}, info: () => {} }
+      if (warm > 0) {
+        for (let i = 0; i < warm; i++) R2.render(view, t + i / 60, 1 / 60, null, env)
+      } else {
+        for (const k of Object.keys(src)) {
+          if (k === 'ctx') continue
+          const v = src[k]
+          R2[k] = Array.isArray(v) ? v.map((e: any) => (e && typeof e === 'object' ? { ...e } : e)) : v
+        }
       }
-      R2.render(view, t, 0, null, { focus: UI.focus, reduced: FX.reduced, best: UI.best, sound: () => {}, info: () => {} })
+      R2.render(view, t, 0, null, env)
       ox.fillStyle = '#040913'; ox.fillRect(0, 0, SNAP_PX, SNAP_PX)
       ox.drawImage(big, 0, 0)
       let url = out.toDataURL('image/webp', 0.95)
       if (!url.startsWith('data:image/webp')) url = out.toDataURL('image/jpeg', 0.95)
       return url
     } catch { return null } finally { big.width = big.height = 0; out.width = out.height = 0 }
+  }
+  /** Secunde de la inceputul replay-ului: din ora reala a cadrului cand o are (serverul rareste mijlocul tranzactiilor lungi). */
+  function repSecs(rep: { frames: Frame[]; hz?: number }, idx: number): number {
+    const f = rep.frames, i = Math.max(0, Math.min(f.length - 1, Math.floor(idx)))
+    if (f[i] && f[i].t != null && f[0].t != null) return Math.round(((f[i].t as number) - (f[0].t as number)) / 1000)
+    return Math.round(idx / (rep.hz ?? REC_HZ))
   }
   const refresh = () => rebuild()
   REC.onChange = () => { void fetchHistory(true); rebuild() }
@@ -370,9 +440,16 @@ export function startBrain(root: HTMLElement): () => void {
       info(!tr ? 'Replay not available: ' + (r.reason || 'no brain data') + '.' : tr.onMain === false ? 'Replay not available: ' + (tr.noSnapReason || 'other symbol on screen') + '.' : STR.noReplay)
       return
     }
-    const frames = (await brainStorage.getFrames(tr.key)) as Frame[] | null
+    let frames: Frame[] | null = null, hz = REC_HZ
+    if (tr.source === 'server') {
+      info('Loading replay from the server…')
+      const d = await fetchCaptureFrames(tr.id)
+      frames = d ? framesToStates(d.entry, d.frames) : null
+      hz = 1                                   // serverul inregistreaza un cadru pe secunda
+    } else frames = (await brainStorage.getFrames(tr.key)) as Frame[] | null
     if (!frames || !frames.length) { info(STR.noReplay); return }
-    closeAll(); closeDet(); UI.rep = { tr, frames, idx: 0 }; RS.prevSig = false; info(STR.replayStart(tr.id))
+    closeAll(); closeDet(); UI.rep = { tr, frames, idx: 0, hz }; RS.prevSig = false
+    info(tr.source === 'server' ? STR.replayStart(tr.id).replace('~12s', '~30s') : STR.replayStart(tr.id))
     try { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch { /* vechi */ }
   }
   $('jr').addEventListener('click', (e) => { void onListClick(e) })
@@ -387,11 +464,11 @@ export function startBrain(root: HTMLElement): () => void {
   })
   $('coins').addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest('[data-rmsat]') as HTMLElement | null
-    if (b) { pref.coins = removeCoin(pref.coins, b.dataset.rmsat as string); savePref(pref); rebuild() }
+    if (b) { pref.coins = removeCoin(pref.coins, b.dataset.rmsat as string); savePref(pref); putServerCoins(pref.coins); rebuild() }
   })
   $('coins').addEventListener('change', (e) => {
     const t = e.target as HTMLSelectElement
-    if (t && t.dataset && 'addsat' in t.dataset && t.value) { pref.coins = addCoin(pref.coins, t.value); savePref(pref); rebuild() }
+    if (t && t.dataset && 'addsat' in t.dataset && t.value) { pref.coins = addCoin(pref.coins, t.value); savePref(pref); putServerCoins(pref.coins); rebuild() }
   })
 
   async function makeCard(r: JRow): Promise<void> {
@@ -429,7 +506,7 @@ export function startBrain(root: HTMLElement): () => void {
       })
     }
     const key = tr && tr.hasSnapshot ? tr.key : null
-    const snap = key ? (snapCache.get(key) || await brainStorage.getSnapshot(key)) : null
+    const snap = key ? await snapFor(key) : null
     const im = new Image()
     im.onload = () => draw(im, !snap); im.onerror = () => draw(null, false)
     im.src = snap || ((import.meta as any).env?.BASE_URL || '/app/') + 'zeus-logo.png'
@@ -465,7 +542,7 @@ export function startBrain(root: HTMLElement): () => void {
     if (UI.rep) {
       const L = UI.rep.frames.length, i = Math.max(0, Math.min(L - 1, Math.floor(x / S * L)))
       UI.rep.idx = i; RS.prevSig = UI.rep.frames[i].sig
-      info('Jumped to ' + Math.round(i / REC_HZ) + 's in the replay: ' + UI.rep.frames[i].mood[0] + '.'); return
+      info('Jumped to ' + repSecs(UI.rep, i) + 's in the replay: ' + UI.rep.frames[i].mood[0] + '.'); return
     }
     const src = REC.frames.slice(-STRIP), i = Math.floor(x / (S / STRIP))
     if (i >= src.length) { info('Mood strip: no history yet at this point. It fills from left to right.'); return }
@@ -556,7 +633,7 @@ export function startBrain(root: HTMLElement): () => void {
       if (lf && lf.evt && lf.i !== lastEvtI) { lastEvtI = lf.i; view = Object.assign({}, st, { evt: lf.evt, i: lf.i }) }
       let rp: { id: string } | null = null
       if (UI.rep) {
-        UI.rep.idx += dt * REC_HZ * 4
+        UI.rep.idx += dt * (UI.rep.hz ?? REC_HZ) * 4
         if (UI.rep.idx >= UI.rep.frames.length) { UI.rep = null; info(STR.replayEnd) }
         else { view = UI.rep.frames[Math.floor(UI.rep.idx)]; rp = { id: UI.rep.tr.id } }
       }
@@ -576,7 +653,7 @@ export function startBrain(root: HTMLElement): () => void {
         if (fN % 4 === 0) rebuild()        // PnL viu pe pozitiile deschise
         else void fetchHistory()
       }
-      if (UI.rep) { const L = UI.rep.frames.length; drawStrip(UI.rep.frames, UI.rep.idx / L); $('rbar').textContent = 'REPLAY #' + UI.rep.tr.id + ' · ' + Math.round(UI.rep.idx / REC_HZ) + 's / ' + Math.round(L / REC_HZ) + 's · exit ✕' }
+      if (UI.rep) { const L = UI.rep.frames.length; drawStrip(UI.rep.frames, UI.rep.idx / L); $('rbar').textContent = 'REPLAY #' + UI.rep.tr.id + ' · ' + repSecs(UI.rep, UI.rep.idx) + 's / ' + repSecs(UI.rep, L - 1) + 's · exit ✕' }
       else if (onScreen && fN % 2 === 0) { drawStrip(REC.frames.slice(-STRIP), null, STRIP); $('rbar').textContent = '' }
       REC.snap(nowMs, () => hiResSnap(view, t), !!UI.rep)
       if (UI.infoUntil > 0 && performance.now() / 1000 > UI.infoUntil) { UI.infoUntil = 0; $('info').textContent = STR.idle }
@@ -605,10 +682,18 @@ export function startBrain(root: HTMLElement): () => void {
   refresh()
   void REC.load().then(() => REC.reconcile()).then(refresh)
   void fetchHistory(true)
+  // [2026-11-20] Axele live de la radarul de pe server + lista radarului salvata pe server.
+  const stopAxes = startServerAxes(() => [mainSym(), ...chosen(pref.coins)])
+  void getServerCoins().then((c) => {
+    if (Array.isArray(c) && c.some(Boolean)) {
+      if (c.join(',') !== pref.coins.join(',')) { pref.coins = c; savePref(pref); coinsSig = ''; rebuild() }
+    } else if (c === null) putServerCoins(pref.coins)   // prima data: serverul afla lista de pe telefon
+  })
   raf = requestAnimationFrame(loop)
 
   return () => {
     alive = false
+    try { stopAxes() } catch { /* deja */ }
     cancelAnimationFrame(raf)
     try { io && io.disconnect() } catch { /* deja */ }
     document.removeEventListener('visibilitychange', onVis)

@@ -225,7 +225,9 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
         const known = ['/api', '/api/market', '/api/srv-pos', '/api/sync', '/api/profile', '/api/leaderboard',
             '/api/referral', '/api/app', '/api/journal', '/api/brain/parity', '/api/omega', '/api/omega/doctor',
             '/api/ring5', '/api/dsldrive', '/api/indicators', '/api/admin', '/api/support', '/api/byoi',
-            '/api/health', '/api/exchange'];
+            '/api/health', '/api/exchange',
+            // [2026-11-20] radarul pe server: monede + inregistrari — sub /api/brain/, deci INTERZIS viewerilor
+            '/api/brain/radar'];
         for (const u of used) expect(known).toContain(u);
     });
 
@@ -238,6 +240,8 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'GET /api/byoi/config', 'GET /api/byoi/indicators', 'GET /api/fng',
             'GET /api/indicators/usage', 'GET /api/liq/recent',
             'GET /api/market/bookmap', 'GET /api/market/depth', 'GET /api/market/footprint', 'GET /api/market/funding',
+            // [2026-11-20] axele radarului de pe server: radarul viewerului le CERE (regula: lista = ce cere aplicatia)
+            'GET /api/market/radar',
             'GET /api/market/klines', 'GET /api/market/liq-map', 'GET /api/market/liq-panel',
             'GET /api/market/liq-predict', 'GET /api/market/markprice', 'GET /api/market/oi',
             'GET /api/market/sentiment', 'GET /api/market/spot/klines', 'GET /api/market/symbol/:symbol',

@@ -26,7 +26,7 @@ const VIEWER_ALLOW = [
     // ── lichidari: harta, heatmap, live, predict, book ──
     'GET /api/market/liq-panel', 'GET /api/market/liq-map', 'GET /api/market/liq-predict',
     'GET /api/market/bookmap', 'GET /api/liq/recent',
-    'GET /api/market/footprint',
+    'GET /api/market/footprint', 'GET /api/market/radar',
     // ── indicatori pe chart ──
     'POST /api/indicators/active', 'GET /api/indicators/usage',
     'GET /api/byoi/config', 'GET /api/byoi/indicators',

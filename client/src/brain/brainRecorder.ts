@@ -15,7 +15,7 @@ const RING = REC_HZ * 60 * 20
 const NEW_ENTRY_MAX_AGE_MS = 60_000
 const CLOSE_LOOKUP_MAX_MS = 120_000
 
-export interface Frame extends St { i: number; evt: string | null }
+export interface Frame extends St { i: number; evt: string | null; t?: number }   // t: ora reala (cadrele serverului)
 
 type JournalRow = { seq: number | string; symbol: string; side: string; mode?: string; entryPrice?: number; exitPrice?: number | null; size?: number; pnl?: number; exitReason?: string; openTs?: number; closeTs?: number }
 

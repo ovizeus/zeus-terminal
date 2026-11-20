@@ -9,6 +9,7 @@ import { getATMode } from '../services/stateAccessors'
 import { getSymPrice } from '../data/marketDataPositions'
 import { N, type Mode } from './brainStrings'
 import { satsOf } from './brainPrefs'
+import { serverAxes } from './brainServer'
 import { modeOf, progressOf, emaStep, DeadDetector, type Num, type Raw, type RawSat } from './brainDerived'
 
 const w = window as any
@@ -51,7 +52,7 @@ export function gatesFrom(cache: any): { failing: number[]; unknown: number[] } 
 // [2026-11-16] Satelitii = lista FIXA din preferintele radarului (brainPrefs), nu primele
 // din scaner. Fiecare isi pastreaza coltul (indexul din lista). Scorul si directia se iau in
 // continuare din scaner (`MSCAN.data[sym]`); o moneda nescanata arata „—".
-export function satsFrom(scan: any, main: string, sats: string[]): RawSat[] {
+export function satsFrom(scan: any, main: string, sats: string[], axesOf: (full: string) => Num[] | null = () => null): RawSat[] {
   const m = String(main || '').toUpperCase()
   const out: RawSat[] = []
   sats.slice(0, 3).forEach((full, slot) => {
@@ -59,9 +60,9 @@ export function satsFrom(scan: any, main: string, sats: string[]): RawSat[] {
     const r = scan && typeof scan === 'object' ? scan[full] : null
     const sc = r ? Number(r.score) : NaN
     const mode: Mode = r && r.dir === 'bull' ? 'LONG' : r && r.dir === 'bear' ? 'SHORT' : 'RANGE'
-    // Scanerul nu calculeaza cele 12 axe pe moneda → satelit desenat ca cerc (spec 3).
+    // [2026-11-20] Axele vin de la radarul de pe server cand le are; altfel satelitul e un cerc (spec 3).
     // principala ramane in coltul ei, doar marcata (colturi fixe, cerut de operator)
-    out.push({ symbol: shortSym(full), full, axes: null, score: Number.isFinite(sc) ? sc : null, mode, slot, isMain: full === m })
+    out.push({ symbol: shortSym(full), full, axes: axesOf(full), score: Number.isFinite(sc) ? sc : null, mode, slot, isMain: full === m })
   })
   return out
 }
@@ -104,7 +105,11 @@ export function _resetAdapterForTest(): void {
 export function buildRawFromZeusState(nowMs: number = Date.now()): Raw {
   const S = w.S || {}
   const payload = w.__zeusBrainAxes
-  const rt = axesFromPayload(payload, nowMs)
+  // [2026-11-20] Axele vin de la RADARUL DE PE SERVER (aceeasi sursa ca inregistrarile din
+  // jurnal, deci deja vu compara corect). Fara raspuns proaspat → axele calculate aici.
+  const mainFull = String(S.symbol || 'BTCUSDT').toUpperCase()
+  const sv = serverAxes(mainFull)
+  const rt = sv ? sv.rt.map((x) => finite01(x)) : axesFromPayload(payload, nowMs)
   const dt = _lastMs ? (nowMs - _lastMs) / 1000 : 0
   _lastMs = nowMs
   // Lentilele TIMEFRAME si SLOW nu exista ca valori in motor: EMA din RT (spec 3, „derived, not engine").
@@ -158,7 +163,7 @@ export function buildRawFromZeusState(nowMs: number = Date.now()): Raw {
     position,
     closeMsg: nowMs < _closeUntil ? _closeMsg : '',
     main: shortSym(main),
-    sats: satsFrom(w.MSCAN?.data, main, satsOf(main)),
+    sats: satsFrom(w.MSCAN?.data, main, satsOf(main), (f) => { const a = serverAxes(f); return a ? a.rt.map((x) => finite01(x)) : null }),
   }
 }
 
