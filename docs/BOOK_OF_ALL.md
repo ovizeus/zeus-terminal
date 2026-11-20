@@ -14985,3 +14985,7 @@ Profilul (fast/swing/def) e al aplicatiei, in `user_settings` (`brain.demo|live.
 - **b396 — corectie la mine:** formele refacute aratau OI 0%. OI-ul din decizii e INGHETAT de la pornire (bugul de mai jos), deci „nicio schimbare" era falsa → OI gol in reconstructii; randurile v1 se sterg si se refac la pornire.
 - **Monede din afara celor 7** (ex. ZEC): carte 50 niveluri + L/S global la 30 s prin poarta Binance, doar pentru monedele de pe radarul cuiva ⇒ IMBALANCE si SENTIMENT nu mai lipsesc.
 - ⛔ **Bugul OI din creierul care tranzactioneaza: NEREPARAT.** Am incercat (reimprospatare OI la minut in marketFeed, emisa doar la schimbare); actiunea a fost **refuzata de permisiunile sesiunii** — schimba scorurile si deci intrarile, adica drumul banilor. Ramane decizia operatorului, explicit.
+
+### 🎨 2026-11-20 — radarul mare ia culoarea STARII (cerut de operator, doar client)
+„sa se schimbe si culorile radarului mare dupa cum e starea". `Derived.build`: `c` = culoarea starii (MC: CALM albastru-cenusiu, ALERT galben, HESITANT portocaliu, NERVOUS piersica, CONFUSED mov, ATTACK alb, FOCUSED cyan, CONFIDENT verde, FEARFUL rosu, SLEEPING gri); `mc` = culoarea modului, pastrata pe eticheta RANGE / LONG MODE. Satelitii raman pe culoarea directiei lor. Schimbare FATA de referinta v7 (acolo forma lua culoarea modului) — ceruta explicit. Replay-urile vechi de pe telefon raman cu culoarea cu care au fost inregistrate.
+Pe viu, 19:22: `all axes present` (ZEC are acum IMBALANCE si SENTIMENT), 4 monede, 74 de tranzactii refacute (OI gol), 20 prinse live.

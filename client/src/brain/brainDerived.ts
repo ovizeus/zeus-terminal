@@ -37,6 +37,7 @@ export interface St {
   conf: Num; thr: Num
   hes: boolean; div: number; zz: boolean
   c: Rgb; n: string
+  mc?: Rgb          // [2026-11-20] culoarea MODULUI (eticheta); `c` = culoarea STARII (forma)
   pos: { sym: string; dir: 1 | -1; pnl: Num; pct: Num; noTp: boolean } | null
   posMsg: string
   mood: [Mood, string]
@@ -47,6 +48,9 @@ export interface St {
   i?: number
   evt?: string | null
 }
+
+/** '#rrggbb' → [r, g, b]. */
+export const hexRgb = (h: string): Rgb => { const n = parseInt(String(h).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] as Rgb }
 
 export const clamp01 = (x: Num | undefined): number => Math.max(0, Math.min(1, x == null || !Number.isFinite(x) ? 0 : x))
 export const dirOf = (m: Mode): number => (m === 'SHORT' ? -1 : m === 'RANGE' ? 0 : 1)
@@ -172,7 +176,9 @@ export class Derived {
     return {
       rt: raw.rt, tf: raw.tf, sl: raw.sl, att: raw.att, ml: raw.ml,
       fails: raw.gatesFailing, unk: raw.gatesUnknown, conf: raw.conf, thr: raw.thr,
-      hes, div, zz: raw.dead, c: MODECOL[raw.mode], n: raw.modeLabel,
+      // [2026-11-20, cerut de operator] radarul mare ia culoarea STARII (CALM, HESITANT, ALERT…);
+      // modul (LONG/SHORT/RANGE/SQUEEZE) isi pastreaza culoarea pe eticheta lui.
+      hes, div, zz: raw.dead, c: hexRgb(MC[mood]), mc: MODECOL[raw.mode], n: raw.modeLabel,
       pos: p ? { sym: p.symbol, dir: p.side === 'LONG' ? 1 : -1, pnl: p.progress, pct: p.pnlPct, noTp: p.noTp } : null,
       posMsg: raw.closeMsg, mood: [mood, MC[mood]], cons: sats.filter((x) => x.cons).length, sats, main: raw.main, sig: raw.signalActive,
     }

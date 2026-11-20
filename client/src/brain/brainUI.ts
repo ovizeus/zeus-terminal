@@ -588,7 +588,7 @@ export function startBrain(root: HTMLElement): () => void {
   // ── randul de text de sub radar (UI.dom) ──
   function dom(st: St): void {
     const md = $('mood'); md.textContent = st.mood[0] === 'SLEEPING' ? 'SLEEPING · zZ' : st.mood[0]; md.style.color = st.mood[1]
-    const m = $('mode'); m.textContent = st.n; m.style.color = rgba(st.c, 1)
+    const m = $('mode'); m.textContent = st.n; m.style.color = rgba(st.mc || st.c, 1)
     $('conf').textContent = 'CONF ' + (st.conf == null ? STR.waiting : st.conf) + ' / ' + (st.thr == null ? STR.waiting : st.thr)
     const unk = (st.unk || []).length, known = 7 - unk, fails = st.fails.length
     const gt = $('gt')
