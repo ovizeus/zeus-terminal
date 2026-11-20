@@ -233,9 +233,11 @@ function liveFor(symbols, now = Date.now()) {
 function _thrFor(uid, now) {
     const c = _thrCache.get(uid);
     if (c && now - c.at < 60_000) return c;
-    let thr = null, profile = null;
-    try { const stc = require('./serverBrain').getSTC(uid); thr = Number(stc.confMin) > 0 ? Number(stc.confMin) : null; profile = stc.profile || null; } catch (_) {}
-    const v = { at: now, thr, profile };
+    let thr = null, settings = null;
+    try { const stc = require('./serverBrain').getSTC(uid); thr = Number(stc.confMin) > 0 ? Number(stc.confMin) : null; } catch (_) {}
+    // Profilul (fast/swing/def) e al aplicatiei, salvat in user_settings: brain.<demo|live>.profile.
+    try { const r = _db().prepare('SELECT data FROM user_settings WHERE user_id = ?').get(uid); settings = r ? JSON.parse(r.data) : null; } catch (_) { settings = null; }
+    const v = { at: now, thr, settings };
     _thrCache.set(uid, v);
     return v;
 }
@@ -249,6 +251,12 @@ function _decisionFor(uid, sym, now) {
     } catch (_) { val = null; }
     _decCache.set(k, { at: now, val });
     return val;
+}
+function profileOf(settings, env) {
+    if (!settings || typeof settings !== 'object') return null;
+    const mode = env === 'DEMO' ? 'demo' : 'live';
+    const p = (settings.brain && settings.brain[mode] && settings.brain[mode].profile) || settings.profile;
+    return typeof p === 'string' && p ? p : null;
 }
 function gatesFrom(reasons) {
     if (!Array.isArray(reasons)) return { failing: [], unknown: [0, 1, 2, 3, 4, 5, 6] };
@@ -345,7 +353,7 @@ function _startCapture(pos, now) {
         v: 1, seq: pos.seq, symbol: sym, side: pos.side, env: _envOf(pos), entryTs: Number(pos.ts) || now,
         entryPrice: +pos.price || null, sl: +pos.sl || null, tp: +pos.tp || null, size: +pos.size || null, lev: +pos.lev || null,
         entryShape: at ? entryShapeOf(at.rt) : null, rt: at ? at.rt : null,
-        conf: at ? at.sc : null, thr: thr.thr, profile: thr.profile, regime: dec && dec.regime ? dec.regime : null,
+        conf: at ? at.sc : null, thr: thr.thr, profile: profileOf(thr.settings, _envOf(pos)), regime: dec && dec.regime ? dec.regime : null,
         radarRegime: at ? at.rg : null, bull: at ? at.b : null, bear: at ? at.r : null,
         gatesFailing: g.failing, gatesUnknown: g.unknown,
         radarCoins: coinsFor(uid).filter(Boolean), late, preFrames: frames.length, source: 'server',
@@ -504,6 +512,6 @@ function health() {
 module.exports = {
     start, stop, liveFor, latest, getCoins, setCoins, coinsFor, listCaptures, getFrames, health,
     // pure, pentru teste
-    normalizeCoins, gatesFrom, thinFrames, progressOf, entryShapeOf, lensesOf, preMoodOf, DEFAULT_COINS,
+    normalizeCoins, gatesFrom, profileOf, thinFrames, progressOf, entryShapeOf, lensesOf, preMoodOf, DEFAULT_COINS,
     _tickForTest: _tick, _resetForTest: () => { _ring.clear(); _caps.clear(); _ignored.clear(); _prefs.clear(); _demand.clear(); _decCache.clear(); _thrCache.clear(); },
 };

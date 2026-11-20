@@ -15,7 +15,12 @@ jest.mock('../../server/services/serverBrain', () => ({
 }));
 jest.mock('../../server/services/serverAT', () => ({ getAllOpenLite: () => OPEN }));
 let OI = 1000;
-jest.mock('../../server/services/marketFeed', () => ({ on: () => {}, subscribeForRef: () => Promise.resolve(true), releaseRef: () => {}, fetchOpenInterest: () => Promise.resolve(OI) }));
+const LISTEN = {}; const SUBS = [];
+jest.mock('../../server/services/marketFeed', () => ({
+    on: (ev, fn) => { (LISTEN[ev] = LISTEN[ev] || []).push(fn); },
+    subscribeForRef: (sym, ref) => { SUBS.push(sym + '@' + ref); return Promise.resolve(true); },
+    releaseRef: () => {}, fetchOpenInterest: () => Promise.resolve(OI),
+}));
 
 const RC = require('../../server/services/radarCapture');
 const db = require('../../server/services/database').db;
@@ -40,6 +45,13 @@ describe('radarCapture — functii pure', () => {
         expect(out[0].t).toBe(0); expect(out[899].t).toBe(899);
         expect(out[out.length - 1].t).toBe(9999);
         expect(RC.thinFrames(fr.slice(0, 50))).toHaveLength(50);
+    });
+    test('profileOf: profilul din setarile aplicatiei, pe mediu (brain.demo / brain.live), apoi cel general', () => {
+        const st = { profile: 'fast', brain: { demo: { profile: 'swing' }, live: { profile: 'defensive' } } };
+        expect(RC.profileOf(st, 'DEMO')).toBe('swing');
+        expect(RC.profileOf(st, 'REAL')).toBe('defensive');
+        expect(RC.profileOf({ profile: 'fast' }, 'TESTNET')).toBe('fast');
+        expect(RC.profileOf(null, 'DEMO')).toBeNull();
     });
     test('progressOf ca in aplicatie; entryShapeOf pune podeaua 0,1 pe lipsuri', () => {
         expect(RC.progressOf('LONG', 100, 105, 95, 110)).toBe(0.5);
@@ -88,7 +100,7 @@ describe('radarCapture — o intrare cu telefonul inchis, cap-coada', () => {
         expect(list.map((c) => c.seq)).toEqual([501]);
         const e = list[0].entry;
         expect(e.entryShape).toHaveLength(12);
-        expect(e).toMatchObject({ symbol: 'BTCUSDT', side: 'LONG', env: 'DEMO', conf: 88, thr: 65, profile: 'swing', source: 'server', late: false, pre: 'ALERT' });
+        expect(e).toMatchObject({ symbol: 'BTCUSDT', side: 'LONG', env: 'DEMO', conf: 88, thr: 65, source: 'server', late: false, pre: 'ALERT' });
         expect(e.preFrames).toBeGreaterThan(0);                    // secundele dinaintea intrarii
     });
 
@@ -125,6 +137,23 @@ describe('radarCapture — o intrare cu telefonul inchis, cap-coada', () => {
             const oiAxis = RC.liveFor(['BTCUSDT']).BTCUSDT.rt[3];
             expect(oiAxis).toBeCloseTo(0.5, 3);          // +1% / 2
         } finally { jest.useRealTimers(); }
+    });
+
+    test('moneda din afara serverState (ZEC): abonata pe radar|uid, lumanarile ei din flux, axe calculate', () => {
+        RC.start();                                         // leaga ascultatorii marketFeed
+        RC.setCoins(9, ['BTCUSDT', 'ETHUSDT', 'ZECUSDT']);
+        RC._tickForTest();
+        expect(SUBS).toContain('ZECUSDT@radar|9');
+        expect(SUBS.some((x) => x.startsWith('BTCUSDT'))).toBe(false);   // BTC e deja in serverState
+        const bars = Array.from({ length: 60 }, (_, i) => ({ time: i, open: 50, high: 51, low: 49, close: 50 + (i % 3) * 0.1, volume: 5 }));
+        for (const fn of LISTEN.kline || []) fn({ symbol: 'ZECUSDT', timeframe: '5m', initial: true, bars });
+        for (const fn of LISTEN.price || []) fn({ symbol: 'ZECUSDT', price: 50.2 });
+        RC._tickForTest();
+        const a = RC.liveFor(['ZECUSDT']).ZECUSDT;
+        expect(a).not.toBeNull();
+        expect(a.rt[4]).not.toBeNull();                      // VOLUME din lumanarile proprii ale radarului
+        expect(require('../../server/services/serverState').getConfiguredSymbols()).not.toContain('ZECUSDT');
+        RC.stop();
     });
 });
 

@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.367',
-    build: 393,
+    version: '1.7.368',
+    build: 394,
     date: '2026-11-20',
     changelog: [
+        'b394 v1.7.368 - Profilul in inregistrarile radarului de pe server, 2026-11-20 (server). Profilul (fast/swing/def) e al aplicatiei, salvat in user_settings brain.demo/live.profile; inregistrarile il iau de acolo, pe mediul tranzactiei.',
         'b393 v1.7.367 - Axa LIQ a radarului de pe server, 2026-11-20 (server). Ca in aplicatie, nivelurile ATR (pret plus/minus ATR) intra printre magneti, deci LIQ nu mai lipseste cand serverLiquidity nu are nivel pe o parte.',
         'b392 v1.7.366 - Axa OI a radarului de pe server, 2026-11-20 (server). serverState citeste OI o singura data la abonare si oiPrev ramane gol pentru totdeauna, deci axa OI lipsea; radarul isi tine acum perechea oi/oiPrev la minut, din cache-ul scannerului, dintr-o singura sursa. Bugul vechi din serverState (votul OI din confluenta mereu neutru) e RAPORTAT, nu atins: ar schimba tranzactiile.',
         'b391 v1.7.365 - Radarul creierului pe SERVER, 2026-11-20 (server + client). Cele 12 axe se calculeaza pe server pentru monedele radarului tuturor utilizatorilor; fiecare intrare se inregistreaza (forma, 30 s inainte, toata tranzactia) si cu telefonul inchis: poza, replay, deja vu, sablon, share. Lista RADAR COINS salvata pe server; tranzactiile vechi primesc decizia serverului de la intrare.',
