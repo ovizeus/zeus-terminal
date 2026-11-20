@@ -6,6 +6,7 @@
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias } from '../services/stateAccessors'
 import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
+import { livePnlOf } from '../data/marketDataPositions'
 import { fP } from '../utils/format'
 import { el, escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -219,7 +220,9 @@ export function updateBrainState(): void {
     // _safePnl in marketDataPositions). The old inline formula used getPrice() = the
     // CHART symbol's price; against an off-chart position's entry that gave absurd
     // values (e.g. +$11M from a ~900x price mismatch).
-    const pnl = pos && Number.isFinite(+pos.pnl) ? +pos.pnl : 0
+    // [2026-11-21] PnL viu (livePnlOf): `pos.pnl` ramanea 0 la pozitiile autotrade → „PnL: +$0.00".
+    const _lp = pos ? livePnlOf(pos) : null
+    const pnl = _lp != null && Number.isFinite(_lp) ? _lp : 0
     ticker = `ACTIVE POSITION ${pos?.side} @$${fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORING TP/SL...`
   } else if (score >= BRAIN_READY_SCORE && sigs >= BRAIN_MIN_SIGNALS) {
     state = 'ready'
@@ -2010,7 +2013,10 @@ export function renderBrainCockpit(): void {
   else if (mode === 'assist' && !getATEnabled()) { topReason = 'ASSIST: Brain monitoring — enable AutoTrade to execute'; reasonCls = 'wait' }
   else if (mode === 'assist') { topReason = isArmAssistValid() ? 'ASSIST ARMED: Waiting user confirm' : 'ASSIST: Needs ARM + manual confirm'; reasonCls = 'wait' }
   else if (isArmed) { topReason = `AUTO ARMED: Entry score ${score} ✓ — waiting close`; reasonCls = 'ok' }
-  else { topReason = `AUTO SCANNING: Score ${score} | ${BR.regime?.toUpperCase() || '—'}`; reasonCls = 'wait' }
+  else { topReason = `AUTO SCANNING: Entry score ${score} | ${BR.regime?.toUpperCase() || '—'}`; reasonCls = 'wait' }
+  // [2026-11-21] Cu o pozitie deschisa, badge-ul spune TRADING iar motivul spunea „AUTO WAIT…" —
+  // pareau sa se contrazica. Motivul e despre URMATOAREA intrare, deci asa se si numeste.
+  if (hasPos && /^AUTO (WAIT|SCANNING):/.test(topReason)) topReason = topReason.replace(/^AUTO (WAIT|SCANNING):/, 'NEXT ENTRY WAIT:')
 
   // [R30] route to brainStore.blockReasonDisplay; <BlockReasonText/> renders the pill
   useBrainStore.getState().setBlockReasonDisplay({ text: topReason, className: 'znc-block-reason ' + reasonCls })

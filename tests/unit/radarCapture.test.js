@@ -77,6 +77,14 @@ describe('radarCapture — starea de dinainte de intrare (regulile din aplicatie
         const L = RC.lensesOf(jump);
         expect(RC.preMoodOf(Array(12).fill(0.95), L.sl, 40, 65, [])).toBe('NERVOUS');
     });
+    test('[2026-11-21] CONFUSED = voturi egale (>= 2); NERVOUS la pragul calibrat 0,013', () => {
+        const rt = Array(12).fill(0.5);
+        expect(RC.preMoodOf(rt, rt, 40, 65, [], 2, 2)).toBe('CONFUSED');
+        expect(RC.preMoodOf(rt, rt, 40, 65, [], 1, 1)).toBe('CALM');
+        expect(RC.preMoodOf(rt, Array(12).fill(0.48), 40, 65, [], 3, 1)).toBe('NERVOUS');   // 0,02 > 0,013
+        expect(RC.preMoodOf(rt, Array(12).fill(0.495), 40, 65, [], 3, 1)).toBe('CALM');    // 0,005
+        expect(RC.preMoodOf(rt, rt, 60, 65, [2], 2, 2)).toBe('HESITANT');                  // poarta pica bate CONFUSED
+    });
     test('HESITANT / ALERT / CALM ca in brainDerived', () => {
         const rt = Array(12).fill(0.5), sl = rt.slice();
         expect(RC.preMoodOf(rt, sl, 60, 65, [2])).toBe('HESITANT');

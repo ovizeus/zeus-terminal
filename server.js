@@ -228,6 +228,12 @@ app.get('/app', (req, res, next) => {
   return next();
 });
 
+// [2026-11-21] Cardurile de share din jurnalul creierului: pagina publica /s/<id> (cu og:image,
+// ca WhatsApp / Telegram / Facebook / X / Discord sa arate imaginea). Doar citire, pre-auth.
+const shareRoutes = require('./server/routes/share');
+app.use(shareRoutes.publicRouter);
+try { shareRoutes.startCleanup(); } catch (e) { logger.warn('SHARE', 'cleanup start failed: ' + (e && e.message)); }
+
 // ─── Session Auth (protects everything below) ───
 app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] prefer config source
 
@@ -1249,7 +1255,8 @@ app.get('/api/exposure', (_req, res) => {
 
 app.get('/api/fng', async (_req, res) => {
   try {
-    const r = await fetch('https://api.alternative.me/fng/?limit=2');
+    // [2026-11-21] 8 zile (nu 2): panoul arata si valoarea de acum o saptamana (scria „Week: —" mereu).
+    const r = await fetch('https://api.alternative.me/fng/?limit=8');
     if (!r.ok) throw new Error(r.statusText);
     const data = await r.json();
     res.json(data);
@@ -1290,6 +1297,8 @@ const brainParityRoutes = require('./server/routes/brainParity');
 app.use('/api/brain/parity', brainParityRoutes);
 // [2026-11-20] Radarul de pe server: monedele radarului + inregistrarile intrarilor.
 app.use('/api/brain/radar', require('./server/routes/brainRadar'));
+// [2026-11-21] Urcarea cardului de share (autentificat; viewerii nu ajung la /api/brain/).
+app.use('/api/brain/share', shareRoutes.apiRouter);
 
 // ─── [OMEGA Wave 1 UI 2026-05-15] Read-only OMEGA UI feed ───
 // Mounts GET /api/omega/{voice,mood,health} + POST /api/omega/chat. Read

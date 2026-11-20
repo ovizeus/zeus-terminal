@@ -227,7 +227,9 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             '/api/ring5', '/api/dsldrive', '/api/indicators', '/api/admin', '/api/support', '/api/byoi',
             '/api/health', '/api/exchange',
             // [2026-11-20] radarul pe server: monede + inregistrari — sub /api/brain/, deci INTERZIS viewerilor
-            '/api/brain/radar'];
+            '/api/brain/radar',
+            // [2026-11-21] urcarea cardului de share — tot sub /api/brain/, INTERZIS viewerilor
+            '/api/brain/share'];
         for (const u of used) expect(known).toContain(u);
     });
 

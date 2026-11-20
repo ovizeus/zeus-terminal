@@ -209,7 +209,7 @@ export const INDICATORS: any[] = [
   { id: 'notos', ico: _ZI.drop, name: 'NOTOS', desc: 'Perp premium — mark vs index in basis points plus funding alignment; flags the divergence that fuels a squeeze', cat: 'momentum', def: false },
   { id: 'pulsar', ico: _ZI.boom, name: 'PULSAR', desc: 'Compression box, measured move and candle recolour — draws the coil on the chart, projects the box height as target on release, marks the invalidation', cat: 'vol', def: false },
   { id: 'autotrend', ico: _ZI.spider, name: 'AUTOTRENDLINE', desc: 'Automatic trendline fans — green support lines from the major low through each higher low, red resistance lines from the major high, all from real pivots and extended to the last bar', cat: 'support', def: false },
-  { id: 'ichnos', ico: _ZI.ruler, name: 'ICHNOS', desc: 'Footprint panel under the chart — sold x bought at every price level of each candle, Σ volume, Δ delta, POC box, diagonal imbalances, stacked imbalance zones and big-order levels (Bybit trades, $k). Swipe to scroll, double-tap for live', cat: 'volume', def: false },
+  // [2026-11-21] ICHNOS nu mai e in lista: e pornit mereu (setarile — rotita din titlul panoului).
   { id: 'arachne', ico: _ZI.spider, name: 'ARACHNE', desc: 'Auto trendlines and S/R — diagonal lines through real pivots, horizontal levels by touch count, each labelled, with break and entry markers', cat: 'support', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null

@@ -64,7 +64,7 @@ export class BrainRenderer {
     ctx.closePath()
   }
 
-  render(st: St, t: number, dt: number, rp: { id: string } | null, env: RenderEnv): void {
+  render(st: St, t: number, dt: number, rp: { id: string; x?: number } | null, env: RenderEnv): void {
     const r = this, ctx = this.ctx
     r.last = st
     const k = rp ? 0.18 : 0.5
@@ -129,7 +129,7 @@ export class BrainRenderer {
     ctx.globalAlpha = 1
     ctx.fillStyle = rgba(col, 0.9); ctx.font = '500 14px monospace'; ctx.textAlign = 'left'; ctx.fillText(st.main, 14, S - 30)
     ctx.fillStyle = 'rgba(170,190,215,.6)'; ctx.font = '500 9px monospace'; ctx.fillText('main', 14, S - 17)
-    if (rp) { ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.font = '500 11px monospace'; ctx.textAlign = 'center'; ctx.fillText('● REPLAY #' + rp.id + ' · x4', C, 12) }
+    if (rp) { ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.font = '500 11px monospace'; ctx.textAlign = 'center'; ctx.fillText('● REPLAY #' + rp.id + ' · x' + (rp.x || 4), C, 12) }
     // inelele grilei
     for (let q = 1; q <= 4; q++) { ctx.beginPath(); ctx.setLineDash([2, 7]); ctx.strokeStyle = 'rgba(120,160,210,.09)'; ctx.lineWidth = 1; ctx.arc(C, C, R * q / 4, 0, 7); ctx.stroke() }
     ctx.setLineDash([])

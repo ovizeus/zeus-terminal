@@ -54,7 +54,7 @@ export const MX: Record<Mood, string> = {
   CALM: 'nothing is building, the brain is relaxed',
   ALERT: 'confluence is close to the threshold, getting ready',
   NERVOUS: 'fast and slow lenses disagree, the market is jumpy',
-  CONFUSED: 'ML confidence is low, the brain cannot read this market',
+  CONFUSED: 'the signals contradict each other, the brain cannot read this market',
   HESITANT: 'it wants to enter but a safety gate is blocking',
   ATTACK: 'signal confirmed, entering now',
   FOCUSED: 'in a position, managing it',

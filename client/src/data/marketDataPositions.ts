@@ -262,6 +262,20 @@ export function renderDemoPositions(): void {
 
 export function calcPosPnL(pos: any, cur: any): number { return _safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false) }
 
+/**
+ * [2026-11-21] PnL-ul VIU al unei pozitii, din pretul de acum. Bug gasit la audit: renderDemoPositions
+ * actualizeaza `pos.pnl` doar pentru pozitiile MANUALE; ale autotrade-ului ramaneau la 0 pana se
+ * deschidea panoul de pozitii (PositionRows il calculeaza la desen) — jurnalul creierului, radarul si
+ * „ACTIVE POSITION" aratau +$0.00 cu pretul miscat. Pozitiile de la bursa pastreaza PnL-ul bursei.
+ */
+export function livePnlOf(pos: any): number | null {
+  if (!pos) return null
+  if (pos.fromExchange && Number.isFinite(+pos.pnl)) return +pos.pnl
+  const cur = getSymPrice(pos)
+  if (cur && Number.isFinite(cur) && cur > 0 && Number(pos.entry) > 0) return calcPosPnL(pos, cur)
+  return Number.isFinite(+pos.pnl) ? +pos.pnl : null
+}
+
 export function updateLiveBalance(): void {
   const balEl = el('liveBalanceAmt') || el('demoBalanceAmt')
   if (balEl && TP.liveBalance) balEl.textContent = '$' + Number(TP.liveBalance).toFixed(2)

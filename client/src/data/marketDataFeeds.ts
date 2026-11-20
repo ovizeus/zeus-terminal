@@ -326,7 +326,8 @@ export async function fetchFG(): Promise<void> {
     const ev = el('fgval'); if (ev) { ev.textContent = String(val); ev.style.color = col }
     const el2 = el('fglbl'); if (el2) { el2.textContent = cls.toUpperCase(); el2.style.color = col }
     const efg = el('fgf'); if (efg) { efg.style.width = val + '%'; efg.style.background = col }
-    const ech = el('fgch'); if (ech) ech.textContent = 'Yesterday: ' + (d.data[1] ? +d.data[1].value : '\u2014') + ' | Week: \u2014'
+    // [2026-11-21] „Week" = valoarea de acum 7 zile (serverul cere acum 8 zile); era scris „—" de mana.
+    const ech = el('fgch'); if (ech) ech.textContent = 'Yesterday: ' + (d.data[1] ? +d.data[1].value : '\u2014') + ' | Week: ' + (d.data[7] ? +d.data[7].value : '\u2014')
     const arc = el('fgarc')
     if (arc) { const circ = 175.93; const offset = circ - (val / 100) * circ; arc.style.strokeDashoffset = String(offset); arc.style.stroke = col }
   } catch (e: any) { console.warn('[fetchFG]', e.message) }

@@ -8398,3 +8398,19 @@ select option {
   }
   .znc .znc-body.znc-stack > .znc-left #zeusBrainV7 { width: 100%; display: flex; justify-content: center }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   [2026-11-21] ZONA BAREI DE SUS A TELEFONULUI (semnal, ceas) — cerut de operator:
+   chart-ul pe tot ecranul si ferestrele ancorate sus intrau sub ea. Antetul o
+   respecta deja (env(safe-area-inset-top), viewport-fit=cover); acestea nu.
+   Inaltimea chart-ului vine din cutia #mc (flex: 1), deci marginea se scade singura.
+   ═══════════════════════════════════════════════════════════════ */
+#csec.chart-section.fsm, .zr-panel--chart.fsm {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
+}
+.cmd-overlay { padding-top: calc(80px + env(safe-area-inset-top, 0px)) }
+.dlog-overlay { padding-top: calc(40px + env(safe-area-inset-top, 0px)) }
+

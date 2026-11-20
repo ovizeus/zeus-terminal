@@ -44,11 +44,11 @@ export function NeuralDataStream() {
       <div className="sess-bt" id="sessBacktestBox" style={{ padding: '2px 8px 4px' }}></div>
 
       {/* Price Action */}
-      <div style={{ fontSize: '6px', letterSpacing: '2px', color: '#1a0830', padding: '4px 10px 2px' }}>PRICE ACTION — 7 SIMBOLURI LIVE</div>
+      <div style={{ fontSize: '6px', letterSpacing: '2px', color: '#1a0830', padding: '4px 10px 2px' }}>PRICE ACTION — 7 SYMBOLS LIVE</div>
       <div id="symPulseRows"></div>
 
       {/* Momentum Heatmap */}
-      <div style={{ fontSize: '6px', letterSpacing: '2px', color: '#1a0830', padding: '4px 10px 0' }}>MOMENTUM HEATMAP</div>
+      <div style={{ fontSize: '6px', letterSpacing: '2px', color: '#1a0830', padding: '4px 10px 0' }}>MOMENTUM HEATMAP · 24H CHANGE · SCANNER SIGNAL</div>
       <div className="nheat" id="brainHeatmap"></div>
 
       {/* Risk Gauges */}

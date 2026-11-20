@@ -10,6 +10,7 @@ import { BrainRenderer, rgba } from './brainRender'
 import { Recorder, type Frame } from './brainRecorder'
 import { brainStorage, type TradeRecord } from './brainStorage'
 import { buildRawFromZeusState, switchMain, currentEnv, currentPositions, shortSym } from './brainAdapter'
+import { livePnlOf } from '../data/marketDataPositions'
 import { buildJournal, brainCaptured, ENV_COLOR, type Env, type JRow, type ServerRow, type OpenPos } from './brainJournal'
 import { radarCoins, MAX_SATS, chosen, addCoin, removeCoin } from './brainPrefs'
 import { startServerAxes, getServerCoins, putServerCoins, fetchCaptures, fetchCaptureFrames, capToRec, framesToStates, entryState, type ServerCapture, type ServerEntry } from './brainServer'
@@ -17,6 +18,7 @@ import { MSCAN_SYMS } from '../core/config'
 import { loadPref, savePref } from './brainPrefs'
 
 const STRIP = REC_HZ * 180
+const REPLAY_MAX_S = 30            // [2026-11-21] durata maxima a unui replay pe ecran
 
 const CSS = `
 .zb7{width:100%;max-width:420px;margin:0 auto;background:#040913;padding:12px 8px 14px;box-sizing:border-box;font-family:monospace;color:#9fb3c8}
@@ -31,6 +33,8 @@ const CSS = `
 .zb7-env{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;border:1px solid currentColor;vertical-align:1px}
 .zb7-chip{font-size:11px!important;padding:3px 8px!important;border-radius:999px!important}
 .zb7-det{position:fixed;inset:0;background:#02060f;z-index:10060;display:none;flex-direction:column;align-items:center;font-family:monospace}
+/* [2026-11-21] sub bara telefonului (semnal, ceas), nu peste ea */
+.zb7-allm,.zb7-det{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box}
 .zb7-det .in{width:100%;max-width:420px;height:100%;overflow-y:auto;padding:12px 10px 24px;box-sizing:border-box;color:#9fb3c8;font-size:12px}
 .zb7-det button{font-family:monospace;font-size:13px;padding:8px;border:1px solid;border-radius:8px;background:transparent;cursor:pointer}
 .zb7-det .kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #0f1b2b}
@@ -154,7 +158,7 @@ export function startBrain(root: HTMLElement): () => void {
   const snapCache = new Map<string, string>()
   const UI = {
     focus: pref.focus,
-    rep: null as null | { tr: TradeRecord; frames: Frame[]; idx: number; hz?: number },
+    rep: null as null | { tr: TradeRecord; frames: Frame[]; idx: number; hz?: number; speed?: number; x?: number },
     best: null as TradeRecord | null,
     infoUntil: 0,
     allShown: PAGE,
@@ -207,7 +211,7 @@ export function startBrain(root: HTMLElement): () => void {
   function openPositions(): OpenPos[] {
     // Pozitiile deschise exista doar pentru mediul ACTIV (store-ul clientului).
     if (JS.view !== JS.env) return []
-    return currentPositions().map((p: any) => ({ id: p.id, sym: p.sym, side: p.side, entry: p.entry, sl: p.sl, tp: p.tp, size: p.size, lev: p.lev, pnl: p.pnl, openTs: p.openTs }))
+    return currentPositions().map((p: any) => ({ id: p.id, sym: p.sym, side: p.side, entry: p.entry, sl: p.sl, tp: p.tp, size: p.size, lev: p.lev, pnl: livePnlOf(p) ?? p.pnl, openTs: p.openTs }))
   }
   function setCaptures(caps: ServerCapture[]): void {
     const uid = String((window as any)._zeusUserId ?? '')
@@ -389,7 +393,7 @@ export function startBrain(root: HTMLElement): () => void {
       ${kv(r.status === 'open' ? 'Unrealized PnL' : 'Realized PnL', fmtPct(r.pnlPct) + ' · ' + (r.pnlAbs == null ? '—' : (r.pnlAbs >= 0 ? '+$' : '−$') + Math.abs(r.pnlAbs).toFixed(2)))}
       ${kv(b && b.source === 'server' || em ? 'Confluence at entry' : 'Cockpit confluence at entry', b && b.confAtEntry != null ? String(b.confAtEntry) : em && em.conf != null ? String(em.conf) : '—')}${em && em.finalConf != null ? kv('Final confidence at entry', String(em.finalConf) + (em.tier ? ' · ' + esc(em.tier) : '')) : ''}${kv('Server score at entry', r.serverScore == null ? '—' : String(r.serverScore))}
       ${kv('Threshold at entry', b && b.thrAtEntry != null ? String(b.thrAtEntry) : '—')}
-      ${kv('Radar mode', esc(b?.meta?.radarMode || '—'))}${kv('Regime', esc(b?.meta?.regime || r.regime || em?.regime || '—'))}${kv('Profile', esc(b?.profile || '—'))}
+      ${kv('Radar mode', esc(b?.meta?.radarMode || '—'))}${kv(b && b.source === 'server' || em ? 'Regime (server)' : 'Regime', esc(b?.meta?.regime || r.regime || em?.regime || '—'))}${kv('Profile', esc(b?.profile || '—'))}
       ${kv('Lens', esc(b?.meta?.lens || '—'))}${kv('Focus at entry', b?.meta?.focus == null ? '—' : b.meta.focus ? 'on' : 'off')}
       ${kv('Mood before entry', esc(b ? b.pre : '—'))}${kv('ML', b?.meta ? (b.meta.ml == null ? 'coming soon' : Math.round(b.meta.ml * 100) + '%') : '—')}
       ${kv('Gates at entry', gates)}
@@ -474,7 +478,12 @@ export function startBrain(root: HTMLElement): () => void {
       hz = 1                                   // serverul inregistreaza un cadru pe secunda
     } else frames = (await brainStorage.getFrames(tr.key)) as Frame[] | null
     if (!frames || !frames.length) { info(STR.noReplay); return }
-    closeAll(); closeDet(); UI.rep = { tr, frames, idx: 0, hz }; RS.prevSig = false
+    // [2026-11-21, cerut de operator] orice replay tine CEL MULT 30 s: scurtele raman la 4×,
+    // cele lungi (unele aveau 300–800 s) se accelereaza cat trebuie. Eticheta arata viteza reala.
+    const speed = Math.max(hz * 4, frames.length / REPLAY_MAX_S)
+    const rep0 = { tr, frames, idx: 0, hz, speed, x: 4 }
+    rep0.x = Math.max(1, Math.round(repSecs(rep0, frames.length - 1) / Math.max(1, frames.length / speed)))
+    closeAll(); closeDet(); UI.rep = rep0; RS.prevSig = false
     info(tr.source === 'server' ? STR.replayStart(tr.id).replace('~12s', '~30s') : STR.replayStart(tr.id))
     try { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }) } catch { /* vechi */ }
   }
@@ -519,17 +528,73 @@ export function startBrain(root: HTMLElement): () => void {
       x.fillStyle = '#7c8ea3'; x.font = '500 20px monospace'
       x.fillText((tr ? 'mood ' + tr.pre + ' · conf ' + (tr.confAtEntry == null ? '—' : tr.confAtEntry) + ' · ' + (tr.meta?.radarMode || '—') + ' · ' + (tr.profile || '—') : 'no brain data · ' + (r.reason || '')), 48, 862)
       const url = c.toDataURL('image/png')
-      const canShare = typeof navigator !== 'undefined' && typeof (navigator as any).canShare === 'function'
-      $('share').innerHTML = `<div style="padding:10px 0;border-top:1px solid #142235;"><img src="${url}" alt="Share card for ${r.env} trade ${esc(r.seq)}" style="width:100%;border-radius:10px;display:block;"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding-top:8px;font-size:11px;color:#7c8ea3;"><span>${STR.longPress}</span><span style="display:flex;gap:6px;">${canShare ? `<button type="button" data-k="shs" style="color:#ffc85a;border-color:#4d3d1d;padding:4px 10px;font-size:11px;">${STR.share}</button>` : ''}<button type="button" data-k="shx" style="color:#9fb3c8;border-color:#2a3a4d;padding:4px 10px;font-size:11px;">${STR.close}</button></span></div></div>`
+      // [2026-11-21, cerut de operator] Share direct in aplicatii. Pe web o imagine nu intra in
+      // WhatsApp / Telegram / X printr-un link, deci cardul se urca pe server (o data) si se trimite
+      // linkul lui public, care arata IMAGINEA in conversatie (og:image). „More" trimite fisierul.
+      const NETS: Array<[string, string, string]> = [
+        ['wa', 'WhatsApp', '#25d366'], ['tg', 'Telegram', '#2aabee'], ['fb', 'Facebook', '#1877f2'],
+        ['x', 'X', '#e7e9ea'], ['dc', 'Discord', '#5865f2'], ['more', 'More', '#ffc85a'], ['save', 'Save', '#9fb3c8'],
+      ]
+      const btn = (k: string, label: string, col: string) => `<button type="button" data-net="${k}" style="color:${col};border-color:${col}55;padding:6px 4px;font-size:11px;">${label}</button>`
+      $('share').innerHTML = `<div style="padding:10px 0;border-top:1px solid #142235;"><img src="${url}" alt="Share card for ${r.env} trade ${esc(r.seq)}" style="width:100%;border-radius:10px;display:block;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding-top:8px;">${NETS.map((n) => btn(n[0], n[1], n[2])).join('')}<button type="button" data-k="shx" style="color:#9fb3c8;border-color:#2a3a4d;padding:6px 4px;font-size:11px;">${STR.close}</button></div>
+        <div data-k="shmsg" style="padding-top:6px;font-size:11px;color:#7c8ea3;min-height:14px;">Pick an app — or long-press the image to save it.</div></div>`
       $('shx').addEventListener('click', () => { $('share').innerHTML = '' })
-      const shs = $('shs')
-      if (shs) shs.addEventListener('click', () => {
-        c.toBlob((blob) => {
-          if (!blob) return
-          const file = new File([blob], `zeus-${r.env.toLowerCase()}-trade-${r.seq}.png`, { type: 'image/png' })
-          try { if ((navigator as any).canShare({ files: [file] })) void (navigator as any).share({ files: [file], title: 'Zeus Terminal ' + r.env + ' trade #' + r.seq }) } catch { /* anulat */ }
-        }, 'image/png')
-      })
+      const msg = (m: string) => { const e = $('shmsg'); if (e) e.textContent = m }
+      const text = `Zeus Terminal · ${r.env} #${r.seq} ${r.symbol} ${r.side} · ${lbl} ${fmtPct(pnl)}`
+      const fileName = `zeus-${r.env.toLowerCase()}-trade-${r.seq}`
+      let link: string | null = null
+      const upload = async (): Promise<string | null> => {
+        if (link) return link
+        let data = c.toDataURL('image/webp', 0.9)
+        if (!data.startsWith('data:image/webp')) data = c.toDataURL('image/jpeg', 0.9)
+        try {
+          const res = await fetch('/api/brain/share', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, body: JSON.stringify({ image: data }) })
+          const j = await res.json().catch(() => null)
+          if (!res.ok || !j || !j.ok) { msg(res.status === 429 ? 'Too many shares this hour — try again later.' : 'Could not create the share link.'); return null }
+          link = String(j.url)
+          return link
+        } catch { msg('No connection — could not create the share link.'); return null }
+      }
+      const copy = async (t: string): Promise<boolean> => { try { await navigator.clipboard.writeText(t); return true } catch { return false } }
+      const blobOf = (): Promise<Blob | null> => new Promise((ok) => c.toBlob((b) => ok(b), 'image/png'))
+      const target = (k: string, u: string): string => {
+        const eu = encodeURIComponent(u), et = encodeURIComponent(text)
+        if (k === 'wa') return `https://wa.me/?text=${encodeURIComponent(text + ' ' + u)}`
+        if (k === 'tg') return `https://t.me/share/url?url=${eu}&text=${et}`
+        if (k === 'fb') return `https://www.facebook.com/sharer/sharer.php?u=${eu}`
+        return `https://twitter.com/intent/tweet?text=${et}&url=${eu}`
+      }
+      $('share').querySelectorAll('[data-net]').forEach((b) => b.addEventListener('click', async () => {
+        const k = (b as HTMLElement).dataset.net as string
+        if (k === 'save') {
+          const blob = await blobOf(); if (!blob) return
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName + '.png'
+          document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+          msg('Saved.'); return
+        }
+        if (k === 'more') {
+          const blob = await blobOf()
+          const file = blob ? new File([blob], fileName + '.png', { type: 'image/png' }) : null
+          try {
+            const nav = navigator as any
+            if (file && typeof nav.canShare === 'function' && nav.canShare({ files: [file] })) { await nav.share({ files: [file], title: 'Zeus Terminal', text }); return }
+          } catch { return /* anulat de om */ }
+          const u = await upload(); if (!u) return
+          try { if (typeof (navigator as any).share === 'function') { await (navigator as any).share({ title: 'Zeus Terminal', text, url: u }); return } } catch { return }
+          msg((await copy(u)) ? 'Link copied — paste it anywhere.' : u)
+          return
+        }
+        // fereastra se deschide ACUM (gestul omului), adresa vine dupa urcare — altfel blocarea pop-up-urilor o opreste
+        const win = k === 'dc' ? null : window.open('', '_blank')
+        msg('Creating the share link…')
+        const u = await upload()
+        if (!u) { try { win && win.close() } catch { /* */ } return }
+        if (k === 'dc') { msg((await copy(text + ' ' + u)) ? 'Link copied — paste it in Discord (the image shows in the chat).' : u); return }
+        const t = target(k, u)
+        if (win) { try { win.opener = null; win.location.href = t } catch { location.href = t } } else location.href = t
+        msg('Opened ' + (NETS.find((n) => n[0] === k) || ['', 'the app'])[1] + '.')
+      }))
     }
     const key = tr && tr.hasSnapshot ? tr.key : null
     const snap = key ? await snapFor(key) : null
@@ -657,11 +722,11 @@ export function startBrain(root: HTMLElement): () => void {
       let view: St = st
       const lf = REC.frames[REC.frames.length - 1]
       if (lf && lf.evt && lf.i !== lastEvtI) { lastEvtI = lf.i; view = Object.assign({}, st, { evt: lf.evt, i: lf.i }) }
-      let rp: { id: string } | null = null
+      let rp: { id: string; x?: number } | null = null
       if (UI.rep) {
-        UI.rep.idx += dt * (UI.rep.hz ?? REC_HZ) * 4
+        UI.rep.idx += dt * (UI.rep.speed ?? (UI.rep.hz ?? REC_HZ) * 4)
         if (UI.rep.idx >= UI.rep.frames.length) { UI.rep = null; info(STR.replayEnd) }
-        else { view = UI.rep.frames[Math.floor(UI.rep.idx)]; rp = { id: UI.rep.tr.id } }
+        else { view = UI.rep.frames[Math.floor(UI.rep.idx)]; rp = { id: UI.rep.tr.id, x: UI.rep.x } }
       }
       acc += dt
       // fara ecran: desenam doar cand trebuie facuta poza de la intrare

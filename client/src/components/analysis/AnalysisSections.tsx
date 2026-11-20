@@ -278,12 +278,8 @@ export function AnalysisSections() {
         </div>
       </div>
 
-      <div className="tickw">
-        <div className="tick" id="ticker">
-          <span className="ti">ZeuS Terminal loading...</span>
-          <span className="ti">ZeuS Terminal loading...</span>
-        </div>
-      </div>
+      {/* [2026-11-21] Banda „ZeuS Terminal loading..." (#ticker) nu avea niciun scriitor: ramanea
+          „loading" pentru totdeauna. Banda de preturi vie e cea de deasupra (#dstreamInner). Scoasa. */}
     </>
   );
 }

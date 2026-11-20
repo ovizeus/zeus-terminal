@@ -94,3 +94,30 @@ describe('dispozitia (spec 5)', () => {
     expect(st.cons).toBe(1)
   })
 })
+
+describe('[2026-11-21] toate starile apar, fiecare cu culoarea ei', () => {
+  const mood = (o: Partial<Raw>) => new Derived().build(raw(o)).mood[0]
+  it('CONFUSED fara ML = voturi egale (>= 2 de fiecare parte); cu ML, ML-ul decide', () => {
+    expect(mood({ bull: 2, bear: 2 })).toBe('CONFUSED')
+    expect(mood({ bull: 3, bear: 2 })).toBe('CALM')
+    expect(mood({ bull: 2, bear: 2, ml: 0.9 })).toBe('CALM')
+    expect(mood({ ml: 0.3 })).toBe('CONFUSED')
+  })
+  it('NERVOUS la pragul calibrat pe date reale (0,013), nu la 0,18', () => {
+    expect(mood({ sl: new Array(12).fill(0.48) })).toBe('NERVOUS')
+    expect(mood({ sl: new Array(12).fill(0.495) })).toBe('CALM')
+  })
+  it('ordinea: HESITANT > CONFUSED > NERVOUS > ALERT > CALM', () => {
+    expect(mood({ conf: 60, gatesFailing: [2], bull: 2, bear: 2 })).toBe('HESITANT')
+    expect(mood({ conf: 60, bull: 2, bear: 2, sl: new Array(12).fill(0.4) })).toBe('CONFUSED')
+    expect(mood({ conf: 60, sl: new Array(12).fill(0.4) })).toBe('NERVOUS')
+    expect(mood({ conf: 60 })).toBe('ALERT')
+    expect(mood({ conf: 40 })).toBe('CALM')
+  })
+  it('culoarea formei = culoarea starii; eticheta modului pastreaza culoarea modului', () => {
+    const st = new Derived().build(raw({ bull: 2, bear: 2 }))
+    expect(st.c).toEqual([192, 139, 255])   // CONFUSED #c08bff
+    expect(st.mc).toEqual([57, 255, 106])   // LONG
+  })
+})
+

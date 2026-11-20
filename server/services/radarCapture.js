@@ -357,10 +357,13 @@ function lensesOf(frames) {
 }
 /**
  * Starea de dinainte de intrare, cu regulile din brainDerived.Derived.build (fara pozitie):
- * HESITANT (conf ≥ prag − 8 si o poarta pica) · NERVOUS (lentilele se contrazic > 0,18)
+ * HESITANT (conf ≥ prag − 8 si o poarta pica) · CONFUSED (voturi egale, ≥ 2) · NERVOUS (lentilele se contrazic > 0,013)
  * · ALERT (conf ≥ prag − 10) · altfel CALM. ML nu exista inca → CONFUSED nu apare.
  */
-function preMoodOf(rt, sl, conf, thr, failing) {
+// [2026-11-21] Aceleasi praguri ca brainDerived (calibrate pe 83.687 de cadre reale).
+const NERVOUS_DIV = 0.013;
+const votesTied = (b, r) => b != null && r != null && b >= 2 && b === r;
+function preMoodOf(rt, sl, conf, thr, failing, bull, bear) {
     let s = 0, k = 0;
     for (let i = 0; i < (rt || []).length; i++) {
         const a = rt[i], b = sl ? sl[i] : null;
@@ -368,7 +371,8 @@ function preMoodOf(rt, sl, conf, thr, failing) {
     }
     const div = k ? s / k : 0;
     if (conf != null && thr != null && conf >= thr - 8 && (failing || []).length > 0) return 'HESITANT';
-    if (div > 0.18) return 'NERVOUS';
+    if (votesTied(bull, bear)) return 'CONFUSED';
+    if (div > NERVOUS_DIV) return 'NERVOUS';
     if (conf != null && thr != null && conf >= thr - 10) return 'ALERT';
     return 'CALM';
 }
@@ -389,14 +393,14 @@ function _startCapture(pos, now) {
     const upTo = at ? ring.filter((f) => f.t <= at.t) : [];
     const lens = lensesOf(upTo);
     const entry = {
-        pre: at ? preMoodOf(at.rt, lens.sl, at.sc, thr.thr, g.failing) : null,
+        pre: at ? preMoodOf(at.rt, lens.sl, at.sc, thr.thr, g.failing, at.b, at.r) : null,
         v: 1, seq: pos.seq, symbol: sym, side: pos.side, env: _envOf(pos), entryTs: Number(pos.ts) || now,
         entryPrice: +pos.price || null, sl: +pos.sl || null, tp: +pos.tp || null, size: +pos.size || null, lev: +pos.lev || null,
         entryShape: at ? entryShapeOf(at.rt) : null, rt: at ? at.rt : null,
         conf: at ? at.sc : null, thr: thr.thr, profile: profileOf(thr.settings, _envOf(pos)), regime: dec && dec.regime ? dec.regime : null,
         radarRegime: at ? at.rg : null, bull: at ? at.b : null, bear: at ? at.r : null,
         gatesFailing: g.failing, gatesUnknown: g.unknown,
-        radarCoins: coinsFor(uid).filter(Boolean), late, preFrames: frames.length, source: 'server',
+        radarCoins: coinsFor(uid).filter(Boolean), late, preFrames: frames.length, source: 'server', moodV: 2,
     };
     const cap = { uid, seq: pos.seq, symbol: sym, pos, entry, frames, lastFlush: 0 };
     _caps.set(uid + ':' + pos.seq, cap);

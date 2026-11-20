@@ -162,7 +162,10 @@ function ArmDetail() {
       <div className="znc-ad-title">AUTO-TRADE DETAIL</div>
       <div className="znc-ad-row">Mode: <b id="zad-mode" style={{ color: s.modeArmed ? ARM_FG_ON : ARM_FG_OFF }}>{s.mode}</b></div>
       <div className="znc-ad-row">Profile: <b id="zad-profile">{s.profile}</b></div>
-      <div className="znc-ad-row">Score: <b id="zad-score" style={{ color: s.scoreArmed ? ARM_FG_ON : ARM_FG_OFF }}>{s.score}</b></div>
+      {/* [2026-11-21] „Entry score", nu „Score": e scorul de INTRARE (BM.entryScore, prag propriu),
+          nu confluenta (CONF de pe radar / Confluence din risk matrix) — doua cifre diferite
+          sub acelasi nume pareau sa se contrazica. */}
+      <div className="znc-ad-row">Entry score: <b id="zad-score" style={{ color: s.scoreArmed ? ARM_FG_ON : ARM_FG_OFF }}>{s.score}</b></div>
       <div className="znc-ad-row">Trigger: <b id="zad-trigger" style={{ color: s.triggerActive ? ARM_FG_ON : ARM_FG_OFF }}>{s.trigger}</b></div>
       <div className="znc-ad-row">TF: <b id="zad-tf">{s.tf}</b></div>
       <div className="znc-ad-row">Cooldown: <b id="zad-cd" style={{ color: s.cooldownReady ? ARM_FG_ON : ARM_FG_OFF }}>{s.cooldown}</b></div>
@@ -242,7 +245,7 @@ function ReceiptBlock() {
     <div className="znc-receipt" id="zncReceipt">
       <div className="znc-receipt-title">EXECUTION RECEIPT</div>
       <div className="znc-receipt-row">Mode: <b id="rec-mode">{s.mode}</b></div>
-      <div className="znc-receipt-row">Score: <b id="rec-score">{s.score}</b></div>
+      <div className="znc-receipt-row">Entry score: <b id="rec-score">{s.score}</b></div>
       <div className="znc-receipt-row">Trigger: <b id="rec-trigger">{s.trigger}</b></div>
       <div className="znc-receipt-row">TF: <b id="rec-tf">{s.tf}</b></div>
       <div className="znc-receipt-bolt">

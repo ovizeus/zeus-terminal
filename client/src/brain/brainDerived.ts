@@ -28,6 +28,7 @@ export interface Raw {
   closeMsg: string
   main: string
   sats: RawSat[]
+  bull?: Num; bear?: Num      // [2026-11-21] voturile directiei (pentru CONFUSED fara ML)
 }
 
 export interface StSat { s: string; full: string; v: Num[] | null; c: Rgb; sc: Num; cons: boolean; slot: number; main?: boolean }
@@ -51,6 +52,17 @@ export interface St {
 
 /** '#rrggbb' → [r, g, b]. */
 export const hexRgb = (h: string): Rgb => { const n = parseInt(String(h).replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] as Rgb }
+
+/**
+ * [2026-11-21] Pragurile starilor, calibrate pe DATE REALE (83.687 de cadre de pe server, 21 nov):
+ * diferenta lentila rapida ↔ lenta are mediana 0,002 si p99 0,028 — pragul vechi 0,18 (gandit
+ * pentru 60 de cadre/s sarite) nu era atins NICIODATA, deci NERVOUS nu aparea. 0,013 = p95.
+ * CONFUSED cerea o incredere ML care nu exista inca; pana atunci = voturile se bat cap in cap
+ * (bull == bear, cel putin 2 de fiecare parte): 0,8% din cadre. Aceleasi reguli pe server.
+ */
+export const NERVOUS_DIV = 0.013
+export const votesTied = (bull: Num | undefined, bear: Num | undefined): boolean =>
+  bull != null && bear != null && bull >= 2 && bull === bear
 
 export const clamp01 = (x: Num | undefined): number => Math.max(0, Math.min(1, x == null || !Number.isFinite(x) ? 0 : x))
 export const dirOf = (m: Mode): number => (m === 'SHORT' ? -1 : m === 'RANGE' ? 0 : 1)
@@ -168,8 +180,8 @@ export class Derived {
     else if (p) mood = p.progress != null && p.progress > 0.35 ? 'CONFIDENT' : p.progress != null && p.progress < -0.5 ? 'FEARFUL' : 'FOCUSED'
     else if (raw.dead) mood = 'SLEEPING'
     else if (hes) mood = 'HESITANT'
-    else if (raw.ml != null && raw.ml < 0.45) mood = 'CONFUSED'
-    else if (div > 0.18) mood = 'NERVOUS'
+    else if (raw.ml != null ? raw.ml < 0.45 : votesTied(raw.bull, raw.bear)) mood = 'CONFUSED'
+    else if (div > NERVOUS_DIV) mood = 'NERVOUS'
     else if (raw.conf != null && raw.thr != null && raw.conf >= raw.thr - 10) mood = 'ALERT'
     else mood = 'CALM'
     if (PRE_MOODS.includes(mood)) this.lastPreMood = mood

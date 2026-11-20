@@ -197,6 +197,31 @@ export function getSessionKey(hUTC: number) {
 // -- Session info config --
 // [MOVED TO TOP] SESS_CFG
 
+/**
+ * [2026-11-21] Bug gasit la audit: tabelul scria YEAR / MONTH / WEEK, dar calcula din lumanarile
+ * CHARTULUI (pe 15m = cateva zile) — „an" si „luna" ieseau identice si nu erau un an / o luna.
+ * Acum are lumanarile LUI de 1 ora (1.000 ≈ 41 de zile, la 30 de minute) si coloane pe care datele
+ * chiar le acopera: 30D / 7D / 24H.
+ */
+const _sessKl: { sym: string; ts: number; bars: any[]; busy: boolean } = { sym: '', ts: 0, bars: [], busy: false }
+function _sessBars(): any[] {
+  const sym = String(getSymbol() || 'BTCUSDT').toUpperCase()
+  if (!_sessKl.busy && (sym !== _sessKl.sym || Date.now() - _sessKl.ts > 30 * 60000)) {
+    _sessKl.busy = true
+    fetch(`/api/market/klines?symbol=${encodeURIComponent(sym)}&interval=1h&limit=1000`, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (Array.isArray(d) && d.length) {
+          _sessKl.bars = d.map((k: any) => ({ time: Math.floor(+k[0] / 1000), open: +k[1], close: +k[4] }))
+          _sessKl.sym = sym; _sessKl.ts = Date.now(); _sessLastBt.ts = 0
+        }
+      })
+      .catch(() => { /* ramane ce era */ })
+      .finally(() => { _sessKl.busy = false })
+  }
+  return _sessKl.sym === sym ? _sessKl.bars : []
+}
+
 export function updateSessionBacktest(hUTC: number) {
 
   const box = el('sessBacktestBox'); if (!box) return;
@@ -206,12 +231,12 @@ export function updateSessionBacktest(hUTC: number) {
   if ((nowTs - _sessLastBt.ts) < 90000 && box.innerHTML) return;
   _sessLastBt.ts = nowTs;
 
-  const klines = getKlines();
+  const klines = _sessBars();
   if (klines.length < 20) { box.innerHTML = ''; return; }
 
-  const yearMs = 365 * 24 * 3600 * 1000;
-  const monthMs = 30 * 24 * 3600 * 1000;
-  const weekMs = 7 * 24 * 3600 * 1000;
+  const yearMs = 30 * 24 * 3600 * 1000;   // coloana 1: 30 de zile
+  const monthMs = 7 * 24 * 3600 * 1000;   // coloana 2: 7 zile
+  const weekMs = 24 * 3600 * 1000;        // coloana 3: 24 de ore
   const curSess = getSessionKey(hUTC);
 
   function calcStats(sh: any, fromMs: number) {
@@ -246,9 +271,9 @@ export function updateSessionBacktest(hUTC: number) {
   let html = '<table style="width:100%;border-collapse:collapse;font-size:10px;line-height:1.7">';
   // Header
   html += '<tr><td style="color:#1a3a5a;padding:0 2px"></td>'
-    + '<td style="color:#2a4a6a;padding:0 3px;text-align:center">YEAR</td>'
-    + '<td style="color:#2a4a6a;padding:0 3px;text-align:center">MONTH</td>'
-    + '<td style="color:#2a4a6a;padding:0 3px;text-align:center">WEEK</td></tr>';
+    + '<td style="color:#2a4a6a;padding:0 3px;text-align:center" title="share of green vs red 1h candles in the session, last 30 days">30D</td>'
+    + '<td style="color:#2a4a6a;padding:0 3px;text-align:center">7D</td>'
+    + '<td style="color:#2a4a6a;padding:0 3px;text-align:center">24H</td></tr>';
 
   (['asia', 'london', 'ny'] as string[]).forEach((sk: string) => {
     const cfg = SESS_CFG[sk];
@@ -333,20 +358,22 @@ export function updateBrainHeatmap() {
     const score = scan?.score || 50;
     const dir = scan?.dir || 'neut';
 
-    // Heatmap color by momentum score
-    const intensity = Math.abs(chg) / 3; // 0-1
-    let bg: string, textCol: string;
-    if (dir === 'bull') { bg = `rgba(0,217,122,${Math.min(.3, intensity * .2 + .05)})`; textCol = 'var(--grn-bright)'; }
-    else if (dir === 'bear') { bg = `rgba(255,68,102,${Math.min(.3, intensity * .2 + .05)})`; textCol = 'var(--red)'; }
-    else { bg = 'transparent'; textCol = '#444'; }
+    // [2026-11-21] Panoul se contrazicea cu pretul: era VERDE 82–88 la toate monedele cand toate
+    // scadeau 4–7%. Culoarea venea din DIRECTIA SCANERULUI, care e CONTRARIAN pe RSI (supravandut →
+    // „bull", posibil rebound) — nu din momentum. Acum: fundalul si cifra mare = schimbarea REALA pe
+    // 24h (momentum); dedesubt, scorul scanerului cu sageata directiei lui, numit ca atare.
+    // Logica scanerului NU s-a atins (o foloseste si decizia).
+    const intensity = Math.min(1, Math.abs(chg) / 5);
+    const up = chg > 0, flat = !chg;
+    const bg = flat ? 'transparent' : up ? `rgba(0,217,122,${(0.06 + intensity * 0.24).toFixed(3)})` : `rgba(255,68,102,${(0.06 + intensity * 0.24).toFixed(3)})`;
+    const textCol = flat ? '#7a8ca0' : up ? 'var(--grn-bright)' : 'var(--red)';
+    const arrow = dir === 'bull' ? '\u25b2' : dir === 'bear' ? '\u25bc' : '\u2013';
+    const sigCol = dir === 'bull' ? 'var(--grn)' : dir === 'bear' ? 'var(--red)' : '#7a8ca0';
 
-    const barW = score + '%';
-    const barCol = score >= 65 ? 'var(--grn)' : score >= 50 ? 'var(--gold)' : 'var(--red)';
-
-    return `<div class="nheat-cell" style="background:${bg}">
+    return `<div class="nheat-cell" style="background:${bg}" title="24h change ${chg ? chg.toFixed(2) + '%' : '—'} · scanner signal ${score} ${dir}">
       <div class="nheat-sym">${sym}</div>
-      <div class="nheat-val" style="color:${textCol}">${score}</div>
-      <div class="nheat-bar" style="width:${barW};background:${barCol}"></div>
+      <div class="nheat-val" style="color:${textCol}">${chg ? (up ? '+' : '') + chg.toFixed(1) + '%' : '\u2014'}</div>
+      <div style="font-size:8px;color:${sigCol};opacity:.85">scan ${scan ? score : '\u2014'} ${scan ? arrow : ''}</div>
     </div>`;
   }).join('');
 }

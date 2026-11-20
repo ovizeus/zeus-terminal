@@ -18,7 +18,7 @@ import { hecate, thanatos, aion, hypnos, notos, flowPulseTargets, flowBucketTime
 import { pulsar, pulsarCandleColor } from './indicatorCalcPulsar'
 import { arachne, lineValueAt } from './indicatorCalcArachne'
 import { autoTrendlines, lineAt as autoLineAt } from './indicatorCalcAutoTrend'
-import { initIchnos, updateIchnos, clearIchnos } from './ichnosChart'
+import { initIchnos, ensureIchnos } from './ichnosChart'
 import { canTintCandles, nextTintOwner, isCandleTinter, tintRivals } from './candleTint'
 import { effectiveActiveIds } from './indicatorUsage'
 import { playAlertSound } from '../ui/dom2'
@@ -442,8 +442,9 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       { if (show) updateAutoTrend(); else clearAutoTrend() }
       break
     // [2026-11-16] ICHNOS: footprint desenat peste lumanari (tranzactii Bybit).
+    // [2026-11-21] Pornit mereu: o setare veche „oprit" (salvata inainte) nu-l mai stinge.
     case 'ichnos':
-      { if (show) initIchnos(); else clearIchnos() }
+      initIchnos()
       break
     case 'eos':
       if (show) initEosSeries()
@@ -3698,7 +3699,8 @@ export function _indRenderHook(): void {
   if (w.S.activeInds.pulsar) safe(updatePulsar)
   if (w.S.activeInds.arachne) safe(updateArachne)
   if (w.S.activeInds.autotrend) safe(updateAutoTrend)
-  if (w.S.activeInds.ichnos) safe(updateIchnos)
+  // [2026-11-21] ICHNOS e pornit MEREU, la toate conturile (cerut de operator).
+  safe(ensureIchnos)
   if (w.S.activeInds.eos) safe(updateEos)
   if (w.S.activeInds.pantheon && w._pantheonInited) safe(updatePantheon)
   if (w.S.activeInds.aegis) safe(updateAegis)

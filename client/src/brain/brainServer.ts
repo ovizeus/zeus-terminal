@@ -132,7 +132,7 @@ function raw(rt: Num[], tf: Num[], sl: Num[], f: { c: number | null; h: number |
   return {
     rt, tf, sl, att: null, ml: null, gatesFailing: f.f || [], gatesUnknown: f.u || [],
     conf: f.c == null ? null : Math.round(f.c), thr: f.h ?? null, mode: m.mode, modeLabel: m.label,
-    signalActive: sig, dead: false, position: pos, closeMsg: '', main, sats: [],
+    signalActive: sig, dead: false, position: pos, closeMsg: '', main, sats: [], bull: f.b, bear: f.r,
   }
 }
 

@@ -19,7 +19,8 @@ import { deriveCandle, bigLevels, kfmt, sumFmt, type FpCandle } from './indicato
 const w = window as any
 const SUPPORTED_TF = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h'])
 const POLL_MS = 5000
-const COL_W = 96, ROW_H = 22, AXIS_W = 66, HEAD_H = 22, TIME_H = 18, STRIP = 7
+// [2026-11-21] COL_W / ROW_H sunt acum setari (Column width / Row height); acestea sunt implicitele.
+const AXIS_W = 66, HEAD_H = 22, TIME_H = 18, STRIP = 7
 const BG = '#0a0f16', GRID = '#121b26'
 const GREEN = [57, 255, 106], RED = [255, 77, 109]
 const rgba = (c: number[], a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a})`
@@ -37,12 +38,30 @@ const st: State = {
     el: null, cv: null, ro: null, colOff: 0, priceOff: 0, follow: true,
 }
 
+/**
+ * [2026-11-21] Setarile ICHNOS (cerut: „setarile in titlu… mai multe, sa fie full").
+ * FIECARE camp e citit de desen — un camp care nu schimba nimic ar minti (lectia TERMINATOR).
+ */
+export const ICHNOS_DEFAULTS = {
+    ratio: 3, stackMin: 3, bigMult: 4,
+    height: 460, colW: 96, rowH: 22, cells: 'bidask' as 'bidask' | 'delta' | 'total',
+    showSums: true, showPoc: true, showStacked: true, showBig: true, heavy: 3,
+}
 function cfg() {
     const c = (w.IND_SETTINGS && w.IND_SETTINGS.ichnos) || {}
+    const D = ICHNOS_DEFAULTS
+    const pick = <T,>(v: unknown, ok: readonly T[], d: T): T => (ok.includes(v as T) ? (v as T) : d)
     return {
-        ratio: c.ratio > 1 ? +c.ratio : 3,
-        stackMin: Math.round(c.stackMin) >= 2 ? Math.round(c.stackMin) : 3,
-        bigMult: c.bigMult > 1 ? +c.bigMult : 4,
+        ratio: c.ratio > 1 ? +c.ratio : D.ratio,
+        stackMin: Math.round(c.stackMin) >= 2 ? Math.round(c.stackMin) : D.stackMin,
+        bigMult: c.bigMult > 1 ? +c.bigMult : D.bigMult,
+        height: pick(+c.height, [360, 460, 600, 760] as const, D.height),
+        colW: pick(+c.colW, [72, 96, 128] as const, D.colW),
+        rowH: pick(+c.rowH, [18, 22, 28] as const, D.rowH),
+        cells: pick(c.cells, ['bidask', 'delta', 'total'] as const, D.cells),
+        showSums: c.showSums !== false, showPoc: c.showPoc !== false,
+        showStacked: c.showStacked !== false, showBig: c.showBig !== false,
+        heavy: pick(+c.heavy, [0, 3, 5, 10] as const, D.heavy),
     }
 }
 const chartTf = (): string => String(w.S?.chartTf || '5m')
@@ -54,6 +73,8 @@ const hhmm = (t: number) => { const d = new Date(t); return String(d.getHours())
 export function renderIchnos(): void {
     const cv = st.cv, el = st.el
     if (!cv || !el) return
+    const c0 = cfg(), COL_W = c0.colW, ROW_H = c0.rowH
+    if (el.style.height !== c0.height + 'px') el.style.height = c0.height + 'px'
     const W = el.clientWidth || 360, H = el.clientHeight || 460
     const dpr = Math.min(2, window.devicePixelRatio || 1)
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
@@ -70,7 +91,7 @@ export function renderIchnos(): void {
     const sym = chartSym().replace(/USDT$/, '')
     ctx.fillText(`ICHNOS · FOOTPRINT · ${sym} · ${chartTf()}`, 8, HEAD_H / 2)
     ctx.textAlign = 'right'; ctx.fillStyle = '#56657a'; ctx.font = `500 9px ${FONT}`
-    ctx.fillText('sold x bought · $k · Bybit', W - 8, HEAD_H / 2)
+    ctx.fillText((c0.cells === 'delta' ? 'delta per level' : c0.cells === 'total' ? 'volume per level' : 'sold x bought') + ' · $k · Bybit', W - 34, HEAD_H / 2)
     ctx.fillStyle = '#142235'; ctx.fillRect(0, HEAD_H - 1, W, 1)
 
     const msg = st.status === 'ok' ? '' : st.status === 'loading' ? (st.msg || 'Collecting trades… the footprint fills from the moment the server started.') : st.msg
@@ -96,7 +117,6 @@ export function renderIchnos(): void {
     const center = Math.floor(centerC.c / bin) * bin + st.priceOff * bin
     const topPrice = +(center + Math.floor(rows / 2) * bin).toFixed(dec)
     const yOf = (p: number) => top + Math.round((topPrice - p) / bin) * ROW_H
-    const c0 = cfg()
 
     // grila orizontala + axa de pret
     ctx.font = `500 10px ${FONT}`; ctx.textAlign = 'left'
@@ -115,7 +135,7 @@ export function renderIchnos(): void {
     // cele mai mari 3 celule din ce se vede = umplute si incadrate (ca in capturi)
     const allCells: Array<{ v: number; key: string }> = []
     for (const c of shown) for (const [p, b, a] of c.lv) allCells.push({ v: b + a, key: c.t + ':' + p })
-    const heavy = new Set(allCells.sort((x, y) => y.v - x.v).slice(0, 3).map((x) => x.key))
+    const heavy = new Set(allCells.sort((x, y) => y.v - x.v).slice(0, c0.heavy).map((x) => x.key))
 
     shown.forEach((c, k) => {
         const x = xLeftOf(k)
@@ -133,7 +153,16 @@ export function renderIchnos(): void {
             ctx.fillStyle = rgba(col, isHeavy ? 0.55 : 0.08 + 0.32 * share)
             ctx.fillRect(cellX, y + 1, cellW, ROW_H - 2)
             if (isHeavy) { ctx.strokeStyle = rgba(col, 0.95); ctx.lineWidth = 1.5; ctx.strokeRect(cellX + 0.75, y + 1.75, cellW - 1.5, ROW_H - 3.5) }
-            if (d.poc === p) { ctx.strokeStyle = '#e9eef4'; ctx.lineWidth = 2.5; ctx.strokeRect(cellX + 1.25, y + 2.25, cellW - 2.5, ROW_H - 4.5) }
+            if (c0.showPoc && d.poc === p) { ctx.strokeStyle = '#e9eef4'; ctx.lineWidth = 2.5; ctx.strokeRect(cellX + 1.25, y + 2.25, cellW - 2.5, ROW_H - 4.5) }
+            // [2026-11-21] Celula: „vandut x cumparat" (implicit), DELTA pe nivel sau TOTAL pe nivel
+            if (c0.cells !== 'bidask') {
+                const v = c0.cells === 'delta' ? ask - bid : vol
+                const t = (c0.cells === 'delta' && v > 0 ? '+' : v < 0 ? '-' : '') + kfmt(Math.abs(v))
+                ctx.textAlign = 'center'; ctx.font = `600 12px ${FONT}`
+                ctx.fillStyle = c0.cells === 'delta' ? (v >= 0 ? '#5aa9ff' : '#ff5c78') : '#e2e9f1'
+                ctx.fillText(t, cellX + cellW / 2, y + ROW_H / 2 + 0.5)
+                continue
+            }
             // „vandut x cumparat"
             const bT = kfmt(bid), aT = kfmt(ask)
             const bBold = d.sellImb.has(p), aBold = d.buyImb.has(p)
@@ -156,6 +185,7 @@ export function renderIchnos(): void {
             const bA = clampY(Math.min(yo, yc) - ROW_H / 2), bB = clampY(Math.max(yo, yc) + ROW_H / 2)
             if (bB > bA) { ctx.fillStyle = rgba(ccol, 0.95); ctx.fillRect(x + 3, bA, STRIP, Math.max(3, bB - bA)) }
             // Σ si Δ deasupra si dedesubt
+            if (c0.showSums) {
             const dCol = d.delta >= 0 ? '#39ff6a' : '#ff5c78'
             const dT = 'Δ ' + (d.delta < 0 ? '-' : '') + sumFmt(Math.abs(d.delta))
             const sT = 'Σ ' + sumFmt(d.total)
@@ -167,8 +197,9 @@ export function renderIchnos(): void {
             const below = Math.min(rowsEnd, yBot) + 10
             ctx.fillStyle = '#d8e4f0'; ctx.fillText(sT, mid, below)
             ctx.fillStyle = dCol; ctx.fillText(dT, mid, below + 14)
+            }
         }
-        for (const z of d.stacked) {
+        for (const z of c0.showStacked ? d.stacked : []) {
             const y1 = yOf(+(z.high - bin).toFixed(dec)), y2 = yOf(z.low) + ROW_H
             zones.push({ x: x + COL_W - 3, y1, y2, side: z.side })
         }
@@ -189,7 +220,7 @@ export function renderIchnos(): void {
     }
     // ordine mari: linie albastra spre dreapta + eticheta
     const usedY: number[] = []
-    for (const b of bigLevels(shown, c0.bigMult, 3)) {
+    for (const b of c0.showBig ? bigLevels(shown, c0.bigMult, 3) : []) {
         const k = shown.findIndex((c) => c.t === b.t)
         if (k < 0) continue
         const y = yOf(b.price) + ROW_H / 2
@@ -236,7 +267,7 @@ function wireGestures(el: HTMLElement): void {
     })
     el.addEventListener('pointermove', (e) => {
         if (!down) return
-        const dc = Math.round((e.clientX - sx) / COL_W)
+        const dc = Math.round((e.clientX - sx) / cfg().colW)
         const nc = Math.max(0, Math.min(Math.max(0, st.candles.length - 1), c0 + dc))
         if (nc !== st.colOff) { st.colOff = nc; st.follow = nc === 0 && st.priceOff === 0; renderIchnos() }
     })
@@ -256,6 +287,62 @@ function wireGestures(el: HTMLElement): void {
     mk('▼', 'Price down', () => { st.priceOff -= 4; st.follow = false; renderIchnos() })
     mk('LIVE', 'Back to live', live)
     el.appendChild(bar)
+    wireSettings(el)
+}
+
+// ── setarile, din titlu ──
+// [2026-11-21] Rotita din titlul panoului deschide setarile; fiecare se aplica pe loc si se
+// salveaza (IND_SETTINGS → telefon + contul utilizatorului, ca restul indicatorilor).
+function wireSettings(el: HTMLElement): void {
+    const gear = document.createElement('button')
+    gear.type = 'button'; gear.className = 'ichnos-btn'; gear.textContent = '⚙'
+    gear.setAttribute('aria-label', 'ICHNOS settings')
+    gear.style.cssText = 'position:absolute;right:4px;top:0;width:26px;height:22px;border:0;background:transparent;color:#9fb3c8;font-size:15px;cursor:pointer;z-index:3'
+    const pop = document.createElement('div')
+    pop.className = 'ichnos-btn'
+    pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'ICHNOS settings')
+    pop.style.cssText = 'position:absolute;right:6px;top:24px;z-index:4;display:none;width:min(300px,calc(100% - 12px));max-height:calc(100% - 30px);overflow-y:auto;background:rgba(6,12,22,.98);border:1px solid #2a3a4d;border-radius:10px;padding:10px 12px;font:500 12px "IBM Plex Mono",monospace;color:#c4d5e8;box-sizing:border-box'
+    const save = (k: string, v: unknown) => {
+        if (!w.IND_SETTINGS) return
+        w.IND_SETTINGS.ichnos = Object.assign({}, w.IND_SETTINGS.ichnos || {}, { [k]: v })
+        try { if (typeof w._indSettingsSave === 'function') w._indSettingsSave() } catch { /* */ }
+        renderIchnos(); draw()
+    }
+    const opt = (label: string, k: string, vals: Array<[unknown, string]>) => {
+        const cur = (cfg() as any)[k]
+        return `<div style="margin:0 0 9px"><div style="color:#7c8ea3;font-size:10px;letter-spacing:.5px;margin-bottom:4px">${label}</div><div style="display:flex;flex-wrap:wrap;gap:4px">` +
+            vals.map(([v, t]) => `<button type="button" data-k="${k}" data-v='${JSON.stringify(v)}' style="padding:4px 8px;border-radius:6px;border:1px solid ${String(v) === String(cur) ? '#5aa9ff' : '#2a3a4d'};background:${String(v) === String(cur) ? 'rgba(90,169,255,.18)' : 'transparent'};color:#d8e4f0;font:inherit;font-size:11px;cursor:pointer">${t}</button>`).join('') + '</div></div>'
+    }
+    const tog = (label: string, k: string) => opt(label, k, [[true, 'On'], [false, 'Off']])
+    const draw = () => {
+        pop.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="letter-spacing:1px">ICHNOS SETTINGS</b><button type="button" data-close="1" aria-label="Close" style="border:0;background:transparent;color:#9fb3c8;font-size:16px;cursor:pointer">✕</button></div>` +
+            opt('Cell shows', 'cells', [['bidask', 'Sold x bought'], ['delta', 'Delta'], ['total', 'Total']]) +
+            opt('Imbalance ratio', 'ratio', [[2, '2×'], [2.5, '2.5×'], [3, '3×'], [4, '4×']]) +
+            opt('Stacked imbalance (rows)', 'stackMin', [[2, '2'], [3, '3'], [4, '4'], [5, '5']]) +
+            opt('Big order (× average level)', 'bigMult', [[3, '3×'], [4, '4×'], [6, '6×'], [8, '8×']]) +
+            opt('Highlight heaviest cells', 'heavy', [[0, 'Off'], [3, '3'], [5, '5'], [10, '10']]) +
+            opt('Panel height', 'height', [[360, 'S'], [460, 'M'], [600, 'L'], [760, 'XL']]) +
+            opt('Column width', 'colW', [[72, 'Narrow'], [96, 'Normal'], [128, 'Wide']]) +
+            opt('Row height', 'rowH', [[18, 'Compact'], [22, 'Normal'], [28, 'Large']]) +
+            tog('Σ volume / Δ delta per candle', 'showSums') + tog('POC box', 'showPoc') +
+            tog('Stacked imbalance bands', 'showStacked') + tog('Big order lines', 'showBig') +
+            `<button type="button" data-reset="1" style="width:100%;margin-top:4px;padding:6px;border-radius:6px;border:1px solid #2a3a4d;background:transparent;color:#9fb3c8;font:inherit;font-size:11px;cursor:pointer">Reset to defaults</button>`
+    }
+    pop.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const b = (e.target as HTMLElement).closest('button') as HTMLElement | null
+        if (!b) return
+        if (b.dataset.close) { pop.style.display = 'none'; return }
+        if (b.dataset.reset) {
+            if (w.IND_SETTINGS) w.IND_SETTINGS.ichnos = Object.assign({}, ICHNOS_DEFAULTS)
+            try { if (typeof w._indSettingsSave === 'function') w._indSettingsSave() } catch { /* */ }
+            renderIchnos(); draw(); return
+        }
+        if (b.dataset.k) { let v: unknown; try { v = JSON.parse(String(b.dataset.v)) } catch { v = b.dataset.v } save(b.dataset.k, v) }
+    })
+    pop.addEventListener('pointerdown', (e) => e.stopPropagation())
+    gear.addEventListener('click', (e) => { e.stopPropagation(); draw(); pop.style.display = pop.style.display === 'none' ? 'block' : 'none' })
+    el.appendChild(gear); el.appendChild(pop)
 }
 
 // ── datele ──
@@ -341,6 +428,16 @@ export function initIchnos(): void {
 export function updateIchnos(): void {
     if (!st.el) return
     if (st.symbol && (st.symbol !== chartSym() || st.tf !== chartTf())) { st.lastFull = Date.now(); void fetchFp(true) }
+}
+
+/**
+ * [2026-11-21, cerut de operator] ICHNOS e PORNIT MEREU, la toate conturile (nu mai e in lista
+ * de indicatori). Chemat din bucla de indicatori: porneste panoul daca nu ruleaza, apoi update.
+ */
+export function ensureIchnos(): void {
+    if (w.S && w.S.activeInds && !w.S.activeInds.ichnos) w.S.activeInds.ichnos = true
+    if (!st.el || !st.timer || !document.getElementById('ichnosPanel')?.contains(st.cv as Node)) initIchnos()
+    else updateIchnos()
 }
 
 export function clearIchnos(): void {

@@ -173,14 +173,14 @@ function entryFrom(frames, pos, meta) {
     const at = pre.length ? pre[pre.length - 1] : frames[0] || null;
     const lens = RC().lensesOf(pre);
     return {
-        pre: at ? RC().preMoodOf(at.rt, lens.sl, at.c, at.h, at.f) : null,
+        pre: at ? RC().preMoodOf(at.rt, lens.sl, at.c, at.h, at.f, at.b, at.r) : null,
         v: 3, seq: pos.seq, symbol: pos.symbol, side: pos.side, env: meta.env, entryTs: Number(pos.ts),
         entryPrice: +pos.price || null, sl: +pos.sl || null, tp: +pos.tp || null, size: +pos.size || null, lev: +pos.lev || null,
         entryShape: at ? RC().entryShapeOf(at.rt) : null, rt: at ? at.rt : null,
         conf: at ? at.c : null, thr: meta.thr, profile: meta.profile, regime: meta.regime || null,
         radarRegime: at ? at.rg : null, bull: at ? at.b : null, bear: at ? at.r : null,
         gatesFailing: at ? at.f : [], gatesUnknown: at ? at.u : [0, 1, 2, 3, 4, 5, 6],
-        radarCoins: meta.coins, late: false, preFrames: pre.length, source: 'server', reconstructed: true,
+        radarCoins: meta.coins, late: false, preFrames: pre.length, source: 'server', reconstructed: true, moodV: 2,
     };
 }
 
@@ -241,10 +241,32 @@ function pending(now = Date.now()) {
     return out;
 }
 
+/**
+ * [2026-11-21] Starea dinainte de intrare, RECALCULATA cu pragurile noi (NERVOUS 0,013, CONFUSED
+ * = voturi egale) pentru inregistrarile salvate inainte — din cadrele lor dinaintea intrarii.
+ * O singura data pe inregistrare (`moodV: 2`).
+ */
+function remood() {
+    const db = _db(); let n = 0;
+    const rows = db.prepare("SELECT user_id, seq, entry, frames FROM brain_captures WHERE coalesce(json_extract(entry, '$.moodV'), 1) < 2").all();
+    const upd = db.prepare('UPDATE brain_captures SET entry = ? WHERE user_id = ? AND seq = ?');
+    for (const r of rows) {
+        let e, fr;
+        try { e = JSON.parse(r.entry); fr = r.frames ? JSON.parse(zlib.inflateSync(r.frames).toString()) : []; } catch (_) { continue; }
+        const pre = fr.filter((f) => !f.p);
+        const at = pre.length ? pre[pre.length - 1] : null;
+        if (at) e.pre = RC().preMoodOf(at.rt, RC().lensesOf(pre).sl, at.c, at.h, at.f, at.b, at.r);
+        e.moodV = 2;
+        upd.run(JSON.stringify(e), r.user_id, r.seq); n++;
+    }
+    return n;
+}
+
 async function run() {
     if (_running) return;
     _running = true; _stats.lastRun = Date.now();
     try {
+        try { const n = remood(); if (n) logger.info('RADAR', `remood: ${n} captures re-evaluated with the new mood thresholds`); } catch (e) { _stats.lastErr = 'remood: ' + e.message; }
         // v1/v2 (b395/b396): fara FLOW/DELTA/OI/SENTIMENT din istoricul oficial — se refac.
         try { _db().prepare("DELETE FROM brain_captures WHERE json_extract(entry, '$.reconstructed') = 1 AND coalesce(json_extract(entry, '$.v'), 1) < 3").run(); } catch (_) {}
         const list = pending();
@@ -266,4 +288,4 @@ function start() {
 function stop() { if (_timer) clearInterval(_timer); _timer = null; }
 function health() { return { running: _running, ..._stats }; }
 
-module.exports = { start, stop, run, pending, health, buildFrames, entryFrom, lastAtOrBefore };
+module.exports = { start, stop, run, pending, health, buildFrames, entryFrom, lastAtOrBefore, remood };

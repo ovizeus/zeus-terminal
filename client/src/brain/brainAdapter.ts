@@ -6,7 +6,7 @@ import { BM, BRAIN } from '../core/config'
 import { usePositionsStore } from '../stores/positionsStore'
 import { useBrainStore } from '../stores/brainStore'
 import { getATMode } from '../services/stateAccessors'
-import { getSymPrice } from '../data/marketDataPositions'
+import { getSymPrice, livePnlOf } from '../data/marketDataPositions'
 import { N, type Mode } from './brainStrings'
 import { satsOf } from './brainPrefs'
 import { serverAxes } from './brainServer'
@@ -145,7 +145,7 @@ export function buildRawFromZeusState(nowMs: number = Date.now()): Raw {
     try { mark = getSymPrice(mp) } catch { mark = null }
     const pr = progressOf(side, +mp.entry || 0, +(mark || 0), +mp.sl || 0, +mp.tp || 0)
     const size = +mp.size || 0
-    const pnl = Number(mp.pnl)
+    const pnl = Number(livePnlOf(mp))      // [2026-11-21] viu, nu `pos.pnl` ramas la 0
     // Acelasi procent ca randul pozitiei (components/dock/PositionRows.tsx).
     const pnlPct: Num = size > 0 && Number.isFinite(pnl) ? (pnl / size) * 100 : null
     position = { symbol: shortSym(main), side, pnlPct, progress: pr.progress, noTp: pr.noTp }
@@ -164,6 +164,7 @@ export function buildRawFromZeusState(nowMs: number = Date.now()): Raw {
     closeMsg: nowMs < _closeUntil ? _closeMsg : '',
     main: shortSym(main),
     sats: satsFrom(w.MSCAN?.data, main, satsOf(main), (f) => { const a = serverAxes(f); return a ? a.rt.map((x) => finite01(x)) : null }),
+    bull: sv ? sv.bull : bull, bear: sv ? sv.bear : bear,
   }
 }
 

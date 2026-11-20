@@ -1934,7 +1934,8 @@ export const IND_SETTINGS: any = {
   // [ARACHNE 2026-10-19] Fiecare camp e citit de calcul.
   arachne: { pivotWidth: 3, tolAtr: 0.35, minTouches: 2, maxLevels: 6, maxLinesPerSide: 2 },
   autotrend: { majorWidth: 8, minorWidth: 3, anchorsPerSide: 2, linesPerAnchor: 3, tolAtr: 0.15 },
-  ichnos: { ratio: 3, stackMin: 3, bigMult: 4 },
+  // [2026-11-21] + setarile din rotita panoului (fiecare citita de desen, vezi ichnosChart.ICHNOS_DEFAULTS)
+  ichnos: { ratio: 3, stackMin: 3, bigMult: 4, height: 460, colW: 96, rowH: 22, cells: 'bidask', showSums: true, showPoc: true, showStacked: true, showBig: true, heavy: 3 },
   // [PULSAR 2026-10-19] Fiecare camp e citit de calcul (vezi lectia TERMINATOR).
   pulsar: { window: 20, atrPeriod: 14, tightPct: 25, chargedBars: 8, expandMult: 1.1 },
   // [FLOW 2026-10-19] Cele cinci instrumente de flux. Fiecare camp de aici e
