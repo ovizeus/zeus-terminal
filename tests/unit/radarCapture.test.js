@@ -14,7 +14,8 @@ jest.mock('../../server/services/serverBrain', () => ({
     getSTC: () => ({ confMin: 65, profile: 'swing' }),
 }));
 jest.mock('../../server/services/serverAT', () => ({ getAllOpenLite: () => OPEN }));
-jest.mock('../../server/services/marketFeed', () => ({ on: () => {}, subscribeForRef: () => Promise.resolve(true), releaseRef: () => {} }));
+let OI = 1000;
+jest.mock('../../server/services/marketFeed', () => ({ on: () => {}, subscribeForRef: () => Promise.resolve(true), releaseRef: () => {}, fetchOpenInterest: () => Promise.resolve(OI) }));
 
 const RC = require('../../server/services/radarCapture');
 const db = require('../../server/services/database').db;
@@ -111,4 +112,19 @@ describe('radarCapture — o intrare cu telefonul inchis, cap-coada', () => {
         expect(a.BTCUSDT.rt).toHaveLength(12);
         expect(a.BTCUSDT.score).toBe(88);
     });
+
+    test('[bug OI] serverState nu reimprospateaza OI: radarul isi tine perechea si axa OI apare', async () => {
+        jest.useFakeTimers({ now: Date.now(), doNotFake: ['nextTick', 'setImmediate'] });
+        try {
+            const flush = () => new Promise((r) => setImmediate(r));
+            jest.setSystemTime(Date.now() + 61_000);
+            RC._tickForTest(); await flush(); await flush();      // prima citire: OI = 1000
+            OI = 1010; jest.setSystemTime(Date.now() + 61_000);
+            RC._tickForTest(); await flush(); await flush();      // a doua: 1000 → 1010
+            RC._tickForTest();
+            const oiAxis = RC.liveFor(['BTCUSDT']).BTCUSDT.rt[3];
+            expect(oiAxis).toBeCloseTo(0.5, 3);          // +1% / 2
+        } finally { jest.useRealTimers(); }
+    });
 });
+

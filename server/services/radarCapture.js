@@ -54,6 +54,8 @@ const _extra = new Map();           // sym -> {bars, price, fr, oi, oiPrev, rsi,
 const _radarRefs = new Map();       // uid -> Set(sym) abonate de radar
 const _decCache = new Map();        // `${uid}:${sym}` -> {at, val}
 const _thrCache = new Map();        // uid -> {at, thr, profile}
+const _oi = new Map();              // sym -> {oi, oiPrev, at} (serverState nu reimprospateaza OI)
+const OI_EVERY_MS = 60_000;
 let _timer = null, _flushAt = 0, _subsAt = 0, _logAt = 0, _started = false;
 let _stats = { ticks: 0, captures: 0, closed: 0, errors: 0, lastErr: null, tickMsMax: 0, tickMsSum: 0 };
 
@@ -175,7 +177,9 @@ function _computeOne(sym, now) {
     const boot = _bootSymbols();
     let flow = null; try { flow = require('./serverOrderflow').getFlow(sym); } catch (_) {}
     const d5 = flow && Number.isFinite(flow.delta5m) ? flow.delta5m : NaN;
-    const deps = { deltaZ: _zOf(sym, d5) };
+    _refreshOi(sym, now);
+    const o = _oi.get(sym);
+    const deps = { deltaZ: _zOf(sym, d5), oi: o ? o.oi : null, oiPrev: o ? o.oiPrev : null };
     if (!boot.has(sym)) Object.assign(deps, { serverState: _extraDeps(sym) });
     const ax = RA.computeAxes(sym, deps);
     if (!ax) return null;
@@ -192,6 +196,24 @@ function _computeOne(sym, now) {
         const h = _deltaHist.get(sym) || []; h.push(d5); if (h.length > 180) h.shift(); _deltaHist.set(sym, h);
     }
     return fr;
+}
+/**
+ * [2026-11-20] OI proaspat pentru axa OI. serverState citeste OI o singura data, la abonare,
+ * deci oiPrev ramane gol pentru totdeauna (bug VECHI, raportat operatorului: atinge si votul
+ * OI din confluenta creierului — NU se repara aici, ar schimba tranzactiile). Radarul citeste
+ * la minut prin marketFeed.fetchOpenInterest, care ia intai din cache-ul scannerului (fara
+ * cerere spre Binance cand moneda e in top 300) si tine propria pereche oi / oiPrev.
+ */
+function _refreshOi(sym, now) {
+    const cur = _oi.get(sym) || { oi: null, oiPrev: null, at: 0, busy: false };
+    if (cur.busy || now - cur.at < OI_EVERY_MS) return;
+    cur.busy = true; cur.at = now; _oi.set(sym, cur);
+    let mf; try { mf = require('./marketFeed'); } catch (_) { mf = null; }
+    if (!mf || typeof mf.fetchOpenInterest !== 'function') { cur.busy = false; return; }
+    Promise.resolve().then(() => mf.fetchOpenInterest(sym)).then((v) => {
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) { if (cur.oi != null && n !== cur.oi) cur.oiPrev = cur.oi; else if (cur.oi == null) cur.oiPrev = null; cur.oi = n; }
+    }).catch(() => {}).finally(() => { cur.busy = false; });
 }
 function latest(sym) { const r = _ring.get(String(sym || '').toUpperCase()); return r && r.length ? r[r.length - 1] : null; }
 /** Afisaj: aplicatia cere axele de acum pentru monedele ei. */

@@ -14967,3 +14967,8 @@ Teste: server 10.876 (shard-uri, 0 esecuri), client 2.273; contractul „AUTO e 
 - Pe viu dupa livrare: `tick avg 0ms`, 3 monede, 2 inregistrari pornite (pozitii deschise inainte de restart ⇒ late). Lipseau la pornire OI (fara valoare anterioara inca) si LIQ pe ETH/SOL.
 - Greseala mea la verificarea versiunii (si la b390): `changelog` se exporta `.join(' ')`, deci `changelog[0]` e o litera; verificarea corecta e pe text. Fisierul era bun.
 Teste: server 24 noi (axe, inregistrare cap-coada, stare dinainte), client 7 noi; contractele portii viewer actualizate dinadins. Backup: tag `pre-radar-server`.
+
+### 🧭 b392 (2026-11-20) — axa OI a radarului + un bug VECHI raportat, NEATINS
+Dupa b391, linia de stare arata `missing …:oi` pe toate monedele si dupa 10 minute. **Cauza:** `marketFeed` citeste OI O SINGURA DATA, la abonare (`_emit('openInterest')` exista doar acolo), deci `serverState.oiPrev` ramane gol pentru totdeauna. Radarul isi tine acum perechea oi / oiPrev, citita la minut prin `fetchOpenInterest` (ia intai din cache-ul scannerului, fara cerere spre Binance), si o foloseste DINTR-O SINGURA SURSA — testul a prins varianta mea care amesteca oi proaspat cu oiPrev de la boot (salt fals de OI).
+⚠️ **RAPORTAT OPERATORULUI, NU REPARAT:** acelasi `oiPrev` gol face ca votul OI din `_calcConfluence` (creierul care TRANZACTIONEAZA) sa fie mereu „neut", deci confluenta serverului numara 4 voturi din 5. Repararea ar schimba scorurile si deci intrarile — e decizia lui.
+Dupa repornire: radarul a RELUAT cele 2 inregistrari deschise (reluarea merge pe viu).

@@ -184,7 +184,11 @@ function computeAxes(symbol, deps) {
         buyVol: flow ? flow.buyVol : null, sellVol: flow ? flow.sellVol : null, deltaZ: D.deltaZ != null ? D.deltaZ : null,
         absorbing: flow ? flow.absorptionScore > 0.5 : false,
         volExpansion: String(ind.volMode || '').toLowerCase() === 'expansion',
-        oi: snap.oi, oiPrev: snap.oiPrev, fr: snap.fr,
+        // OI: serverState il citeste O SINGURA DATA la abonare (oiPrev ramane gol); radarCapture
+        // tine o pereche proaspata, din cache-ul scannerului, si o da aici.
+        // Perechea vine dintr-o SINGURA sursa: amestecate, oi de acum fata de oiPrev de la boot
+        // ar desena un salt de OI care n-a existat.
+        oi: D.oi != null ? D.oi : snap.oi, oiPrev: D.oi != null ? D.oiPrev : snap.oiPrev, fr: snap.fr,
         bookBid, bookAsk, lsRatio: sent ? sent.ls : null,
         liqAbove: liq ? nearPx(liq.nearestAbove) : null, liqBelow: liq ? nearPx(liq.nearestBelow) : null,
         regime: ind.regime || null,
