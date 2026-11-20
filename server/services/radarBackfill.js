@@ -7,9 +7,11 @@
 //   • deciziile creierului (brain_decisions, la 30 s pe utilizator si moneda): RSI, ADX,
 //     SuperTrend, funding, OI, regim, voturile bull/bear, confluenta, portile, ATR;
 //   • lumanarile istorice Binance (5m pentru indicatori, 1m pentru pret si PnL).
-// Din ele ies TREND, VOLUME, VOLATILITY, MOMENTUM, STRUCTURE, LIQ (niveluri ATR), OI,
-// FUNDING. FLOW, DELTA, IMBALANCE si SENTIMENT n-au fost pastrate atunci ⇒ NULL („—"),
-// nu inventate. Fara decizie in apropiere (tranzactie manuala), indicatorii se calculeaza
+// Din ele ies TREND, VOLUME, VOLATILITY, MOMENTUM, STRUCTURE, LIQ (niveluri ATR), FUNDING.
+// [b397] Plus istoricul oficial Binance (30 de zile): FLOW si DELTA din volumul cumparatorilor
+// agresivi al lumanarilor de 1 minut, OI din openInterestHist, SENTIMENT din
+// globalLongShortAccountRatio. IMBALANCE (cartea de ordine din trecut) nu e pastrata nicaieri
+// ⇒ NULL („—"), nu inventata. Fara decizie in apropiere (tranzactie manuala), indicatorii se calculeaza
 // din lumanari cu aceleasi functii ca serverul (teacherIndicators).
 //
 // Rezultatul: o inregistrare in brain_captures marcata `reconstructed: true`, un cadru la
@@ -41,7 +43,8 @@ async function _get(url, weight) {
     if (!r || !r.ok) throw new Error('http_' + (r && r.status));
     return r.json();
 }
-const _kl = (rows) => (Array.isArray(rows) ? rows : []).map((k) => ({ time: +k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }));
+// q = volum in USDT, tb = volumul CUMPARATORILOR agresivi (taker buy) — din ele FLOW si DELTA
+const _kl = (rows) => (Array.isArray(rows) ? rows : []).map((k) => ({ time: +k[0], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5], q: +k[7], tb: +k[10] }));
 
 /** Lumanari 5m pentru o moneda pe [from, to], cu cache (o singura aducere pe moneda si zi). */
 async function _bars5For(sym, from, to) {
@@ -55,6 +58,24 @@ async function _bars5For(sym, from, to) {
     }
     have = [...out.values()].sort((a, b) => a.time - b.time);
     _bars5.set(sym, have);
+    return have;
+}
+/**
+ * [b397] Istoricul oficial Binance, 30 de zile, la 5 min: OI (openInterestHist) si raportul
+ * long/short (globalLongShortAccountRatio). Cache pe moneda.
+ */
+const _oiH = new Map(), _lsH = new Map();
+async function _hist(cache, sym, from, to, path, pick) {
+    let have = cache.get(sym) || [];
+    if (have.length && from >= have[0].time && to <= have[have.length - 1].time + BAR5) return have;
+    const out = new Map(have.map((x) => [x.time, x]));
+    const start = Math.max(from, Date.now() - 29.5 * 864e5);       // Binance tine 30 de zile
+    for (let t = start; t <= to; t += 500 * BAR5) {
+        const rows = await _get(`https://fapi.binance.com/futures/data/${path}?symbol=${encodeURIComponent(sym)}&period=5m&startTime=${t}&endTime=${Math.min(to, t + 500 * BAR5)}&limit=500`, 1);
+        for (const r of Array.isArray(rows) ? rows : []) { const v = pick(r); if (Number.isFinite(v) && v > 0) out.set(+r.timestamp, { time: +r.timestamp, v }); }
+    }
+    have = [...out.values()].sort((a, b) => a.time - b.time);
+    cache.set(sym, have);
     return have;
 }
 async function _bars1For(sym, from, to) {
@@ -77,7 +98,8 @@ function lastAtOrBefore(arr, t, key = 'time') {
  * `decisions` = [{ts, d}] sortate, `pos` = pozitia (side, price, sl, tp, lev, ts, closeTs),
  * `thr` = pragul. Fara decizie in ultimele 90 s → indicatorii din lumanari.
  */
-function buildFrames({ bars5, bars1, decisions, pos, thr, compute, confluence }) {
+function buildFrames({ bars5, bars1, decisions, pos, thr, compute, confluence, oiHist = [], lsHist = [] }) {
+    const deltas = [];
     const frames = [];
     const entry = Number(pos.ts), exit = Number(pos.closeTs) || entry;
     const span = exit - (entry - PRE_MS);
@@ -94,8 +116,8 @@ function buildFrames({ bars5, bars1, decisions, pos, thr, compute, confluence })
         if (dec) {
             ind = { stDir: dec.stDir, macdDir: dec.macdDir, regime: dec.regime };
             rsi = dec.rsi5m; bull = dec.confBullDirs; bear = dec.confBearDirs; fr = dec.fr; oi = dec.oi;
-            // OI: NU din decizii. OI-ul serverului era citit o singura data la pornire (bug raportat),
-            // deci in decizii e o valoare inghetata — „nicio schimbare" ar fi falsa. Ramane null.
+            // OI: NU din decizii (OI-ul serverului era inghetat de la pornire — bug raportat);
+            // vine mai jos din istoricul oficial Binance.
             oi = null; oiPrev = null;
             regime = dec.regime; sc = dec.confScore; atr = dec.atr; reasons = dec.gateReasons || [];
             ind.adx = dec.adx;
@@ -105,9 +127,31 @@ function buildFrames({ bars5, bars1, decisions, pos, thr, compute, confluence })
             const c = confluence({ price, rsi: { '5m': rsi }, fr: null, oi: null, oiPrev: null }, ind);
             bull = c ? c.bullDirs : 0; bear = c ? c.bearDirs : 0; sc = c ? c.score : null;
         }
+        // OI din istoricul oficial: valoarea de la t fata de cea de acum 5 min.
+        const io = lastAtOrBefore(oiHist, t);
+        if (io > 0) { oi = oiHist[io].v; oiPrev = oiHist[io - 1].v; }
+        // SENTIMENT din istoricul raportului long/short.
+        const il = lastAtOrBefore(lsHist, t);
+        const lsRatio = il >= 0 ? lsHist[il].v : null;
+        // FLOW si DELTA din cumpararile/vanzarile agresive ale ultimelor 5 lumanari de 1 minut.
+        let buyVol = null, sellVol = null, deltaZ = null;
+        if (i1 >= 4) {
+            let b = 0, s2 = 0, ok = true;
+            for (let k = i1 - 4; k <= i1; k++) { const x = bars1[k]; if (!(x.q >= 0) || !(x.tb >= 0)) { ok = false; break; } b += x.tb; s2 += x.q - x.tb; }
+            if (ok && b + s2 > 0) {
+                buyVol = b; sellVol = s2;
+                const d = b - s2;
+                if (deltas.length >= 20) {
+                    const m = deltas.reduce((a, v) => a + v, 0) / deltas.length;
+                    const sd = Math.sqrt(deltas.reduce((a, v) => a + (v - m) * (v - m), 0) / deltas.length);
+                    deltaZ = sd > 0 ? (d - m) / sd : null;
+                }
+                deltas.push(d); if (deltas.length > 180) deltas.shift();
+            }
+        }
         const ax = RA.axesFrom({
             bars: win, price, adx: ind.adx, stDir: ind.stDir, rsi, bull, bear, fr,
-            oi, oiPrev: oi != null ? oiPrev : null,
+            oi, oiPrev: oi != null ? oiPrev : null, lsRatio, buyVol, sellVol, deltaZ,
             liqAbove: atr > 0 ? price + atr : null, liqBelow: atr > 0 ? price - atr : null,
             regime,
         });
@@ -130,7 +174,7 @@ function entryFrom(frames, pos, meta) {
     const lens = RC().lensesOf(pre);
     return {
         pre: at ? RC().preMoodOf(at.rt, lens.sl, at.c, at.h, at.f) : null,
-        v: 2, seq: pos.seq, symbol: pos.symbol, side: pos.side, env: meta.env, entryTs: Number(pos.ts),
+        v: 3, seq: pos.seq, symbol: pos.symbol, side: pos.side, env: meta.env, entryTs: Number(pos.ts),
         entryPrice: +pos.price || null, sl: +pos.sl || null, tp: +pos.tp || null, size: +pos.size || null, lev: +pos.lev || null,
         entryShape: at ? RC().entryShapeOf(at.rt) : null, rt: at ? at.rt : null,
         conf: at ? at.c : null, thr: meta.thr, profile: meta.profile, regime: meta.regime || null,
@@ -167,7 +211,10 @@ async function _one(uid, d) {
     let thr = 65, settings = null;
     try { const stc = require('./serverBrain').getSTC(uid); if (Number(stc.confMin) > 0) thr = Number(stc.confMin); } catch (_) {}
     try { const r = db.prepare('SELECT data FROM user_settings WHERE user_id = ?').get(uid); settings = r ? JSON.parse(r.data) : null; } catch (_) {}
-    const frames = buildFrames({ bars5, bars1, decisions, pos, thr, compute, confluence: require('./serverBrain')._calcConfluence });
+    let oiHist = [], lsHist = [];
+    try { oiHist = await _hist(_oiH, sym, d.ts - PRE_MS - 600_000, closeTs, 'openInterestHist', (r) => Number(r.sumOpenInterest)); } catch (_) { oiHist = []; }
+    try { lsHist = await _hist(_lsH, sym, d.ts - PRE_MS - 600_000, closeTs, 'globalLongShortAccountRatio', (r) => Number(r.longShortRatio)); } catch (_) { lsHist = []; }
+    const frames = buildFrames({ bars5, bars1, decisions, pos, thr, compute, confluence: require('./serverBrain')._calcConfluence, oiHist, lsHist });
     if (!frames.length) { _stats.skipped++; return; }
     const linked = db.prepare('SELECT data FROM brain_decisions WHERE user_id = ? AND linked_seq = ? LIMIT 1').get(uid, seq);
     let regime = null; try { regime = linked ? JSON.parse(linked.data).regime : null; } catch (_) {}
@@ -198,8 +245,8 @@ async function run() {
     if (_running) return;
     _running = true; _stats.lastRun = Date.now();
     try {
-        // v1 (primele ore de b395) avea OI din deciziile cu OI inghetat: se refac.
-        try { _db().prepare("DELETE FROM brain_captures WHERE json_extract(entry, '$.reconstructed') = 1 AND coalesce(json_extract(entry, '$.v'), 1) < 2").run(); } catch (_) {}
+        // v1/v2 (b395/b396): fara FLOW/DELTA/OI/SENTIMENT din istoricul oficial — se refac.
+        try { _db().prepare("DELETE FROM brain_captures WHERE json_extract(entry, '$.reconstructed') = 1 AND coalesce(json_extract(entry, '$.v'), 1) < 3").run(); } catch (_) {}
         const list = pending();
         logger.info('RADAR', `backfill: ${list.length} past trades to rebuild (last ${DAYS} days, radar coins)`);
         for (const { uid, d } of list) {
@@ -207,7 +254,7 @@ async function run() {
             await new Promise((r) => setTimeout(r, PACE_MS));
         }
         logger.info('RADAR', `backfill done: rebuilt ${_stats.done}, skipped ${_stats.skipped}, failed ${_stats.failed}` + (_stats.lastErr ? ` lastErr=${_stats.lastErr}` : ''));
-    } finally { _running = false; _bars5.clear(); }
+    } finally { _running = false; _bars5.clear(); _oiH.clear(); _lsH.clear(); }
 }
 
 function start() {

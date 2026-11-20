@@ -681,7 +681,8 @@ async function subscribe(symbol, timeframes) {
         fetchOpenInterest(symUpper),
     ]);
     if (fr !== null) _emit('fundingRate', { symbol: symUpper, rate: fr });
-    if (oi !== null) _emit('openInterest', { symbol: symUpper, value: oi });
+    if (oi !== null) { _lastOi.set(symUpper, oi); _emit('openInterest', { symbol: symUpper, value: oi }); }
+    _ensureOiRefresh();
 
     // [Phase 2 S3.1d] Lane selection — when the primary Binance streams are
     // throttled (markPrice@1s / kline_* / aggTrade), MF.ALT_WS_FEEDS routes
@@ -773,6 +774,34 @@ async function subscribe(symbol, timeframes) {
     logger.info('FEED', `Subscription complete for ${symUpper}`);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// [2026-11-20] OI REIMPROSPATAT — bug gasit de radarul de pe server, reparat cu
+// ACORDUL EXPLICIT al operatorului („Da, repara"; stia ca schimba intrarile).
+// OI se citea O SINGURA DATA, la abonare (mai sus), deci serverState.oiPrev ramanea
+// gol pentru totdeauna si votul OI din _calcConfluence iesea mereu „neut": confluenta
+// numara 4 voturi din 5, desi e scrisa ca oglinda clientului, care numara 5.
+// Acum, la minut, pentru monedele abonate. fetchOpenInterest ia intai din cache-ul
+// scannerului (fara cerere spre Binance pentru top 300). Se emite DOAR cand valoarea
+// s-a schimbat: o valoare identica ar face oi > oiPrev fals si votul ar iesi „bear".
+// ══════════════════════════════════════════════════════════════════
+const OI_REFRESH_MS = 60_000;
+const _lastOi = new Map();
+let _oiTimer = null;
+function _oiRefreshTick() {
+    for (const s of [..._activeSymbols]) {
+        Promise.resolve().then(() => fetchOpenInterest(s)).then((v) => {
+            if (v == null || !Number.isFinite(v) || v <= 0 || v === _lastOi.get(s)) return;
+            _lastOi.set(s, v);
+            _emit('openInterest', { symbol: s, value: v });
+        }).catch(() => { /* urmatorul minut */ });
+    }
+}
+function _ensureOiRefresh() {
+    if (_oiTimer) return;
+    _oiTimer = setInterval(_oiRefreshTick, OI_REFRESH_MS);
+    if (_oiTimer.unref) _oiTimer.unref();
+}
+
 // [MULTI-SYM] Subscribe to multiple symbols sequentially
 async function subscribeMulti(symbols, timeframes) {
     for (const sym of symbols) {
@@ -795,6 +824,7 @@ async function subscribeMultiWithBootRef(symbols, timeframes) {
 // Unsubscribe — close all streams
 // ══════════════════════════════════════════════════════════════════
 function unsubscribeAll() {
+    if (_oiTimer) { clearInterval(_oiTimer); _oiTimer = null; }
     // Close combined stream
     if (_combinedWs) {
         try { _combinedWs.removeAllListeners(); } catch (_) {}
@@ -957,6 +987,8 @@ module.exports = {
     startSelfHeal, stopSelfHeal, _selfHealPass,
     fetchFundingRate,
     fetchOpenInterest,
+    _oiRefreshTick,    // [2026-11-20] teste — reimprospatarea OI
+    _addActiveSymbolForTest: (s) => _activeSymbols.add(String(s).toUpperCase()),
     on,
     getHealth,
     getActiveSymbols,  // [RECON-SUBSCRIBE 2026-05-14]
