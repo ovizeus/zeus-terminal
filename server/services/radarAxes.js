@@ -178,6 +178,12 @@ function computeAxes(symbol, deps) {
         bookBid = sum(book.bids); bookAsk = sum(book.asks);
     }
     const nearPx = (x) => (x && Number(x.price) > 0 ? Number(x.price) : null);
+    // Ca in aplicatie (ui/panels.ts): printre magneti sunt MEREU si nivelurile ATR (pret ± ATR×1…),
+    // deci cel mai apropiat nivel e cel mult la un ATR. Fara ele, LIQ ar lipsi des pe server.
+    const atr = Number(snap.atr != null ? snap.atr : ind.atr);
+    const hasAtr = Number.isFinite(atr) && atr > 0;
+    let up = liq ? nearPx(liq.nearestAbove) : null, dn = liq ? nearPx(liq.nearestBelow) : null;
+    if (hasAtr) { up = up == null ? snap.price + atr : Math.min(up, snap.price + atr); dn = dn == null ? snap.price - atr : Math.max(dn, snap.price - atr); }
     return axesFrom({
         bars, price: snap.price, adx: snap.adx != null ? snap.adx : ind.adx, stDir: ind.stDir,
         rsi: snap.rsi && snap.rsi['5m'], bull: conf ? conf.bullDirs : 0, bear: conf ? conf.bearDirs : 0,
@@ -190,7 +196,7 @@ function computeAxes(symbol, deps) {
         // ar desena un salt de OI care n-a existat.
         oi: D.oi != null ? D.oi : snap.oi, oiPrev: D.oi != null ? D.oiPrev : snap.oiPrev, fr: snap.fr,
         bookBid, bookAsk, lsRatio: sent ? sent.ls : null,
-        liqAbove: liq ? nearPx(liq.nearestAbove) : null, liqBelow: liq ? nearPx(liq.nearestBelow) : null,
+        liqAbove: up, liqBelow: dn,
         regime: ind.regime || null,
     });
 }

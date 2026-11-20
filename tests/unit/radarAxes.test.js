@@ -63,4 +63,15 @@ describe('radarAxes — cele 12 axe', () => {
         expect(a.rt[9]).toBe(0);            // L/S 1 → echilibru
         expect(RA.computeAxes('X', { ...deps, serverState: { getSnapshotForSymbol: () => null, getBarsForSymbol: () => [] } })).toBeNull();
     });
+
+    test('LIQ: nivelurile ATR intra printre magneti, ca in aplicatie (fara niveluri de lichiditate tot exista)', () => {
+        const deps = {
+            serverState: { getSnapshotForSymbol: () => ({ price: 100, atr: 1, rsi: { '5m': 50 }, indicators: {} }), getBarsForSymbol: () => flat },
+            confluence: () => ({ bullDirs: 0, bearDirs: 0 }), orderflow: { getFlow: () => null }, sentiment: { getSentiment: () => null },
+            liquidity: { getLiquidity: () => ({ nearestAbove: null, nearestBelow: { price: 99.5 } }), getOrderBook: () => null },
+        };
+        // cel mai apropiat: jos 99,5 (0,5%) → 1 − 0,005/0,02 = 0,75
+        expect(RA.computeAxes('BTCUSDT', deps).rt[11]).toBeCloseTo(0.75, 3);
+    });
 });
+
