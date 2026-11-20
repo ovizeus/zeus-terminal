@@ -82,7 +82,7 @@ export function LiqMapPanel() {
     const [loading, setLoading] = useState(true)
     const [pred, setPred] = useState<PredictSymbol[]>([])
     const [book, setBook] = useState<any>(null)
-    const [bookBand, setBookBand] = useState<number | 'auto'>('auto')
+    const [bookBand, setBookBand] = useState<number | 'auto' | 'wide'>('auto')
     const [bookWin, setBookWin] = useState(600)
     // ZOOM pe carte: tap pe harta cere o fereastra de pret. Sta AICI, nu in
     // BookView, fiindca aducerea se face aici si trebuie sa reporneasca.
@@ -992,6 +992,46 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom, mag
         }
         ctx.stroke()
 
+        // ── 2b. BANDA LATA: unde se termina fiecare bursa + linia magnetului ──
+        // [2026-11-16] Totalul e Binance + OKX + Gate, dar fiecare doar pana unde ii
+        // ajunge cartea. Dincolo de linie harta e „mai subtire" pentru ca o bursa
+        // lipseste, nu pentru ca piata e goala — si asta se SPUNE pe harta.
+        const wideInfo = data?.wide
+        if (wideInfo && Array.isArray(wideInfo.coverage)) {
+            ctx.save()
+            ctx.font = '9px monospace'; ctx.textBaseline = 'middle'
+            const seen = new Set<number>()
+            for (const cv0 of wideInfo.coverage) {
+                for (const [px, up] of [[cv0.lo, false], [cv0.hi, true]] as Array<[number, boolean]>) {
+                    const y = yOf(Number(px))
+                    if (y === null || y < 6 || y > h - 6) continue      // bursa ajunge pana la margine
+                    const key = Math.round(y)
+                    if (seen.has(key)) continue
+                    seen.add(key)
+                    ctx.setLineDash([2, 4]); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(200,210,225,.45)'
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mapW, y); ctx.stroke()
+                    ctx.setLineDash([])
+                    ctx.fillStyle = 'rgba(200,210,225,.75)'; ctx.textAlign = 'left'
+                    ctx.fillText(String(cv0.ex) + ' ends', 4, y + (up ? -6 : 6))
+                }
+            }
+            const mt = magnet && magnet.target && Number(magnet.target.price)
+            if (mt && mt > 0) {
+                const y = yOf(mt)
+                if (y !== null) {
+                    const rgb = magnet.side === 'UP' ? '57,255,106' : '255,77,109'
+                    ctx.setLineDash([6, 3]); ctx.lineWidth = 1.6; ctx.strokeStyle = `rgba(${rgb},.95)`
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(mapW, y); ctx.stroke(); ctx.setLineDash([])
+                    const txt = 'MAGNET ' + Math.round(mt).toLocaleString('en-US')
+                    ctx.font = 'bold 10px monospace'
+                    const tw = ctx.measureText(txt).width
+                    ctx.fillStyle = `rgb(${rgb})`; ctx.fillRect(mapW - tw - 14, y - 8, tw + 10, 16)
+                    ctx.fillStyle = '#06090c'; ctx.textAlign = 'left'; ctx.fillText(txt, mapW - tw - 9, y + 0.5)
+                }
+            }
+            ctx.restore()
+        }
+
         // ── 3. BULELE: tranzacţii executate ──
         const tList: Trade[] = data?.trades || []
         const tMax = tList.reduce((m, t) => Math.max(m, t.usd), 0)
@@ -1178,7 +1218,7 @@ function BookView({ data, band, setBand, win, setWin, symbol, zoom, setZoom, mag
                 ctx.textAlign = 'left'
             }
         } catch { /* fara dunga, dar cu harta intreaga */ }
-    }, [heat, data])
+    }, [heat, data, magnet])
 
     if (!data) return <Empty what="The order book" />
     if (!heat || !heat.frames) {

@@ -136,7 +136,16 @@ router.get('/bookmap', (req, res) => {
         feed.noteDemand(Date.now());
         try { require('../services/tradeFeed').noteDemand(Date.now()); } catch (_) { /* */ }
 
-        const deep = feed.deepFrames(sym);
+        // [2026-11-16] Banda LATA (±2.5K pe BTC): totalul Binance + OKX + Gate pe trepte
+        // de pret, cu acoperirea fiecarei burse (vezi bookWide). Benzile vechi raman neatinse.
+        const wide = bandRaw === 'wide';
+        let W = null, wcfg = null;
+        if (wide) {
+            W = require('../services/bookWide');
+            W.noteDemand(Date.now());
+            wcfg = W.config(sym);
+        }
+        const deep = wide ? W.frames(sym) : feed.deepFrames(sym);
         const now = Date.now();
         // Grila pe PRET ABSOLUT: bulele si lichidarile au preturi reale, deci
         // au nevoie de o axa de pret adevarata. Vezi nota din bookMap.heatAbs.
@@ -146,9 +155,28 @@ router.get('/bookmap', (req, res) => {
         const focusPct = Number(req.query.focusPct) > 0
             ? Math.min(1, Math.max(0.005, Number(req.query.focusPct)))
             : null;
-        const heat = BM.heatAbs({ frames: deep, cols, rows, windowMs, now,
-            focusPrice, focusPct });
-        const ladder = BM.aggregate({ frames: deep, bandPct: band, rows, windowMs, now });
+        let heat, ladder, coverage = null;
+        if (wide && wcfg) {
+            const lastW = deep.length ? deep[deep.length - 1] : null;
+            const rowStep = wcfg.step * 2;
+            if (focusPrice && focusPct) {
+                heat = BM.heatAbs({ frames: deep, cols, rows, windowMs, now, focusPrice, focusPct,
+                    maxPct: 100 * wcfg.half / focusPrice });
+            } else if (lastW) {
+                const gLo = Math.floor((lastW.mid - wcfg.half) / rowStep) * rowStep;
+                const nRows = Math.round((2 * wcfg.half) / rowStep) + 1;
+                heat = BM.heatAbs({ frames: deep, cols, rows: nRows, windowMs, now,
+                    gridLo: gLo, gridHi: gLo + nRows * rowStep });
+            } else {
+                heat = BM.heatAbs({ frames: [], cols, rows, windowMs, now });
+            }
+            ladder = BM.aggregate({ frames: deep, bandPct: lastW ? 100 * wcfg.half / lastW.mid : 'auto', rows, windowMs, now });
+            coverage = lastW ? lastW.coverage : null;
+        } else {
+            heat = BM.heatAbs({ frames: deep, cols, rows, windowMs, now,
+                focusPrice, focusPct });
+            ladder = BM.aggregate({ frames: deep, bandPct: wide ? 'auto' : band, rows, windowMs, now });
+        }
 
         // Banda de sus vine din cadrele RAPIDE (WS) si NU din medii — vezi nota
         // din bookFeed despre de ce cele doua surse nu se amesteca.
@@ -170,6 +198,7 @@ router.get('/bookmap', (req, res) => {
             symbol: sym,
             heat,
             stall,
+            wide: wide ? { coverage, step: wcfg ? wcfg.step : null, half: wcfg ? wcfg.half : null } : null,
             ladder: { cells: ladder.cells, mid: ladder.mid, bandPct: ladder.bandPct,
                 rowPct: ladder.rowPct, maxUsd: ladder.maxUsd, frames: ladder.frames,
                 excludedLevels: ladder.excludedLevels },

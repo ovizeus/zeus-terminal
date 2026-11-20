@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.363',
-    build: 389,
-    date: '2026-11-16',
+    version: '1.7.364',
+    build: 390,
+    date: '2026-11-20',
     changelog: [
+        'b390 v1.7.364 - NEREUS banda WIDE, 2026-11-20 (server + client). Cartea de ordine pana la ±2.5K pe BTC: totalul Binance + OKX + Gate pe trepte de 50 $, cu linia unde se termina fiecare bursa si linia magnetului pe harta. Benzile vechi neschimbate.',
         'b389 v1.7.363 - Jurnalul radarului (pasul B), 2026-11-16 (server + client). Doar monedele radarului (principala + satelitii, lista fixa, max 3), doar mediul activ cu eticheta lui (DEMO/TESTNET/REAL), fereastra de detalii, card de share cu eticheta mediului, psych/deja vu pe mediu. /api/journal da si serverScore.',
         'b388 v1.7.362 - Doi indicatori noi in lista de deasupra chartului, 2026-11-16 (server + client). AUTOTRENDLINE: evantaie de linii de trend trase singure din pivoti reali - verzi de suport din fundul major spre minimele urmatoare, rosii de rezistenta din varful major, prelungite pana la bara curenta, valide cat timp pretul nu le-a rupt dupa al doilea pivot. ICHNOS (footprint): in fiecare lumanare, pe fiecare nivel de pret, cat s-a vandut x cat s-a cumparat agresiv (mii de dolari), cu Σ volum, Δ delta, POC incadrat, dezechilibre diagonale aldine (albastru cumparatori, rosu vanzatori), zone de dezechilibre stivuite si niveluri cu ordine mari. Datele: fiecare tranzactie Bybit (BTC, ETH, SOL, BNB), gratuit si in timp real; serverul le strange pe minut (footprintService, tabela footprint_1m, 48h) si le uneste pe intervalul chartului (1m-4h). Ruta /api/market/footprint, permisa si conturilor beta.',
         'b387 v1.7.361 - Close all nu mai porneste kill switch-ul, 2026-11-16 (server + client). Butonul Close all din panoul AutoTrade chema /api/at/kill, adica oprirea de urgenta: inchidea si BLOCA intrarile pana la RESET. Acum cheama /api/at/close-all (serverAT.closeAllForUser): inchide pozitiile AT din modul curent, cu confirmare, si nu atinge kill switch-ul. O inchidere ceruta de om (MANUAL_CLIENT) nu mai declanseaza kill switch-ul pe pierdere; pierderea ramane socotita in dailyPnL, iar inchiderile motorului il pot porni ca inainte. Mesajul Kill switch active nu mai sta pe ecran: sincronizarea cu serverul il reafisa la fiecare ciclu. Quantitative Monitor: HIGH/LOW/VOL/schimbarea pe 24h citeau campuri fara niciun scriitor (mereu 0) - acum vin din ticker24hr (acelasi cache ca lista de urmarire); PRICE cade pe mijlocul cartii cand pretul viu lipseste; bucla de desen nu mai lucreaza in fundal sau cu panoul ascuns, nu rescrie ecranul nemodificat, prinde erorile si pe telefon deseneaza la 1 s. PIN: lacatul se pune odata cu aplicatia, din semnul tinut pe dispozitiv per cont, iar serverul e intrebat imediat dupa autentificare (inainte venea dupa 1,5-2 s).',

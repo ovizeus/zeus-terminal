@@ -95,12 +95,15 @@ export function bookColor(side: 'bid' | 'ask', intensity: number): string {
     return `rgba(${rgb}, ${a === 0 ? '0' : a.toFixed(3)})`
 }
 
-export const BANDS: { label: string; value: number | 'auto' }[] = [
+export type BandValue = number | 'auto' | 'wide'
+export const BANDS: { label: string; value: BandValue }[] = [
     { label: '0.01%', value: 0.01 },
     { label: '0.05%', value: 0.05 },
     { label: '0.1%', value: 0.1 },
     { label: '0.2%', value: 0.2 },
     { label: 'AUTO', value: 'auto' },
+    // [2026-11-16] Banda LATA: totalul Binance + OKX + Gate pe trepte (±2.5K pe BTC).
+    { label: 'WIDE', value: 'wide' },
 ]
 
 export const WINDOWS: { label: string; value: number }[] = [
@@ -110,8 +113,9 @@ export const WINDOWS: { label: string; value: number }[] = [
     { label: '20m', value: 1200 },
 ]
 
-export function bandLabel(v: number | 'auto'): string {
+export function bandLabel(v: BandValue): string {
     if (v === 'auto') return 'AUTO band'
+    if (v === 'wide') return 'WIDE band'
     const n = Number(v)
     return Number.isFinite(n) ? `±${n}%` : 'AUTO band'
 }
@@ -182,7 +186,7 @@ export function sourceLabel(src: { deepLevels: number | null; deepFrames: number
 
 export async function fetchBook(
     symbol: string,
-    opts: { band: number | 'auto'; windowSec: number; cols: number; rows: number;
+    opts: { band: BandValue; windowSec: number; cols: number; rows: number;
         focusPrice?: number | null; focusPct?: number | null },
     signal?: AbortSignal,
 ): Promise<any | null> {

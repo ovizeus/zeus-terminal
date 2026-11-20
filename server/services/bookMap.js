@@ -424,7 +424,7 @@ function heat({ frames, cols, rows, bandPct, windowMs, now }) {
 //
 // ⚠️ Zoom aici înseamnă MAI ADÂNC, nu mai departe: cartea care există e lată
 // de 253$ pe BTC (±0,16%), deci nu e nimic de văzut mai încolo.
-function heatAbs({ frames, cols, rows, windowMs, now, padPct, focusPrice, focusPct }) {
+function heatAbs({ frames, cols, rows, windowMs, now, padPct, focusPrice, focusPct, gridLo, gridHi, maxPct }) {
     const asked = Math.max(2, Math.min(600, Number(cols) || 90));
     const R = Math.max(4, Math.min(MAX_ROWS, Number(rows) || DEFAULT_ROWS));
     const all = Array.isArray(frames) ? frames.filter(Boolean) : [];
@@ -458,9 +458,17 @@ function heatAbs({ frames, cols, rows, windowMs, now, padPct, focusPrice, focusP
     const fp = Number(focusPrice), fw = Number(focusPct);
     const focused = Number.isFinite(fp) && fp > 0
         && Number.isFinite(fw) && fw > 0;
+    // [2026-11-16] Banda LATA (bookWide) da grila explicit, aliniata pe treptele
+    // de pret ale cadrelor combinate; altfel un rand ar prinde cand una, cand doua
+    // trepte si harta ar avea dungi care nu exista in piata.
+    const glo = Number(gridLo), ghi = Number(gridHi);
+    const explicitGrid = Number.isFinite(glo) && Number.isFinite(ghi) && ghi > glo && glo > 0;
+    const capPct = Number(maxPct) > 0 ? Number(maxPct) : GRID_MAX_PCT;
     let lo, hi;
-    if (focused) {
-        const half = Math.min(GRID_MAX_PCT, Math.max(FOCUS_MIN_PCT, fw)) / 100;
+    if (explicitGrid) {
+        lo = glo; hi = ghi;
+    } else if (focused) {
+        const half = Math.min(capPct, Math.max(FOCUS_MIN_PCT, fw)) / 100;
         lo = fp * (1 - half); hi = fp * (1 + half);
     } else {
         lo = Infinity; hi = -Infinity;

@@ -82,10 +82,15 @@ describe('culorile — cyan = partea de CUMPARARE, chihlimbar = partea de VANZAR
 })
 
 describe('ZOOM — presetari care au sens pe datele care EXISTA', () => {
-    it('benzile merg de la foarte strans pana la AUTO', () => {
-        expect(BANDS.length).toBeGreaterThanOrEqual(4)
-        expect(BANDS[BANDS.length - 1].value).toBe('auto')
-        for (const b of BANDS.slice(0, -1)) {
+    // [2026-11-16] Contract schimbat DE OPERATOR („vreo 2,5k sus cu 2,5 jos… fa o
+    // combinatie din ele"): dupa AUTO vine WIDE, care NU e o banda din cartea Binance,
+    // ci totalul Binance + OKX + Gate (alta sursa, server/services/bookWide.js).
+    // Regula benzilor procentuale (cel mult ±0,2%, cat tine Binance) ramane.
+    it('benzile merg de la foarte strans pana la AUTO, apoi WIDE (sursa combinata)', () => {
+        expect(BANDS.length).toBeGreaterThanOrEqual(5)
+        expect(BANDS[BANDS.length - 1].value).toBe('wide')
+        expect(BANDS[BANDS.length - 2].value).toBe('auto')
+        for (const b of BANDS.slice(0, -2)) {
             expect(typeof b.value).toBe('number')
             expect(b.value as number).toBeLessThanOrEqual(0.2)
         }
