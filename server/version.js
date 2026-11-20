@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.371',
-    build: 397,
+    version: '1.7.372',
+    build: 398,
     date: '2026-11-20',
     changelog: [
+        'b398 v1.7.372 - Creierul pe PC + tot istoricul pastrat, 2026-11-20 (server + client). Pe PC cockpit-ul se aseaza ca pe telefon dar mare: creierul centrat, lat de 760 px, desenat la marimea reala (clar), restul dedesubt; pe telefon neschimbat. Inregistrarile pastrate 3.000 pe utilizator (300 stergea la loc tranzactiile refacute); jurnalul cere pana la 1.000, la 5 minute.',
         'b397 v1.7.371 - Bugul OI reparat (cu acordul operatorului) + trecutul refacut aproape complet, 2026-11-20 (server). OI se reimprospateaza la minut si se emite doar la schimbare: votul OI din confluenta nu mai e mereu neutru (schimba intrarile, stiut si aprobat). Tranzactiile refacute iau FLOW si DELTA din volumul taker buy, OI si SENTIMENT din istoricul oficial Binance; doar IMBALANCE ramane gol (cartea din trecut nu exista).',
         'b396 v1.7.370 - Tranzactiile refacute nu mai arata OI 0%, 2026-11-20 (server). OI-ul din decizii era inghetat de la pornire (bugul raportat), deci in reconstructii OI ramane gol; cele refacute cu varianta veche se refac.',
         'b395 v1.7.369 - Radarul pe server, si pentru TRECUT si pentru orice moneda, 2026-11-20 (server + client). Tranzactiile inchise din ultimele 30 de zile, pe monedele radarului, se refac din deciziile serverului si lumanarile Binance (marcate rebuilt; flux, delta, carte si L/S nepastrate atunci raman goale). Monedele din afara celor 7 primesc carte si raport long/short la 30 s.',

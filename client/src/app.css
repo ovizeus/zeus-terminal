@@ -8381,3 +8381,20 @@ select option {
    calculeaza scazand panourile VIZIBILE (chartFullscreen.measureOccupiedHeight),
    deci ascunderea elibereaza spatiul pentru chart. La iesire ICHNOS revine. */
 #csec.fsm #ichnosPanel { display: none !important; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   [2026-11-20] PC: cockpit-ul se aseaza ca pe telefon, dar mare — creierul v7 sus,
+   centrat, restul (cadrane, AUTO-TRADE, regim, chitanta) dedesubt, in grila.
+   Specificitate mai mare decat main.css (care se incarca DUPA app.css si fixeaza
+   .znc-left la 52%) — vezi memoria „main.css se incarca dupa app.css".
+   ═══════════════════════════════════════════════════════════════ */
+@media (min-width: 769px) {
+  .znc .znc-body.znc-stack { flex-direction: column }
+  .znc .znc-body.znc-stack > .znc-left { flex: none; width: 100%; max-width: 100%; border-right: none; border-bottom: 1px solid #0a1a0a }
+  .znc .znc-body.znc-stack > .znc-right {
+    flex: none; width: 100%; max-width: 100%;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start;
+  }
+  .znc .znc-body.znc-stack > .znc-left #zeusBrainV7 { width: 100%; display: flex; justify-content: center }
+}

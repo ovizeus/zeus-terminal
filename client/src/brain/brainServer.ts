@@ -81,7 +81,7 @@ export interface ServerFrame {
 
 export async function fetchCaptures(): Promise<ServerCapture[] | null> {
   try {
-    const r = await fetch('/api/brain/radar/captures?limit=300', { credentials: 'same-origin' })
+    const r = await fetch('/api/brain/radar/captures?limit=1000', { credentials: 'same-origin' })
     if (!r.ok) return null
     const j = await r.json()
     return Array.isArray(j && j.captures) ? j.captures : null

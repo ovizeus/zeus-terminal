@@ -35,6 +35,10 @@ const CSS = `
 .zb7-det button{font-family:monospace;font-size:13px;padding:8px;border:1px solid;border-radius:8px;background:transparent;cursor:pointer}
 .zb7-det .kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid #0f1b2b}
 .zb7-det .kv span:last-child{color:#d8e4f0;text-align:right}
+@media (min-width:769px){
+  .zb7{max-width:760px;padding:16px 14px 20px}
+  .zb7-allm .in,.zb7-det .in{max-width:760px}
+}
 .zb7-ph{width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;display:flex;align-items:center;justify-content:center;text-align:center;font-size:8px;line-height:1.2;color:#56657a;padding:3px;box-sizing:border-box;background:#060c16}
 `
 
@@ -118,8 +122,27 @@ export function startBrain(root: HTMLElement): () => void {
   // redesenat la fiecare cadru; memoria grafica ocupata lasa restul paginii nedesenat
   // (zona neagra raportata de operator). La 2× diferenta nu se vede.
   const dpr = Math.min(2, window.devicePixelRatio || 1)
-  cv.width = S * dpr; cv.height = S * dpr; ctx.scale(dpr, dpr)
-  ms.width = S * dpr; ms.height = 26 * dpr; mx.scale(dpr, dpr)
+  /**
+   * [2026-11-20] Pe PC radarul e afisat mult mai mare decat pe telefon (pana la ~760 px).
+   * Canvas-ul se masoara dupa latimea AFISATA × densitate (plafon 1.600 px), ca desenul sa
+   * fie clar, nu intins; desenatorul ramane pe sistemul lui de 360 de unitati (scalare).
+   * Pe telefon iese practic ca inainte (~750 px).
+   */
+  let lastCss = 0
+  function sizeCanvases(): void {
+    // Pe telefon (afisat sub 450 px): EXACT marimea de dinainte (S × densitate) — o varianta
+    // masurata dupa latime lasa radarul gol la 390 px (prins pe captura, 20 nov).
+    const raw = Math.round(cv.clientWidth || S)
+    const css = raw > 450 ? raw : S
+    if (css === lastCss) return
+    lastCss = css
+    const px = css === S ? S * dpr : Math.min(1600, Math.round(css * dpr)), k = px / S
+    cv.width = px; cv.height = px; ctx.setTransform(k, 0, 0, k, 0, 0)
+    ms.width = px; ms.height = Math.round(26 * k); mx.setTransform(k, 0, 0, k, 0, 0)
+  }
+  sizeCanvases()
+  let ro: ResizeObserver | null = null
+  try { ro = new ResizeObserver(() => sizeCanvases()); ro.observe(cv) } catch { ro = null }
 
   const FX = new Fx()
   const pref = loadPref()
@@ -162,6 +185,7 @@ export function startBrain(root: HTMLElement): () => void {
     capRecs: [] as TradeRecord[],
     capEntry: new Map<string, ServerEntry>(),
     lastFetch: 0,
+    capFetch: 0,                       // [2026-11-20] lista inregistrarilor: la 5 min (e mare), sau fortat
     fetching: false,
   }
   const mainSym = () => String((window as any).S?.symbol || 'BTCUSDT').toUpperCase()
@@ -173,7 +197,9 @@ export function startBrain(root: HTMLElement): () => void {
     if (JS.fetching || (!force && Date.now() - JS.lastFetch < 60000)) return
     JS.fetching = true
     try {
-      const [r, caps] = await Promise.all([fetch('/api/journal?limit=500', { credentials: 'same-origin' }), fetchCaptures()])
+      const wantCaps = force || Date.now() - JS.capFetch > 300_000
+      const [r, caps] = await Promise.all([fetch('/api/journal?limit=500', { credentials: 'same-origin' }), wantCaps ? fetchCaptures() : Promise.resolve(null)])
+      if (caps) JS.capFetch = Date.now()
       if (r.ok) { const j = await r.json(); if (j && Array.isArray(j.trades)) JS.rows = j.trades; JS.lastFetch = Date.now() }
       if (caps) setCaptures(caps)
     } catch { /* fara retea: ramane ce aveam */ } finally { JS.fetching = false; rebuild() }
@@ -696,6 +722,7 @@ export function startBrain(root: HTMLElement): () => void {
     try { stopAxes() } catch { /* deja */ }
     cancelAnimationFrame(raf)
     try { io && io.disconnect() } catch { /* deja */ }
+    try { ro && ro.disconnect() } catch { /* deja */ }
     document.removeEventListener('visibilitychange', onVis)
     document.removeEventListener('keydown', onKey)
     closeAll(); closeDet()

@@ -362,7 +362,8 @@ export const BrainCockpit = memo(function BrainCockpit() {
       </div>
 
       {/* BODY */}
-      <div className="znc-body">
+      {/* [2026-11-20] znc-stack: si pe PC creierul sus, mare, si restul dedesubt (ca pe telefon). */}
+      <div className="znc-body znc-stack">
 
         {/* ═══ LEFT COLUMN ═══ */}
         <div className="znc-left">

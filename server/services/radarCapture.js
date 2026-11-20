@@ -31,7 +31,9 @@ const MAX_FRAMES = 3600;            // dupa rarire (o tranzactie lunga)
 const KEEP_EDGE = 900;              // cadre pastrate intregi la inceput si la sfarsit
 const MAX_SYMBOLS = 24;
 const DEMAND_TTL_MS = 60_000;       // o moneda ceruta de o aplicatie ramane calculata 1 min
-const KEEP_PER_USER = 300;          // inregistrari pastrate pe utilizator
+// [2026-11-20] 3.000, nu 300: cu 300, fiecare inchidere stergea la loc tranzactiile refacute din
+// ultimele 30 de zile (contul 1 are 857 pe monedele radarului). ~9 KB / inregistrare.
+const KEEP_PER_USER = 3000;         // inregistrari pastrate pe utilizator
 const DEFAULT_COINS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
 const SYM_RE = /^[A-Z0-9]{2,20}USDT$/;
 // Portile radarului (ordinea din aplicatie): RISK SPREAD COOL NEWS SESS NOOPP REGIME.
@@ -524,7 +526,7 @@ function stop() {
 // ── citire pentru rute ────────────────────────────────────────────
 function listCaptures(uid, limit = 300) {
     const rows = _db().prepare('SELECT seq, symbol, env, side, entry_ts, exit_ts, status, entry, n_frames FROM brain_captures WHERE user_id = ? ORDER BY entry_ts DESC LIMIT ?')
-        .all(Number(uid), Math.max(1, Math.min(500, Number(limit) || 300)));
+        .all(Number(uid), Math.max(1, Math.min(1500, Number(limit) || 300)));
     return rows.map((r) => {
         let e = null; try { e = JSON.parse(r.entry); } catch (_) { e = null; }
         // o inregistrare deschisa in memorie are mai multe cadre decat ultima salvare
