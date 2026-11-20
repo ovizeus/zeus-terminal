@@ -1851,6 +1851,9 @@ try {
 setTimeout(() => {
   try { require('./server/services/radarCapture').start(); }
   catch (e) { logger.warn('RADAR', 'start failed: ' + (e && e.message)); }
+  // tranzactiile din trecut: refacute din deciziile serverului + lumanari (o data, apoi zilnic)
+  try { require('./server/services/radarBackfill').start(); }
+  catch (e) { logger.warn('RADAR', 'backfill start failed: ' + (e && e.message)); }
 }, 45000).unref();
 
 // Retentia instantaneelor de predictie. Aceeasi lectie ca la G-5: lotizata,

@@ -37,6 +37,8 @@ export interface TradeRecord {
   }
   // [2026-11-20] 'server' = inregistrata de radarul de pe server (si cu telefonul inchis)
   source?: 'server' | 'device'
+  // [2026-11-20] refacuta din istoricul serverului (decizii + lumanari), nu prinsa live
+  reconstructed?: boolean
 }
 
 const DB = 'zeus_brain'

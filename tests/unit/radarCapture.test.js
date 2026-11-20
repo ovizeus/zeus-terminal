@@ -22,6 +22,14 @@ jest.mock('../../server/services/marketFeed', () => ({
     releaseRef: () => {}, fetchOpenInterest: () => Promise.resolve(OI),
 }));
 
+const GW = [];
+jest.mock('../../server/services/binanceGateway', () => ({
+    fetch: (url) => {
+        GW.push(url);
+        const body = url.includes('/depth') ? { bids: [['50.1', '30']], asks: [['50.3', '10']] } : [{ longShortRatio: '3' }];
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    },
+}));
 const RC = require('../../server/services/radarCapture');
 const db = require('../../server/services/database').db;
 
@@ -153,7 +161,16 @@ describe('radarCapture — o intrare cu telefonul inchis, cap-coada', () => {
         expect(a).not.toBeNull();
         expect(a.rt[4]).not.toBeNull();                      // VOLUME din lumanarile proprii ale radarului
         expect(require('../../server/services/serverState').getConfiguredSymbols()).not.toContain('ZECUSDT');
-        RC.stop();
+        // cartea si L/S ajung la urmatorul pas
+        return new Promise((r) => setImmediate(r)).then(() => new Promise((r) => setImmediate(r))).then(() => {
+            expect(GW.some((u) => u.includes('depth?symbol=ZECUSDT'))).toBe(true);
+            expect(GW.some((u) => u.includes('globalLongShortAccountRatio?symbol=ZECUSDT'))).toBe(true);
+            RC._tickForTest();
+            const b = RC.liveFor(['ZECUSDT']).ZECUSDT;
+            expect(b.rt[7]).not.toBeNull();                  // IMBALANCE
+            expect(b.rt[9]).toBeCloseTo(0.5, 3);             // SENTIMENT: L/S 3 → 75% long
+            RC.stop();
+        });
     });
 });
 

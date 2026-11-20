@@ -100,8 +100,36 @@ function _loadPrefs() {
 function _bootSymbols() { try { return new Set(_st().getConfiguredSymbols()); } catch (_) { return new Set(); } }
 function _extraState(sym) {
     let x = _extra.get(sym);
-    if (!x) { x = { bars: [], price: 0, priceTs: 0, fr: null, oi: null, oiPrev: null, rsi: null, ind: {}, at: 0 }; _extra.set(sym, x); }
+    if (!x) { x = { bars: [], price: 0, priceTs: 0, fr: null, oi: null, oiPrev: null, rsi: null, ind: {}, at: 0, book: null, ls: null, polledAt: 0, polling: false }; _extra.set(sym, x); }
     return x;
+}
+/**
+ * [2026-11-20] Cartea (IMBALANCE) si raportul long/short (SENTIMENT) pentru monedele din
+ * afara serverState: serverLiquidity si serverSentiment le aduc doar pentru SD_SYMBOLS.
+ * La 30 s, prin poarta Binance (gard de ban + limitator): carte 50 niveluri (greutate 2) +
+ * L/S global (greutate 1). Doar pentru monedele de pe radarul cuiva.
+ */
+const EXTRA_POLL_MS = 30_000;
+function _pollExtra(sym, now) {
+    const x = _extra.get(sym);
+    if (!x || x.polling || now - x.polledAt < EXTRA_POLL_MS) return;
+    x.polling = true; x.polledAt = now;
+    let gw; try { gw = require('./binanceGateway'); } catch (_) { gw = null; }
+    if (!gw || typeof gw.fetch !== 'function') { x.polling = false; return; }
+    const get = (url, w, src) => Promise.resolve().then(() => gw.fetch(url, { __weight: w, __src: src, signal: AbortSignal.timeout(8000) }))
+        .then((r) => (r && r.ok ? r.json() : null)).catch(() => null);
+    const q = encodeURIComponent(sym);
+    Promise.all([
+        get('https://fapi.binance.com/fapi/v1/depth?symbol=' + q + '&limit=50', 2, 'radar:depth'),
+        get('https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=' + q + '&period=5m&limit=1', 1, 'radar:ls'),
+    ]).then(([d, ls]) => {
+        if (d && Array.isArray(d.bids) && Array.isArray(d.asks)) {
+            const m = (rows) => rows.map(([p, qty]) => ({ price: parseFloat(p), qty: parseFloat(qty) })).filter((r) => r.price > 0 && r.qty > 0);
+            x.book = { bids: m(d.bids), asks: m(d.asks), ts: Date.now() };
+        }
+        const r = Array.isArray(ls) && ls.length ? Number(ls[ls.length - 1].longShortRatio) : NaN;
+        if (Number.isFinite(r) && r > 0) x.ls = r;
+    }).finally(() => { x.polling = false; });
 }
 function _onKline(d) {
     if (!d || !_extra.has(d.symbol) || d.timeframe !== '5m') return;
@@ -180,7 +208,17 @@ function _computeOne(sym, now) {
     _refreshOi(sym, now);
     const o = _oi.get(sym);
     const deps = { deltaZ: _zOf(sym, d5), oi: o ? o.oi : null, oiPrev: o ? o.oiPrev : null };
-    if (!boot.has(sym)) Object.assign(deps, { serverState: _extraDeps(sym) });
+    if (!boot.has(sym)) {
+        _pollExtra(sym, now);
+        const x = _extra.get(sym);
+        let L = null; try { L = require('./serverLiquidity'); } catch (_) { L = null; }
+        Object.assign(deps, {
+            serverState: _extraDeps(sym),
+            sentiment: { getSentiment: () => (x && x.ls ? { ls: x.ls } : null) },
+            // pivotii din lumanarile proprii (getLiquidity) + cartea adusa aici
+            liquidity: { getLiquidity: (s, b, p) => (L ? L.getLiquidity(s, b, p) : null), getOrderBook: () => (x && x.book && Date.now() - x.book.ts < 120_000 ? x.book : null) },
+        });
+    }
     const ax = RA.computeAxes(sym, deps);
     if (!ax) return null;
     let sc = null;

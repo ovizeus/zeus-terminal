@@ -345,7 +345,7 @@ export function startBrain(root: HTMLElement): () => void {
     const em = !b ? r.entryMeta : null
     const gs = b && b.meta ? { failing: b.meta.gatesFailing, unknown: b.meta.gatesUnknown } : em && em.gates ? em.gates : null
     const gates = gs ? GN.map((g, i) => `${g} ${gs.unknown.includes(i) ? '<span style="color:#7c8ea3">unknown</span>' : gs.failing.includes(i) ? '<span style="color:#ff5a6e">failing</span>' : '<span style="color:#39ff6a">pass</span>'}`).join('<br>') : '—'
-    const brainData = r.origin === 'brain' ? (b && b.source === 'server' ? 'captured by the server radar' : 'captured on this device')
+    const brainData = r.origin === 'brain' ? (b && b.reconstructed ? 'rebuilt from server history · flow, delta, imbalance, sentiment not kept' : b && b.source === 'server' ? 'captured by the server radar' : 'captured on this device')
       : esc(r.reason || '—') + (em ? ' · server decision kept' : '')
     const k = b && b.hasSnapshot ? b.key : null
     const snap = k ? snapCache.get(k) : null

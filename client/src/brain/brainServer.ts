@@ -68,6 +68,7 @@ export interface ServerEntry {
   entryShape: number[] | null; rt: Num[] | null; conf: number | null; thr: number | null; profile: string | null
   regime: string | null; radarRegime: string | null; bull: number | null; bear: number | null
   gatesFailing: number[]; gatesUnknown: number[]; radarCoins: string[]; late: boolean; pre: string | null
+  reconstructed?: boolean
 }
 export interface ServerCapture {
   seq: number; symbol: string; env: string; side: string; entryTs: number; exitTs: number | null
@@ -118,9 +119,10 @@ export function capToRec(c: ServerCapture, uid: string): TradeRecord | null {
     env: env === 'DEMO' || env === 'TESTNET' || env === 'REAL' ? env : null,
     radarCoin: true, radarCoins: Array.isArray(e.radarCoins) ? e.radarCoins : [], onMain: true,
     noSnapReason: shape ? null : 'opened before the server radar was running',
-    meta: { radarMode: m.label, regime: e.regime || null, focus: null, lens: 'server (RT + TIMEFRAME + SLOW)',
+    meta: { radarMode: m.label, regime: e.regime || null, focus: null,
+      lens: e.reconstructed ? 'server history (rebuilt from decisions + candles, 30 s)' : 'server (RT + TIMEFRAME + SLOW)',
       gatesFailing: e.gatesFailing || [], gatesUnknown: e.gatesUnknown || [], ml: null },
-    source: 'server',
+    source: 'server', reconstructed: !!e.reconstructed,
   }
 }
 

@@ -77,4 +77,12 @@ describe('brainServer — inregistrarile serverului in jurnal', () => {
     expect(s[0].axes).toEqual(shape)
     expect(s[1].axes).toBeNull()
   })
+
+  it('refacuta din istoric: marcata, cu lentila care spune de unde vine', () => {
+    const r = capToRec({ ...cap, entry: { ...entry, reconstructed: true } }, '1')!
+    expect(r.reconstructed).toBe(true)
+    expect(r.meta?.lens).toContain('rebuilt')
+    expect(r.hasSnapshot).toBe(true)
+  })
 })
+
