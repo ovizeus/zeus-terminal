@@ -1984,7 +1984,9 @@ export function renderBrainCockpit(): void {
       trigger: trigType,
       tf: 'Trig:' + tfMap.trigger + ' Ctx:' + tfMap.context,
       cooldown: cdLeft > 0 ? cdLeft + 'm WAIT' : 'READY',
-      gatesSummary: `Gates: ${gatesOk}/${gatesTotal} pass`,
+      // [2026-11-21] „safety + context": radarul arata doar portile de SIGURANTA (GATES x/6); aici sunt
+      // si cele de context (MTF, flow, trigger, anti-fakeout) — acelasi nume pentru doua seturi parea contradictie.
+      gatesSummary: `Gates (safety + context): ${gatesOk}/${gatesTotal} pass`,
       modeArmed: isArmed,
       scoreArmed: isArmed,
       triggerActive: !!ctx.trigger,

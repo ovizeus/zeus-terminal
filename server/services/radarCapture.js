@@ -346,13 +346,20 @@ function _envOf(pos) { return pos.env ? String(pos.env).toUpperCase() : pos.mode
  * cu un cadru pe secunda, ajunge la aceleasi valori ca telefonul.
  */
 function lensesOf(frames) {
-    const step = (prev, next, a60) => next.map((x, i) => {
+    // [2026-11-21] Pasul tine cont de TIMPUL dintre cadre (o secunda live, 30 s la cele refacute):
+    // varianta care presupunea mereu o secunda lasa lentilele in urma la cadrele de 30 s si facea
+    // 38% din tranzactiile refacute „NERVOUS" (live: 1 din 81) — prins pe distributie, 21 nov.
+    const step = (prev, next, a60, secs) => next.map((x, i) => {
         if (x == null || !Number.isFinite(x)) return null;
-        const p = prev ? prev[i] : null, a = 1 - Math.pow(1 - a60, 60);
+        const p = prev ? prev[i] : null, a = 1 - Math.pow(1 - a60, 60 * secs);
         return p == null ? x : p + (x - p) * a;
     });
-    let tf = null, sl = null;
-    for (const f of frames || []) { tf = step(tf, f.rt, 0.025); sl = step(sl, tf, 0.007); }
+    let tf = null, sl = null, prevT = null;
+    for (const f of frames || []) {
+        const secs = prevT != null && Number.isFinite(f.t) ? Math.max(1, Math.min(600, (f.t - prevT) / 1000)) : 1;
+        prevT = Number.isFinite(f.t) ? f.t : prevT;
+        tf = step(tf, f.rt, 0.025, secs); sl = step(sl, tf, 0.007, secs);
+    }
     return { tf, sl };
 }
 /**
@@ -400,7 +407,7 @@ function _startCapture(pos, now) {
         conf: at ? at.sc : null, thr: thr.thr, profile: profileOf(thr.settings, _envOf(pos)), regime: dec && dec.regime ? dec.regime : null,
         radarRegime: at ? at.rg : null, bull: at ? at.b : null, bear: at ? at.r : null,
         gatesFailing: g.failing, gatesUnknown: g.unknown,
-        radarCoins: coinsFor(uid).filter(Boolean), late, preFrames: frames.length, source: 'server', moodV: 2,
+        radarCoins: coinsFor(uid).filter(Boolean), late, preFrames: frames.length, source: 'server', moodV: 3,
     };
     const cap = { uid, seq: pos.seq, symbol: sym, pos, entry, frames, lastFlush: 0 };
     _caps.set(uid + ':' + pos.seq, cap);

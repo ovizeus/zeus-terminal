@@ -180,7 +180,7 @@ function entryFrom(frames, pos, meta) {
         conf: at ? at.c : null, thr: meta.thr, profile: meta.profile, regime: meta.regime || null,
         radarRegime: at ? at.rg : null, bull: at ? at.b : null, bear: at ? at.r : null,
         gatesFailing: at ? at.f : [], gatesUnknown: at ? at.u : [0, 1, 2, 3, 4, 5, 6],
-        radarCoins: meta.coins, late: false, preFrames: pre.length, source: 'server', reconstructed: true, moodV: 2,
+        radarCoins: meta.coins, late: false, preFrames: pre.length, source: 'server', reconstructed: true, moodV: 3,
     };
 }
 
@@ -244,11 +244,11 @@ function pending(now = Date.now()) {
 /**
  * [2026-11-21] Starea dinainte de intrare, RECALCULATA cu pragurile noi (NERVOUS 0,013, CONFUSED
  * = voturi egale) pentru inregistrarile salvate inainte — din cadrele lor dinaintea intrarii.
- * O singura data pe inregistrare (`moodV: 2`).
+ * O singura data pe inregistrare (`moodV: 3`; v3 = lentilele cu timpul real dintre cadre).
  */
 function remood() {
     const db = _db(); let n = 0;
-    const rows = db.prepare("SELECT user_id, seq, entry, frames FROM brain_captures WHERE coalesce(json_extract(entry, '$.moodV'), 1) < 2").all();
+    const rows = db.prepare("SELECT user_id, seq, entry, frames FROM brain_captures WHERE coalesce(json_extract(entry, '$.moodV'), 1) < 3").all();
     const upd = db.prepare('UPDATE brain_captures SET entry = ? WHERE user_id = ? AND seq = ?');
     for (const r of rows) {
         let e, fr;
@@ -256,7 +256,7 @@ function remood() {
         const pre = fr.filter((f) => !f.p);
         const at = pre.length ? pre[pre.length - 1] : null;
         if (at) e.pre = RC().preMoodOf(at.rt, RC().lensesOf(pre).sl, at.c, at.h, at.f, at.b, at.r);
-        e.moodV = 2;
+        e.moodV = 3;
         upd.run(JSON.stringify(e), r.user_id, r.seq); n++;
     }
     return n;

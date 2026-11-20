@@ -85,6 +85,13 @@ describe('radarCapture — starea de dinainte de intrare (regulile din aplicatie
         expect(RC.preMoodOf(rt, Array(12).fill(0.495), 40, 65, [], 3, 1)).toBe('CALM');    // 0,005
         expect(RC.preMoodOf(rt, rt, 60, 65, [2], 2, 2)).toBe('HESITANT');                  // poarta pica bate CONFUSED
     });
+    test('[2026-11-21] lentilele tin cont de timpul dintre cadre: 30 s nu e o secunda', () => {
+        const f = (t, v) => ({ t, rt: Array(12).fill(v) });
+        const oneSec = RC.lensesOf([f(0, 0.2), f(1000, 0.8)]).sl[0];
+        const thirty = RC.lensesOf([f(0, 0.2), f(30000, 0.8)]).sl[0];
+        expect(thirty).toBeGreaterThan(oneSec);              // dupa 30 s lentila lenta e mult mai aproape de 0,8
+        expect(thirty).toBeGreaterThan(0.75);
+    });
     test('HESITANT / ALERT / CALM ca in brainDerived', () => {
         const rt = Array(12).fill(0.5), sl = rt.slice();
         expect(RC.preMoodOf(rt, sl, 60, 65, [2])).toBe('HESITANT');

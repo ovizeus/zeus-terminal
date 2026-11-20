@@ -15015,3 +15015,6 @@ Cerut (cu capturi, lucru autonom peste noapte): stari, replay, share, bara telef
   6. **„TRADING" langa „AUTO WAIT"**: cu pozitie deschisa motivul devine „NEXT ENTRY WAIT".
   7. **Regimul din detaliile unei inregistrari de server** vine din motorul serverului → „Regime (server)".
   8. Text in romana in UI („7 SIMBOLURI") → engleza; banda moarta „ZeuS Terminal loading..." (fara scriitor) scoasa.
+
+### 🧪 b400 (2026-11-21) — corectie la mine: NERVOUS fals la tranzactiile refacute
+Dupa b399 distributia starii dinainte de intrare arata **NERVOUS 451 (36%)** — toate la tranzactiile REFACUTE (live: 1 din 81). `lensesOf` de pe server presupunea o secunda intre cadre; la cele refacute sunt 30 s, deci lentilele ramaneau in urma si „se contraziceau" artificial. Acum pasul foloseste timpul real dintre cadre (ca aplicatia, `framesToStates`). Recalculate o data (`moodV: 3`). Distributia reala: ALERT 759, HESITANT 287, CALM 213, CONFUSED 2, NERVOUS 1 — inainte de intrare creierul e aproape mereu ALERT/HESITANT (intra cand confluenta e langa prag). Pe radarul live NERVOUS si CONFUSED apar cat piata o cere (~5% / ~1% din timp). Si: eticheta portilor din AUTO-TRADE „Gates (safety + context)" (radarul arata doar siguranta).
