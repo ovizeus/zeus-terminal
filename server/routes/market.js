@@ -369,4 +369,13 @@ router.get('/cache/health', (req, res) => {
 //
 // tests/unit/noShadowedRoutes.test.js now fails if any path is mounted twice.
 
+// [2026-11-21] MARKETS — piete traditionale (aur, petrol, indici, actiuni), doar informare.
+// Datele vin de la Gate prin server (services/tradfiMarkets.js); cererea tine bucla vie.
+router.get('/tradfi', (req, res) => {
+    const tm = require('../services/tradfiMarkets');
+    tm.touch();
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(tm.snapshot());
+});
+
 module.exports = router;

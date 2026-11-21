@@ -27,6 +27,8 @@ const VIEWER_ALLOW = [
     'GET /api/market/liq-panel', 'GET /api/market/liq-map', 'GET /api/market/liq-predict',
     'GET /api/market/bookmap', 'GET /api/liq/recent',
     'GET /api/market/footprint', 'GET /api/market/radar',
+    // ── piete traditionale (MARKETS) — doar informare ──
+    'GET /api/market/tradfi',
     // ── indicatori pe chart ──
     'POST /api/indicators/active', 'GET /api/indicators/usage',
     'GET /api/byoi/config', 'GET /api/byoi/indicators',

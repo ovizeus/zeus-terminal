@@ -249,6 +249,8 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'GET /api/market/sentiment', 'GET /api/market/spot/klines', 'GET /api/market/symbol/:symbol',
             'GET /api/market/ticker', 'GET /api/market/ticker/all', 'GET /api/market/ticker24hr',
             'GET /api/market/time', 'GET /api/market/top', 'GET /api/market/topLongShort',
+            // [2026-11-21] MARKETS (aur, indici, actiuni) — doar informare, caseta de sub DEMO MODE o CERE
+            'GET /api/market/tradfi',
             'GET /api/migration/flags',
             'GET /api/profile', 'GET /api/referral', 'GET /api/sd/symbols',
             'GET /api/support/thread', 'GET /api/support/unread',

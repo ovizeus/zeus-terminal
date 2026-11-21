@@ -1857,6 +1857,13 @@ try {
 // [2026-11-20] Radarul creierului pe SERVER: cele 12 axe + inregistrarea fiecarei
 // intrari pe monedele radarului (poza, replay, deja vu, sablon si cu telefonul inchis).
 // Porneste dupa 45 s, cand serverState are deja lumanari. Doar afisaj si jurnal.
+// [2026-11-21] MARKETS (aur, indici, actiuni) — incarca o data lumanarile zilnice (graficul pe 7 zile +
+// corelatia cu BTC) ca primul om care deschide caseta sa nu astepte un minut. Preturile live pornesc la cerere.
+setTimeout(() => {
+  try { const tm = require('./server/services/tradfiMarkets'); tm.refreshTickers().then(() => tm.refreshCandles()).catch(() => {}); }
+  catch (e) { logger.warn('MARKETS', 'warm-up failed: ' + (e && e.message)); }
+}, 60_000);
+
 setTimeout(() => {
   try { require('./server/services/radarCapture').start(); }
   catch (e) { logger.warn('RADAR', 'start failed: ' + (e && e.message)); }

@@ -15062,6 +15062,26 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### 🌍 b407 v1.7.381 (2026-11-21) — MARKETS: aur, petrol, indici, actiuni, LIVE (server + client, reload)
+**Cerut de operator:** „o rubrica gen stock … aur nvidia argint tesla petrol, top 100, de informare … sub caseta cu demo mode o caseta la fel de lata … corelarea cu btc … daca poti face in timp real tot fa".
+
+**Sursa — Gate.io futures, nu Stooq.** Stooq (prima idee, intarziat 15 min) a pus un zid anti-bot (pagina cu JavaScript + problema de calcul) — NU il ocolim. Gate are catalog oficial pe categorii (`contract_type`: 456 actiuni, 18 indici, 12 metale, 3 energie, valute) si da TOATE preturile intr-o singura cerere `/futures/usdt/tickers` → timp real, fara risc de limite. Pret afisat = `index_price` (urmareste activul real). Binance futures are si el aur/argint/petrol/actiuni (XAU, XAG, CL, NVDA, TSLA, QQQ, SPY…), dar mai putine; atentie: `SPXUSDT` pe Binance e o moneda meme, NU S&P 500.
+
+**Server — `server/services/tradfiMarkets.js`:**
+- catalog de **105** active: 7 metale, 3 energie, 10 indici (S&P 500, Nasdaq 100, Dow, Russell 2000, DAX, FTSE, Nikkei, Hang Seng, ASX, KOSPI), EUR/USD, GBP/USD, TLT, ~74 actiuni mari, 9 legate de crypto (MSTR, COIN, HOOD, IBIT, CRCL, MARA, CLSK, IREN, GLXY). Toate verificate live.
+- preturi la **3 s, doar cat timp cineva s-a uitat in ultimul minut** (altfel bucla se opreste singura); lumanari zilnice (grafic 7 zile + corelatie) la 6 h, in ritm de 400 ms/cerere; incalzite o data la 60 s dupa pornire.
+- **corelatia cu BTC** = Pearson pe randamentele zilnice (log) pe 30 de zile, doar zilele comune; sub 15 zile → null („—"). Masurat viu: IBIT 0,97 · MSTR 0,92 · COIN 0,84 · Nasdaq 0,64 · S&P 0,63 · aur 0,53 · petrol −0,40 · EUR/USD 0,05.
+- OPEN / CLOSED dupa ora locala a fiecarei burse (NYSE, Xetra, Londra, Tokyo, HK, Sydney, Seul; marfuri/valute duminica 18:00 – vineri 17:00 ET cu pauza 17–18). **Sarbatorile legale NU sunt tratate** (scris si pe ecran).
+- ruta `GET /api/market/tradfi`, permisa si conturilor beta (`viewerGate`, doar informare).
+
+**Client:**
+- `components/markets/MarketsBar.tsx` — caseta de sub banda EXECUTION MODE: aceeasi latime si **aceeasi inaltime** (titlu Orbitron 18 px si pe telefon), neon + linii de scanare, accent auriu, preturile principale defileaza, buton OPEN. Fara miscare cu `prefers-reduced-motion`.
+- `components/markets/MarketsPanel.tsx` — panou pe tot ecranul (sub bara telefonului, `safe-area`), activeModal `markets` → butonul Inapoi de pe Android il inchide (clasa `z-modal--open`) si derularea din spate e blocata. Grupe cu numar, cautare, sortare (crestere, scadere, cel mai asemanator cu BTC, cel mai tranzactionat), rand: pret live, 24h, grafic 7 zile, pastila BTC colorata (puternic / moderat / deloc / invers), punct verde cand bursa e deschisa; atingere → interval 24h, 30 de zile, volum, explicatia corelatiei.
+- `markets/tradfi.ts` — UN SINGUR sondaj pentru caseta + panou (3 s cu panoul deschis, 6 s altfel), oprit in fundal (`startPoll`).
+- Verificat RANDAT in Chrome fara ecran la 390 px, cu date reale: gasite si reparate inainte de livrare randul mai lat cu 32 px (lipsea `box-sizing`), fontul serif mostenit si „Nothing matches" la prima incarcare.
+
+Teste: server `tradfiMarkets` (orar, corelatie, instantaneu, erori) + `viewerGate`; client `markets` (formatare, filtre, sondaj unic, caseta, panou).
+
 ### 🔍 2026-11-21 — baleiajul final pe TOATA interfata (fara cod nou)
 Toate panourile citesc din aceleasi obiecte comune, deci verificarea „citit dar nescris" pe ele acopera orice panou:
 - `BM.*` (45 de campuri), `S._*`, `BR.*`: **niciun camp citit fara scriitor.**

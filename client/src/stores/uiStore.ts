@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { isModalLocked, getAccessLevel, isAccessLevelKnown, showBetaNotice, lockedLabel } from '../core/betaGate'
 import type { ThemeId } from '../types'
 
-type ModalId = 'support' | 'notifications' | 'cloud' | 'alerts' | 'charts' | 'llv' | 'supremus' | 'sr' | 'settings' | 'ovi' | 'welcome' | 'admin' | 'adminPage' | 'cmdpalette' | 'exposure' | 'decisionlog' | 'missed' | 'session' | 'regime' | 'performance' | 'compare' | 'byoi'
+type ModalId = 'support' | 'notifications' | 'cloud' | 'alerts' | 'charts' | 'llv' | 'supremus' | 'sr' | 'settings' | 'ovi' | 'welcome' | 'admin' | 'adminPage' | 'cmdpalette' | 'exposure' | 'decisionlog' | 'missed' | 'session' | 'regime' | 'performance' | 'compare' | 'byoi' | 'markets'
 
 interface UiStore {
   /** Current theme */
