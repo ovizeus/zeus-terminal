@@ -104,3 +104,4 @@ data/admin_backups/
 # history rewrite, which is the operator decision.
 data/audit.jsonl.*
 data/g8-watch.log
+data/shares/
