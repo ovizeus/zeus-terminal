@@ -115,6 +115,12 @@ body {
   min-height: 100dvh;
   min-height: var(--app-height, 100dvh);
 }
+/* [2026-11-21] DOCUMENTUL deruleaza, nu <body>. main.css (incarcat dupa) pune
+   `html, body { height: 100%; overflow-x: hidden !important }`: cu overflow pe <html>,
+   <body> devenea un cadru de derulare inalt cat ecranul — `window.scrollTo` nu facea
+   nimic, iar sub cadru ramanea fundalul negru („negru jos" dupa click-uri).
+   `html > body` (0,0,2) bate `html, body` (0,0,1). Test: documentScroller.test.ts */
+html > body { height: auto; }
 
 /* ── Fixed top wrapper (header + status bar) ── */
 .zeus-fixed-top {

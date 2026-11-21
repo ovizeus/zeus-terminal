@@ -203,7 +203,9 @@ export function PanelShell() {
 
     setDockActive(null)
     try { sessionStorage.removeItem('zeusDock') } catch {}
-    window.scrollTo(0, 0)
+    // [2026-11-21] Fara window.scrollTo(0, 0): pana azi <body> derula pagina, deci apelul nu
+    // facea nimic si operatorul ramanea la dock dupa inchidere. Acum documentul deruleaza
+    // (app.css `html > body`), iar scroll-lock-ul pastreaza pozitia — ramai unde erai.
   }
 
   // [MultiExchange 2026-05-20] Allow external triggers (e.g. SettingsHubModal

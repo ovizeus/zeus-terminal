@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.390',
-    build: 416,
+    version: '1.7.391',
+    build: 417,
     date: '2026-11-21',
     changelog: [
+        'b417 v1.7.391 - negru jos dupa click-uri: pagina derula IN <body> (cadru inalt cat ecranul, din main.css), nu documentul; acum deruleaza documentul, inchiderea unui panou te lasa unde erai, 2026-11-21 (client).',
         'b416 v1.7.390 - MARKET NEWS: calendar de earnings (Nasdaq), anunturi Binance de listare/delistare (delistarile = alerta), +6 surse (21 de publicatii), 13 monede noi etichetate, filtru pe moneda din grafic, „N new since you looked", 2026-11-21 (server + client).',
         'b415 v1.7.389 - ™ de langa ZEU\'S dublu (1.1em), de proba, 2026-11-21 (client).',
         'b414 v1.7.388 - ™ de langa ZEU\'S putin mai mare (0.55em), 2026-11-21 (client).',
