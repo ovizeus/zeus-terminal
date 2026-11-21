@@ -43,13 +43,23 @@ const CSS = `
   .zb7{max-width:760px;padding:16px 14px 20px}
   .zb7-allm .in,.zb7-det .in{max-width:760px}
 }
+/* [2026-11-21] Ecran lat: fara benzile goale stanga-dreapta (cerut de operator, poza de pe laptop) — radarul in
+   stanga (pana la 760 px, aceeasi marime), informatiile in dreapta pe tot restul latimii. Sub 1100 px: o coloana. */
+@media (min-width:1100px){
+  .zb7{max-width:1680px;display:grid;grid-template-columns:minmax(0,760px) minmax(360px,1fr);column-gap:28px;align-items:start;padding:18px 22px 22px}
+  .zb7-r{border-left:1px solid #142235;padding-left:18px;min-width:0}
+  .zb7-r [data-k="info"]{padding-top:0}
+}
 .zb7-ph{width:56px;height:56px;border-radius:8px;border:1px solid #1d2c40;display:flex;align-items:center;justify-content:center;text-align:center;font-size:8px;line-height:1.2;color:#56657a;padding:3px;box-sizing:border-box;background:#060c16}
 `
 
 const HTML = `
+<div class="zb7-l">
 <canvas data-k="cv" style="width:100%;height:auto;display:block;cursor:pointer;" aria-label="Zeus brain radar"></canvas>
 <div style="display:flex;justify-content:space-between;padding:6px 6px 3px;font-size:11px;color:#7c8ea3;"><span>MOOD · LAST 3 MIN</span><span data-k="rbar" style="color:#fff;cursor:pointer;"></span></div>
 <canvas data-k="ms" style="width:100%;height:26px;display:block;cursor:pointer;" aria-label="Mood strip"></canvas>
+</div>
+<div class="zb7-r">
 <div data-k="info" style="min-height:36px;font-size:12px;color:#d8e4f0;padding:8px 8px 4px;line-height:1.45;"></div>
 <div data-k="mood" style="text-align:center;font-size:18px;letter-spacing:4px;color:#7fb8d6;padding:2px 0 6px;cursor:pointer;">CALM</div>
 <div class="row"><span data-k="mode" style="color:#39ff6a;">—</span><span data-k="conf" style="color:#9fb3c8;">CONF —</span></div>
@@ -70,6 +80,7 @@ const HTML = `
 <div data-k="share" style="padding:0 8px;"></div>
 <div data-k="prh" class="sec" style="cursor:pointer;">PSYCH REPORT</div>
 <div data-k="pr" style="padding:0 10px;font-size:12px;color:#7c8ea3;"></div>
+</div>
 `
 
 const MODAL = `<div class="in">

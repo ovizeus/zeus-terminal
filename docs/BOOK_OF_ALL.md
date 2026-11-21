@@ -15062,6 +15062,9 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### 🖥️ b411 v1.7.385 (2026-11-21) — PC: creierul pe toata latimea (client, fara reload)
+Cerut de operator (poze de pe laptop): „sa se inscrie pe toata pagina ca latime … raman 2 bare negre stanga dreapta". Cauza: b398 a centrat blocul creierului la 760 px. Acum `brainUI.ts` imparte marcajul in `.zb7-l` (radar + banda de stare) si `.zb7-r` (restul); de la **1100 px**: grila `minmax(0,760px) | minmax(360px,1fr)`, radarul ramane la aceeasi marime, informatiile umplu restul latimii (max 1680 px). Sub 1100 px: o coloana, ca inainte; telefonul neschimbat. Verificat randat cu blocul REAL (startBrain) si CSS-ul aplicatiei la 1600 / 900 / 390 px.
+
 ### 📰 b410 v1.7.384 (2026-11-21) — MARKET NEWS: stiri + reactia MASURATA + calendar economic + rezumat AI + alerte (server + client, reload)
 **Cerut de operator:** „sub markets … o casuta cu news … stirile principale care influenteaza piata, bursa, crypto … sa faca corelatie … surse gratuite … calendar economic … sa fim blindati … omega daca nu limiteaza bagal, daca limiteaza coming soon".
 
