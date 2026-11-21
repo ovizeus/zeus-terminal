@@ -233,6 +233,24 @@ export function _syncQmVars(): void {
       for (const t of th) if (!t.checked && nowMs - t.time >= 30000 && px > 0) { t.checked = true; t.hit = t.act === 'BUY' ? px > t.price : px < t.price }
       while (th.length > 50) th.shift()
     }
+    // SESSION P&L „(auto-tracked from AI signals)": wins/losses/pnl nu le scria nimeni → 0 trades mereu,
+    // Kelly 0. Acum chiar urmareste pe hartie semnalele ACT: BUY/SELL deschide la pret, semnalul opus
+    // sau HOLD inchide. Procent, nu bani — NU sunt tranzactii reale (acelea sunt in AUTO-TRADE).
+    {
+      const ses: any = (QM as any).session
+      if (ses && px > 0) {
+        const open = ses._open as { side: string; entry: number; time: number } | null | undefined
+        if (open && S._qmAct !== open.side) {
+          const pnl = ((open.side === 'BUY' ? px - open.entry : open.entry - px) / open.entry) * 100
+          ses.entries.push({ side: open.side, entry: open.entry, exit: px, pnl, time: nowMs })
+          while (ses.entries.length > 50) ses.entries.shift()
+          ses.pnl += pnl; ses.totalTrades++; if (pnl > 0) ses.wins++; else ses.losses++
+          ses.peak = Math.max(ses.peak, ses.pnl); ses.drawdown = Math.min(ses.drawdown, ses.pnl - ses.peak)
+          ses._open = null
+        }
+        if (!ses._open && (S._qmAct === 'BUY' || S._qmAct === 'SELL')) ses._open = { side: S._qmAct, entry: px, time: nowMs }
+      }
+    }
     // Trap rate (ARIA): din capcanele MMTRAP reale (flow.ts) — cate s-au CONFIRMAT, adica pretul a
     // continuat in sensul intoarcerii dupa 30 s. Fara capcane verificate: „─", nu 0%.
     {

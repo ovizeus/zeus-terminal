@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.377',
-    build: 403,
+    version: '1.7.378',
+    build: 404,
     date: '2026-11-21',
     changelog: [
+        'b404 v1.7.378 - Quant Monitor: Fear & Greed era blocat pe 50 (NaN), balenele aveau prag in unitati de moneda, portofelul BTC se evalua cu pretul din chart, SESSION P&L nu urmarea nimic, BTC.D devenise ETH.D; garda: niciun camp NaN dupa un ciclu, 2026-11-21 (client).',
         'b403 v1.7.377 - share in aplicatia instalata + bara de sus, 2026-11-21 (client). Cardul din jurnalul creierului foloseste in APK pluginul nativ ZeusShare (Save in galerie, More = foaia de share Android) si deschide WhatsApp/Telegram/X/Facebook direct; sertarul din Admin nu mai intra sub bara de sus; test pentru toate ecranele pe tot ecranul.',
         'b402 v1.7.376 - ultimele randuri moarte din Quant Monitor, 2026-11-21 (client). SIGNAL ACCURACY LOG si Trap rate din semnale si capcane reale, verificate la 30 s; STOP arata de cand; ARIA spune cand lumanarea abia s-a deschis; regimurile si fazele reale colorate; bifa PF PHASE din verdictul real al filtrului; test pentru culorile celor 5 stari.',
         'b401 v1.7.375 - Quant Monitor fara date inventate, 2026-11-21 (server + client). SPEED aleator inlocuit cu intarzierea reala a fluxului; ARES tinte din volatilitatea reala; 24h LIQUIDATIONS masurate (era 0 mereu); TREND MATRIX, AI CONF, SIGNAL, SLOPE, regim, faza, magnet, pereti, OI 1h, funding, EMA cross legate de date reale; etichetele BTC scrise de mana inlocuite cu moneda din chart.',

@@ -1,6 +1,8 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest'
 import { _syncQmVars } from '../index'
 import { BM } from '../../core/config'
+import { QM } from '../state'
+import { detectWhales } from '../engines/intel'
 
 // [2026-11-21] Audit (R-C-15): campuri citite de monitor, fara scriitor, aratau implicite inventate:
 // AI CONF 50%, SIGNAL 0%, regim „RANGING", risc NORMAL, ×1.0, lichidari 24h $0.
@@ -98,5 +100,28 @@ describe('Quant Monitor — puntile din 21 nov', () => {
     w.S.symbol = 'NOHISTUSDT'
     _syncQmVars()
     expect(w.S._qmLiq24hTotal).toBeNull()
+  })
+
+  test('SESSION P&L urmareste pe hartie semnalele: BUY la 100, inchis la 102 = +2%, 1 castig', () => {
+    const ses: any = (QM as any).session
+    Object.assign(ses, { entries: [], pnl: 0, peak: 0, drawdown: 0, wins: 0, losses: 0, totalTrades: 0, _open: null })
+    ;(BM as any).confluenceScore = 90; (BM as any).confMin = 65
+    w.S.signalData = { bullCount: 4, bearCount: 1, signals: [] }; w.S.price = 100; w.S._qmPrice = 100
+    _syncQmVars()
+    expect(ses._open).toMatchObject({ side: 'BUY', entry: 100 })
+    ;(BM as any).confluenceScore = 30; w.S.price = 102; w.S._qmPrice = 102
+    _syncQmVars()
+    expect(ses.totalTrades).toBe(1)
+    expect(ses.wins).toBe(1)
+    expect(ses.pnl).toBeCloseTo(2, 6)
+    expect(ses.entries[0]).toMatchObject({ side: 'BUY', entry: 100, exit: 102 })
+  })
+})
+
+describe('WHALE DETECTOR — prag in dolari pe orice moneda', () => {
+  test('3 SOL ($450) nu e balena; 2.000 SOL ($300K) e', () => {
+    w.S.bids = [{ p: 150, q: 3 }, { p: 149, q: 2000 }]; w.S.asks = [{ p: 151, q: 1 }]; w.S._qmWhales = []
+    detectWhales()
+    expect(w.S._qmWhales.map((x: any) => x.q)).toEqual([2000])
   })
 })

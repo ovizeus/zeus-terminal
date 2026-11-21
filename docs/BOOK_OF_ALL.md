@@ -15045,3 +15045,12 @@ Teste: client 2.300 verzi.
 - **De ce ar trebui sa mearga pe telefon:** antetul aplicatiei foloseste acelasi `env(safe-area-inset-top)` si la operator sta corect → WebView-ul lui raporteaza valoarea. APK: targetSdk 35 (Android 15, desenat obligatoriu sub bara).
 - **Culori pe radar, verificate RANDAT:** radarul desenat in Chrome fara ecran (harness esbuild cu `Derived` + `BrainRenderer` reale), pixelii luminati mediati: CALM (128,185,214), ALERT (227,244,111), HESITANT (253,180,76), NERVOUS (252,161,111), CONFUSED (191,142,253) — fiecare = culoarea starii lui.
 Teste: client 2.305 verzi.
+
+### 🧮 b404 v1.7.378 (2026-11-21) — inca 5 buguri de date in Quant Monitor (client, fara reload)
+- **FEAR & GREED blocat pe „50 NEUTRAL" mereu.** `calcFearGreed` scadea `S.ls` ca numar, dar e `{l, s}` → NaN → afisajul cadea pe `|| 50`. Acelasi bug fusese reparat candva in `liqMap.ts`, nu si aici. Plus `|| 50` facea si un 0 real (frica extrema) „50" → `??`.
+- **WHALE DETECTOR:** pragul era 3 UNITATI din moneda curenta (BTC ≈ $255K, ETH ≈ $5K, SOL ≈ $500 → pe altcoin aproape orice ordin era „balena"), iar deduplicarea cu „$1" le contopea la monedele ieftine. Acum $250K pe orice moneda, deduplicare relativa, randul arata si valoarea in dolari.
+- **WALLET SIZE TRACKER:** portofelul e in BTC, dar se evalua cu pretul monedei din chart (BTC × pret ETH). Acum pretul BTC (chart / `allPrices` / `wlPrices`); ATR$ doar pe chartul BTC. Si eticheta: inlocuirea mea in masa din b401 pusese aici moneda din chart — corectat la BTC; la fel **BTC.D** (dominanta) devenise „ETH.D".
+- **SESSION P&L („auto-tracked from AI signals")** n-avea scriitor → 0 tranzactii, Kelly 0. Acum urmareste pe hartie semnalele ACT (procent, nu bani; tranzactiile reale raman in AUTO-TRADE).
+- **Garda noua `noNaN`:** un ciclu complet al motoarelor pe o stare cu FORMELE reale (ls obiect, carte {p,q}, lumanari Zeus) → niciun camp `_qm*` NaN. Ar fi prins bug-ul Fear & Greed.
+- Verificat consecvent intre panouri: funding (aceeasi sursa `S.fr`, ×100 peste tot), raport long/short, win rate AUTO-TRADE (statisticile serverului pe mod).
+Teste: client 2.311 verzi.

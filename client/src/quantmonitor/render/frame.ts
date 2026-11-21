@@ -221,7 +221,7 @@ export function renderFrame(): string {
   const cascadeZone: string = S._qmCascadeZone || ''
   const orderFlowDelta: number = S._qmOrderFlowDelta || 0
   const ofdHist: number[] = S._qmOfdHist || []
-  const fearGreed: number = S._qmFearGreed || 50
+  const fearGreed: number = S._qmFearGreed ?? 50   // [2026-11-21] ?? nu ||: 0 = frica extrema, nu „50"
   const ticksPerSec: number = S._qmTicksPerSec || 0
   const bbUpper: number = S._qmBbUpper || 0
   const bbLower: number = S._qmBbLower || 0
@@ -421,12 +421,12 @@ export function renderFrame(): string {
 
   // 1. WHALE ALERT
   const bWhales = whales.filter((wh: any) => Date.now() - wh.time < 120000)
-  L(`  <span class="c">WHALE DETECTOR</span> <span class="dg">(orders >3BTC)</span>`)
+  L(`  <span class="c">WHALE DETECTOR</span> <span class="dg">(orders &gt;$250K)</span>`)
   {
     const wSlice = bWhales.slice(-4).sort((a: any, bw: any) => bw.time - a.time)
     for (let i = 0; i < 4; i++) {
       const wh = wSlice[i]
-      if (wh) { const cls = wh.side === 'BID' ? 'g' : 'r'; L(`  <span class="${cls}"> ${wh.side}</span> BTC <span class="w">${wh.q.toFixed(3)}</span> <span class="dg">@ $${wh.p.toFixed(2)}</span>`) }
+      if (wh) { const cls = wh.side === 'BID' ? 'g' : 'r'; L(`  <span class="${cls}"> ${wh.side}</span> ${_qmBase} <span class="w">${wh.q.toFixed(3)}</span> <span class="dg">@ $${wh.p.toFixed(2)} · $${fmtUSD(wh.q * wh.p)}</span>`) }
       else L(`  <span class="d">\u00B7</span>`)
     }
   }
@@ -969,19 +969,24 @@ export function renderFrame(): string {
   L(`  <span class="w">WALLET SIZE TRACKER</span> <span class="dg">(click to edit)</span>`)
   L(`  <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>`)
   const wAddr = WALLET.address || '<not set>'
+  // [2026-11-21] Portofelul e in BTC, dar se evalua cu pretul monedei din CHART (pe ETH: BTC × pret ETH).
+  // Acum pretul BTC (chart daca e BTC, altfel allPrices / wlPrices, ca restul aplicatiei).
+  const _w = window as any
+  const btcPx: number = _qmSym === 'BTCUSDT' ? price : (Number(_w.allPrices?.BTCUSDT) || Number(_w.wlPrices?.BTCUSDT?.price) || 0)
+  const onBtc = _qmSym === 'BTCUSDT'
   const wBtc = WALLET.btcSize || 0
-  const wUsd = WALLET.usdValue > 0 ? WALLET.usdValue : wBtc * price
+  const wUsd = WALLET.usdValue > 0 ? WALLET.usdValue : wBtc * btcPx
   const wNote = WALLET.note || '\u2500'
   L(`  <span class="dg">ADDR :</span> <span class="edit-field" data-edit="address">${wAddr.length > 30 ? wAddr.slice(0, 14) + '...' + wAddr.slice(-10) : wAddr}</span>`)
-  L(`  <span class="dg">${_qmBase}  :</span> <span class="edit-field g" data-edit="btcSize">${wBtc.toFixed(4)} BTC</span>`)
+  L(`  <span class="dg">BTC  :</span> <span class="edit-field g" data-edit="btcSize">${wBtc.toFixed(4)} BTC</span>`)
   L(`  <span class="dg">USD  :</span> <span class="edit-field y" data-edit="usdValue">$${fmtUSD(wUsd)}</span>`)
   L(`  <span class="dg">NOTE :</span> <span class="edit-field dg" data-edit="note">${wNote}</span>`)
   {
-    const move1 = wBtc > 0 && price > 0 ? wBtc * price * 0.01 : 0
-    const move5 = wBtc > 0 && price > 0 ? wBtc * price * 0.05 : 0
-    const atrRisk = wBtc > 0 && atr > 0 ? wBtc * atr : 0
-    L(wBtc > 0 && price > 0 ? `  <span class="dg">1%\u0394  :</span> <span class="g">$${fmtUSD(move1)}</span>  <span class="dg">5%\u0394:</span> <span class="g">$${fmtUSD(move5)}</span>` : `  <span class="dg">1%\u0394  : \u2500  5%\u0394: \u2500</span>`)
-    L(wBtc > 0 && atr > 0 ? `  <span class="dg">ATR$ :</span> <span class="y">$${fmtUSD(atrRisk)}</span> <span class="dg">risk/candle</span>` : `  <span class="dg">ATR$ : \u2500  set BTC size to activate</span>`)
+    const move1 = wBtc > 0 && btcPx > 0 ? wBtc * btcPx * 0.01 : 0
+    const move5 = wBtc > 0 && btcPx > 0 ? wBtc * btcPx * 0.05 : 0
+    const atrRisk = onBtc && wBtc > 0 && atr > 0 ? wBtc * atr : 0   // ATR-ul e al monedei din chart
+    L(wBtc > 0 && btcPx > 0 ? `  <span class="dg">1%\u0394  :</span> <span class="g">$${fmtUSD(move1)}</span>  <span class="dg">5%\u0394:</span> <span class="g">$${fmtUSD(move5)}</span>` : `  <span class="dg">1%\u0394  : \u2500  5%\u0394: \u2500</span>`)
+    L(onBtc && wBtc > 0 && atr > 0 ? `  <span class="dg">ATR$ :</span> <span class="y">$${fmtUSD(atrRisk)}</span> <span class="dg">risk/candle</span>` : `  <span class="dg">ATR$ : \u2500  ${wBtc > 0 && !onBtc ? 'open the BTC chart (ATR is per chart coin)' : 'set BTC size to activate'}</span>`)
   }
   L(``)
 
@@ -1238,7 +1243,7 @@ export function renderFrame(): string {
   const domFill = Math.round(Math.min(40, Math.max(0, btcDominance / 100 * 40)))
   let domBar = ''; for (let i = 0; i < 40; i++) domBar += `<span class="${i < domFill ? domClr : 'd'}">${i < domFill ? '\u2588' : '\u2591'}</span>`
   L(`  [${domBar}]`)
-  L(`  <span class="dg">${_qmBase}.D :</span> <span class="${domClr}">${btcDominance.toFixed(2)}%</span>  <span class="dg">\u0394:</span> <span class="${domDelta > 0 ? 'g' : 'r'}">${domDelta >= 0 ? '+' : ''}${domDelta.toFixed(2)}%</span>`)
+  L(`  <span class="dg">BTC.D :</span> <span class="${domClr}">${btcDominance.toFixed(2)}%</span>  <span class="dg">\u0394:</span> <span class="${domDelta > 0 ? 'g' : 'r'}">${domDelta >= 0 ? '+' : ''}${domDelta.toFixed(2)}%</span>`)
   L(`  <span class="dg">SIGNAL:</span> <span class="${domClr}">${domTag}</span>`)
   L(``)
 
@@ -1297,7 +1302,7 @@ export function renderFrame(): string {
   L(`  <span class="w">POSITION SIZING CALCULATOR</span>`)
   L(`  <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>`)
   const wRisk = WALLET.riskPct || 1
-  const wAcct = WALLET.usdValue > 0 ? WALLET.usdValue : (WALLET.btcSize || 0) * price
+  const wAcct = WALLET.usdValue > 0 ? WALLET.usdValue : (WALLET.btcSize || 0) * btcPx
   if (wAcct > 0 && price > 0 && atr > 0) {
     const riskUSD = wAcct * wRisk / 100
     const stopDist = atr * 1.5 // 1.5x ATR stop
@@ -1310,7 +1315,7 @@ export function renderFrame(): string {
     const kellyPct = winRate > 0 ? Math.max(0, Math.min(25, (winRate - 0.5) * 200)) : 0
     L(`  <span class="dg">ACCT  :</span> <span class="w">$${fmtUSD(wAcct)}</span>  <span class="dg">RISK:</span> <span class="edit-field y" data-edit="riskPct">${wRisk}%</span>`)
     L(`  <span class="dg">STOP  :</span> <span class="r">$${stopDist.toFixed(0)}</span> <span class="dg">(1.5\u00D7ATR = ${stopPct.toFixed(2)}%)</span>`)
-    L(`  <span class="dg">SIZE  :</span> <span class="g">${sizeBTC.toFixed(4)} BTC</span>  <span class="dg">($${fmtUSD(sizeUSD)})</span>`)
+    L(`  <span class="dg">SIZE  :</span> <span class="g">${sizeBTC.toFixed(4)} ${_qmBase}</span>  <span class="dg">($${fmtUSD(sizeUSD)})</span>`)
     L(`  <span class="dg">LEV   :</span> <span class="${leverage > 10 ? 'rb' : leverage > 5 ? 'y' : 'g'}">${leverage.toFixed(1)}\u00D7</span>`)
     L(`  <span class="dg">KELLY :</span> <span class="${kellyPct > 15 ? 'gb' : kellyPct > 5 ? 'y' : 'dg'}">${kellyPct.toFixed(1)}%</span> <span class="dg">(${SESSION.totalTrades} trades, ${(winRate * 100).toFixed(0)}% win)</span>`)
   } else {

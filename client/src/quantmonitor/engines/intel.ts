@@ -3,12 +3,15 @@ const w = window as any
 
 export function detectWhales(): void {
   const c = w.S; if (!c || !c.bids || !c.asks) return
-  const threshold = 3 // 3 BTC
+  // [2026-11-21] Pragul era „3" UNITATI din moneda curenta: pe BTC ≈ $255K, pe ETH ≈ $5K, pe SOL ≈ $500
+  // → pe altcoin aproape orice ordin era „balena". Acum in dolari (echivalentul celor 3 BTC), iar
+  // deduplicarea e relativa (un prag de $1 la pret le contopea pe toate la monedele ieftine).
+  const WHALE_USD = 250_000
   const now = Date.now()
   c._qmWhales = (c._qmWhales || []).filter((ww: any) => now - ww.time < 300000)
   ;[...c.bids, ...c.asks].forEach((o: any) => {
-    if (o.q >= threshold) {
-      const exists = c._qmWhales.some((ww: any) => Math.abs(ww.p - o.p) < 1 && Math.abs(ww.q - o.q) < 0.1)
+    if (o.p > 0 && o.q * o.p >= WHALE_USD) {
+      const exists = c._qmWhales.some((ww: any) => Math.abs(ww.p - o.p) <= o.p * 1e-4 && Math.abs(ww.q - o.q) <= o.q * 0.03)
       if (!exists) {
         const side = c.bids.includes(o) ? 'BID' : 'ASK'
         c._qmWhales.push({ p: o.p, q: o.q, side, time: now })
@@ -194,13 +197,16 @@ export function calcFearGreed(): void {
   score += ((c.rsi || 50) - 50) / 2
   score += ((c._qmMfi || 50) - 50) / 4
   score += Math.max(-15, Math.min(15, (c.fr || 0) * 10000))
-  score += ((c.ls || 0.5) - 0.5) * 20
+  // [2026-11-21] S.ls e {l, s} in procente (fetchLS), nu un numar: „obiect − 0,5" = NaN → tot scorul NaN →
+  // afisajul cadea pe implicitul 50 → „NEUTRAL" MEREU. Acum fractia de long reala.
+  const lsFrac = c.ls && typeof c.ls === 'object' ? (Number(c.ls.l) > 0 ? Number(c.ls.l) / 100 : 0.5) : (Number(c.ls) > 0 ? Number(c.ls) : 0.5)
+  score += (lsFrac - 0.5) * 20
   const tot = (c.obBV || 0) + (c.obAV || 0)
   if (tot > 0) score += ((c.obBV - c.obAV) / tot) * 15
   const atrPct = c.price > 0 ? ((c.atr || 0) / c.price * 100) : 0
   if (atrPct > 0.15) score -= 10
   score += (c._qmOrderFlowDelta || 0) / 10
-  c._qmFearGreed = Math.max(0, Math.min(100, score))
+  c._qmFearGreed = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : null
 }
 
 export function detectDivergence(): void {
