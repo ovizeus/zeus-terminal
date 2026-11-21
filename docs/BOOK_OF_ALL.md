@@ -15062,6 +15062,15 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### 📌 DE FACUT (NU ACUM) — pagina web publica sa arate ce e nou (notat 2026-11-21, la cererea operatorului)
+Operatorul: „sa facem sa nu uitam pagina web sa o actualizam cu ce avem nou … dar asta nu acum, doar trece sa stim".
+De adaugat pe pagina de prezentare (landing) cand se decide:
+- **Radarul creierului pe server** (b391–b400): starile CALM / ALERT / HESITANT / NERVOUS / CONFUSED, fiecare cu culoarea ei; replay de max 30 s; deja vu, sablon, poze si share (WhatsApp, Telegram, Facebook, X, Discord) — merg si cu telefonul inchis.
+- **GLOBAL MARKETS** (b407–b408): 105 active traditionale live (aur, petrol, indici, actiuni, valute), corelatia cu BTC pe 30 de zile, risk-on / risk-off, bursa deschisa / inchisa.
+- **MARKET NEWS** (b410): 18 surse gratuite, aceeasi stire grupata, reactia MASURATA a pietei dupa fiecare stire, calendar economic, rezumat AI (OMEGA), alerte in aplicatie + Telegram.
+- **ICHNOS** (footprint) activ implicit, cu setari complete; vederea pe toata latimea pe PC (b411).
+Atentie la formulare: „information only", „moved after" (nu „because"), fara promisiuni de profit.
+
 ### 🖥️ b411 v1.7.385 (2026-11-21) — PC: creierul pe toata latimea (client, fara reload)
 Cerut de operator (poze de pe laptop): „sa se inscrie pe toata pagina ca latime … raman 2 bare negre stanga dreapta". Cauza: b398 a centrat blocul creierului la 760 px. Acum `brainUI.ts` imparte marcajul in `.zb7-l` (radar + banda de stare) si `.zb7-r` (restul); de la **1100 px**: grila `minmax(0,760px) | minmax(360px,1fr)`, radarul ramane la aceeasi marime, informatiile umplu restul latimii (max 1680 px). Sub 1100 px: o coloana, ca inainte; telefonul neschimbat. Verificat randat cu blocul REAL (startBrain) si CSS-ul aplicatiei la 1600 / 900 / 390 px.
 
