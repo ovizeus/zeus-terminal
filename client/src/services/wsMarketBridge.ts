@@ -56,6 +56,29 @@ export function unsubscribeSymbol(symbol: string) {
   wsSend({ type: 'market.unsubscribe', symbol: symbol.toUpperCase() })
 }
 
-export function subscribeWatchlist(symbols: string[]) {
-  wsSend({ type: 'market.subscribe.wl', symbols: symbols.map(s => s.toUpperCase()) })
+// [2026-11-21] Abonarea la lista de sus (ETH, SOL, BNB, XRP) se PIERDEA: `send()` arunca mesajul daca soclul
+// nu e inca deschis (caseta se monteaza inainte), iar la reconectare (revenire din fundal) nu se retrimitea.
+// Jurnalul serverului: „wss clients: 2, subs: 0". Casetele aratau „—" pana la urmatoarea difuzare (≤10 s).
+// Acum: reincercam pana trece, si retrimitem la fiecare reconectare — serverul raspunde imediat cu
+// ultimele preturi (subscribe → _sendCachedValues).
+let _wlSyms: string[] = []
+let _wlRetry: ReturnType<typeof setInterval> | null = null
+let _wlReconnectHooked = false
+function _sendWl(): boolean {
+  return _wlSyms.length > 0 && wsSend({ type: 'market.subscribe.wl', symbols: _wlSyms }) === true
 }
+export function subscribeWatchlist(symbols: string[]) {
+  _wlSyms = symbols.map(s => s.toUpperCase())
+  if (!_wlReconnectHooked) {
+    _wlReconnectHooked = true
+    wsSubscribe((msg: any) => { if (msg && msg.type === 'reconnect') _sendWl() })
+  }
+  if (_sendWl()) return
+  if (_wlRetry) clearInterval(_wlRetry)
+  let tries = 0
+  _wlRetry = setInterval(() => {
+    tries++
+    if (_sendWl() || tries >= 60) { if (_wlRetry) clearInterval(_wlRetry); _wlRetry = null }
+  }, 1000)
+}
+export function _resetWlForTest() { _wlSyms = []; if (_wlRetry) clearInterval(_wlRetry); _wlRetry = null; _wlReconnectHooked = false }
