@@ -2,7 +2,7 @@
 // grupe, cautare, sortare, grafic 7 zile, corelatia cu BTC pe 30 de zile. Doar informare.
 import { useEffect, useMemo, useState } from 'react'
 import { useTradfi } from './useTradfi'
-import { GROUPS, selectItems, fmtPrice, fmtPct, fmtCompact, corrInfo, type SortKey, type TradfiGroup, type TradfiItem } from '../../markets/tradfi'
+import { GROUPS, selectItems, marketPulse, fmtPrice, fmtPct, fmtCompact, corrInfo, type SortKey, type TradfiGroup, type TradfiItem } from '../../markets/tradfi'
 import './markets.css'
 
 const GROUP_LABEL: Record<TradfiGroup, string> = {
@@ -91,12 +91,17 @@ export function MarketsPanel({ onClose }: { onClose: () => void }) {
     return c
   }, [items])
   const s = snap?.sessions || {}
+  const pulse = useMemo(() => marketPulse(items), [items])
+  const tot = pulse.up + pulse.down
 
   return (
     <div className="zmkp z-modal--open" role="dialog" aria-modal="true" aria-label="Markets">
       <div className="zmkp-head">
         <div className="zmkp-row1">
-          <div className="zmkp-title">MARKETS</div>
+          <div>
+            <span className="zmkp-kicker">Cross-asset monitor · {items.length || 105} instruments</span>
+            <div className="zmkp-title">GLOBAL MARKETS</div>
+          </div>
           <button className="zmkp-close" onClick={onClose} aria-label="Close markets">×</button>
         </div>
         <div className="zmkp-sub">
@@ -112,6 +117,22 @@ export function MarketsPanel({ onClose }: { onClose: () => void }) {
           <span className={'zmkp-pill' + (s.de ? ' open' : '')}>Europe {s.de ? 'open' : 'closed'}</span>
           <span className={'zmkp-pill' + (s.jp ? ' open' : '')}>Asia {s.jp ? 'open' : 'closed'}</span>
         </div>
+        {items.length > 0 && (
+          <div className="zmkp-pulse" aria-label="Market state">
+            <div className="zmkp-pulse-top">
+              <span className={'zmkp-regime ' + (pulse.regime === 'RISK-ON' ? 'on' : pulse.regime === 'RISK-OFF' ? 'off' : 'mixed')}>{pulse.regime || '—'}</span>
+              <div className="zmkp-breadth" aria-label={`${pulse.up} rising, ${pulse.down} falling`}>
+                <div className="zmkp-breadth-bar">
+                  <i className="u" style={{ width: tot ? (pulse.up / tot) * 100 + '%' : '0%' }} />
+                  <i className="d" style={{ width: tot ? (pulse.down / tot) * 100 + '%' : '0%' }} />
+                </div>
+                <div className="zmkp-breadth-l"><span className="up">{pulse.up} up</span><span className="dn">{pulse.down} down</span></div>
+              </div>
+            </div>
+            <p>{pulse.regimeText}</p>
+            {pulse.btcText && <p><b>₿</b> {pulse.btcText}</p>}
+          </div>
+        )}
       </div>
 
       <div className="zmkp-tools">

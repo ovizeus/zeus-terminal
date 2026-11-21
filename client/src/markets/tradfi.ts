@@ -48,6 +48,66 @@ export function corrInfo(r: number | null): { label: string; tone: 'strong' | 'm
   if (r <= -0.3) return { label: v, tone: 'inverse', text: 'Tends to move AGAINST Bitcoin over the last 30 days.' }
   return { label: v, tone: 'none', text: 'Little relation to Bitcoin over the last 30 days.' }
 }
+/**
+ * [2026-11-21] Rezumatul „de stare" din capul panoului (cerut: „ceva mai psihologic, mai pro institutional").
+ * PURA, doar din cifrele din lista — nimic inventat:
+ *  - regimul: actiunile (S&P 500 + Nasdaq 100) fata de refugii (aur + obligatiuni TLT), pe 24h;
+ *  - latimea pietei: cate cresc / cate scad;
+ *  - pe ce merge BTC: cea mai mare corelatie dintre reperele macro (fara actiunile „crypto-linked", evidente).
+ */
+export interface MarketPulse {
+  regime: 'RISK-ON' | 'RISK-OFF' | 'MIXED' | null
+  regimeText: string
+  up: number; down: number
+  btcText: string | null
+}
+const MACRO_REFS: Array<[string, string]> = [
+  ['NAS100', 'Nasdaq 100'], ['SPX500', 'the S&P 500'], ['XAU', 'gold'], ['CL', 'oil'], ['TLT', 'US bonds'], ['EURUSD', 'EUR/USD'], ['US2000', 'small caps'],
+]
+export function marketPulse(items: TradfiItem[]): MarketPulse {
+  const m = new Map(items.map((i) => [i.sym, i]))
+  const avg = (syms: string[]) => {
+    const v = syms.map((s) => m.get(s)?.chg24).filter((x): x is number => x != null && Number.isFinite(x))
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
+  }
+  const eq = avg(['SPX500', 'NAS100']), haven = avg(['XAU', 'TLT'])
+  let regime: MarketPulse['regime'] = null, regimeText = 'Waiting for index data…'
+  const up = items.filter((i) => (i.chg24 ?? 0) > 0).length, down = items.filter((i) => (i.chg24 ?? 0) < 0).length
+  if (eq != null) {
+    const g = m.get('XAU')?.chg24, b = m.get('TLT')?.chg24
+    const parts = [`stocks ${fmtPct(eq)}`]
+    if (g != null) parts.push(`gold ${fmtPct(g)}`)
+    if (b != null) parts.push(`bonds ${fmtPct(b)}`)
+    if (eq <= -0.5 && (haven == null || haven > eq + 0.5)) {
+      regime = 'RISK-OFF'
+      // „si refugiile scad" DOAR daca fiecare refugiu cunoscut scade (nu media: aur −1% + obligatiuni +0,35% NU inseamna asta)
+      const havens = [g, b].filter((x): x is number => x != null && Number.isFinite(x))
+      const allHavensDown = havens.length > 0 && havens.every((x) => x < 0)
+      regimeText = (down > up * 2
+        ? (allHavensDown ? 'Broad selling — safe havens are down too: ' : `Broad selling (${down} of ${up + down} falling): `)
+        : 'Money is leaving risk: ') + parts.join(', ') + '.'
+    } else if (eq >= 0.5 && (haven == null || eq > haven)) {
+      regime = 'RISK-ON'; regimeText = 'Appetite for risk: ' + parts.join(', ') + '.'
+    } else {
+      regime = 'MIXED'; regimeText = 'No clear direction: ' + parts.join(', ') + '.'
+    }
+  }
+  let best: { name: string; r: number } | null = null
+  for (const [sym, name] of MACRO_REFS) {
+    const r = m.get(sym)?.corrBtc
+    if (r != null && Number.isFinite(r) && (!best || Math.abs(r) > Math.abs(best.r))) best = { name, r }
+  }
+  let btcText: string | null = null
+  if (best) {
+    btcText = Math.abs(best.r) < 0.3
+      ? `Bitcoin is moving on its own — no macro reference above 0.30 over 30 days (closest: ${best.name}, ${best.r.toFixed(2)}).`
+      : best.r > 0
+        ? `Bitcoin is moving most with ${best.name} (${best.r.toFixed(2)} over 30 days).`
+        : `Bitcoin is moving most against ${best.name} (${best.r.toFixed(2)} over 30 days).`
+  }
+  return { regime, regimeText, up, down, btcText }
+}
+
 export type SortKey = 'default' | 'gainers' | 'losers' | 'corr' | 'volume'
 /** Filtru + cautare + sortare (PURA). */
 export function selectItems(items: TradfiItem[], group: 'all' | TradfiGroup, q: string, sort: SortKey): TradfiItem[] {

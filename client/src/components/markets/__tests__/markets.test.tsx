@@ -6,7 +6,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MarketsBar } from '../MarketsBar'
 import { MarketsPanel } from '../MarketsPanel'
 import { useUiStore } from '../../../stores'
-import { selectItems, fmtPrice, fmtPct, corrInfo, subscribeTradfi, _resetTradfiForTest, type TradfiItem } from '../../../markets/tradfi'
+import { selectItems, marketPulse, fmtPrice, fmtPct, corrInfo, subscribeTradfi, _resetTradfiForTest, type TradfiItem } from '../../../markets/tradfi'
 
 const it0 = (o: Partial<TradfiItem>): TradfiItem => ({
   sym: 'X', name: 'X', group: 'stocks', market: 'us', price: 100, chg24: 0, high24: 110, low24: 90, vol24: 1e6,
@@ -47,6 +47,40 @@ describe('formatare si filtre (pure)', () => {
   })
 })
 
+describe('rezumatul de stare a pietei (marketPulse)', () => {
+  const mk = (sym: string, chg24: number, corrBtc: number | null = null) => it0({ sym, name: sym, chg24, corrBtc })
+  it('actiunile scad, aurul creste → RISK-OFF; cifrele vin din lista', () => {
+    const p = marketPulse([mk('SPX500', -2.6), mk('NAS100', -4.0), mk('XAU', 0.8), mk('TLT', 0.4)])
+    expect(p.regime).toBe('RISK-OFF')
+    expect(p.regimeText).toMatch(/stocks -3\.30%/)
+    expect(p.regimeText).toMatch(/gold \+0\.80%/)
+  })
+  it('scade tot, si refugiile → „broad selling"', () => {
+    const p = marketPulse([mk('SPX500', -2.6), mk('NAS100', -4.0), mk('XAU', -1.3), mk('TLT', -0.9), mk('A', -1), mk('B', -2), mk('C', 0.5)])
+    expect(p.regime).toBe('RISK-OFF')
+    expect(p.regimeText).toMatch(/Broad selling/)
+    expect(p.down).toBe(6); expect(p.up).toBe(1)
+  })
+  it('„si refugiile scad" doar cand FIECARE scade (aur jos, obligatiuni sus = nu)', () => {
+    const base = [mk('SPX500', -2.6), mk('NAS100', -4.0), mk('A', -1), mk('B', -2), mk('C', -1), mk('D', 0.5)]
+    expect(marketPulse([...base, mk('XAU', -1.04), mk('TLT', 0.35)]).regimeText).not.toMatch(/safe havens are down/)
+    expect(marketPulse([...base, mk('XAU', -1.04), mk('TLT', 0.35)]).regimeText).toMatch(/Broad selling \(\d+ of \d+ falling\)/)
+    expect(marketPulse([...base, mk('XAU', -1.04), mk('TLT', -0.2)]).regimeText).toMatch(/safe havens are down too/)
+  })
+  it('actiunile cresc peste refugii → RISK-ON; in rest MIXED', () => {
+    expect(marketPulse([mk('SPX500', 1.2), mk('NAS100', 1.6), mk('XAU', -0.2)]).regime).toBe('RISK-ON')
+    expect(marketPulse([mk('SPX500', 0.1), mk('NAS100', -0.2), mk('XAU', 0.1)]).regime).toBe('MIXED')
+  })
+  it('pe ce merge BTC: cea mai mare corelatie macro, fara actiunile crypto', () => {
+    const p = marketPulse([mk('NAS100', -1, 0.64), mk('XAU', 0, 0.53), mk('CL', 0, -0.4), it0({ sym: 'IBIT', group: 'crypto', corrBtc: 0.97 })])
+    expect(p.btcText).toMatch(/with Nasdaq 100 \(0\.64/)
+    expect(marketPulse([mk('NAS100', 0, 0.1), mk('XAU', 0, -0.05)]).btcText).toMatch(/on its own/)
+  })
+  it('fara indici: fara regim inventat', () => {
+    expect(marketPulse([mk('NVDA', -10)]).regime).toBeNull()
+  })
+})
+
 describe('un singur sondaj pentru toata aplicatia', () => {
   let calls = 0
   beforeEach(() => {
@@ -76,9 +110,9 @@ describe('caseta si panoul', () => {
   it('caseta arata aurul si deschide panoul la atingere', async () => {
     render(<MarketsBar />)
     await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
-    expect(screen.getByText('MARKETS')).toBeTruthy()
+    expect(screen.getByText('GLOBAL MARKETS')).toBeTruthy()
     expect(screen.getAllByText('Gold').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByRole('button', { name: /open traditional markets/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open global markets/i }))
     expect(useUiStore.getState().activeModal).toBe('markets')
   })
 

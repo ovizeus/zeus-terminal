@@ -15062,6 +15062,14 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### 🎨 b408 v1.7.382 (2026-11-21) — GLOBAL MARKETS: paleta institutionala + preturile defileaza pe telefon + rezumat de stare (client, fara reload)
+**Cerut de operator (cu poze):** „informatiile de langa open stau pe loc … nu vreau galben la open si markets … mai psihologic, mai pro institutional". Paleta ALEASA de el (din 3 variante): **platina + albastru-otel**.
+- **Preturile stateau pe loc pe telefon — cauza:** `app.css:5757` si `main.css:12340` au `@media (max-width: 768px) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important } }` („kill animations for performance"). Pe orice telefon, banda se oprea dupa 0,01 ms. In verificarea mea din b407 n-am incarcat CSS-ul aplicatiei → n-am vazut. Reparat cu o regula pe id (`#zeus-markets-bar .zmk-track … !important`) — id-ul bate `*`. **Dovedit cu CSS-ul REAL incarcat:** banda = `zmk-scroll 42s x infinite`, elementul de control (punctul) = `1e-05s x1` (oprit de regula globala, cum trebuie).
+- **Culori:** titlu platina `#d6dee8`, accent albastru-otel `#6f9bd1`, fundal bleumarin; fara neon. Verde/rosu DOAR pentru crestere/scadere. Pastilele BTC: puternic = otel plin, moderat = contur, invers = lila (nu rosu: nu e „rau").
+- **Titlu:** „GLOBAL MARKETS", eticheta „Cross-asset · live"; pe telefon OPEN devine „›" (loc pentru preturi), inaltimea casetei = cea a benzii DEMO (53 px).
+- **Rezumatul de stare** (sus in panou, `marketPulse`, PUR, doar din cifrele din lista): RISK-ON / RISK-OFF / MIXED (S&P + Nasdaq fata de aur + obligatiuni, 24h), bara cate cresc / cate scad, si „pe ce merge BTC" (cea mai mare corelatie dintre reperele macro, fara actiunile crypto). **Corectie gasita la randare:** textul spunea „even safe havens are down" cand obligatiunile CRESTEAU (conditia era pe medie) → acum doar cand FIECARE refugiu scade; altfel „Broad selling (86 of 105 falling)".
+Teste: client 2.326 verzi (+6 pentru rezumat).
+
 ### 🌍 b407 v1.7.381 (2026-11-21) — MARKETS: aur, petrol, indici, actiuni, LIVE (server + client, reload)
 **Cerut de operator:** „o rubrica gen stock … aur nvidia argint tesla petrol, top 100, de informare … sub caseta cu demo mode o caseta la fel de lata … corelarea cu btc … daca poti face in timp real tot fa".
 

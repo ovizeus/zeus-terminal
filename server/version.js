@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.381',
-    build: 407,
+    version: '1.7.382',
+    build: 408,
     date: '2026-11-21',
     changelog: [
+        'b408 v1.7.382 - GLOBAL MARKETS: platina + albastru-otel (fara galben), preturile defileaza si pe telefon (regula globala care oprea animatiile), rezumat de stare: risk-on/off, cate cresc/scad, pe ce merge BTC, 2026-11-21 (client).',
         'b407 v1.7.381 - MARKETS: caseta sub DEMO MODE + panou cu 105 active traditionale (aur, petrol, indici, actiuni) LIVE din Gate prin server, grafic 7 zile, corelatia cu BTC pe 30 de zile, bursa deschisa/inchisa, 2026-11-21 (server + client).',
         'b406 v1.7.380 - scos codul mort din clasificarea pozitiilor noi (citea AT._atActive, nescris nicaieri); comportament neschimbat: unknown pana confirma serverul, 2026-11-21 (client).',
         'b405 v1.7.379 - Market Radar primeste din nou lichidari (fluxul Binance e mort pe retea; acum din Bybit/OKX/Gate), win rate-ul din clasamentul Admin = aceeasi definitie ca AUTO-TRADE, RSI real in Fear & Greed din Quant Monitor, 2026-11-21 (server + client).',
