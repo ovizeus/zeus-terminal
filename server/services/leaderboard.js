@@ -91,6 +91,10 @@ function computeLeaderboard(closedRows, openPositions, balances, users, opts) {
     const grossProfit = pnls.filter(p => p > 0).reduce((s, p) => s + p, 0);
     const grossLoss = Math.abs(pnls.filter(p => p < 0).reduce((s, p) => s + p, 0));
     const wins = pnls.filter(p => p > 0).length;
+    // [2026-11-21] Aceeasi definitie ca AUTO-TRADE (serverAT: wins/(wins+losses), PnL 0 nu conteaza).
+    // Inainte: wins/toate → pe TESTNET 35,5% aici fata de 41,8% in AUTO-TRADE pentru ACELEASI tranzactii
+    // (46 de inchideri cu PnL 0, 21 dintre ele HIT_SL = PnL neinregistrat, numarate ca pierderi).
+    const decided = pnls.filter(p => p !== 0).length;
     const durations = trades.filter(t => t._openMs && t._closeMs).map(t => (t._closeMs - t._openMs) / 60000);
     const liquidations = trades.filter(t => /LIQUIDATED/i.test(t.closeReason || '')).length;
 
@@ -109,7 +113,7 @@ function computeLeaderboard(closedRows, openPositions, balances, users, opts) {
       userId: u.id, email: u.email, role: u.role,
       netPnl, grossProfit, grossLoss,
       profitFactor: grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : 0),
-      trades: trades.length, wins, winRate: trades.length ? wins / trades.length : 0,
+      trades: trades.length, wins, winRate: decided ? wins / decided : 0,
       bestTrade: pnls.length ? Math.max(...pnls) : 0,
       worstTrade: pnls.length ? Math.min(...pnls) : 0,
       avgTrade: trades.length ? netPnl / trades.length : 0,

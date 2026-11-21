@@ -194,7 +194,9 @@ export function calcSupportResistance(): void {
 export function calcFearGreed(): void {
   const c = w.S; if (!c) return
   let score = 50
-  score += ((c.rsi || 50) - 50) / 2
+  // [2026-11-21] S.rsi e {tf: valoare}, nu un numar → tot NaN. Puntea _qmRsi (din S.rsi['5m']) e citirea vie.
+  const rsiNow = Number.isFinite(c._qmRsi) ? c._qmRsi : (typeof c.rsi === 'number' ? c.rsi : Number(c.rsi?.['5m']))
+  score += ((Number.isFinite(rsiNow) ? rsiNow : 50) - 50) / 2
   score += ((c._qmMfi || 50) - 50) / 4
   score += Math.max(-15, Math.min(15, (c.fr || 0) * 10000))
   // [2026-11-21] S.ls e {l, s} in procente (fetchLS), nu un numar: „obiect − 0,5" = NaN → tot scorul NaN →

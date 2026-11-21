@@ -17,7 +17,7 @@ function realistic() {
   })
   const px = kl[kl.length - 1].close
   return {
-    symbol: 'BTCUSDT', price: px, _qmPrice: px, klines: kl, rsi: 58, fr: 0.0001, oi: 9.1e9, atr: 180,
+    symbol: 'BTCUSDT', price: px, _qmPrice: px, klines: kl, rsi: { '5m': 58, '1h': 55 }, fr: 0.0001, oi: 9.1e9, atr: 180,
     ls: { l: 62, s: 38 }, bnbOk: true,
     bids: Array.from({ length: 20 }, (_, i) => ({ p: px - 1 - i, q: 1 + (i % 5) })),
     asks: Array.from({ length: 20 }, (_, i) => ({ p: px + 1 + i, q: 1 + (i % 4) })),

@@ -98,6 +98,31 @@ function _handleForceOrder(msg) {
     _broadcast({ type: 'market.radar', data: event });
 }
 
+// [2026-11-21] Fluxul Binance futures (!forceOrder) NU livreaza nimic catre acest server (masurat:
+// conexiune deschisa, 0 cadre in 40 s; jurnalul LIQ-FEED o spune de luni) → Market Radar n-a mai aratat
+// NICIO lichidare, in timp ce LIQ / Quant Monitor aratau zeci de milioane din Bybit / OKX / Gate.
+// Acum agregatorul (care primeste de la ele) trimite si aici. Binance ramane pe calea lui (nu dublam).
+let _ingested = 0;
+function ingestAggregated(liq) {
+    if (!ENABLED || !liq || liq.exchange === 'binance' || liq.exchange === 'bnb') return false;
+    const symbol = typeof liq.symbol === 'string' ? liq.symbol.toUpperCase() : null;
+    const side = liq.side;
+    const price = Number(liq.p), qty = Number(liq.q);
+    const notional = Number(liq.vol) > 0 ? Number(liq.vol) : price * qty;
+    const ts = Number(liq.time) || Date.now();
+    if (!symbol || !symbol.endsWith('USDT') || (side !== 'BUY' && side !== 'SELL')) return false;
+    if (!(price > 0) || !(notional > 0) || notional < LIQ_NOTIONAL_MIN) return false;
+    if (!_canEmit(symbol, side, ts)) return false;
+    _ingested++; _eventsEmitted++;
+    const event = {
+        ts, symbol, category: side === 'SELL' ? 'liqLong' : 'liqShort', color: side === 'SELL' ? 'red' : 'green',
+        price, changePct: null, notional, rank: null, quoteVolume: null, source: String(liq.exchange || ''),
+    };
+    radarCache.push(event);
+    _broadcast({ type: 'market.radar', data: event });
+    return true;
+}
+
 function _onMessage(raw) {
     _framesReceived++;
     let parsed;
@@ -188,7 +213,8 @@ function getState() {
         eventsEmitted: _eventsEmitted,
         dedupeEntries: _dedupe.size,
         minNotionalUsd: LIQ_NOTIONAL_MIN,
+        ingestedFromAggregator: _ingested,
     };
 }
 
-module.exports = { start, stop, getState };
+module.exports = { start, stop, getState, ingestAggregated };

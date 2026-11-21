@@ -177,6 +177,8 @@ function _emitLiq(liq) {
     // Istoricul e TELEMETRIE: nu are voie sa darame fluxul daca baza are o
     // toana. liqStore.record nu arunca niciodata, dar garda sta aici oricum.
     try { liqStore.record(liq); } catch (_) { /* niciodata fatal */ }
+    // [2026-11-21] si in Market Radar (fluxul Binance de lichidari e mort pe aceasta retea) — vezi liquidationFeed.ingestAggregated
+    try { require('./liquidationFeed').ingestAggregated(liq); } catch (_) { /* niciodata fatal */ }
     const s = _state[liq.exchange === 'bybit' ? 'byb' : liq.exchange === 'okx' ? 'okx' : liq.exchange === 'gate' ? 'gate' : 'bnb'];
     s.eventsEmitted++;
     s.lastEventTs = liq.time;

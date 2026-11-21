@@ -161,3 +161,15 @@ describe('computeLeaderboard — active traders ranked first', () => {
     expect(r.users.map(u => u.userId)).toEqual([2, 1]); // both active → net desc
   });
 });
+
+describe('[2026-11-21] win rate = aceeasi definitie ca AUTO-TRADE', () => {
+  const { computeLeaderboard } = require('../../server/services/leaderboard');
+  test('o inchidere cu PnL 0 (neinregistrat) nu trage win rate-ul in jos', () => {
+    const now = Date.now();
+    const row = (pnl, i) => ({ userId: 9, env: 'TESTNET', closePnl: pnl, qty: 1, closeReason: 'HIT_TP', closeTs: now - i * 1000, openTs: now - i * 1000 - 60000 });
+    const out = computeLeaderboard([row(10, 1), row(-5, 2), row(0, 3)], [], [], [{ id: 9, email: 'x@y.z' }], { env: 'TESTNET', window: 'all', now });
+    const u = (Array.isArray(out) ? out : out.users || out.rows || []).find((x) => x.userId === 9 || x.id === 9);
+    expect(u.trades).toBe(3);
+    expect(u.winRate).toBeCloseTo(0.5, 6);   // 1 castig / (1 castig + 1 pierdere), ca serverAT
+  });
+});
