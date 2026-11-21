@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.376',
-    build: 402,
+    version: '1.7.377',
+    build: 403,
     date: '2026-11-21',
     changelog: [
+        'b403 v1.7.377 - share in aplicatia instalata + bara de sus, 2026-11-21 (client). Cardul din jurnalul creierului foloseste in APK pluginul nativ ZeusShare (Save in galerie, More = foaia de share Android) si deschide WhatsApp/Telegram/X/Facebook direct; sertarul din Admin nu mai intra sub bara de sus; test pentru toate ecranele pe tot ecranul.',
         'b402 v1.7.376 - ultimele randuri moarte din Quant Monitor, 2026-11-21 (client). SIGNAL ACCURACY LOG si Trap rate din semnale si capcane reale, verificate la 30 s; STOP arata de cand; ARIA spune cand lumanarea abia s-a deschis; regimurile si fazele reale colorate; bifa PF PHASE din verdictul real al filtrului; test pentru culorile celor 5 stari.',
         'b401 v1.7.375 - Quant Monitor fara date inventate, 2026-11-21 (server + client). SPEED aleator inlocuit cu intarzierea reala a fluxului; ARES tinte din volatilitatea reala; 24h LIQUIDATIONS masurate (era 0 mereu); TREND MATRIX, AI CONF, SIGNAL, SLOPE, regim, faza, magnet, pereti, OI 1h, funding, EMA cross legate de date reale; etichetele BTC scrise de mana inlocuite cu moneda din chart.',
         'b400 v1.7.374 - Starea dinainte de intrare corecta si la tranzactiile refacute, 2026-11-21 (server + client). Lentilele de pe server tin cont de timpul dintre cadre (30 s la cele refacute): 38% NERVOUS fals la cele refacute → 0; recalculate o data. Eticheta portilor din AUTO-TRADE: safety + context.',

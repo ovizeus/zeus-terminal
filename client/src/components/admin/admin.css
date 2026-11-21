@@ -320,6 +320,8 @@
   border-left: 1px solid var(--ac-border-strong);
   box-shadow: -8px 0 32px rgba(0,0,0,.6);
   z-index: 9601;
+  /* [2026-11-21] pe telefon antetul (×) intra sub bara de sus — ca la imagine si chart */
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); box-sizing: border-box;
   display: flex; flex-direction: column;
   animation: zacSlide .2s cubic-bezier(.3,.8,.4,1);
   /* [2026-06-26] The phone status bar / notch overlays content at top:0 (the app is edge-to-edge,

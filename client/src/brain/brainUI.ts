@@ -558,6 +558,13 @@ export function startBrain(root: HTMLElement): () => void {
       }
       const copy = async (t: string): Promise<boolean> => { try { await navigator.clipboard.writeText(t); return true } catch { return false } }
       const blobOf = (): Promise<Blob | null> => new Promise((ok) => c.toBlob((b) => ok(b), 'image/png'))
+      // [2026-11-21] In APK (Capacitor) WebView-ul NU poate navigator.share / <a download> si nu are blocare de
+      // pop-up → aceeasi ruta ca ReferralPanel (merge pe telefon): pluginul nativ ZeusShare pentru imagine,
+      // window.open direct pentru linkuri. null in browser obisnuit.
+      const nativeShare = (): { shareImage: (o: unknown) => Promise<unknown>; saveImage: (o: unknown) => Promise<unknown> } | null => {
+        const cap = (window as any).Capacitor
+        return cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform() && cap.Plugins && cap.Plugins.ZeusShare ? cap.Plugins.ZeusShare : null
+      }
       const target = (k: string, u: string): string => {
         const eu = encodeURIComponent(u), et = encodeURIComponent(text)
         if (k === 'wa') return `https://wa.me/?text=${encodeURIComponent(text + ' ' + u)}`
@@ -567,6 +574,14 @@ export function startBrain(root: HTMLElement): () => void {
       }
       $('share').querySelectorAll('[data-net]').forEach((b) => b.addEventListener('click', async () => {
         const k = (b as HTMLElement).dataset.net as string
+        const ns = nativeShare()
+        if (k === 'save' && ns) {
+          try { await ns.saveImage({ data: c.toDataURL('image/png') }); msg('Saved to Gallery.') } catch (e) { msg('Save failed: ' + String((e as any)?.message || e).slice(0, 40)) }
+          return
+        }
+        if (k === 'more' && ns) {
+          try { await ns.shareImage({ data: c.toDataURL('image/png'), text }); return } catch { /* cade pe ruta de browser */ }
+        }
         if (k === 'save') {
           const blob = await blobOf(); if (!blob) return
           const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName + '.png'
@@ -586,13 +601,14 @@ export function startBrain(root: HTMLElement): () => void {
           return
         }
         // fereastra se deschide ACUM (gestul omului), adresa vine dupa urcare — altfel blocarea pop-up-urilor o opreste
-        const win = k === 'dc' ? null : window.open('', '_blank')
+        const win = k === 'dc' || ns ? null : window.open('', '_blank')
         msg('Creating the share link…')
         const u = await upload()
         if (!u) { try { win && win.close() } catch { /* */ } return }
         if (k === 'dc') { msg((await copy(text + ' ' + u)) ? 'Link copied — paste it in Discord (the image shows in the chat).' : u); return }
         const t = target(k, u)
-        if (win) { try { win.opener = null; win.location.href = t } catch { location.href = t } } else location.href = t
+        if (ns) { window.open(t, '_blank') }
+        else if (win) { try { win.opener = null; win.location.href = t } catch { location.href = t } } else location.href = t
         msg('Opened ' + (NETS.find((n) => n[0] === k) || ['', 'the app'])[1] + '.')
       }))
     }
