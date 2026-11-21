@@ -182,7 +182,7 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
             title={onLogoClick ? 'Open your profile' : undefined}
             style={onLogoClick ? { cursor: 'pointer' } : undefined} />
           <div>
-            <div className="t1">ZEU&apos;S</div>
+            <div className="t1">ZEU&apos;S<sup className="zt-tm" aria-label="trademark">™</sup></div>
             <div className="t2">AI TRADING ANALYTICS</div>
             <BetaBadge />
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>

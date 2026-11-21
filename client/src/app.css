@@ -235,6 +235,20 @@ body {
   color: var(--dim);
   margin-top: -1px;
 }
+/* [2026-11-21] ™ langa ZEU'S (cerut de operator). Font obisnuit (Cinzel n-are glifa ™), mic si ridicat,
+   aceeasi culoare ca titlul; clasa proprie ca main.css (incarcat dupa) sa nu-l atinga. */
+.zt-tm {
+  font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-size: 0.42em;
+  font-weight: 600;
+  letter-spacing: 0;
+  vertical-align: super;
+  line-height: 0;
+  margin-left: 2px;
+  color: inherit;
+  opacity: 0.85;
+  text-shadow: none;
+}
 .bprice {
   font-family: 'Cinzel', serif;
   font-size: 14px;

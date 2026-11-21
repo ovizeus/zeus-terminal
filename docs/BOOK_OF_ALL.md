@@ -15062,9 +15062,12 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### ™ b413 v1.7.387 (2026-11-21) — ™ langa ZEU'S in antet (client, fara reload)
+Cerut de operator („eu vb de zeus din header stanga sus"). `Header.tsx`: `<sup class="zt-tm">™</sup>` dupa „ZEU'S"; stil in `app.css` (clasa proprie, font obisnuit — Cinzel n-are glifa ™ — 0,42em, ridicat, aceeasi culoare, fara umbra). ™ = marca revendicata, permisa fara inregistrare; **®** doar dupa inregistrare (EUIPO / OSIM). Recomandat: cautare TMview / OSIM pentru „ZEUS" in clasele 9 si 36 inainte de reclama.
+
 ### 🔌 b412 v1.7.386 (2026-11-21) — preturile ETH / SOL / BNB / XRP de sus apareau „—" (client, fara reload)
 Poza operatorului: BTC cu pret, celelalte patru cu „—". **Cauza:** pe calea prin server (WS proxy) caseta se abona o singura data, la montare, cu `wsMarketBridge.subscribeWatchlist` → `ws.send`, care **arunca mesajul daca soclul nu e inca deschis**, iar la reconectare (revenire din fundal) abonarea nu se retrimitea. Jurnal: „wss clients: 2, subs: 0". Preturile veneau doar din difuzarea generala la 10 s → „—" in primele secunde (sau dupa fiecare revenire). Binance REST raspunde normal (200), fara ban. **Reparat:** lista de monede e tinuta minte; se reincearca la 1 s pana trece (max 60 s) si se retrimite la fiecare `reconnect`; serverul raspunde la abonare cu ultimele preturi (`_sendCachedValues`). Test `services/__tests__/wlSubscribeRetry`. Client 2.337 verzi.
-Si: ™ langa ZEU'S — operatorul a intrebat; raspuns: ™ e permis fara inregistrare (® doar dupa), cu recomandarea unei cautari TMview / OSIM. **Nepus inca** — asteapta „da".
+Si: ™ langa ZEU'S — operatorul a intrebat; raspuns: ™ e permis fara inregistrare (® doar dupa), cu recomandarea unei cautari TMview / OSIM. **Pus in b413** (v. mai jos).
 
 ### 📌 DE FACUT (NU ACUM) — pagina web publica sa arate ce e nou (notat 2026-11-21, la cererea operatorului)
 Operatorul: „sa facem sa nu uitam pagina web sa o actualizam cu ce avem nou … dar asta nu acum, doar trece sa stim".
