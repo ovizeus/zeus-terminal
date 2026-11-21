@@ -10572,6 +10572,17 @@ migrate('424_byoi_requests', () => {
 // 'viewer' ca valoare implicita (orice cont NOU porneste viewer), iar conturile
 // deja aprobate si adminii sunt ridicati la 'full' o singura data, aici —
 // pentru ei nu se schimba nimic. Conturile inca neaprobate raman 'viewer'.
+migrate('429_news_prefs', () => {
+    // [2026-11-21] MARKET NEWS — alertele fiecarui utilizator: 'off' | 'app' | 'app_tg' (app + Telegram).
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS news_prefs (
+            user_id    INTEGER PRIMARY KEY,
+            alerts     TEXT    NOT NULL DEFAULT 'app',
+            updated_at INTEGER NOT NULL
+        );
+    `);
+});
+
 migrate('428_brain_radar_server', () => {
     // [2026-11-20] Radarul creierului pe SERVER (radarAxes + radarCapture).
     // brain_radar_prefs: monedele radarului fiecarui utilizator (pana acum doar pe

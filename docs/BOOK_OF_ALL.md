@@ -15062,6 +15062,25 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### 📰 b410 v1.7.384 (2026-11-21) — MARKET NEWS: stiri + reactia MASURATA + calendar economic + rezumat AI + alerte (server + client, reload)
+**Cerut de operator:** „sub markets … o casuta cu news … stirile principale care influenteaza piata, bursa, crypto … sa faca corelatie … surse gratuite … calendar economic … sa fim blindati … omega daca nu limiteaza bagal, daca limiteaza coming soon".
+
+**Surse (toate verificate de pe server, 18/18 raspund):** Bloomberg Markets, FT Markets, MarketWatch ×3, Investing.com, OilPrice, Kitco, Cointelegraph, The Block, Decrypt, Bitcoin Magazine, CryptoSlate, Bitcoin.com, Fed (comunicate + discursuri), ECB, SEC. Calendar: ForexFactory (JSON public saptamanal; saptamana urmatoare apare DUMINICA — panoul o spune). **Refuza robotii si NU se ocolesc:** CoinDesk, CNBC, FXStreet, DailyFX, BLS, Treasury. Afisam doar titlu + sursa + ora + link.
+
+**Server — `services/newsFeed.js`** (fara dependinte noi; cititor RSS/Atom propriu):
+- fluxuri la 3 min, calendar la 30 min (ForexFactory cere menajament), preturi Gate la 1 min;
+- **etichete** (25: BTC, ETH, FED, CPI/INFLATION, JOBS, ECB, DOLLAR, TARIFFS, STOCKS, GOLD, OIL, NVDA, TSLA…) → contractul Gate cu care se masoara;
+- **grupare**: aceeasi poveste din mai multe surse (Jaccard ≥ 0,5, sau ≥ 0,25 cu aceeasi eticheta principala in 2 h); topul ia o singura stire pe poveste;
+- **reactia MASURATA**: lumanari Gate de 1 minut → pret la publicare, +15 min, +1 h, „de atunci". Si dupa evenimentele High din calendar (S&P, BTC, aur pentru USD etc.). Pe ecran: „moved AFTER", niciodata „because";
+- **impact** = surse distincte + oficial (2) + reactia (plafon 5);
+- **rezumat AI (OMEGA / Groq gratuit)**: masurat contul — 1.000 cereri/zi, 8.000 tokeni/min → la 30 min (~48/zi), **plafon 60/zi** ca OMEGA din chat sa aiba prioritate; indisponibil → „AI briefing coming soon". **Doua corectii prinse pe date vii:** (1) cifrele fara semn → modelul a scris „Bitcoin dropped 3.63%" cand BTC CRESCUSE — acum sensul se trimite in cuvinte (ROSE/FELL) si promptul cere sa-l pastreze; (2) gpt-oss „gandeste" si taia raspunsul la jumatate → max 900 tokeni + doar propozitii intregi;
+- **alerte**: eveniment High peste ≤15 min, comunicat oficial nou, stire din ≥3 surse in 45 min. Prin WebSocket (`news.alert`) + Telegram celor care aleg „In-app + Telegram". **La pornire, stirile existente sunt marcate anuntate** (altfel fiecare restart retrimitea notificarile); calendarul nu;
+- rute `GET /api/news`, `POST /api/news/prefs` (permise si viewerilor: informare + alegerea PROPRIE); tabela `news_prefs` (migratia 429).
+
+**Client:** `components/news/NewsBar.tsx` (sub GLOBAL MARKETS, aceeasi inaltime/paleta, titluri cu eticheta + reactia, urmatorul eveniment High in eticheta), `NewsPanel.tsx` (Headlines: rezumat AI, „What's moving markets", filtre, cautare, detalii cu tabelul de reactie si linkuri; Economic calendar: pe zile, impact, forecast/previous/actual, numaratoare inversa, reactia dupa eveniment; jos: Alerts Off / In-app / In-app + Telegram), `markets/news.ts` (un singur sondaj, alertele respecta alegerea). Banda defileaza si pe telefon (aceeasi regula pe id ca la GLOBAL MARKETS).
+**Bonus:** calendarul din Quant Monitor (hardcodat cu date din 2025, expirat) e alimentat acum din calendarul real; mesajul „Calendar expirat" (in romana, in UI) → engleza.
+Verificat randat cu CSS-ul aplicatiei la 390 px. Teste: server `newsFeed` (18), `viewerGate`; client `news` (9).
+
 ### 🎨 b409 v1.7.383 (2026-11-21) — fereastra COMING SOON in paleta GLOBAL MARKETS (client, fara reload)
 Cerut de operator (cu poza): „la caseta coming soon vreau tot asa ceva pro fara galben". `app.css` `.z-coming-soon`: aur `#d4af37` → platina `#d6dee8` + albastru-otel `#6f9bd1`, fundal bleumarin opac, insigna Z patrata (nu cerc aurit), fara stralucire; „COMING SOON" pe un singur rand pe telefon (`white-space: nowrap`, latime max = ecran − 32 px). Verificat randat cu CSS-ul aplicatiei la 390 px. Client 2.326 verzi.
 

@@ -1299,6 +1299,8 @@ app.use('/api/brain/parity', brainParityRoutes);
 app.use('/api/brain/radar', require('./server/routes/brainRadar'));
 // [2026-11-21] Urcarea cardului de share (autentificat; viewerii nu ajung la /api/brain/).
 app.use('/api/brain/share', shareRoutes.apiRouter);
+// [2026-11-21] MARKET NEWS — stiri + reactia masurata + calendar economic + rezumat AI + alerte
+app.use('/api/news', require('./server/routes/news'));
 
 // ─── [OMEGA Wave 1 UI 2026-05-15] Read-only OMEGA UI feed ───
 // Mounts GET /api/omega/{voice,mood,health} + POST /api/omega/chat. Read
@@ -1857,6 +1859,9 @@ try {
 // [2026-11-20] Radarul creierului pe SERVER: cele 12 axe + inregistrarea fiecarei
 // intrari pe monedele radarului (poza, replay, deja vu, sablon si cu telefonul inchis).
 // Porneste dupa 45 s, cand serverState are deja lumanari. Doar afisaj si jurnal.
+// [2026-11-21] MARKET NEWS — fluxurile pornesc la 5 s, calendarul la 8 s, reactiile la 40 s (vezi newsFeed.start)
+try { require('./server/services/newsFeed').start(); } catch (e) { logger.warn('NEWS', 'start failed: ' + (e && e.message)); }
+
 // [2026-11-21] MARKETS (aur, indici, actiuni) — incarca o data lumanarile zilnice (graficul pe 7 zile +
 // corelatia cu BTC) ca primul om care deschide caseta sa nu astepte un minut. Preturile live pornesc la cerere.
 setTimeout(() => {

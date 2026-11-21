@@ -16,6 +16,8 @@ import { _zComingSoon } from '../../ui/dock'
 import { ModeBar } from './ModeBar'
 import { MarketsBar } from '../markets/MarketsBar'
 import { MarketsPanel } from '../markets/MarketsPanel'
+import { NewsBar } from '../news/NewsBar'
+import { NewsPanel } from '../news/NewsPanel'
 import { MarketRadar } from '../radar/MarketRadar'
 // ── Legacy panel init functions (1:1 from old openPageView in pageview.ts) ──
 import { _aresRender } from '../../engine/aresUI'
@@ -469,6 +471,8 @@ export function PanelShell() {
       <AdminPage visible={activeModal === 'adminPage'} onClose={closeModal} />
       {/* [2026-11-21] MARKETS — panoul complet (deschis din caseta de sub DEMO MODE) */}
       {activeModal === 'markets' && <MarketsPanel onClose={closeModal} />}
+      {/* [2026-11-21] MARKET NEWS — panoul complet (deschis din caseta de sub GLOBAL MARKETS) */}
+      {activeModal === 'news' && <NewsPanel onClose={closeModal} />}
       <BuildIndicatorModal visible={activeModal === 'byoi'} onClose={closeModal} />
       <CommandPalette visible={activeModal === 'cmdpalette'} onClose={closeModal} />
       <ExposurePanel visible={activeModal === 'exposure'} onClose={closeModal} />
@@ -575,6 +579,8 @@ export function PanelShell() {
         <ModeBar />
         {/* [2026-11-21] MARKETS — aur, indici, actiuni; la fel de lata ca banda de mai sus */}
         <MarketsBar />
+        {/* [2026-11-21] MARKET NEWS — stiri + reactia masurata + calendar economic */}
+        <NewsBar />
 
         {/* ── Icon Dock — 1:1 from original zeus-dock ── */}
         <ZeusDock active={dockActive} onDockClick={handleDockClick} />

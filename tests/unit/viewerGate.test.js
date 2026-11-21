@@ -191,6 +191,7 @@ function inventory() {
         ring5: '/api/ring5', dslDrive: '/api/dsldrive', indicators: '/api/indicators',
         admin: '/api/admin', support: '/api/support', byoi: '/api/byoi', health: '/api/health',
         trading: '/api', exchange: '/api/exchange',
+        news: '/api/news',   // [2026-11-21] MARKET NEWS
     };
     const out = [];
     const RE = /\.(get|post|put|delete|patch)\(\s*'([^']+)'/g;
@@ -229,7 +230,9 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             // [2026-11-20] radarul pe server: monede + inregistrari — sub /api/brain/, deci INTERZIS viewerilor
             '/api/brain/radar',
             // [2026-11-21] urcarea cardului de share — tot sub /api/brain/, INTERZIS viewerilor
-            '/api/brain/share'];
+            '/api/brain/share',
+            // [2026-11-21] MARKET NEWS — stiri + alegerea alertelor proprii (GET + POST /prefs permise viewerilor)
+            '/api/news'];
         for (const u of used) expect(known).toContain(u);
     });
 
@@ -251,6 +254,8 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'GET /api/market/time', 'GET /api/market/top', 'GET /api/market/topLongShort',
             // [2026-11-21] MARKETS (aur, indici, actiuni) — doar informare, caseta de sub DEMO MODE o CERE
             'GET /api/market/tradfi',
+            // [2026-11-21] MARKET NEWS — caseta de sub GLOBAL MARKETS o CERE
+            'GET /api/news',
             'GET /api/migration/flags',
             'GET /api/profile', 'GET /api/referral', 'GET /api/sd/symbols',
             'GET /api/support/thread', 'GET /api/support/unread',
@@ -259,6 +264,7 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'POST /api/app/version', 'POST /api/client-error', 'POST /api/indicators/active',
             'POST /api/profile', 'POST /api/support/send', 'POST /api/sync/state',
             'POST /api/sync/user-context', 'POST /api/user/settings',
+            'POST /api/news/prefs',
         ].sort());
     });
 
@@ -271,7 +277,7 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             .filter((r) => { const sp = r.indexOf(' '); return classify(r.slice(0, sp), concrete(r.slice(sp + 1))).allowed; });
         expect(writes.sort()).toEqual(['POST /api/app/version', 'POST /api/client-error', 'POST /api/indicators/active',
             'POST /api/profile', 'POST /api/support/send', 'POST /api/sync/state', 'POST /api/sync/user-context',
-            'POST /api/user/settings'].sort());
+            'POST /api/user/settings', 'POST /api/news/prefs'].sort());   // alegerea alertelor PROPRII de stiri
     });
 });
 

@@ -1,0 +1,67 @@
+/* [2026-11-21] MARKET NEWS — aceeasi paleta ca GLOBAL MARKETS (platina + albastru-otel); refoloseste .zmk-* / .zmkp-*.
+   Clase proprii zmn-* ca public/css/main.css (incarcat dupa app.css) sa nu le poata suprascrie. */
+
+/* ── caseta ── */
+#zeus-news-bar { border-top: 0; }
+#zeus-news-bar .zmk-label { max-width: 48vw; overflow: hidden; text-overflow: ellipsis; }
+.zmn-track { gap: 28px; animation-duration: 70s; }
+.zmn-chip { display: inline-flex; align-items: baseline; gap: 7px; font-family: var(--ff); font-size: 11px; }
+.zmn-chip-tag { font-size: 9px; letter-spacing: 0.8px; padding: 1px 5px; border-radius: 4px; color: var(--zmk-plat); background: rgba(111, 155, 209, 0.2); border: 1px solid rgba(111, 155, 209, 0.45); }
+.zmn-chip-t { color: rgba(214, 222, 232, 0.85); }
+/* pe telefon app.css / main.css opresc TOATE animatiile — pornim inapoi doar banda asta (ca la GLOBAL MARKETS) */
+@media (max-width: 768px) {
+  #zeus-news-bar .zmk-track { animation-name: zmk-scroll !important; animation-duration: 70s !important; animation-iteration-count: infinite !important; animation-timing-function: linear !important; }
+}
+
+/* ── panoul ── */
+.zmn-seg { display: flex; gap: 4px; margin-top: 12px; padding: 3px; border-radius: 10px; background: rgba(214, 222, 232, 0.04); border: 1px solid rgba(214, 222, 232, 0.08); }
+.zmn-seg button { flex: 1; font-family: var(--ff); font-size: 11px; letter-spacing: 0.5px; padding: 7px 8px; border-radius: 8px; border: 0; cursor: pointer;
+  background: transparent; color: rgba(214, 222, 232, 0.6); }
+.zmn-seg button.on { background: rgba(111, 155, 209, 0.2); color: var(--zmk-plat); box-shadow: inset 0 0 0 1px rgba(111, 155, 209, 0.5); }
+.zmn-seg button:focus-visible, .zmn-alerts button:focus-visible { outline: 1px solid var(--zmk-steel); outline-offset: 1px; }
+
+.zmn-section { padding: 6px 0 0; }
+.zmn-h { padding: 14px 16px 6px; font-size: 10px; letter-spacing: 1.8px; text-transform: uppercase; color: rgba(214, 222, 232, 0.45); }
+.zmn-brief { margin: 8px 16px 2px; padding: 12px 14px; border-radius: 10px; background: rgba(111, 155, 209, 0.07); border: 1px solid rgba(111, 155, 209, 0.2); }
+.zmn-brief-h { display: flex; justify-content: space-between; align-items: baseline; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--zmk-steel); }
+.zmn-brief-h small { letter-spacing: 0.5px; text-transform: none; color: rgba(214, 222, 232, 0.4); }
+.zmn-brief p { margin: 8px 0 0; font-size: 12px; line-height: 1.55; color: rgba(214, 222, 232, 0.85); }
+
+.zmn-item { padding: 12px 16px; }
+.zmn-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 10px; color: rgba(214, 222, 232, 0.45); }
+.zmn-multi { color: var(--zmk-steel); }
+.zmn-off { padding: 1px 6px; border-radius: 4px; color: var(--zmk-plat); border: 1px solid rgba(214, 222, 232, 0.3); letter-spacing: 0.5px; }
+.zmn-title { margin-top: 4px; font-size: 13.5px; line-height: 1.4; color: var(--zmk-plat); }
+.zmn-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.zmn-move, .zmn-tag { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(214, 222, 232, 0.12); background: rgba(214, 222, 232, 0.03); }
+.zmn-move small { opacity: 0.6; margin-left: 2px; }
+.zmn-move.up { border-color: rgba(0, 217, 122, 0.35); }
+.zmn-move.dn { border-color: rgba(255, 51, 85, 0.35); }
+.zmn-tag { color: rgba(214, 222, 232, 0.6); }
+.zmn-mtab { display: grid; gap: 4px; font-size: 11px; }
+.zmn-mtab > div { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 6px; }
+.zmn-mtab .h { font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(214, 222, 232, 0.4); }
+.zmn-links { display: flex; flex-wrap: wrap; gap: 10px; }
+.zmn-links a { color: var(--zmk-steel); text-decoration: none; font-size: 11px; }
+.zmn-links a:hover, .zmn-links a:focus-visible { text-decoration: underline; }
+
+.zmn-note { margin: 12px 16px 4px; padding: 10px 12px; border-radius: 8px; font-size: 11px; color: rgba(214, 222, 232, 0.7);
+  background: rgba(214, 222, 232, 0.04); border: 1px solid rgba(214, 222, 232, 0.1); }
+.zmn-cal { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 10px 16px; border-bottom: 1px solid rgba(214, 222, 232, 0.05); }
+.zmn-cal.past { opacity: 0.72; }
+.zmn-cal-time b { display: block; font-weight: 400; font-size: 13px; color: var(--zmk-plat); }
+.zmn-cal-time span { display: block; font-size: 10px; margin-top: 2px; color: var(--zmk-steel); }
+.zmn-cal.past .zmn-cal-time span { color: rgba(214, 222, 232, 0.4); }
+.zmn-cal-t { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--zmk-plat); }
+.zmn-imp { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: rgba(214, 222, 232, 0.25); }
+.zmn-imp.high { background: #ff5c7a; box-shadow: 0 0 0 3px rgba(255, 92, 122, 0.15); }
+.zmn-imp.medium { background: #e0a85a; }
+.zmn-imp.low { background: rgba(214, 222, 232, 0.3); }
+.zmn-cal-v { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; font-size: 10.5px; color: rgba(214, 222, 232, 0.5); }
+.zmn-cal-v b { font-weight: 400; color: var(--zmk-plat); }
+
+.zmn-alerts { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 16px; border-top: 1px solid rgba(214, 222, 232, 0.08); background: #070d18; }
+.zmn-alerts > span { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(214, 222, 232, 0.45); margin-right: 4px; }
+.zmn-alerts button { font-family: var(--ff); font-size: 11px; padding: 6px 10px; border-radius: 8px; cursor: pointer; border: 1px solid rgba(214, 222, 232, 0.12); background: transparent; color: rgba(214, 222, 232, 0.6); }
+.zmn-alerts button.on { border-color: var(--zmk-steel); color: var(--zmk-plat); background: rgba(111, 155, 209, 0.14); }
+.zmn-alerts em { flex-basis: 100%; font-style: normal; font-size: 10.5px; color: var(--zmk-steel); }

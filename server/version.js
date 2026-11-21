@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.383',
-    build: 409,
+    version: '1.7.384',
+    build: 410,
     date: '2026-11-21',
     changelog: [
+        'b410 v1.7.384 - MARKET NEWS: caseta sub GLOBAL MARKETS + panou: 18 surse gratuite, stiri grupate, reactia MASURATA a pietei dupa fiecare stire, calendar economic, rezumat AI (OMEGA, plafonat), alerte in aplicatie + Telegram; calendarul Quant Monitor alimentat real, 2026-11-21 (server + client).',
         'b409 v1.7.383 - fereastra COMING SOON in paleta GLOBAL MARKETS (platina + albastru-otel), fara galben, pe un singur rand pe telefon, 2026-11-21 (client).',
         'b408 v1.7.382 - GLOBAL MARKETS: platina + albastru-otel (fara galben), preturile defileaza si pe telefon (regula globala care oprea animatiile), rezumat de stare: risk-on/off, cate cresc/scad, pe ce merge BTC, 2026-11-21 (client).',
         'b407 v1.7.381 - MARKETS: caseta sub DEMO MODE + panou cu 105 active traditionale (aur, petrol, indici, actiuni) LIVE din Gate prin server, grafic 7 zile, corelatia cu BTC pe 30 de zile, bursa deschisa/inchisa, 2026-11-21 (server + client).',

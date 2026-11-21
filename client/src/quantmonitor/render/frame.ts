@@ -1214,7 +1214,8 @@ export function renderFrame(): string {
       const mins = Math.floor((diff % 3600000) / 60000)
       const urgency = days < 1 ? 'rb' : days < 3 ? 'yb' : days < 7 ? 'y' : 'dg'
       const timeStr = days > 0 ? `${days}d ${hrs}h` : hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`
-      const evtClr = e.name === 'FOMC' ? 'c' : e.name === 'CPI' ? 'y' : 'g'
+      // [2026-11-21] numele vin acum din calendarul REAL (markets/news.ts): „USD CPI m/m”, „USD Federal Funds Rate”…
+      const evtClr = /FOMC|Federal Funds|Fed /i.test(e.name) ? 'c' : /CPI|inflation/i.test(e.name) ? 'y' : 'g'
       L(`  <span class="${evtClr}">${e.name.padEnd(5)}</span> <span class="dg">${e.date.toISOString().slice(0, 10)}</span>  <span class="${urgency}">T-${timeStr}</span>`)
     })
   } else {
@@ -1226,7 +1227,7 @@ export function renderFrame(): string {
     const newest = MACRO_EVENTS.reduce((a, b2) => (b2.date > a.date ? b2 : a), MACRO_EVENTS[0])
     const stale = newest && newest.date.getTime() < nowMs
     L(stale
-      ? `  <span class="y">Calendar expirat</span> <span class="dg">— ultima intrare ${newest.date.toISOString().slice(0, 10)}, de actualizat</span>`
+      ? `  <span class="y">Calendar not loaded yet</span> <span class="dg">— opens with MARKET NEWS (last entry ${newest.date.toISOString().slice(0, 10)})</span>`
       : `  <span class="dg">No upcoming events in calendar</span>`)
     L(`  <span class="d">\u00B7</span>`)
     L(`  <span class="d">\u00B7</span>`)

@@ -29,6 +29,8 @@ const VIEWER_ALLOW = [
     'GET /api/market/footprint', 'GET /api/market/radar',
     // ── piete traditionale (MARKETS) — doar informare ──
     'GET /api/market/tradfi',
+    // ── stiri (MARKET NEWS) — informare + alegerea alertelor proprii ──
+    'GET /api/news', 'POST /api/news/prefs',
     // ── indicatori pe chart ──
     'POST /api/indicators/active', 'GET /api/indicators/usage',
     'GET /api/byoi/config', 'GET /api/byoi/indicators',
