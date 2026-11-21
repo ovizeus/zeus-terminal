@@ -15062,6 +15062,9 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### ™ b415 v1.7.389 (2026-11-21) — ™ dublu, de proba
+Operatorul: „mai mare, fa-l dublu sa vad cum e" → `.zt-tm` 0,55em → 1,1em (se poate reveni la 0,55 dintr-o linie).
+
 ### ™ b414 v1.7.388 (2026-11-21) — ™ putin mai mare
 Operatorul: „se vede, fa-l un pic mai mare" → `.zt-tm` 0,42em → 0,55em.
 
