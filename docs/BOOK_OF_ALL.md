@@ -15062,6 +15062,16 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### 🏠 2026-11-21 — pagina de start: cele 11 carduri inlocuite cu o prezentare de produs (static, fara build/reload)
+Cerut de operator: „uita-te la pagina web de start … ce lipseste … in loc de carduri ceva mai profi … fa backup … nu schimba pagina de login si codurile de jos … eu ma uit, daca nu e bine revenim".
+**Backup:** `public/login.html.bak-pre-landing-pro-20261121` (ignorat de git) + tag git `pre-landing-pro`. **Revenire:** `cp public/login.html.bak-pre-landing-pro-20261121 public/login.html` (sau `git checkout pre-landing-pro -- public/login.html`).
+**Neatinse (verificat cu diff fata de backup):** caseta de logare (Sign in / Request an invite) si blocul Install (QR + codul de bare). Banda de preturi de sus si subsolul — neschimbate.
+**Nou, in locul cardurilor** (`<main class="zl">`, CSS `zl-*`, aceleasi culori ca pagina):
+- titlu „See what moves the market." + o fraza; **The market has a mood** — 5 radare desenate cu codul REAL al radarului (CALM / ALERT / HESITANT / NERVOUS / CONFUSED, fundal transparent), replay 30 s, share, merge pe server; **Know what moved it** — captura reala MARKET NEWS (18 surse, reactia masurata, calendar, rezumat AI, alerte); **Crypto, next to everything else** — captura reala GLOBAL MARKETS (105 piete, corelatia cu BTC, risk-on/off); **Built on order flow, guarded by rules** — ICHNOS, liquidation map, NEREUS, Quant Monitor, protectia DSL, limitele de risc; „Also inside" (ARES, OMEGA, Binance/Bybit, jurnal, Telegram); rand de incredere („Information, not advice / Measured, not guessed / Sources named").
+- scos limbajul intern („Ring5 Bandit · Thompson Sampling", „quarantine manager").
+- imagini in `public/assets/landing/` (WebP, ≤ 62 KB, `loading="lazy"`), facute din componentele reale cu date publice, fara date de cont. Pe telefon radarele se deruleaza orizontal, sectiunile se aseaza una sub alta.
+Verificat randat la 1440 si 390 px.
+
 ### ™ b415 v1.7.389 (2026-11-21) — ™ dublu, de proba
 Operatorul: „mai mare, fa-l dublu sa vad cum e" → `.zt-tm` 0,55em → 1,1em (se poate reveni la 0,55 dintr-o linie).
 

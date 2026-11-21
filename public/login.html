@@ -570,6 +570,50 @@
         .btn-delete:hover { background: #ff444455 }
         .no-pending { color: #445; font-size: 11px; text-align: center; padding: 12px }
 
+        /* ─── [2026-11-21] Prezentarea produsului (inlocuieste .features). Clase zl-*; aceleasi culori ca pagina. ─── */
+        .zl { width: 1040px; max-width: 94vw; margin: 34px auto 8px; color: var(--text); font-family: 'Rajdhani', 'Segoe UI', sans-serif }
+        .zl-hero { text-align: center; max-width: 720px; margin: 0 auto 46px }
+        .zl-hero h2 { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: clamp(24px, 3.4vw, 38px); letter-spacing: 1px; line-height: 1.2; color: #e8f2fb; margin: 0 0 14px }
+        .zl-hero p { font-size: 18px; line-height: 1.55; color: #8fa3b6; margin: 0 }
+        .zl-ch { padding: 40px 0; border-top: 1px solid #12253a }
+        .zl-txt { max-width: 560px }
+        .zl-txt-wide { max-width: none }
+        .zl-txt h3 { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: clamp(22px, 2.6vw, 30px); line-height: 1.2; color: #eef5fc; margin: 0 0 12px }
+        .zl-txt p { font-size: 17px; line-height: 1.6; color: #93a7ba; margin: 0 0 16px }
+        .zl-facts { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px }
+        .zl-facts li { position: relative; padding-left: 18px; font-size: 16px; line-height: 1.45; color: #c3d0dc }
+        .zl-facts li::before { content: ''; position: absolute; left: 0; top: .62em; width: 8px; height: 2px; background: var(--cyan) }
+        .zl-moods { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 28px }
+        .zl-moods figure { margin: 0 }
+        .zl-moods img { width: 100%; height: auto; display: block }
+        .zl-split { display: grid; grid-template-columns: 1fr minmax(280px, 360px); gap: 56px; align-items: center }
+        .zl-rev { grid-template-columns: minmax(280px, 360px) 1fr }
+        .zl-rev .zl-txt { order: 2 }
+        .zl-shot { margin: 0; border-radius: 22px; padding: 8px; background: #0a1220; border: 1px solid #1a2c42; box-shadow: 0 30px 60px rgba(0, 0, 0, .45) }
+        .zl-shot img { width: 100%; height: auto; display: block; border-radius: 15px; aspect-ratio: 840 / 1100; object-fit: cover; object-position: top }
+        .zl-spec { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; margin: 22px 0 0 }
+        .zl-spec > div { padding: 14px 0; border-bottom: 1px solid #12253a }
+        .zl-spec dt { font-size: 17px; font-weight: 700; color: #e3edf7; margin: 0 0 3px }
+        .zl-spec dd { margin: 0; font-size: 15.5px; line-height: 1.5; color: #8fa3b6 }
+        .zl-also { font-size: 16px; line-height: 1.6; color: #93a7ba; margin: 22px 0 0; max-width: 820px }
+        .zl-trust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; padding: 30px 0 10px; border-top: 1px solid #12253a }
+        .zl-trust b { display: block; font-size: 17px; color: #e3edf7; margin-bottom: 4px }
+        .zl-trust span { font-size: 15.5px; line-height: 1.5; color: #8fa3b6 }
+        @media (max-width: 860px) {
+            .zl { margin-top: 26px }
+            .zl-hero { margin-bottom: 30px }
+            .zl-hero p { font-size: 16.5px }
+            .zl-ch { padding: 30px 0 }
+            .zl-split, .zl-rev { grid-template-columns: 1fr; gap: 24px }
+            .zl-rev .zl-txt { order: 0 }
+            .zl-shot { max-width: 360px; margin: 0 auto; width: 100% }
+            .zl-moods { grid-template-columns: repeat(5, 46%); overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; scrollbar-width: none }
+            .zl-moods::-webkit-scrollbar { display: none }
+            .zl-moods figure { scroll-snap-align: start }
+            .zl-spec { grid-template-columns: 1fr }
+            .zl-trust { grid-template-columns: 1fr; gap: 18px }
+        }
+
         /* ─── System Module Showcase ─── */
         .features {
             display: grid;
@@ -1418,130 +1462,80 @@
             </div>
             <!-- END Login Card -->
 
-            <!-- System Modules -->
-            <div class="features">
-                <div class="feat-card mod-brain">
-                    <div class="feat-head">
-                        <div class="feat-icon">Z</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">CORE</span>
-                            <span class="feat-label">ZEUS Brain</span>
-                        </div>
+            <!-- [2026-11-21] Prezentarea produsului — inlocuieste cele 11 carduri (backup: login.html.bak-pre-landing-pro-20261121,
+                 tag git pre-landing-pro). Imaginile sunt randari REALE ale componentelor aplicatiei, cu date publice (fara conturi). -->
+            <main class="zl">
+                <header class="zl-hero">
+                    <h2>See what moves the market.</h2>
+                    <p>Zeus reads crypto and global markets live, measures how prices react to the news, and shows the state of the market at a glance. Information, not advice.</p>
+                </header>
+
+                <section class="zl-ch zl-ch-moods" aria-labelledby="zl-moods-h">
+                    <div class="zl-txt">
+                        <h3 id="zl-moods-h">The market has a mood. Zeus shows it.</h3>
+                        <p>Twelve live signals — trend, order flow, liquidity, sentiment, order-book imbalance and more — form one shape. Its colour is the brain's state: calm, alert, hesitant, nervous or confused.</p>
+                        <ul class="zl-facts">
+                            <li>Replay any trade in under 30 seconds</li>
+                            <li>Share trade cards to WhatsApp, Telegram, X, Facebook and Discord</li>
+                            <li>Runs on the server, even with your phone closed</li>
+                        </ul>
                     </div>
-                    <div class="feat-desc">Adaptive regime detection, layered confluence scoring, behavioral state logic, and controlled decision-routing.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-dsl">
-                    <div class="feat-head">
-                        <div class="feat-icon">D</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">PROTECTION</span>
-                            <span class="feat-label">DSL Protection Engine</span>
-                        </div>
+                    <div class="zl-moods" role="list">
+                        <figure role="listitem"><img src="/assets/landing/mood-calm.webp" width="480" height="560" alt="Zeus brain radar in the calm state, drawn in blue" loading="lazy"></figure>
+                        <figure role="listitem"><img src="/assets/landing/mood-alert.webp" width="480" height="560" alt="Zeus brain radar in the alert state, drawn in yellow-green" loading="lazy"></figure>
+                        <figure role="listitem"><img src="/assets/landing/mood-hesitant.webp" width="480" height="560" alt="Zeus brain radar in the hesitant state, drawn in amber" loading="lazy"></figure>
+                        <figure role="listitem"><img src="/assets/landing/mood-nervous.webp" width="480" height="560" alt="Zeus brain radar in the nervous state, drawn in orange" loading="lazy"></figure>
+                        <figure role="listitem"><img src="/assets/landing/mood-confused.webp" width="480" height="560" alt="Zeus brain radar in the confused state, drawn in violet" loading="lazy"></figure>
                     </div>
-                    <div class="feat-desc">Dynamic stop logic, activation thresholds, impulse tracking, pivot control, and structured exit behavior.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-intel">
-                    <div class="feat-head">
-                        <div class="feat-icon">M</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">FLOW</span>
-                            <span class="feat-label">Market Intelligence</span>
-                        </div>
+                </section>
+
+                <section class="zl-ch zl-split" aria-labelledby="zl-news-h">
+                    <div class="zl-txt">
+                        <h3 id="zl-news-h">Know what moved it — measured, not guessed.</h3>
+                        <p>Headlines from 18 sources, from Bloomberg and the Financial Times to the Federal Reserve and the ECB. For every story Zeus measures how Bitcoin, stocks, gold or oil actually moved fifteen minutes and one hour later.</p>
+                        <ul class="zl-facts">
+                            <li>The same story from many outlets, grouped into one</li>
+                            <li>Economic calendar with countdowns and the market's reaction</li>
+                            <li>AI briefing of the day, alerts in the app and on Telegram</li>
+                        </ul>
                     </div>
-                    <div class="feat-desc">Order flow context, multi-timeframe structure, volatility mapping, liquidity behavior, and chart-state awareness.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-signal">
-                    <div class="feat-head">
-                        <div class="feat-icon">S</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">SIGNAL</span>
-                            <span class="feat-label">Signal Fusion</span>
-                        </div>
+                    <figure class="zl-shot"><img src="/assets/landing/news.webp" width="840" height="1560" alt="Market News panel: an AI briefing, the stories moving markets and the measured price reaction after each one" loading="lazy"></figure>
+                </section>
+
+                <section class="zl-ch zl-split zl-rev" aria-labelledby="zl-mk-h">
+                    <div class="zl-txt">
+                        <h3 id="zl-mk-h">Crypto, next to everything else.</h3>
+                        <p>105 traditional markets live — gold, oil, the S&amp;P 500, the Nasdaq, Nvidia, Tesla, the euro — each with its 30-day correlation to Bitcoin and a clear risk-on or risk-off read of the day.</p>
+                        <ul class="zl-facts">
+                            <li>See which markets move with Bitcoin, and which against it</li>
+                            <li>Metals, energy, indices, currencies and the largest stocks</li>
+                            <li>Exchange hours at a glance: open or closed</li>
+                        </ul>
                     </div>
-                    <div class="feat-desc">Multi-layer signal synthesis combining timing logic, regime alignment, contextual filters, and execution-assistance scoring.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-risk">
-                    <div class="feat-head">
-                        <div class="feat-icon">R</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">CONTROL</span>
-                            <span class="feat-label">Risk &amp; Execution Control</span>
-                        </div>
+                    <figure class="zl-shot"><img src="/assets/landing/markets.webp" width="840" height="1560" alt="Global Markets panel: risk-off summary, rising and falling counts, and gold, silver and platinum with their correlation to Bitcoin" loading="lazy"></figure>
+                </section>
+
+                <section class="zl-ch" aria-labelledby="zl-hood-h">
+                    <div class="zl-txt zl-txt-wide">
+                        <h3 id="zl-hood-h">Built on order flow, guarded by rules.</h3>
                     </div>
-                    <div class="feat-desc">Exposure discipline, leverage boundaries, position constraints, loss protection rails, and execution-side safety.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-perf">
-                    <div class="feat-head">
-                        <div class="feat-icon">P</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">REVIEW</span>
-                            <span class="feat-label">Performance Review</span>
-                        </div>
-                    </div>
-                    <div class="feat-desc">Trade journal insight, execution feedback, post-session review, behavioral tracking, and refinement data.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-ares">
-                    <div class="feat-head">
-                        <div class="feat-icon">A</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">ARES</span>
-                            <span class="feat-label">ARES Watch</span>
-                        </div>
-                    </div>
-                    <div class="feat-desc">Autonomous wallet logic, control-state supervision, position intelligence, and protected execution monitoring.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-omega">
-                    <div class="feat-head">
-                        <div class="feat-icon">&Omega;</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">OMEGA</span>
-                            <span class="feat-label">Cognitive Layer</span>
-                        </div>
-                    </div>
-                    <div class="feat-desc">AI personality engine, real-time market chat, mood-reactive Orb, voice output, and long-term trader memory.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-ml">
-                    <div class="feat-head">
-                        <div class="feat-icon">5</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">ML</span>
-                            <span class="feat-label">Ring5 Bandit</span>
-                        </div>
-                    </div>
-                    <div class="feat-desc">Thompson Sampling adaptive learning, per-cell confidence tuning, reflection gate, and influence audit trail.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-multi">
-                    <div class="feat-head">
-                        <div class="feat-icon">X</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">EXCHANGE</span>
-                            <span class="feat-label">Multi-Exchange</span>
-                        </div>
-                    </div>
-                    <div class="feat-desc">Binance &amp; Bybit unified routing, per-user credential isolation, automatic API failover, and cross-exchange sanity.</div>
-                    <div class="feat-scan"></div>
-                </div>
-                <div class="feat-card mod-doctor">
-                    <div class="feat-head">
-                        <div class="feat-icon">+</div>
-                        <div class="feat-meta">
-                            <span class="feat-chip">DOCTOR</span>
-                            <span class="feat-label">System Health</span>
-                        </div>
-                    </div>
-                    <div class="feat-desc">Cognitive diagnostics, severity classification, quarantine manager, trust scoring, and false-positive auditor.</div>
-                    <div class="feat-scan"></div>
-                </div>
-            </div>
+                    <dl class="zl-spec">
+                        <div><dt>ICHNOS footprint</dt><dd>What was bought and sold at every price, candle by candle.</dd></div>
+                        <div><dt>Liquidation map</dt><dd>Liquidations that actually happened, from several exchanges — measured, not estimated.</dd></div>
+                        <div><dt>NEREUS order book</dt><dd>The real book, wide, to see where size is waiting.</dd></div>
+                        <div><dt>Quant Monitor</dt><dd>Dozens of live flow and volatility readings in one terminal view.</dd></div>
+                        <div><dt>Dynamic stop protection</dt><dd>Stops that follow the trade and lock in progress by rules, not by feel.</dd></div>
+                        <div><dt>Risk rails</dt><dd>Exposure, leverage and daily loss limits, with a kill switch that closes everything.</dd></div>
+                    </dl>
+                    <p class="zl-also">Also inside: ARES wallet supervision, OMEGA — an AI you can talk to about the market — Binance and Bybit with your own keys, a trade journal with post-mortems, and Telegram alerts. On Android, iPhone and desktop.</p>
+                </section>
+
+                <section class="zl-trust" aria-label="How Zeus treats information">
+                    <div><b>Information, not advice.</b><span>Zeus shows what the market is doing. Decisions stay yours.</span></div>
+                    <div><b>Measured, not guessed.</b><span>Moves after the news are measured from real prices, never implied as cause.</span></div>
+                    <div><b>Sources named.</b><span>Every headline links to its outlet; every price says where it comes from.</span></div>
+                </section>
+            </main>
         </div>
 
 
