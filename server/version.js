@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.387',
-    build: 413,
+    version: '1.7.388',
+    build: 414,
     date: '2026-11-21',
     changelog: [
+        'b414 v1.7.388 - ™ de langa ZEU\'S putin mai mare (0.55em), 2026-11-21 (client).',
         'b413 v1.7.387 - ™ langa ZEU\'S in antet (stanga sus), mic si ridicat, aceeasi culoare, 2026-11-21 (client).',
         'b412 v1.7.386 - preturile ETH / SOL / BNB / XRP de sus apar imediat: abonarea se pierdea cand soclul nu era deschis si nu se retrimitea la reconectare, 2026-11-21 (client).',
         'b411 v1.7.385 - PC: creierul pe toata latimea (radarul in stanga, informatiile in dreapta) de la 1100 px, fara benzile goale; telefonul neschimbat, 2026-11-21 (client).',

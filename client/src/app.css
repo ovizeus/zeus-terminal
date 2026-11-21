@@ -239,7 +239,7 @@ body {
    aceeasi culoare ca titlul; clasa proprie ca main.css (incarcat dupa) sa nu-l atinga. */
 .zt-tm {
   font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
-  font-size: 0.42em;
+  font-size: 0.55em;   /* [2026-11-21] operatorul: „un pic mai mare" (era 0.42em) */
   font-weight: 600;
   letter-spacing: 0;
   vertical-align: super;
