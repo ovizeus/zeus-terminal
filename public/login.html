@@ -632,6 +632,33 @@
             .zl-imp { font-size: 17px }
         }
 
+        /* „Everything, in one terminal": cifre reale (numarate din cod) + inventarul pe categorii */
+        .zl-nums { display: grid; grid-template-columns: repeat(5, 1fr); margin: 20px 0 8px; border-top: 1px solid #12253a; border-bottom: 1px solid #12253a }
+        .zl-nums > div { padding: 16px 0; text-align: center; border-right: 1px solid #12253a }
+        .zl-nums > div:last-child { border-right: 0 }
+        .zl-nums b { display: block; font-family: 'Orbitron', sans-serif; font-size: 26px; font-weight: 700; color: #e8f2fb }
+        .zl-nums span { font-size: 14px; color: #8fa3b6 }
+        .zl-cats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 40px; margin-top: 18px }
+        .zl-cats > div { padding: 14px 0; border-bottom: 1px solid #12253a }
+        .zl-cats h4 { font-size: 17px; font-weight: 700; color: #e3edf7; margin: 0 0 6px }
+        .zl-cats p { font-size: 15.5px; line-height: 1.55; color: #8fa3b6; margin: 0 }
+        @media (max-width: 860px) {
+            .zl-nums { grid-template-columns: repeat(2, 1fr) }
+            .zl-nums > div { border-right: 0; border-bottom: 1px solid #12253a }
+            .zl-nums > div:nth-child(odd) { border-right: 1px solid #12253a }
+            .zl-nums > div:last-child { border-bottom: 0 }
+            .zl-cats { grid-template-columns: 1fr }
+        }
+
+        /* indemnul final (beta privat — adevarat: conturile se aproba manual) */
+        .zl-cta { text-align: center; padding: 46px 0 40px; border-top: 1px solid #12253a }
+        .zl-cta h3 { font-family: 'Orbitron', sans-serif; font-size: clamp(20px, 2.6vw, 28px); font-weight: 700; color: #eef5fc; margin: 0 0 12px }
+        .zl-cta p { font-size: 17px; line-height: 1.6; color: #93a7ba; max-width: 600px; margin: 0 auto 22px }
+        .zl-cta-btn { font-family: 'Orbitron', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 2px; padding: 14px 30px; border-radius: 10px; cursor: pointer;
+            color: #04121c; background: linear-gradient(90deg, #00d9a8, #00afff); border: 0; box-shadow: 0 10px 30px rgba(0, 175, 255, .25) }
+        .zl-cta-btn:hover { filter: brightness(1.08) }
+        .zl-cta-btn:focus-visible { outline: 2px solid #9fe8ff; outline-offset: 3px }
+
         /* ─── System Module Showcase ─── */
         .features {
             display: grid;
@@ -1484,14 +1511,14 @@
                  tag git pre-landing-pro). Imaginile sunt randari REALE ale componentelor aplicatiei, cu date publice (fara conturi). -->
             <main class="zl">
                 <header class="zl-hero">
-                    <h2>See what moves the market.</h2>
-                    <p>Zeus reads crypto and global markets live, measures how prices react to the news, and shows the state of the market at a glance. Information, not advice.</p>
+                    <h2>The market is talking.<br>Most traders can't hear it.</h2>
+                    <p>Zeus listens to everything at once: order flow, liquidations, the news, 105 global markets. Then it shows you, in one glance, what the market is feeling right now, before your emotions decide for you.</p>
                 </header>
 
                 <section class="zl-ch zl-ch-moods" aria-labelledby="zl-moods-h">
                     <div class="zl-txt">
-                        <h3 id="zl-moods-h">The market has a mood. Zeus shows it.</h3>
-                        <p>Twelve live signals — trend, order flow, liquidity, sentiment, order-book imbalance and more — form one shape. Its colour is the brain's state: calm, alert, hesitant, nervous or confused.</p>
+                        <h3 id="zl-moods-h">The market has a mood. Now you can see it.</h3>
+                        <p>Twelve live signals — trend, order flow, liquidity, sentiment, order-book imbalance and more — fuse into one living shape. When it is calm, you will know. When it turns nervous, you will see it before your gut does.</p>
                         <ul class="zl-facts">
                             <li>Replay any trade in under 30 seconds</li>
                             <li>Share trade cards to WhatsApp, Telegram, X, Facebook and Discord</li>
@@ -1510,7 +1537,7 @@
                 <section class="zl-ch zl-mind" aria-labelledby="zl-mind-h">
                     <div class="zl-txt zl-txt-wide">
                         <h3 id="zl-mind-h">Your mind vs. the market.</h3>
-                        <p class="zl-mind-lead">Most losses don't start on the chart. They start in the head. Every part of Zeus answers one of those moments.</p>
+                        <p class="zl-mind-lead">Most losses don't start on the chart. They start in your head, in a three-second decision you can't take back. Zeus was built for exactly those three seconds.</p>
                     </div>
                     <ol class="zl-mind-list">
                         <li><span class="zl-imp">“I have to get in. Now.”</span><span class="zl-ans"><b>Signal fusion and safety gates.</b> Regime, confluence and context have to agree before the brain calls an entry, and it shows HESITANT when a gate says no.</span></li>
@@ -1530,8 +1557,8 @@
 
                 <section class="zl-ch" aria-labelledby="zl-news-h">
                     <div class="zl-txt">
-                        <h3 id="zl-news-h">Know what moved it — measured, not guessed.</h3>
-                        <p>Headlines from 18 sources, from Bloomberg and the Financial Times to the Federal Reserve and the ECB. For every story Zeus measures how Bitcoin, stocks, gold or oil actually moved fifteen minutes and one hour later.</p>
+                        <h3 id="zl-news-h">Stop guessing why it moved.</h3>
+                        <p>Everyone has an opinion after the candle. Zeus has a measurement. Headlines from 18 sources, from Bloomberg and the Financial Times to the Federal Reserve and the ECB, and for every story, how Bitcoin, stocks, gold or oil actually moved fifteen minutes and one hour later.</p>
                         <ul class="zl-facts">
                             <li>The same story from many outlets, grouped into one</li>
                             <li>Economic calendar with countdowns and the market's reaction</li>
@@ -1542,8 +1569,8 @@
 
                 <section class="zl-ch" aria-labelledby="zl-mk-h">
                     <div class="zl-txt">
-                        <h3 id="zl-mk-h">Crypto, next to everything else.</h3>
-                        <p>105 traditional markets live — gold, oil, the S&amp;P 500, the Nasdaq, Nvidia, Tesla, the euro — each with its 30-day correlation to Bitcoin and a clear risk-on or risk-off read of the day.</p>
+                        <h3 id="zl-mk-h">Bitcoin doesn't move alone.</h3>
+                        <p>When Wall Street sneezes, crypto catches the cold, and most traders find out last. Zeus puts 105 traditional markets beside your chart, live: gold, oil, the S&amp;P 500, the Nasdaq, Nvidia, Tesla, the euro, each with its 30-day link to Bitcoin and a clear risk-on or risk-off read of the day.</p>
                         <ul class="zl-facts">
                             <li>See which markets move with Bitcoin, and which against it</li>
                             <li>Metals, energy, indices, currencies and the largest stocks</li>
@@ -1554,7 +1581,8 @@
 
                 <section class="zl-ch" aria-labelledby="zl-hood-h">
                     <div class="zl-txt zl-txt-wide">
-                        <h3 id="zl-hood-h">Built on order flow, guarded by rules.</h3>
+                        <h3 id="zl-hood-h">See the hand that moves the price.</h3>
+                        <p class="zl-mind-lead">Candles show you what happened. Order flow shows you who did it, and where size is still waiting.</p>
                     </div>
                     <dl class="zl-spec">
                         <div><dt>ICHNOS footprint</dt><dd>What was bought and sold at every price, candle by candle.</dd></div>
@@ -1570,7 +1598,7 @@
                 <section class="zl-ch" aria-labelledby="zl-ml-h">
                     <div class="zl-txt zl-txt-wide">
                         <h3 id="zl-ml-h">Learning, with guard rails.</h3>
-                        <p class="zl-mind-lead">Machine learning in Zeus works inside hard limits. It earns influence slowly, and everything it does is written down.</p>
+                        <p class="zl-mind-lead">Most “AI trading” promises magic. Zeus does the opposite: its learning earns trust slowly, works inside hard limits, and writes down every move it makes.</p>
                     </div>
                     <dl class="zl-spec">
                         <div><dt>ML exit control</dt><dd>Protection attaches at entry and the ML policy re-pivots it every second, always inside fixed safety limits.</dd></div>
@@ -1594,6 +1622,59 @@
                         <div><dt>Demo, testnet, real</dt><dd>Practise with zero risk, then switch modes when you are ready.</dd></div>
                         <div><dt>Locked down</dt><dd>PIN and biometric lock, encrypted backups, and exchange keys kept per account.</dd></div>
                     </dl>
+                </section>
+
+                <section class="zl-ch" aria-labelledby="zl-teach-h">
+                    <div class="zl-txt zl-txt-wide">
+                        <h3 id="zl-teach-h">The Teacher trains while you sleep.</h3>
+                        <p class="zl-mind-lead">Before a strategy ever touches your money, it has already lived through months of real market history, made its mistakes there, and kept score.</p>
+                    </div>
+                    <dl class="zl-spec">
+                        <div><dt>Replays real history</dt><dd>Past months of real candles, bar by bar, as if they were happening now.</dd></div>
+                        <div><dt>Builds its own curriculum</dt><dd>Chooses which months to study next, favouring the ones it has practised least.</dd></div>
+                        <div><dt>Autopilot practice</dt><dd>Runs complete simulated trades by itself: entry, stops, exits and the result.</dd></div>
+                        <div><dt>Calibrated confidence</dt><dd>Compares how sure it was with how often it was actually right.</dd></div>
+                        <div><dt>Explains every decision</dt><dd>A reason engine records why each trade was taken, so nothing is a mystery.</dd></div>
+                        <div><dt>Capability score</dt><dd>One number from 0 to 100 for what it has really mastered, backed by its memory of every lesson.</dd></div>
+                    </dl>
+                </section>
+
+                <section class="zl-ch" aria-labelledby="zl-all-h">
+                    <div class="zl-txt zl-txt-wide">
+                        <h3 id="zl-all-h">Everything, in one terminal.</h3>
+                        <p class="zl-mind-lead">Everything a serious trader opens ten tabs for. In one place, talking to each other.</p>
+                    </div>
+                    <div class="zl-nums" role="list">
+                        <div role="listitem"><b>500+</b><span>USDT pairs</span></div>
+                        <div role="listitem"><b>99</b><span>chart indicators</span></div>
+                        <div role="listitem"><b>105</b><span>global markets</span></div>
+                        <div role="listitem"><b>18</b><span>news sources</span></div>
+                        <div role="listitem"><b>25</b><span>tools in the dock</span></div>
+                    </div>
+                    <div class="zl-cats">
+                        <div><h4>Chart</h4><p>99 indicators: 32 classics, from EMA, VWAP and Ichimoku to Fibonacci, and 67 Zeus originals. ICHNOS footprint, Asia, London and New York sessions, VWAP bands, a time and sales tape, trendlines and levels, several chart types, full screen, your own indicators and a backtester.</p></div>
+                        <div><h4>Scanners</h4><p>A live radar of the top 300 pairs by volume, funding and leverage. Market events as they happen: open-interest surges, funding extremes, large liquidations. A multi-timeframe matrix, automatic support and resistance, a signal registry, market metrics and the Quant Monitor.</p></div>
+                        <div><h4>Liquidity</h4><p>A liquidation map from several exchanges, a live liquidation feed, a long and short liquidation predictor, the NEREUS book up to ±2,500 around price, and the live order book.</p></div>
+                        <div><h4>Trading</h4><p>AutoTrade and manual trading in demo, testnet or real. Dynamic stop protection with DSL Drive, max-trades protection, an orphan-position guard and a kill switch. Binance and Bybit, with your own keys.</p></div>
+                        <div><h4>Intelligence</h4><p>The brain radar and its five moods, the THEIA dashboard with a clear verdict, brain vision, safety health and an ML digest. ARIA, NOVA, Adaptive control, the Alien Upgrade Bay for diagnostics and simulations, OMEGA chat with voice, and the Teacher.</p></div>
+                        <div><h4>Review, and you</h4><p>Trade journal, post-mortems, PnL Lab, psych report and an activity feed. Alerts in the app, as notifications and on Telegram. PIN and biometric lock, encrypted backup, support chat, referrals, and an Android app with a home-screen widget. Also runs on iPhone and desktop.</p></div>
+                    </div>
+                </section>
+
+                <section class="zl-cta" aria-labelledby="zl-cta-h">
+                    <h3 id="zl-cta-h">Zeus is in private beta.</h3>
+                    <p>Every account is approved by hand, so the people inside get the full attention of the team. Ask for your seat while the doors are still open.</p>
+                    <button type="button" class="zl-cta-btn" id="zlCtaInvite">Request an invite</button>
+                    <script>
+                        (function () {
+                            var b = document.getElementById('zlCtaInvite'); if (!b) return;
+                            b.addEventListener('click', function () {
+                                var box = document.getElementById('loginBox');
+                                if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                var r = document.getElementById('overlayRegisterBtn'); if (r) r.click();
+                            });
+                        })();
+                    </script>
                 </section>
 
                 <section class="zl-trust" aria-label="How Zeus treats information">
