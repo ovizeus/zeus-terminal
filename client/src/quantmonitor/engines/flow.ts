@@ -98,6 +98,7 @@ export function calcFLOW(): void {
   }
   const lstop = c._qmStopHist?.[c._qmStopHist.length - 1]
   c._qmStopState = lstop ? `HIT ${lstop.side}` : 'IDLE'
+  c._qmStopTs = lstop ? lstop.time : 0   // [2026-11-21] „acum X s” langa STOP (era citit, nescris)
 
   // SMF
   let smf = 0

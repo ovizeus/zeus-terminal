@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.375',
-    build: 401,
+    version: '1.7.376',
+    build: 402,
     date: '2026-11-21',
     changelog: [
+        'b402 v1.7.376 - ultimele randuri moarte din Quant Monitor, 2026-11-21 (client). SIGNAL ACCURACY LOG si Trap rate din semnale si capcane reale, verificate la 30 s; STOP arata de cand; ARIA spune cand lumanarea abia s-a deschis; regimurile si fazele reale colorate; bifa PF PHASE din verdictul real al filtrului; test pentru culorile celor 5 stari.',
         'b401 v1.7.375 - Quant Monitor fara date inventate, 2026-11-21 (server + client). SPEED aleator inlocuit cu intarzierea reala a fluxului; ARES tinte din volatilitatea reala; 24h LIQUIDATIONS masurate (era 0 mereu); TREND MATRIX, AI CONF, SIGNAL, SLOPE, regim, faza, magnet, pereti, OI 1h, funding, EMA cross legate de date reale; etichetele BTC scrise de mana inlocuite cu moneda din chart.',
         'b400 v1.7.374 - Starea dinainte de intrare corecta si la tranzactiile refacute, 2026-11-21 (server + client). Lentilele de pe server tin cont de timpul dintre cadre (30 s la cele refacute): 38% NERVOUS fals la cele refacute → 0; recalculate o data. Eticheta portilor din AUTO-TRADE: safety + context.',
         'b399 v1.7.373 - Retusuri cerute + audit, 2026-11-21 (server + client). Toate cele cinci stari apar (NERVOUS si CONFUSED calibrate pe 83.687 de cadre reale), fiecare cu culoarea ei; replay maxim 30 s; share in WhatsApp/Telegram/Facebook/X/Discord/More/Save prin link public cu imagine; chart si ferestre sub bara telefonului; ICHNOS pornit mereu cu setari in titlu. Audit: PnL viu la pozitiile autotrade (era 0), heatmap-ul de momentum dupa schimbarea reala, tabelul sesiunilor pe 30D/7D/24H reale, Fear&Greed saptamana, etichete de scor clare.',

@@ -759,7 +759,8 @@ export function renderFrame(): string {
   L(``)
 
   const sqzStr = bbSqueeze ? `<span class="yb">\u26A1 ACTIV</span> <span class="dg">str:${bbSqueezeStr.toFixed(0)}%</span>` : `<span class="dg">\u2500</span>`
-  const regCls2: Record<string, string> = { TRENDING: 'gb', VOLATILE: 'rb', RANGING: 'y', TRANSITION: 'dg', SQUEEZE: 'yb' }
+  // [2026-11-21] + valorile pe care RegimeEngine le produce de fapt (TREND_UP/DOWN, RANGE, EXPANSION, CHAOS, LIQUIDATION_EVENT)
+  const regCls2: Record<string, string> = { TRENDING: 'gb', VOLATILE: 'rb', RANGING: 'y', TRANSITION: 'dg', SQUEEZE: 'yb', TREND_UP: 'gb', TREND_DOWN: 'rb', TREND: 'gb', RANGE: 'y', EXPANSION: 'yb', CHAOS: 'rb', LIQUIDATION_EVENT: 'rb' }
   // [2026-10-21 b295] `_qmMtfAlignDetailed` n-avea scriitor, deci `al` era `{}`,
   // `v` era gol, `u` ieşea 0 si eticheta raporta permanent 'ALIGNED BEAR' — un
   // semnal FALS, nu un gol. Acum are scriitor (aria.ts), dar randurile pot fi
@@ -804,9 +805,9 @@ export function renderFrame(): string {
   L(`  <span class="dg">RE CONF    </span>  <span class="${reConf > 65 ? 'gb' : reConf > 40 ? 'y' : 'r'}">${reConf.toFixed(0)}%</span>`)
   L(``)
   L(`  <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 POSITION FILTER \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>`)
-  const pfCls = pfPhase === 'SQUEEZE' || pfPhase === 'VOLATILE' ? 'rb' : pfPhase === 'TRENDING' ? 'gb' : 'y'
-  L(`  <span class="dg">PF PHASE   </span>  <span class="${pfCls}">${pfPhase || '\u2500'}</span> ${pfPhase === 'SQUEEZE' || pfPhase === 'VOLATILE' ? '<span class="rb">\u2717</span>' : '<span class="g">\u2713</span>'}`)
-  L(`  <span class="dg">PF RISK    </span>  <span class="${pfRisk === 'REDUCED' ? 'y' : 'g'}">${pfRisk}</span>`)
+  const pfCls = pfPhase === 'SQUEEZE' || pfPhase === 'VOLATILE' || pfPhase === 'CHAOS' || pfPhase === 'LIQUIDATION_EVENT' ? 'rb' : pfPhase === 'TRENDING' || pfPhase === 'TREND' ? 'gb' : 'y'
+  L(`  <span class="dg">PF PHASE   </span>  <span class="${pfCls}">${pfPhase || '\u2500'}</span> ${(S._qmPfAllow != null ? !S._qmPfAllow : (pfPhase === 'SQUEEZE' || pfPhase === 'VOLATILE')) ? '<span class="rb">\u2717</span>' : '<span class="g">\u2713</span>'}`)
+  L(`  <span class="dg">PF RISK    </span>  <span class="${pfRisk === 'BLOCKED' ? 'rb' : pfRisk === 'REDUCED' ? 'y' : 'g'}">${pfRisk}</span>`)
   L(`  <span class="dg">PF SIZE    </span>  <span class="${pfSize < 1 ? 'rb' : 'gb'}">\u00D7${pfSize.toFixed(1)}</span>`)
   L(``)
 

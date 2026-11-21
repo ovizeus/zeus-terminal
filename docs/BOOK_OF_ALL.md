@@ -15029,3 +15029,12 @@ Cautarea de date false prin toata interfata (`Math.random` + campuri citite fara
 - **TREND MATRIX desena „▼ DN" pe toate 3 + „ALL BEARISH" FALS** (0 → DN) → acum pretul fata de media pe 1/5/15 minute; cat nu are istoric arata „—".
 - **Ramase moarte, cinstit**: `TrapHist`/`TrapRate` (istoric de capcane neimplementat; arata „─" si lista goala, nu inventeaza), `StopTs`, `AriaWaiting`.
 Teste: client 2.296 verzi (+7 noi: `bridges1121`, `feedLagHonesty`), server 4 shard-uri verzi (+1 `liq-store` long/short).
+
+### 🧩 b402 v1.7.376 (2026-11-21) — ultimele randuri moarte din Quant Monitor + culorile starilor (client, fara reload)
+- **SIGNAL ACCURACY LOG** („30s outcome check") n-avea scriitor → fiecare trecere HOLD→BUY/SELL a randului ACT se noteaza cu pretul si se verifica dupa 30 s (HIT/MISS). Ultimele 50.
+- **Trap rate (ARIA)** → din capcanele MMTRAP reale: confirmata daca dupa 30 s pretul a mers in sensul intoarcerii. Fara verificari: „─".
+- **STOP** arata acum de cand (`_qmStopTs` din `flow.ts`). **ARIA** spune „waiting close" in primele 20% ale lumanarii (inainte era mereu fals).
+- **Contradictie gasita la puntea din b401:** RegimeEngine produce TREND_UP/TREND_DOWN/RANGE/EXPANSION/CHAOS/LIQUIDATION_EVENT, iar monitorul colora doar TRENDING/RANGING/VOLATILE → valori reale fara culoare. Completate. **Bifa ✓/✗ de la PF PHASE** era scrisa de mana (✗ doar la SQUEEZE/VOLATILE) → acum verdictul real `phaseFilter.allow`; PF RISK BLOCKED = rosu.
+- **Culorile starilor:** masurate perceptual (ΔE CIELAB): minim 25,4 (NERVOUS/HESITANT), restul 44–134 → toate se deosebesc; designul neschimbat. Test `moodColours` fixeaza regula (≥ 20). In capturile din ultimele 7 zile apar toate 5: ALERT 822, HESITANT 287, CALM 253, CONFUSED 2, NERVOUS 1. Cele 2 capturi fara stare (cont 2, 20 nov 17:18/17:46) au intrat in timpul primei livrari a radarului pe server — nu se repeta.
+- **Baleiaj pe toata aplicatia:** `BM.*` si `S._*` (in afara monitorului) — niciun camp citit fara scriitor. `Math.random` ramas: doar efecte vizuale, esantionare si unealta de dezvoltator.
+Teste: client 2.300 verzi.

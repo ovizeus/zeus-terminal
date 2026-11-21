@@ -63,6 +63,8 @@ export function calcARIA(): void {
   const lk = kl[kl.length - 1]
   const body = Math.abs(lk.c - lk.o), rng = lk.h - lk.l || 0.001
   const br = body / rng
+  // [2026-11-21] lumanarea curenta inca se formeaza in primele 20% din interval → citirea ei nu spune nimic
+  { const iv = kl.length > 1 ? Math.abs(+kl[kl.length - 1].t - +kl[kl.length - 2].t) : 0; const st = +lk.t; c._qmAriaWaiting = iv > 0 && st > 0 && (Date.now() - (st < 1e12 ? st * 1000 : st)) < iv * (iv < 1e7 ? 1000 : 1) * 0.2 }
   c._qmAriaCandleType = br > 0.6 ? (lk.c > lk.o ? 'bullish' : 'bearish') : (br > 0.3 ? 'indecision' : 'doji')
   c._qmAriaCandleVol = lk.v > avgVol * 1.5 ? 'high' : lk.v < avgVol * 0.5 ? 'low' : 'flat'
 

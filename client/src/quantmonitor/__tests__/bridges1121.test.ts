@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'vitest'
+import { describe, test, expect, beforeEach, vi } from 'vitest'
 import { _syncQmVars } from '../index'
 import { BM } from '../../core/config'
 
@@ -62,6 +62,36 @@ describe('Quant Monitor — puntile din 21 nov', () => {
     _syncQmVars()
     expect(w.S._qmTrend15m).toBe(1)
     expect(w.S._qmTrend1m).toBe(1)
+  })
+
+  test('SIGNAL ACCURACY LOG: BUY notat, verificat dupa 30 s (HIT cand pretul urca)', () => {
+    vi.useFakeTimers(); vi.setSystemTime(1_800_000_000_000)
+    try {
+      w.S._qmTrapHist = []; w.S._qmLastAct = 'HOLD'; w.S.price = 100; w.S._qmPrice = 100
+      ;(BM as any).confluenceScore = 90; (BM as any).confMin = 65
+      w.S.signalData = { bullCount: 4, bearCount: 1, signals: [] }
+      _syncQmVars()
+      expect(w.S._qmAct).toBe('BUY')
+      expect(w.S._qmTrapHist).toHaveLength(1)
+      vi.setSystemTime(1_800_000_031_000); w.S.price = 101; w.S._qmPrice = 101
+      _syncQmVars()
+      expect(w.S._qmTrapHist[0]).toMatchObject({ checked: true, hit: true })
+    } finally { vi.useRealTimers() }
+  })
+
+  test('Trap rate: capcana SHORT confirmata cand pretul scade in 30 s; fara verificari = „─"', () => {
+    vi.useFakeTimers(); vi.setSystemTime(1_800_000_000_000)
+    try {
+      w.S._qmTrapSeen = []; w.S._qmMmtrapHist = []; w.S.price = 100; w.S._qmPrice = 100
+      _syncQmVars()
+      expect(w.S._qmTrapRateStr).toBe('─')
+      w.S._qmMmtrapHist = [{ type: 'SHORT', pct: -0.05, time: Date.now() }]
+      _syncQmVars()
+      vi.setSystemTime(1_800_000_031_000); w.S.price = 99; w.S._qmPrice = 99
+      _syncQmVars()
+      expect(w.S._qmTrapRatePct).toBe(100)
+      expect(w.S._qmTrapRateStr).toBe('100% (1/1)')
+    } finally { vi.useRealTimers() }
   })
 
   test('24h LIQUIDATIONS: fara istoric = null („—"), nu $0', () => {

@@ -162,7 +162,7 @@ export function _syncQmVars(): void {
     const _BM = (window as any).BM || {}
     const re = _BM.regimeEngine, pf = _BM.phaseFilter
     if (re && re.regime) { S._qmReRegime = String(re.regime).toUpperCase(); S._qmReConf = Number(re.confidence) || 0; S._qmReTrap = Number(re.trapRisk) || 0 }
-    if (pf && pf.phase) { S._qmPfPhase = String(pf.phase).toUpperCase(); S._qmPfRisk = String(pf.riskMode || 'normal').toUpperCase(); S._qmPfSize = Number(pf.sizeMultiplier) > 0 ? Number(pf.sizeMultiplier) : 1 }
+    if (pf && pf.phase) { S._qmPfPhase = String(pf.phase).toUpperCase(); S._qmPfRisk = String(pf.riskMode || 'normal').toUpperCase(); S._qmPfSize = Number(pf.sizeMultiplier) > 0 ? Number(pf.sizeMultiplier) : 1; S._qmPfAllow = pf.allow !== false }
     // Primele randuri (AI CONF / SIGNAL / DIFF / SLOPE) erau constante: 50% / 0% / 0 / 0.
     // CONF = confluenta reala; SIGNAL = cat de unite sunt semnalele (majoritatea / total);
     // DIFF = schimbarea ultimei lumanari (fractie); SLOPE = panta EMA20 pe 10 bare (%), ca regimeEnhanced.
@@ -224,6 +224,26 @@ export function _syncQmVars(): void {
       const sd = getSignalData(), thr = Number(_BM.confMin) > 0 ? Number(_BM.confMin) : 65
       S._qmAct = Number.isFinite(cs) && cs >= thr && sd.bullCount !== sd.bearCount ? (sd.bullCount > sd.bearCount ? 'BUY' : 'SELL') : 'HOLD'
     } catch { S._qmAct = 'HOLD' }
+    // SIGNAL ACCURACY LOG „(30s outcome check)": nimeni nu-l scria. Fiecare trecere HOLD→BUY/SELL se
+    // noteaza cu pretul; dupa 30 s: HIT daca pretul a mers in directia semnalului, altfel MISS.
+    {
+      const th: any[] = S._qmTrapHist || (S._qmTrapHist = [])
+      if (S._qmAct !== 'HOLD' && S._qmAct !== S._qmLastAct && px > 0) th.push({ act: S._qmAct, price: px, time: nowMs, checked: false, hit: false })
+      S._qmLastAct = S._qmAct
+      for (const t of th) if (!t.checked && nowMs - t.time >= 30000 && px > 0) { t.checked = true; t.hit = t.act === 'BUY' ? px > t.price : px < t.price }
+      while (th.length > 50) th.shift()
+    }
+    // Trap rate (ARIA): din capcanele MMTRAP reale (flow.ts) — cate s-au CONFIRMAT, adica pretul a
+    // continuat in sensul intoarcerii dupa 30 s. Fara capcane verificate: „─", nu 0%.
+    {
+      const seen: any[] = S._qmTrapSeen || (S._qmTrapSeen = [])
+      for (const tr of S._qmMmtrapHist || []) if (!seen.some((x) => x.time === tr.time) && px > 0) seen.push({ time: tr.time, type: tr.type, price: px, done: false, ok: false })
+      for (const x of seen) if (!x.done && nowMs - x.time >= 30000 && px > 0) { x.done = true; x.ok = x.type === 'SHORT' ? px < x.price : px > x.price }
+      while (seen.length && nowMs - seen[0].time > 3600000) seen.shift()
+      const done = seen.filter((x) => x.done)
+      if (done.length) { const ok = done.filter((x) => x.ok).length; S._qmTrapRatePct = Math.round((ok / done.length) * 100); S._qmTrapRateStr = `${S._qmTrapRatePct}% (${ok}/${done.length})` }
+      else { S._qmTrapRatePct = 0; S._qmTrapRateStr = '─' }
+    }
     try {
       const sd = getSignalData(); const tot = (sd.bullCount || 0) + (sd.bearCount || 0)
       S._qmSig = tot > 0 ? (Math.max(sd.bullCount, sd.bearCount) / tot) * 100 : 0
