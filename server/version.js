@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.379',
-    build: 405,
+    version: '1.7.380',
+    build: 406,
     date: '2026-11-21',
     changelog: [
+        'b406 v1.7.380 - scos codul mort din clasificarea pozitiilor noi (citea AT._atActive, nescris nicaieri); comportament neschimbat: unknown pana confirma serverul, 2026-11-21 (client).',
         'b405 v1.7.379 - Market Radar primeste din nou lichidari (fluxul Binance e mort pe retea; acum din Bybit/OKX/Gate), win rate-ul din clasamentul Admin = aceeasi definitie ca AUTO-TRADE, RSI real in Fear & Greed din Quant Monitor, 2026-11-21 (server + client).',
         'b404 v1.7.378 - Quant Monitor: Fear & Greed era blocat pe 50 (NaN), balenele aveau prag in unitati de moneda, portofelul BTC se evalua cu pretul din chart, SESSION P&L nu urmarea nimic, BTC.D devenise ETH.D; garda: niciun camp NaN dupa un ciclu, 2026-11-21 (client).',
         'b403 v1.7.377 - share in aplicatia instalata + bara de sus, 2026-11-21 (client). Cardul din jurnalul creierului foloseste in APK pluginul nativ ZeusShare (Save in galerie, More = foaia de share Android) si deschide WhatsApp/Telegram/X/Facebook direct; sertarul din Admin nu mai intra sub bara de sus; test pentru toate ecranele pe tot ecranul.',

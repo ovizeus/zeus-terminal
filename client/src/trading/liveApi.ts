@@ -405,12 +405,11 @@ export async function liveApiSyncState(): Promise<any> {
             return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade === true
           })
         }
-        // [FIX] If _lastServerPositions empty (boot race), check AT state directly
-        if (!_isServerAT && _cacheLen <= 0 && w.AT && typeof w.AT._serverMode === 'string') {
-          // Server AT is active — new positions on testnet/live are likely AT, not manual
-          // Only mark as AT if AT is actively running (SERVER_AT_DEMO or SERVER_AT_TESTNET)
-          if (w.AT._atActive === true) _isServerAT = true
-        }
+        // [2026-11-21] SCOS: ramura „boot race" citea `AT._atActive`, pe care nu-l scria nimeni → nu se
+        // aprindea niciodata (cod mort). Si NU trebuie aprinsa: ar marca AT orice pozitie noua doar fiindca
+        // AT e pornit, deci si una MANUALA deschisa la pornire. Corect e ce se intampla deja: pozitia
+        // ramane „unknown" (in niciun panou) si e reclasificata sus cand soseste lista serverului
+        // (Phase 8C1, mai sus: sp.autoTrade === true, varsta >= 3 s). Comportament neschimbat.
         var _tpMatchFound = false
         if (!_isServerAT && Array.isArray(w.TP.livePositions)) {
           var _tpMatch = w.TP.livePositions.find(function(tp: any) {
