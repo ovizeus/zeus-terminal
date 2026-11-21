@@ -6111,8 +6111,8 @@ select option {
 }
 
 /* ── Z-glyph Coming Soon toast (UI-POLISH-1 2026-05-13) ──────
-   Operator-approved brand-aligned overlay pentru More icon click.
-   Z rune sharp angular cyan + Orbitron 900 + glow pulse 1.5s loop. */
+   [2026-11-21] Refacut la cererea operatorului: „tot asa ceva pro, fara galben" — aceeasi paleta ca
+   GLOBAL MARKETS (platina #d6dee8 + albastru-otel #6f9bd1), fundal opac bleumarin, fara aur si fara neon. */
 .z-coming-soon {
   position: fixed;
   top: 50%;
@@ -6120,10 +6120,12 @@ select option {
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
-  gap: 15px;
-  padding: 18px 30px;
-  background: linear-gradient(145deg, rgba(18, 22, 30, 0.94), rgba(8, 11, 16, 0.96));
-  border: 1px solid rgba(212, 175, 55, 0.30);
+  gap: 16px;
+  padding: 18px 26px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+  background: linear-gradient(160deg, rgba(14, 24, 40, 0.97), rgba(7, 12, 22, 0.98));
+  border: 1px solid rgba(111, 155, 209, 0.38);
   border-radius: 14px;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -6131,53 +6133,54 @@ select option {
   pointer-events: none;
   transition: opacity 300ms ease, transform 300ms ease;
   box-shadow:
-    0 18px 50px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 1px 0 rgba(255, 255, 255, 0.07) inset;
+    0 20px 50px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(214, 222, 232, 0.04) inset,
+    0 1px 0 rgba(214, 222, 232, 0.08) inset;
+}
+.z-coming-soon::before {
+  content: '';
+  position: absolute; left: 18px; right: 18px; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(111, 155, 209, 0.7), transparent);
 }
 .z-coming-soon .z-cs-badge {
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #d4af37;
-  background: radial-gradient(circle at 50% 38%, rgba(212, 175, 55, 0.20), rgba(212, 175, 55, 0.02));
-  border: 1px solid rgba(212, 175, 55, 0.45);
+  color: #d6dee8;
+  background: linear-gradient(160deg, rgba(111, 155, 209, 0.22), rgba(111, 155, 209, 0.05));
+  border: 1px solid rgba(111, 155, 209, 0.55);
   animation: z-cs-badge-pulse 2.4s ease-in-out infinite;
 }
-.z-coming-soon .z-cs-glyph {
-  display: block;
-  filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.6));
-}
+.z-coming-soon .z-cs-glyph { display: block; }
 .z-coming-soon .z-cs-textwrap {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  min-width: 0;
 }
 .z-coming-soon .z-cs-text {
   font-family: 'Orbitron', sans-serif;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 14px;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   text-transform: uppercase;
-  background: linear-gradient(180deg, #f4e4b0, #d4af37);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: #d4af37;
+  white-space: nowrap;
+  color: #d6dee8;
 }
 .z-coming-soon .z-cs-sub {
   font-size: 9.5px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #7a6a3a;
+  white-space: nowrap;
+  color: rgba(214, 222, 232, 0.5);
 }
 @keyframes z-cs-badge-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(212, 175, 55, 0.30), 0 0 0 4px rgba(212, 175, 55, 0.04); }
-  50%      { box-shadow: 0 0 22px rgba(212, 175, 55, 0.55), 0 0 0 7px rgba(212, 175, 55, 0.07); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(111, 155, 209, 0.08); }
+  50%      { box-shadow: 0 0 0 6px rgba(111, 155, 209, 0.14); }
 }
 
 /* ── ModeBar NEON PULSE redesign (2026-05-14) ────────────────────────
