@@ -15061,3 +15061,9 @@ Teste: client 2.311 verzi.
 - **Corectie la mine (b404):** Fear & Greed din Quant Monitor folosea si `S.rsi` ca numar, dar e `{tf: valoare}` → tot NaN. Testele mele foloseau `rsi: 58`, o forma care nu exista in aplicatie, de-aia n-au prins. Acum puntea `_qmRsi` (RSI 5m), iar testele (`fearGreedLs`, `noNaN`) folosesc forma reala.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
+
+### 🔍 2026-11-21 — baleiajul final pe TOATA interfata (fara cod nou)
+Toate panourile citesc din aceleasi obiecte comune, deci verificarea „citit dar nescris" pe ele acopera orice panou:
+- `BM.*` (45 de campuri), `S._*`, `BR.*`: **niciun camp citit fara scriitor.**
+- `window.*` (873 de nume): 54 fara scriitor gasit. Verificate cele care arata a date (`allP`, `PRICES`, `currentSymbol`, `currentTF`, `SYMBOL`, `REGIME`, `ARES_*`, `wsStatus`): toate sunt REZERVE in lanturi `sursa_vie || rezerva` (prima sursa e vie: `S.symbol`, `allPrices`, `ARES.wallet`, `BM.regime`). Restul: functii expuse altfel sau `w` local (perete / balena).
+- **DESCHIS, cere decizia operatorului (calea banilor):** `AT._atActive` e citit in `trading/liveApi.ts:412` si **nu e scris nicaieri** → ramura de rezerva pentru „cursa de la pornire" (pozitie noua pe bursa inainte sa soseasca lista de pozitii a serverului) nu se aprinde niciodata. Efect atenuat: pasul urmator (Phase 5C „safe-unknown") nu o declara manuala. Remediu posibil: `AT._atActive = data.atActive` acolo unde `marketDataTrading.ts:192` citeste deja `data.atActive`. NEATINS.
