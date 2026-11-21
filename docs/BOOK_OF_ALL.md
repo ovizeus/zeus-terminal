@@ -15018,3 +15018,14 @@ Cerut (cu capturi, lucru autonom peste noapte): stari, replay, share, bara telef
 
 ### 🧪 b400 (2026-11-21) — corectie la mine: NERVOUS fals la tranzactiile refacute
 Dupa b399 distributia starii dinainte de intrare arata **NERVOUS 451 (36%)** — toate la tranzactiile REFACUTE (live: 1 din 81). `lensesOf` de pe server presupunea o secunda intre cadre; la cele refacute sunt 30 s, deci lentilele ramaneau in urma si „se contraziceau" artificial. Acum pasul foloseste timpul real dintre cadre (ca aplicatia, `framesToStates`). Recalculate o data (`moodV: 3`). Distributia reala: ALERT 759, HESITANT 287, CALM 213, CONFUSED 2, NERVOUS 1 — inainte de intrare creierul e aproape mereu ALERT/HESITANT (intra cand confluenta e langa prag). Pe radarul live NERVOUS si CONFUSED apar cat piata o cere (~5% / ~1% din timp). Si: eticheta portilor din AUTO-TRADE „Gates (safety + context)" (radarul arata doar siguranta).
+
+### 🔎 b401 v1.7.375 (2026-11-21) — Quant Monitor fara date inventate (server + client, reload facut)
+Cautarea de date false prin toata interfata (`Math.random` + campuri citite fara scriitor, regula R-C-15):
+- **`[ SPEED ]` era ALEATOR** (`Math.random`) → acum **FEED LAG** = intarzierea reala a fluxului Binance (timpul evenimentului `E` fata de ceas, medie glisanta); „—" fara date.
+- **ARES isi alegea tinta la intamplare** (0,3–0,7%) → acum jumatate din ATR-ul real (intre 0,2% si 1%).
+- **Etichetele scrise de mana „BTCUSDT only" / „BTC:"** (27 de locuri) → moneda din chart.
+- **24h LIQUIDATIONS** scria „estimated from OI drops" si arata **$0 mereu** (campurile n-aveau scriitor) → acum lichidarile MASURATE pe 24h (Bybit, OKX, Gate) din aceeasi cerere ca cadranul LIQ; `liqStore.stats` intoarce si `longUsd`/`shortUsd`. Viu: BTC $161,8M (long $143,6M / short $18,2M, 15.465 evenimente). Fara istoric: „—", nu $0.
+- **Alte 26 de campuri moarte**, cu implicite inventate (AI CONF 50%, SIGNAL 0%, „RANGING", NORMAL ×1.0, MAGNET „$0.00 ()", MAG BIAS mereu BELOW, ACT mereu HOLD, OI 1h 0, funding plat, EMA cross 0). Le-am legat in `_syncQmVars` de sursele reale: `BM.regimeEngine`, `BM.phaseFilter`, `BM.confluenceScore`, semnalele, lumanarile, `S.magnets`, cartea de ordine si istoricul propriu al monitorului (pret 20 min, OI 70 min, funding 2 h).
+- **TREND MATRIX desena „▼ DN" pe toate 3 + „ALL BEARISH" FALS** (0 → DN) → acum pretul fata de media pe 1/5/15 minute; cat nu are istoric arata „—".
+- **Ramase moarte, cinstit**: `TrapHist`/`TrapRate` (istoric de capcane neimplementat; arata „─" si lista goala, nu inventeaza), `StopTs`, `AriaWaiting`.
+Teste: client 2.296 verzi (+7 noi: `bridges1121`, `feedLagHonesty`), server 4 shard-uri verzi (+1 `liq-store` long/short).

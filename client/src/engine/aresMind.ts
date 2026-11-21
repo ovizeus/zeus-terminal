@@ -24,7 +24,10 @@ function resolveOutcome(pnl: number): void {
 
 function _makePrediction(dir: string, price: number): void {
   if (!price || price <= 0) return
-  const movePct = 0.003 + Math.random() * 0.004  // 0.3-0.7%
+  // [2026-11-21] Tinta era ALEATOARE (0,3–0,7%), deci „acuratetea" si „clarity" erau inventate.
+  // Acum: jumatate din volatilitatea reala (ATR% din creier), intre 0,2% si 1%.
+  const atrPct = Number(w.BRAIN?.regimeAtrPct) || Number(w.BR?.regimeAtrPct) || 0.8
+  const movePct = Math.max(0.002, Math.min(0.01, (atrPct / 100) * 0.5))
   const target = dir === 'LONG' ? price * (1 + movePct) : price * (1 - movePct)
   _predictions.unshift({ ts: Date.now(), price, dir, targetPrice: target, resolved: false, correct: null })
   if (_predictions.length > 20) _predictions.pop()

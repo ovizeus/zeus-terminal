@@ -83,7 +83,10 @@ function _s() {
             'SELECT symbol, COUNT(*) AS n, SUM(usd) AS usd FROM liq_events'
             + ' WHERE ts >= ? GROUP BY symbol ORDER BY n DESC LIMIT ?'),
         stats: db.db.prepare(
-            'SELECT exchange, COUNT(*) AS n, SUM(usd) AS usd, MIN(ts) AS oldest, MAX(ts) AS newest'
+            // [2026-11-21] + impartirea pe parte (SELL = long lichidat, ca in map/heatmap) — Quant
+            // Monitor afisa „24h LIQUIDATIONS" dintr-un camp fara scriitor ($0 mereu).
+            'SELECT exchange, COUNT(*) AS n, SUM(usd) AS usd, MIN(ts) AS oldest, MAX(ts) AS newest,'
+            + " SUM(CASE WHEN side = 'SELL' THEN usd ELSE 0 END) AS longUsd"
             + ' FROM liq_events WHERE symbol = ? AND ts >= ? GROUP BY exchange'),
         pruneBatch: db.db.prepare(
             'DELETE FROM liq_events WHERE rowid IN (SELECT rowid FROM liq_events WHERE ts < ? LIMIT ?)'),
@@ -271,7 +274,7 @@ function heatmap({ symbol, ref, days, cols, spanPct } = {}) {
  * Binance chiar nu livrează nimic către serverul ăsta.
  */
 function stats({ symbol, days } = {}) {
-    const out = { events: 0, totalUsd: 0, since: 0, exchanges: [], days: DEFAULT_DAYS };
+    const out = { events: 0, totalUsd: 0, longUsd: 0, shortUsd: 0, since: 0, exchanges: [], days: DEFAULT_DAYS };
     try {
         const sym = typeof symbol === 'string' ? symbol.trim() : '';
         const d = Number.isFinite(Number(days)) && Number(days) > 0 ? Math.min(Number(days), 365) : DEFAULT_DAYS;
@@ -281,6 +284,8 @@ function stats({ symbol, days } = {}) {
         for (const r of rows) {
             out.events += r.n;
             out.totalUsd += r.usd;
+            out.longUsd += r.longUsd || 0;
+            out.shortUsd += (r.usd || 0) - (r.longUsd || 0);
             if (!out.since || r.oldest < out.since) out.since = r.oldest;
             out.exchanges.push({ exchange: r.exchange, n: r.n, usd: r.usd, last: r.newest });
         }

@@ -1,0 +1,72 @@
+import { describe, test, expect, beforeEach } from 'vitest'
+import { _syncQmVars } from '../index'
+import { BM } from '../../core/config'
+
+// [2026-11-21] Audit (R-C-15): campuri citite de monitor, fara scriitor, aratau implicite inventate:
+// AI CONF 50%, SIGNAL 0%, regim „RANGING", risc NORMAL, ×1.0, lichidari 24h $0.
+const w = window as any
+
+describe('Quant Monitor — puntile din 21 nov', () => {
+  beforeEach(() => {
+    w.S = Object.assign(w.S || {}, { symbol: 'BTCUSDT' })
+  })
+
+  test('regimul si faza vin din RegimeEngine / PhaseFilter, nu din implicite', () => {
+    ;(BM as any).regimeEngine = { regime: 'trend', confidence: 72, trapRisk: 15 }
+    ;(BM as any).phaseFilter = { phase: 'expansion', riskMode: 'reduced', sizeMultiplier: 0.5 }
+    _syncQmVars()
+    expect(w.S._qmReRegime).toBe('TREND')
+    expect(w.S._qmReConf).toBe(72)
+    expect(w.S._qmReTrap).toBe(15)
+    expect(w.S._qmPfPhase).toBe('EXPANSION')
+    expect(w.S._qmPfRisk).toBe('REDUCED')
+    expect(w.S._qmPfSize).toBe(0.5)
+  })
+
+  test('AI CONF = confluenta reala; SLOPE si DIFF din lumanari', () => {
+    ;(BM as any).confluenceScore = 83
+    w.S.klines = Array.from({ length: 60 }, (_, i) => ({ time: i, open: 100 + i, high: 101 + i, low: 99 + i, close: 100 + i, volume: 1 }))
+    _syncQmVars()
+    expect(w.S._qmConf).toBe(83)
+    expect(w.S._qmSlope).toBeGreaterThan(0)          // pret in crestere → panta pozitiva
+    expect(w.S._qmMom).toBeCloseTo(1 / 158, 6)       // 159 vs 158
+  })
+
+  test('MAGNET / MAG BIAS din magnetii reali: cel mai apropiat nivel si partea lui', () => {
+    w.S.price = 100; w.S._qmPrice = 100; w.S.magnetBias = 'neut'
+    w.S.magnets = { above: [{ price: 103 }, { price: 101.5 }], below: [{ price: 97 }] }
+    _syncQmVars()
+    expect(w.S._qmLiqMagnet).toBe(101.5)
+    expect(w.S._qmLiqSide).toBe('ABOVE')
+    expect(w.S._qmMagnetUpPct).toBeCloseTo(1.5, 6)
+    expect(w.S._qmMagnetDnPct).toBeCloseTo(-3, 6)
+    expect(w.S._qmMagBias).toBe('ABOVE')
+  })
+
+  test('pereti din carte: nivelurile >= 3,5× media, cele mai mari primele', () => {
+    w.S.bids = [{ p: 99, q: 1 }, { p: 98, q: 1 }, { p: 97, q: 1 }, { p: 96, q: 1 }, { p: 95, q: 1 }, { p: 94, q: 1 }, { p: 93, q: 1 }, { p: 92, q: 1 }, { p: 91, q: 1 }, { p: 90, q: 40 }]
+    w.S.asks = [{ p: 101, q: 1 }, { p: 102, q: 1 }]
+    _syncQmVars()
+    expect(w.S._qmBidWalls.map((x: any) => x.p)).toEqual([90])
+    expect(w.S._qmAskWalls).toEqual([])
+  })
+
+  test('TREND MATRIX: fara istoric destul = 0 (afisat „—"), nu „DN"', () => {
+    w.S._qmPxRing = []
+    _syncQmVars()
+    expect(w.S._qmTrend15m).toBe(0)
+    // cu 16 minute de pret in crestere → sus
+    const now = Date.now()
+    w.S._qmPxRing = Array.from({ length: 960 }, (_, i) => ({ t: now - (960 - i) * 1000, v: 90 + i * 0.01 }))
+    w.S.price = 120; w.S._qmPrice = 120
+    _syncQmVars()
+    expect(w.S._qmTrend15m).toBe(1)
+    expect(w.S._qmTrend1m).toBe(1)
+  })
+
+  test('24h LIQUIDATIONS: fara istoric = null („—"), nu $0', () => {
+    w.S.symbol = 'NOHISTUSDT'
+    _syncQmVars()
+    expect(w.S._qmLiq24hTotal).toBeNull()
+  })
+})

@@ -49,6 +49,18 @@ function ev(over = {}) {
     }, over);
 }
 
+describe('[2026-11-21] statistica pe 24h are si impartirea long / short (Quant Monitor)', () => {
+    test('SELL = long lichidat, BUY = short lichidat; suma = totalul', () => {
+        store.record(ev({ side: 'SELL', vol: 3000 }));
+        store.record(ev({ side: 'SELL', vol: 1000, exchange: 'okx' }));
+        store.record(ev({ side: 'BUY', vol: 500 }));
+        const st = store.stats({ symbol: 'BTCUSDT', days: 1 });
+        expect(st.totalUsd).toBeCloseTo(4500, 6);
+        expect(st.longUsd).toBeCloseTo(4000, 6);
+        expect(st.shortUsd).toBeCloseTo(500, 6);
+    });
+});
+
 describe('depozitul de lichidari — scrierea', () => {
 
     test('tabela exista, creata de migratie', () => {

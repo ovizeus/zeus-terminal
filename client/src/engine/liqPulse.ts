@@ -104,6 +104,12 @@ export function recentLiqs(now: number): LiqTick[] {
     return _events
 }
 
+/** [2026-11-21] Totalurile REALE pe 24h (din aceeasi cerere liq-panel days=1), pentru Quant Monitor. */
+const _day = new Map<string, { long: number; short: number; total: number; at: number }>()
+export function day24Of(symbol: string): { long: number; short: number; total: number; at: number } | null {
+    return _day.get(String(symbol || '').toUpperCase()) || null
+}
+
 export function baselineOf(symbol: string): number | null {
     const b = _baseline.get(symbol)
     return b ? b.usd : null
@@ -127,9 +133,10 @@ export function refreshBaseline(symbol: string, price: number, now: number, fetc
             const st = j && j.stats
             const usd = st ? baselinePerWindow(st.totalUsd, st.since, Date.now(), PULSE_WINDOW_MS) : null
             _baseline.set(symbol, { usd, at: Date.now() })
+            if (st && Number.isFinite(+st.totalUsd)) _day.set(String(symbol).toUpperCase(), { long: +st.longUsd || 0, short: +st.shortUsd || 0, total: +st.totalUsd || 0, at: Date.now() })
         })
         .catch(() => { _baseline.set(symbol, { usd: cur ? cur.usd : null, at: Date.now() }) })
         .finally(() => { _inflight.delete(symbol) })
 }
 
-export function _resetLiqPulseForTest(): void { _events = []; _lastPrune = 0; _baseline.clear(); _inflight.clear() }
+export function _resetLiqPulseForTest(): void { _events = []; _lastPrune = 0; _baseline.clear(); _inflight.clear(); _day.clear() }

@@ -177,6 +177,9 @@ export function connectBNB(): void {
       let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
       if (j.stream) {
         const d = j.data; const st = j.stream
+        // [2026-11-21] Intarzierea REALA a fluxului (ora bursei → ora primirii), pentru Quant Monitor,
+        // care afisa o „viteza" din Math.random(). Netezita; ceasurile pot diferi cateva ms.
+        if (d && +d.E > 0) { const lag = Math.max(0, Date.now() - +d.E); w.S._wsLagMs = w.S._wsLagMs == null ? lag : w.S._wsLagMs * 0.8 + lag * 0.2; w.S._wsLagTs = Date.now() }
         if (st.includes('markPrice')) {
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T

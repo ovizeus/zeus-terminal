@@ -2,6 +2,8 @@
 // Manages intervals, WS connections, render loop
 import { QM, qmLog, addLiq } from './state'
 import { startPoll } from '../utils/poll'
+import { day24Of } from '../engine/liqPulse'
+import { getSignalData, getKlines } from '../services/stateAccessors'
 import { runIntel } from './engines/intel'
 import { calcFLOW } from './engines/flow'
 import { calcARIA } from './engines/aria'
@@ -146,6 +148,99 @@ export function _syncQmVars(): void {
   S._qmLongRatio = S.ls?.l ? S.ls.l / 100 : 0
   S._qmShortRatio = S.ls?.s ? S.ls.s / 100 : 0
   S._qmWsOK = !!(S.bnbOk || S.bybOk)
+  // [2026-11-21] 24h LIQUIDATIONS: campurile n-aveau scriitor ($0 mereu). Acum totalurile MASURATE pe
+  // 24h ale monedei din chart (server liq-panel, aceeasi cerere ca cadranul LIQ). Fara date: null → „—".
+  {
+    const d24 = day24Of(String(S.symbol || 'BTCUSDT'))
+    S._qmLiq24hLong = d24 ? d24.long : null
+    S._qmLiq24hShort = d24 ? d24.short : null
+    S._qmLiq24hTotal = d24 ? d24.total : null
+  }
+  // [2026-11-21] Punti lipsa (R-C-15): regimul si faza EXISTA in BM (RegimeEngine / PhaseFilter, calculate
+  // la fiecare ciclu) dar monitorul afisa implicite inventate („RANGING", 50%, NORMAL, ×1.0).
+  {
+    const _BM = (window as any).BM || {}
+    const re = _BM.regimeEngine, pf = _BM.phaseFilter
+    if (re && re.regime) { S._qmReRegime = String(re.regime).toUpperCase(); S._qmReConf = Number(re.confidence) || 0; S._qmReTrap = Number(re.trapRisk) || 0 }
+    if (pf && pf.phase) { S._qmPfPhase = String(pf.phase).toUpperCase(); S._qmPfRisk = String(pf.riskMode || 'normal').toUpperCase(); S._qmPfSize = Number(pf.sizeMultiplier) > 0 ? Number(pf.sizeMultiplier) : 1 }
+    // Primele randuri (AI CONF / SIGNAL / DIFF / SLOPE) erau constante: 50% / 0% / 0 / 0.
+    // CONF = confluenta reala; SIGNAL = cat de unite sunt semnalele (majoritatea / total);
+    // DIFF = schimbarea ultimei lumanari (fractie); SLOPE = panta EMA20 pe 10 bare (%), ca regimeEnhanced.
+    // MAGNET / MAG BIAS: „$0.00 ()" si „BELOW" mereu. Acum magnetii reali ai aplicatiei (S.magnets,
+    // calculati in ui/panels.ts: pereti din carte, niveluri de volum, niveluri ATR).
+    const mg = S.magnets, px = Number(S._qmPrice || S.price) || 0
+    const near = (arr: any[], up: boolean) => {
+      let best: number | null = null
+      for (const m of arr || []) { const p = Number(typeof m === 'number' ? m : m && m.price); if (!(p > 0)) continue; if (up ? p <= px : p >= px) continue; if (best == null || Math.abs(p - px) < Math.abs(best - px)) best = p }
+      return best
+    }
+    if (mg && px > 0) {
+      const a = near(mg.above, true), b = near(mg.below, false)
+      S._qmMagnetUpPct = a != null ? ((a - px) / px) * 100 : 0
+      S._qmMagnetDnPct = b != null ? ((b - px) / px) * 100 : 0
+      const pick = a != null && (b == null || a - px <= px - b) ? a : b
+      if (pick != null) { S._qmLiqMagnet = pick; S._qmLiqSide = pick >= px ? 'ABOVE' : 'BELOW' }
+    }
+    const mb = String(S.magnetBias || '').toLowerCase()
+    S._qmMagBias = mb === 'above' || mb === 'up' || mb === 'bull' ? 'ABOVE' : mb === 'below' || mb === 'down' || mb === 'bear' ? 'BELOW' : (S._qmMagnetUpPct && S._qmMagnetDnPct ? (Math.abs(S._qmMagnetUpPct) <= Math.abs(S._qmMagnetDnPct) ? 'ABOVE' : 'BELOW') : S._qmMagBias)
+    // ── Pereti din carte (ASK/BID WALLS): nimeni nu-i scria. Nivelurile ≥ 3,5× media (ca in ui/panels).
+    const wallsOf = (rows: any[]) => {
+      const lv = (rows || []).map((r: any) => ({ p: Number(r && (r.p ?? r[0])), q: Number(r && (r.q ?? r[1])) })).filter((r) => r.p > 0 && r.q > 0)
+      if (!lv.length) return []
+      const avg = lv.reduce((s2, r) => s2 + r.q, 0) / lv.length
+      return lv.filter((r) => r.q >= avg * 3.5).sort((x, y) => y.q - x.q).slice(0, 5)
+    }
+    S._qmAskWalls = wallsOf(S.asks); S._qmBidWalls = wallsOf(S.bids)
+    // ── Istoric propriu al monitorului: pret (1/s, 20 min), OI (1/min, 70 min), funding (1/5 min, 24 valori).
+    const nowMs = Date.now()
+    const ring = (key: string, v: number, everyMs: number, keepMs: number) => {
+      const arr: Array<{ t: number; v: number }> = S[key] || (S[key] = [])
+      if (Number.isFinite(v) && v !== 0 && (!arr.length || nowMs - arr[arr.length - 1].t >= everyMs)) arr.push({ t: nowMs, v })
+      while (arr.length && nowMs - arr[0].t > keepMs) arr.shift()
+      return arr
+    }
+    const pxR = ring('_qmPxRing', px, 1000, 20 * 60000)
+    const trendOver = (min: number): number => {
+      if (!pxR.length || nowMs - pxR[0].t < min * 60000 * 0.9) return 0          // 0 = inca nu stim („—")
+      const win = pxR.filter((x) => nowMs - x.t <= min * 60000)
+      const mean = win.reduce((s2, x) => s2 + x.v, 0) / win.length
+      return px > mean * (1 + 1e-4) ? 1 : px < mean * (1 - 1e-4) ? -1 : 0
+    }
+    S._qmTrend1m = trendOver(1); S._qmTrend5m = trendOver(5); S._qmTrend15m = trendOver(15)
+    const oiR = ring('_qmOiRing', Number(S.oi), 60000, 70 * 60000)
+    const old = oiR.find((x) => nowMs - x.t >= 60 * 60000)
+    S._qmOiChange1h = old && old.v > 0 ? ((oiR[oiR.length - 1].v - old.v) / old.v) * 100 : 0
+    const frR = ring('_qmFrRing', Number(S.fr), 5 * 60000, 24 * 5 * 60000)
+    S._qmFrHist = frR.map((x) => x.v)
+    S._qmFrTrend = frR.length > 1 ? frR[frR.length - 1].v - frR[0].v : 0
+    S._qmTicks = (S._qmTicks || 0) + 1
+    S._qmFlowTickRate = Number(S._qmTicksPerSec) || 0
+    S._qmFlowSampleCount = pxR.length
+    const cs = Number(_BM.confluenceScore)
+    if (Number.isFinite(cs)) S._qmConf = cs
+    // ACT (langa AI CONF) era „HOLD" mereu. Acum: peste pragul de confluenta → directia majoritatii
+    // semnalelor (BUY / SELL); altfel HOLD. Doar afisaj — nu e o comanda.
+    try {
+      const sd = getSignalData(), thr = Number(_BM.confMin) > 0 ? Number(_BM.confMin) : 65
+      S._qmAct = Number.isFinite(cs) && cs >= thr && sd.bullCount !== sd.bearCount ? (sd.bullCount > sd.bearCount ? 'BUY' : 'SELL') : 'HOLD'
+    } catch { S._qmAct = 'HOLD' }
+    try {
+      const sd = getSignalData(); const tot = (sd.bullCount || 0) + (sd.bearCount || 0)
+      S._qmSig = tot > 0 ? (Math.max(sd.bullCount, sd.bearCount) / tot) * 100 : 0
+    } catch { /* fara semnale */ }
+    const kl = getKlines()
+    if (kl && kl.length >= 30) {
+      const c = kl.slice(-60).map((k: any) => +k.close)
+      const a = 2 / 21; let e = c[0]; const ema = c.map((v: number) => (e = v * a + e * (1 - a)))
+      const e0 = ema[ema.length - 10], e1 = ema[ema.length - 1]
+      S._qmSlope = e0 > 0 ? ((e1 - e0) / e0) * 100 : 0
+      const p0 = c[c.length - 2], p1 = c[c.length - 1]
+      S._qmMom = p0 > 0 ? (p1 - p0) / p0 : 0
+      // EMA cross str: EMA9 − EMA21 in puncte de baza din pret (era 0 mereu)
+      const emaN = (n: number) => { const k = 2 / (n + 1); let v = c[0]; for (const x of c) v = x * k + v * (1 - k); return v }
+      S._qmEmaCrossStr = p1 > 0 ? ((emaN(9) - emaN(21)) / p1) * 1e4 : 0
+    }
+  }
   // [2026-11-15] Datele de 24h sunt ale monedei din chart — daca moneda s-a
   // schimbat si ticker-ul inca e al celei vechi, nu le aratam (0 = „inca nu").
   const _t24ok = !S.ticker24Sym || String(S.symbol || 'BTCUSDT').toUpperCase() === S.ticker24Sym

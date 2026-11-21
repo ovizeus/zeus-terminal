@@ -202,6 +202,7 @@ export function renderFrame(): string {
   const oiChange1h: number = S._qmOiChange1h || 0
   const frTrend: number = S._qmFrTrend || 0
   const frHist: number[] = S._qmFrHist || []
+  const liq24hKnown = S._qmLiq24hTotal != null   // [2026-11-21] null = inca nu stim (nu „$0")
   const liq24hLong: number = S._qmLiq24hLong || 0
   const liq24hShort: number = S._qmLiq24hShort || 0
   const liq24hTotal: number = S._qmLiq24hTotal || 0
@@ -346,10 +347,19 @@ export function renderFrame(): string {
   L(`<span class="g">\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550</span>`)
   L(`<span class="w"> *ZeuS Smart Alpha AI [V2.0.0]*</span> <span class="dg">(Modern Quantitative Trading)</span>`)
   L(`<span class="g">\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550</span>`)
-  L(`<span class="dg">[PATH]: /zeus/ai_engine/btcusdt/config.json</span>`)
-  L(`<span class="dg">[STREAM]: wss://stream.binance.com:9443 | BTCUSDT only</span>`)
+  // [2026-11-21] Scria „btcusdt" / „BTCUSDT only" de mana; monitorul urmeaza moneda din chart.
+  const _qmSym = String(S.symbol || 'BTCUSDT').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const _qmBase = _qmSym.replace(/USDT$/, '')   // [2026-11-21] etichetele „BTC:" scrise de mana → moneda din chart
+  L(`<span class="dg">[PATH]: /zeus/ai_engine/${_qmSym.toLowerCase()}/config.json</span>`)
+  L(`<span class="dg">[STREAM]: Binance futures | ${_qmSym}</span>`)
   L(``)
-  L(`<span class="dg">[ SPEED ]</span> |<span class="c">${bar(Math.random() * 10, 25, 25)}</span>| <span class="c">${(Math.random() * 1.2).toFixed(4)} ms</span>`)
+  // [2026-11-21] Era „SPEED" din Math.random() (0–1,2 ms inventate). Acum intarzierea REALA a fluxului
+  // Binance (ora evenimentului → primirea in aplicatie), din ultimele 10 s; altfel „—".
+  {
+    const lag = Number(S._wsLagMs), fresh = Date.now() - Number(S._wsLagTs || 0) < 10_000
+    const has = fresh && Number.isFinite(lag)
+    L(`<span class="dg">[ FEED LAG ]</span> |<span class="c">${bar(has ? Math.min(25, lag / 40) : 0, 25, 25)}</span>| <span class="c">${has ? Math.round(lag) + ' ms' : '\u2014'}</span>`)
+  }
   L(``)
   L(`<span class="dg">EXCHANGE: Binance | ACC: ${wsOK ? 'CONNECTED' : 'CONNECTING...'}</span>`)
   L(`<span class="dg">\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550</span>`)
@@ -427,10 +437,10 @@ export function renderFrame(): string {
   L(`  <span class="c">BUY/SELL PRESSURE</span> <span class="dg">(5min rolling)</span>`)
   const bPrClr = bPr.avg > 0.55 ? 'g' : bPr.avg < 0.45 ? 'r' : 'y'
   const bPrDir = bPr.rising ? '<span class="g">\u25B2</span>' : '<span class="r">\u25BC</span>'
-  L(`  <span class="dg">BTC:</span> <span class="${bPrClr}">${(bPr.avg * 100).toFixed(1)}% BUY</span> ${bPrDir} <span class="dg">trend:${bPr.trend >= 0 ? '+' : ''}${(bPr.trend * 100).toFixed(2)}%</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="${bPrClr}">${(bPr.avg * 100).toFixed(1)}% BUY</span> ${bPrDir} <span class="dg">trend:${bPr.trend >= 0 ? '+' : ''}${(bPr.trend * 100).toFixed(2)}%</span>`)
 
   {
-    let sp = '  <span class="dg">BTC 5m:</span> '
+    let sp = '  <span class="dg">' + _qmBase + ' 5m:</span> '
     const ph = pressureHist.slice(-25)
     if (ph.length > 5) ph.forEach((p: any) => { sp += `<span class="${p.ratio > 0.52 ? 'g' : p.ratio < 0.48 ? 'r' : 'y'}">\u25AE</span>` })
     else sp += '<span class="dg">accumulating...</span>'
@@ -441,14 +451,14 @@ export function renderFrame(): string {
   // 3. SPREAD MONITOR
   L(`  <span class="c">SPREAD MONITOR</span>`)
   const bSpAlert = spreadAlert ? '<span class="rb"> WIDENING</span>' : '<span class="g"> NORMAL</span>'
-  L(`  <span class="dg">BTC:</span> $${spread.toFixed(2)} <span class="dg">avg:$${spreadAvg.toFixed(2)}</span>${bSpAlert}`)
+  L(`  <span class="dg">${_qmBase}:</span> $${spread.toFixed(2)} <span class="dg">avg:$${spreadAvg.toFixed(2)}</span>${bSpAlert}`)
   L(``)
 
   // 5. VOLATILITY INDEX (ATR)
   L(`  <span class="c">VOLATILITY INDEX</span> <span class="dg">(ATR-14 on 1m)</span>`)
   const bAtrPct = price > 0 ? (atr / price * 100) : 0
   const bVolLvl = bAtrPct > 0.15 ? '<span class="rb">HIGH</span>' : bAtrPct > 0.05 ? '<span class="y">MEDIUM</span>' : '<span class="g">LOW</span>'
-  L(`  <span class="dg">BTC ATR:</span> <span class="w">$${atr.toFixed(2)}</span> <span class="dg">(${bAtrPct.toFixed(3)}%)</span> ${bVolLvl}`)
+  L(`  <span class="dg">${_qmBase} ATR:</span> <span class="w">$${atr.toFixed(2)}</span> <span class="dg">(${bAtrPct.toFixed(3)}%)</span> ${bVolLvl}`)
 
   L(bAtrPct > 0.15 ? `  <span class="rb">!! BTC HIGH VOLATILITY \u2014 large move incoming</span>` : `  <span class="d">\u00B7</span>`)
   L(``)
@@ -457,17 +467,17 @@ export function renderFrame(): string {
   L(`  <span class="c">MONEY FLOW INDEX</span> <span class="dg">(MFI-14)</span>`)
   const bMfiClr = mfi > 80 ? 'rb' : mfi < 20 ? 'gb' : mfi > 60 ? 'r' : mfi < 40 ? 'g' : 'y'
   const bMfiTag = mfi > 80 ? 'OVERBOUGHT' : mfi < 20 ? 'OVERSOLD' : mfi > 60 ? 'BULLISH' : mfi < 40 ? 'BEARISH' : 'NEUTRAL'
-  L(`  <span class="dg">BTC:</span> <span class="${bMfiClr}">${mfi.toFixed(1)}</span> [<span class="${bMfiClr}">${bar(mfi, 100, 15)}</span>] <span class="${bMfiClr}">${bMfiTag}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="${bMfiClr}">${mfi.toFixed(1)}</span> [<span class="${bMfiClr}">${bar(mfi, 100, 15)}</span>] <span class="${bMfiClr}">${bMfiTag}</span>`)
   L(``)
 
   // 7. ORDER BOOK ABSORPTION
   L(`  <span class="c">OB ABSORPTION</span> <span class="dg">(stealth accumulation)</span>`)
   if (absorption.detected) {
     const abClr = absorption.side === 'BID' ? 'g' : 'r'
-    L(`  <span class="dg">BTC:</span> <span class="${abClr}b">ABSORBING on ${absorption.side}</span> <span class="dg">str:</span><span class="y">${absorption.strength.toFixed(0)}%</span>`)
+    L(`  <span class="dg">${_qmBase}:</span> <span class="${abClr}b">ABSORBING on ${absorption.side}</span> <span class="dg">str:</span><span class="y">${absorption.strength.toFixed(0)}%</span>`)
     L(`  <span class="yb">Whale accumulating \u2014 price held while volume consumed</span>`)
   } else {
-    L(`  <span class="dg">BTC: No absorption detected</span>`)
+    L(`  <span class="dg">${_qmBase}: No absorption detected</span>`)
     L(`  <span class="d">\u00B7</span>`)
   }
 
@@ -479,14 +489,14 @@ export function renderFrame(): string {
   const bVwapPct = vwap > 0 ? (bVwapDiff / vwap * 100) : 0
   const bVwapClr = bVwapDiff > 0 ? 'g' : 'r'
   const bVwapTag = bVwapDiff > 0 ? 'ABOVE \u2014 bullish' : 'BELOW \u2014 bearish'
-  L(`  <span class="dg">BTC:</span> <span class="w">$${vwap.toFixed(2)}</span> <span class="${bVwapClr}">${bVwapDiff >= 0 ? '+' : ''}${bVwapDiff.toFixed(2)} (${bVwapPct >= 0 ? '+' : ''}${bVwapPct.toFixed(3)}%)</span> <span class="dg">${bVwapTag}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="w">$${vwap.toFixed(2)}</span> <span class="${bVwapClr}">${bVwapDiff >= 0 ? '+' : ''}${bVwapDiff.toFixed(2)} (${bVwapPct >= 0 ? '+' : ''}${bVwapPct.toFixed(3)}%)</span> <span class="dg">${bVwapTag}</span>`)
   L(``)
 
   // 9. VOLUME PERCENTILE
   L(`  <span class="c">VOLUME PERCENTILE</span> <span class="dg">(current vs 60 candles)</span>`)
   const bVpClr = volPercentile > 80 ? 'rb' : volPercentile > 60 ? 'y' : volPercentile < 20 ? 'g' : 'dg'
   const bVpTag = volPercentile > 90 ? 'EXTREME' : volPercentile > 75 ? 'HIGH' : volPercentile > 50 ? 'ABOVE AVG' : volPercentile > 25 ? 'NORMAL' : 'LOW'
-  L(`  <span class="dg">BTC:</span> [<span class="${bVpClr}">${bar(volPercentile, 100, 18)}</span>] <span class="${bVpClr}">${volPercentile.toFixed(0)}%</span> <span class="${bVpClr}">${bVpTag}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> [<span class="${bVpClr}">${bar(volPercentile, 100, 18)}</span>] <span class="${bVpClr}">${volPercentile.toFixed(0)}%</span> <span class="${bVpClr}">${bVpTag}</span>`)
   L(volPercentile > 85 ? `  <span class="rb">!! BTC VOLUME SPIKE \u2014 unusual activity</span>` : `  <span class="d">\u00B7</span>`)
   L(``)
 
@@ -494,7 +504,7 @@ export function renderFrame(): string {
   L(`  <span class="c">MARKET REGIME</span> <span class="dg">(ADX + ATR derived)</span>`)
   const regClr: Record<string, string> = { TRENDING: 'gb', VOLATILE: 'rb', RANGING: 'y', TRANSITION: 'dg' }
   const regDesc: Record<string, string> = { TRENDING: 'Strong directional move', VOLATILE: 'Chaotic \u2014 wide swings', RANGING: 'Sideways \u2014 mean reverting', TRANSITION: 'Shifting \u2014 watch for breakout' }
-  L(`  <span class="dg">BTC:</span> <span class="${regClr[regime] || 'dg'}">${regime}</span> <span class="dg">ADX:${adx.toFixed(1)} \u2014 ${regDesc[regime] || ''}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="${regClr[regime] || 'dg'}">${regime}</span> <span class="dg">ADX:${adx.toFixed(1)} \u2014 ${regDesc[regime] || ''}</span>`)
 
   L(``)
 
@@ -502,7 +512,7 @@ export function renderFrame(): string {
   L(`  <span class="c">CASCADE RISK</span> <span class="dg">(clustered liqs within 3% of price)</span>`)
   const bCasClr = cascadeRisk > 50 ? 'rb' : cascadeRisk > 25 ? 'y' : 'g'
   const bCasTag = cascadeRisk > 60 ? 'DANGER \u2014 cascade likely' : cascadeRisk > 30 ? 'ELEVATED' : 'LOW'
-  L(`  <span class="dg">BTC:</span> [<span class="${bCasClr}">${bar(cascadeRisk, 100, 15)}</span>] <span class="${bCasClr}">${cascadeRisk.toFixed(1)}%</span> <span class="dg">${cascadeZone} zone</span> <span class="${bCasClr}">${bCasTag}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> [<span class="${bCasClr}">${bar(cascadeRisk, 100, 15)}</span>] <span class="${bCasClr}">${cascadeRisk.toFixed(1)}%</span> <span class="dg">${cascadeZone} zone</span> <span class="${bCasClr}">${bCasTag}</span>`)
 
   L(cascadeRisk > 50 ? `  <span class="rb">!! BTC ${cascadeZone} CASCADE \u2014 chain liquidation risk HIGH</span>` : `  <span class="d">\u00B7</span>`)
   L(``)
@@ -512,9 +522,9 @@ export function renderFrame(): string {
   const bOfd = orderFlowDelta
   const bOfdClr = bOfd > 10 ? 'g' : bOfd < -10 ? 'r' : 'y'
   const bOfdTag = bOfd > 20 ? 'AGGRESSIVE BUYERS' : bOfd < -20 ? 'AGGRESSIVE SELLERS' : bOfd > 5 ? 'BUYERS LEADING' : bOfd < -5 ? 'SELLERS LEADING' : 'BALANCED'
-  L(`  <span class="dg">BTC:</span> <span class="${bOfdClr}">${bOfd >= 0 ? '+' : ''}${bOfd.toFixed(1)}%</span> <span class="${bOfdClr}">${bOfdTag}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="${bOfdClr}">${bOfd >= 0 ? '+' : ''}${bOfd.toFixed(1)}%</span> <span class="${bOfdClr}">${bOfdTag}</span>`)
   {
-    let sp = '  <span class="dg">BTC OFD:</span> '
+    let sp = '  <span class="dg">' + _qmBase + ' OFD:</span> '
     if (ofdHist.length > 3) ofdHist.slice(-20).forEach((v: number) => { sp += `<span class="${v > 5 ? 'g' : v < -5 ? 'r' : 'y'}">|</span>` })
     else sp += '<span class="dg">accumulating...</span>'
     L(sp)
@@ -524,11 +534,11 @@ export function renderFrame(): string {
   // 13. BOLLINGER BANDS + SQUEEZE
   L(`  <span class="c">BOLLINGER BANDS</span> <span class="dg">(20-period, 2\u03C3)</span>`)
   const bBBPosClr = bbPos > 85 ? 'rb' : bbPos < 15 ? 'gb' : bbPos > 70 ? 'r' : bbPos < 30 ? 'g' : 'y'
-  L(`  <span class="dg">BTC:</span> <span class="r">U:$${bbUpper.toFixed(0)}</span> <span class="y">M:$${bbMiddle.toFixed(0)}</span> <span class="g">L:$${bbLower.toFixed(0)}</span> <span class="dg">pos:</span><span class="${bBBPosClr}">${bbPos.toFixed(0)}%</span> <span class="dg">bw:</span>${bbWidth.toFixed(3)}%`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="r">U:$${bbUpper.toFixed(0)}</span> <span class="y">M:$${bbMiddle.toFixed(0)}</span> <span class="g">L:$${bbLower.toFixed(0)}</span> <span class="dg">pos:</span><span class="${bBBPosClr}">${bbPos.toFixed(0)}%</span> <span class="dg">bw:</span>${bbWidth.toFixed(3)}%`)
   // BB position visual
   const bbBarW = 30
   const bBBFill = Math.round(bbPos / 100 * bbBarW)
-  let bbVisB = '  <span class="dg">BTC:</span> <span class="g">L</span>['
+  let bbVisB = '  <span class="dg">' + _qmBase + ':</span> <span class="g">L</span>['
   for (let i = 0; i < bbBarW; i++) {
     if (i === bBBFill) bbVisB += '<span class="w">\u25C6</span>'
     else if (i < bbBarW * 0.15 || i > bbBarW * 0.85) bbVisB += '<span class="rb">\u2500</span>'
@@ -548,35 +558,37 @@ export function renderFrame(): string {
     if (bNR) {
       const dist = ((bNR.price - price) / price * 100)
       const prox = dist < 0.1 ? '<span class="rb"> \u25C4 TESTING</span>' : dist < 0.3 ? '<span class="y"> CLOSE</span>' : ''
-      L(`  <span class="dg">BTC</span> <span class="r">R: $${bNR.price.toFixed(0)}</span> <span class="dg">(+${dist.toFixed(2)}% | ${bNR.touches}x tested)</span>${prox}`)
+      L(`  <span class="dg">${_qmBase}</span> <span class="r">R: $${bNR.price.toFixed(0)}</span> <span class="dg">(+${dist.toFixed(2)}% | ${bNR.touches}x tested)</span>${prox}`)
     } else L(`  <span class="dg">R: accumulating pivot data...</span>`)
     const bNS = nearestSupport
     if (bNS) {
       const dist = ((price - bNS.price) / price * 100)
       const prox = dist < 0.1 ? '<span class="gb"> \u25C4 TESTING</span>' : dist < 0.3 ? '<span class="y"> CLOSE</span>' : ''
-      L(`  <span class="dg">BTC</span> <span class="g">S: $${bNS.price.toFixed(0)}</span> <span class="dg">(-${dist.toFixed(2)}% | ${bNS.touches}x tested)</span>${prox}`)
+      L(`  <span class="dg">${_qmBase}</span> <span class="g">S: $${bNS.price.toFixed(0)}</span> <span class="dg">(-${dist.toFixed(2)}% | ${bNS.touches}x tested)</span>${prox}`)
     } else L(`  <span class="dg">S: accumulating pivot data...</span>`)
   }
 
   L(``)
 
   // 15. MULTI-TIMEFRAME TREND MATRIX
-  L(`  <span class="c">TREND MATRIX</span> <span class="dg">(multi-window EMA cross)</span>`)
-  const tIcon = (v: number) => v === 1 ? '<span class="gb">\u25B2 UP</span>' : '<span class="rb">\u25BC DN</span>'
+  // [2026-11-21] Campurile n-aveau scriitor \u2192 0 \u2192 desenat \u201E\u25BC DN" pe toate trei si \u201EALL BEARISH" FALS.
+  // Acum: pretul fata de media ultimelor 1/5/15 minute (istoricul monitorului); 0 = inca nu stim \u2192 \u201E\u2014".
+  L(`  <span class="c">TREND MATRIX</span> <span class="dg">(price vs 1/5/15-min average)</span>`)
+  const tIcon = (v: number) => v === 1 ? '<span class="gb">\u25B2 UP</span>' : v === -1 ? '<span class="rb">\u25BC DN</span>' : '<span class="dg">  \u2014  </span>'
   const bT1 = trend1m, bT5 = trend5m, bT15 = trend15m
-  const bAlign = bT1 === bT5 && bT5 === bT15
+  const bAlign = bT1 !== 0 && bT1 === bT5 && bT5 === bT15
   L(`  <span class="dg">         1m      5m     15m     ALIGN</span>`)
-  L(`  <span class="dg">BTC</span>    ${tIcon(bT1)}   ${tIcon(bT5)}   ${tIcon(bT15)}   ${bAlign ? (bT1 === 1 ? '<span class="gb">ALL BULLISH \u25C4\u25C4</span>' : '<span class="rb">ALL BEARISH \u25C4\u25C4</span>') : '<span class="y">MIXED</span>'}`)
+  L(`  <span class="dg">${_qmBase}</span>    ${tIcon(bT1)}   ${tIcon(bT5)}   ${tIcon(bT15)}   ${bAlign ? (bT1 === 1 ? '<span class="gb">ALL BULLISH \u25C4\u25C4</span>' : '<span class="rb">ALL BEARISH \u25C4\u25C4</span>') : '<span class="y">MIXED</span>'}`)
 
   const bECS = emaCrossStr
-  L(`  <span class="dg">BTC EMA cross str:</span> <span class="${bECS > 0 ? 'g' : 'r'}">${bECS >= 0 ? '+' : ''}${bECS.toFixed(1)} bps</span>`)
+  L(`  <span class="dg">${_qmBase} EMA cross str:</span> <span class="${bECS > 0 ? 'g' : 'r'}">${bECS >= 0 ? '+' : ''}${bECS.toFixed(1)} bps</span>`)
   L(``)
 
   // 16. DIVERGENCE DETECTOR
   L(`  <span class="c">DIVERGENCE DETECTOR</span> <span class="dg">(price vs RSI, 20-tick window)</span>`)
   const divClr: Record<string, string> = { BULLISH: 'gb', BEARISH: 'rb', NONE: 'dg' }
   const divDesc: Record<string, string> = { BULLISH: 'Price \u2193 + RSI \u2191 \u2014 reversal up likely', BEARISH: 'Price \u2191 + RSI \u2193 \u2014 reversal down likely', NONE: 'No divergence' }
-  L(`  <span class="dg">BTC:</span> <span class="${divClr[divergence] || 'dg'}">${divergence}</span> <span class="dg">\u2014 ${divDesc[divergence] || ''}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="${divClr[divergence] || 'dg'}">${divergence}</span> <span class="dg">\u2014 ${divDesc[divergence] || ''}</span>`)
   L(divergence !== 'NONE' ? `  <span class="${divClr[divergence] || 'dg'}">!! BTC ${divergence} DIVERGENCE \u2014 high probability reversal signal</span>` : `  <span class="d">\u00B7</span>`)
   L(``)
 
@@ -598,7 +610,7 @@ export function renderFrame(): string {
     }
     return s
   }
-  L(`  <span class="dg">BTC:</span> ${fgBar(bFG)} <span class="${fgClr(bFG)}">${bFG.toFixed(0)}</span> <span class="${fgClr(bFG)}">${fgLabel(bFG)}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> ${fgBar(bFG)} <span class="${fgClr(bFG)}">${bFG.toFixed(0)}</span> <span class="${fgClr(bFG)}">${fgLabel(bFG)}</span>`)
   L(`  <span class="dg">FEAR\u25C4\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25BAGREED</span>`)
   L(``)
 
@@ -607,7 +619,7 @@ export function renderFrame(): string {
   const bTPS = ticksPerSec
   const tsClr = (v: number) => v > 8 ? 'rb' : v > 3 ? 'g' : 'dg'
   const tsTag = (v: number) => v > 8 ? 'FAST \u2014 high activity' : v > 3 ? 'NORMAL' : 'SLOW \u2014 low activity'
-  L(`  <span class="dg">BTC:</span> <span class="${tsClr(bTPS)}">${bTPS.toFixed(1)} ticks/s</span> <span class="${tsClr(bTPS)}">${tsTag(bTPS)}</span>`)
+  L(`  <span class="dg">${_qmBase}:</span> <span class="${tsClr(bTPS)}">${bTPS.toFixed(1)} ticks/s</span> <span class="${tsClr(bTPS)}">${tsTag(bTPS)}</span>`)
   L(bTPS > 10 ? `  <span class="rb">!! RAPID TAPE \u2014 algo/HFT activity spike</span>` : `  <span class="d">\u00B7</span>`)
 
   L(``)
@@ -652,19 +664,19 @@ export function renderFrame(): string {
   // === OI Change 1h ===
   const bOiClr = oiChange1h > 0.5 ? 'g' : oiChange1h < -0.5 ? 'r' : 'dg'
   const bOiTag = oiChange1h > 1 ? '<span class="g"> BUILDING</span>' : oiChange1h < -1 ? '<span class="r"> CLOSING</span>' : ''
-  L(`  <span class="dg">OI CHANGE 1h  :</span> <span class="${bOiClr}">${oiChange1h >= 0 ? '+' : ''}${oiChange1h.toFixed(2)}%</span>${bOiTag} <span class="dg">BTC</span>`)
+  L(`  <span class="dg">OI CHANGE 1h  :</span> <span class="${bOiClr}">${oiChange1h >= 0 ? '+' : ''}${oiChange1h.toFixed(2)}%</span>${bOiTag} <span class="dg">${_qmBase}</span>`)
 
   // OI + Price interpretation
   const bOiSignal = oiChange1h > 0.3 && chgP > 0 ? '<span class="gb">SMART MONEY LONG</span>' :
     oiChange1h > 0.3 && chgP < 0 ? '<span class="rb">SQUEEZE BUILDING</span>' :
     oiChange1h < -0.3 && chgP > 0 ? '<span class="y">SHORT COVERING</span>' :
     oiChange1h < -0.3 && chgP < 0 ? '<span class="y">LONG CAPITULATION</span>' : '<span class="dg">NEUTRAL</span>'
-  L(`  <span class="dg">OI + PRICE    :</span> ${bOiSignal} <span class="dg">BTC (OI${oiChange1h >= 0 ? '\u2191' : '\u2193'} + Price${chgP >= 0 ? '\u2191' : '\u2193'})</span>`)
+  L(`  <span class="dg">OI + PRICE    :</span> ${bOiSignal} <span class="dg">${_qmBase} (OI${oiChange1h >= 0 ? '\u2191' : '\u2193'} + Price${chgP >= 0 ? '\u2191' : '\u2193'})</span>`)
   L(``)
 
   // === Funding Rate Trend ===
   const bFrDir = frTrend > 0.0001 ? '<span class="g">\u25B2 RISING</span>' : frTrend < -0.0001 ? '<span class="r">\u25BC FALLING</span>' : '<span class="dg">\u2550 FLAT</span>'
-  L(`  <span class="dg">FR TREND      :</span> ${bFrDir} <span class="dg">BTC</span>`)
+  L(`  <span class="dg">FR TREND      :</span> ${bFrDir} <span class="dg">${_qmBase}</span>`)
 
   {
     const frMin = Math.min(...(frHist.length > 1 ? frHist : [0, 0]))
@@ -680,15 +692,17 @@ export function renderFrame(): string {
 
   // === 24h Aggregated Liquidations ===
   L(`  <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>`)
-  L(`  <span class="rb">24h LIQUIDATIONS (estimated from OI drops)</span>`)
+  L(`  <span class="rb">24h LIQUIDATIONS (measured · Bybit, OKX, Gate)</span>`)
   L(`  <span class="dg">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>`)
   L(`  <span class="dg">           LONG LIQ           SHORT LIQ          TOTAL</span>`)
-  L(`  <span class="w">BTC</span>    <span class="r">$${fmtUSD(liq24hLong).padStart(10)}</span>       <span class="g">$${fmtUSD(liq24hShort).padStart(10)}</span>       <span class="yb">$${fmtUSD(liq24hTotal).padStart(10)}</span>`)
+  L(liq24hKnown
+    ? `  <span class="w">${_qmBase.padEnd(4)}</span>  <span class="r">$${fmtUSD(liq24hLong).padStart(10)}</span>       <span class="g">$${fmtUSD(liq24hShort).padStart(10)}</span>       <span class="yb">$${fmtUSD(liq24hTotal).padStart(10)}</span>`
+    : `  <span class="w">${_qmBase.padEnd(4)}</span>  <span class="dg">— waiting for the 24h liquidation history</span>`)
 
   {
     const lPct = liq24hTotal > 0 ? liq24hLong / liq24hTotal * 100 : 50
     const sPct = liq24hTotal > 0 ? liq24hShort / liq24hTotal * 100 : 50
-    L(liq24hTotal > 0 ? `  <span class="dg">BTC 24h:</span> <span class="r">[${bar(lPct, 100, 15)}]</span> <span class="r">${lPct.toFixed(0)}%L</span> <span class="dg">vs</span> <span class="g">[${bar(sPct, 100, 15)}]</span> <span class="g">${sPct.toFixed(0)}%S</span>` : `  <span class="dg">BTC 24h: estimating from OI history...</span>`)
+    L(liq24hTotal > 0 ? `  <span class="dg">${_qmBase} 24h:</span> <span class="r">[${bar(lPct, 100, 15)}]</span> <span class="r">${lPct.toFixed(0)}%L</span> <span class="dg">vs</span> <span class="g">[${bar(sPct, 100, 15)}]</span> <span class="g">${sPct.toFixed(0)}%S</span>` : `  <span class="dg">${_qmBase} 24h: estimating from OI history...</span>`)
   }
 
   // Per-exchange liquidation breakdown
@@ -958,7 +972,7 @@ export function renderFrame(): string {
   const wUsd = WALLET.usdValue > 0 ? WALLET.usdValue : wBtc * price
   const wNote = WALLET.note || '\u2500'
   L(`  <span class="dg">ADDR :</span> <span class="edit-field" data-edit="address">${wAddr.length > 30 ? wAddr.slice(0, 14) + '...' + wAddr.slice(-10) : wAddr}</span>`)
-  L(`  <span class="dg">BTC  :</span> <span class="edit-field g" data-edit="btcSize">${wBtc.toFixed(4)} BTC</span>`)
+  L(`  <span class="dg">${_qmBase}  :</span> <span class="edit-field g" data-edit="btcSize">${wBtc.toFixed(4)} BTC</span>`)
   L(`  <span class="dg">USD  :</span> <span class="edit-field y" data-edit="usdValue">$${fmtUSD(wUsd)}</span>`)
   L(`  <span class="dg">NOTE :</span> <span class="edit-field dg" data-edit="note">${wNote}</span>`)
   {
@@ -1223,7 +1237,7 @@ export function renderFrame(): string {
   const domFill = Math.round(Math.min(40, Math.max(0, btcDominance / 100 * 40)))
   let domBar = ''; for (let i = 0; i < 40; i++) domBar += `<span class="${i < domFill ? domClr : 'd'}">${i < domFill ? '\u2588' : '\u2591'}</span>`
   L(`  [${domBar}]`)
-  L(`  <span class="dg">BTC.D :</span> <span class="${domClr}">${btcDominance.toFixed(2)}%</span>  <span class="dg">\u0394:</span> <span class="${domDelta > 0 ? 'g' : 'r'}">${domDelta >= 0 ? '+' : ''}${domDelta.toFixed(2)}%</span>`)
+  L(`  <span class="dg">${_qmBase}.D :</span> <span class="${domClr}">${btcDominance.toFixed(2)}%</span>  <span class="dg">\u0394:</span> <span class="${domDelta > 0 ? 'g' : 'r'}">${domDelta >= 0 ? '+' : ''}${domDelta.toFixed(2)}%</span>`)
   L(`  <span class="dg">SIGNAL:</span> <span class="${domClr}">${domTag}</span>`)
   L(``)
 
