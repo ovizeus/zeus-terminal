@@ -578,6 +578,10 @@
         .zl-ch { padding: 40px 0; border-top: 1px solid #12253a }
         .zl-txt { max-width: 560px }
         .zl-txt-wide { max-width: none }
+        /* sectiunile doar-text (fara capturi): fraza in stanga, punctele cheie in dreapta */
+        .zl-ch:not(.zl-ch-moods) > .zl-txt:not(.zl-txt-wide) { max-width: none; display: grid; grid-template-columns: 1.25fr 1fr; column-gap: 56px; align-items: start }
+        .zl-ch:not(.zl-ch-moods) > .zl-txt:not(.zl-txt-wide) h3 { grid-column: 1 / -1 }
+        .zl-ch:not(.zl-ch-moods) > .zl-txt:not(.zl-txt-wide) .zl-facts { padding-top: 4px }
         .zl-txt h3 { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: clamp(22px, 2.6vw, 30px); line-height: 1.2; color: #eef5fc; margin: 0 0 12px }
         .zl-txt p { font-size: 17px; line-height: 1.6; color: #93a7ba; margin: 0 0 16px }
         .zl-facts { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px }
@@ -611,7 +615,21 @@
             .zl-moods::-webkit-scrollbar { display: none }
             .zl-moods figure { scroll-snap-align: start }
             .zl-spec { grid-template-columns: 1fr }
+            .zl-ch:not(.zl-ch-moods) > .zl-txt:not(.zl-txt-wide) { grid-template-columns: 1fr }
             .zl-trust { grid-template-columns: 1fr; gap: 18px }
+        }
+
+        /* „Your mind vs. the market": impulsul omului (stanga, sters, italic) → raspunsul lui Zeus (dreapta, clar) */
+        .zl-mind-lead { font-size: 18px !important; color: #9fb2c4 !important; max-width: 640px }
+        .zl-mind-list { list-style: none; padding: 0; margin: 26px 0 0; counter-reset: none }
+        .zl-mind-list li { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr); gap: 32px; padding: 16px 0; border-bottom: 1px solid #12253a; align-items: baseline }
+        .zl-imp { font-family: 'Cinzel', serif; font-style: normal; font-size: 18px; line-height: 1.35; color: #6f8396 }
+        .zl-ans { font-size: 16px; line-height: 1.55; color: #93a7ba }
+        .zl-ans b { color: #e8f2fb; font-weight: 700 }
+        .zl-mind-list li:hover .zl-imp { color: #a9bccd }
+        @media (max-width: 860px) {
+            .zl-mind-list li { grid-template-columns: 1fr; gap: 6px; padding: 14px 0 }
+            .zl-imp { font-size: 17px }
         }
 
         /* ─── System Module Showcase ─── */
@@ -1462,7 +1480,7 @@
             </div>
             <!-- END Login Card -->
 
-            <!-- [2026-11-21] Prezentarea produsului — inlocuieste cele 11 carduri (backup: login.html.bak-pre-landing-pro-20261121,
+            <!-- [2026-11-21] Prezentarea produsului — inlocuieste cele 11 carduri. Fara capturi de ecran (cerut de operator), doar informatie (backup: login.html.bak-pre-landing-pro-20261121,
                  tag git pre-landing-pro). Imaginile sunt randari REALE ale componentelor aplicatiei, cu date publice (fara conturi). -->
             <main class="zl">
                 <header class="zl-hero">
@@ -1489,7 +1507,28 @@
                     </div>
                 </section>
 
-                <section class="zl-ch zl-split" aria-labelledby="zl-news-h">
+                <section class="zl-ch zl-mind" aria-labelledby="zl-mind-h">
+                    <div class="zl-txt zl-txt-wide">
+                        <h3 id="zl-mind-h">Your mind vs. the market.</h3>
+                        <p class="zl-mind-lead">Most losses don't start on the chart. They start in the head. Every part of Zeus answers one of those moments.</p>
+                    </div>
+                    <ol class="zl-mind-list">
+                        <li><span class="zl-imp">“I have to get in. Now.”</span><span class="zl-ans"><b>Signal fusion and safety gates.</b> Regime, confluence and context have to agree before the brain calls an entry, and it shows HESITANT when a gate says no.</span></li>
+                        <li><span class="zl-imp">“It's coming back. I'll hold.”</span><span class="zl-ans"><b>Dynamic stop protection.</b> The exit follows the trade by rules: activation, pivots, impulse. It never follows hope.</span></li>
+                        <li><span class="zl-imp">“I'll win it back on the next one.”</span><span class="zl-ans"><b>Risk rails.</b> Exposure, leverage and daily loss limits, a cooldown after losses, and a kill switch that closes everything.</span></li>
+                        <li><span class="zl-imp">“Why did it just dump?”</span><span class="zl-ans"><b>Market News, measured.</b> The headline, the outlet, and how far Bitcoin, stocks or gold actually moved after it.</span></li>
+                        <li><span class="zl-imp">“I only see my chart.”</span><span class="zl-ans"><b>Global Markets.</b> Gold, oil, the S&amp;P 500 and the Nasdaq next to Bitcoin, with how closely each one moves with it.</span></li>
+                        <li><span class="zl-imp">“Something big is happening and I can't see it.”</span><span class="zl-ans"><b>Order flow.</b> ICHNOS footprint, real liquidations, the wide order book and the Quant Monitor show where size is actually trading.</span></li>
+                        <li><span class="zl-imp">“I've seen this setup before… I think.”</span><span class="zl-ans"><b>Déjà vu and templates.</b> The brain compares this moment with your past trades and shows the shape of your best one.</span></li>
+                        <li><span class="zl-imp">“I keep making the same mistake.”</span><span class="zl-ans"><b>Journal, post-mortem and psych report.</b> Every trade is recorded with the brain's state at entry, so the pattern becomes visible.</span></li>
+                        <li><span class="zl-imp">“I don't trust a black box.”</span><span class="zl-ans"><b>Learning you can audit.</b> The ML layer adapts with Thompson sampling, and every change it makes is logged and reviewable.</span></li>
+                        <li><span class="zl-imp">“I can't watch it all night.”</span><span class="zl-ans"><b>ARES and the server-side brain.</b> Positions, protection and the radar keep running with your phone closed; alerts reach you in the app and on Telegram.</span></li>
+                        <li><span class="zl-imp">“I just need to think out loud.”</span><span class="zl-ans"><b>OMEGA.</b> An AI you can talk to about the market, with Zeus's own data in front of it.</span></li>
+                        <li><span class="zl-imp">“What if the exchange or the system breaks?”</span><span class="zl-ans"><b>System health.</b> Binance and Bybit with your own isolated keys, automatic failover, and a doctor that watches every part of Zeus.</span></li>
+                    </ol>
+                </section>
+
+                <section class="zl-ch" aria-labelledby="zl-news-h">
                     <div class="zl-txt">
                         <h3 id="zl-news-h">Know what moved it — measured, not guessed.</h3>
                         <p>Headlines from 18 sources, from Bloomberg and the Financial Times to the Federal Reserve and the ECB. For every story Zeus measures how Bitcoin, stocks, gold or oil actually moved fifteen minutes and one hour later.</p>
@@ -1499,10 +1538,9 @@
                             <li>AI briefing of the day, alerts in the app and on Telegram</li>
                         </ul>
                     </div>
-                    <figure class="zl-shot"><img src="/assets/landing/news.webp" width="840" height="1560" alt="Market News panel: an AI briefing, the stories moving markets and the measured price reaction after each one" loading="lazy"></figure>
                 </section>
 
-                <section class="zl-ch zl-split zl-rev" aria-labelledby="zl-mk-h">
+                <section class="zl-ch" aria-labelledby="zl-mk-h">
                     <div class="zl-txt">
                         <h3 id="zl-mk-h">Crypto, next to everything else.</h3>
                         <p>105 traditional markets live — gold, oil, the S&amp;P 500, the Nasdaq, Nvidia, Tesla, the euro — each with its 30-day correlation to Bitcoin and a clear risk-on or risk-off read of the day.</p>
@@ -1512,7 +1550,6 @@
                             <li>Exchange hours at a glance: open or closed</li>
                         </ul>
                     </div>
-                    <figure class="zl-shot"><img src="/assets/landing/markets.webp" width="840" height="1560" alt="Global Markets panel: risk-off summary, rising and falling counts, and gold, silver and platinum with their correlation to Bitcoin" loading="lazy"></figure>
                 </section>
 
                 <section class="zl-ch" aria-labelledby="zl-hood-h">
