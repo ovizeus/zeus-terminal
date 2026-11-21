@@ -15062,6 +15062,16 @@ Teste: client 2.311 verzi.
 - **Brain cockpit:** toate cele 8 campuri din `brainStatsStore.snapshot` au scriitor; OFI (`BR.ofi.blendBuy`) si RSI au surse vii. Implicitele `|| 50` din logica creierului sunt in calea de trading — NEATINSE (cer aprobarea operatorului).
 Teste: client 2.311 verzi, server 4 shard-uri verzi (+6 radar, +1 clasament).
 
+### 📰 b416 v1.7.390 (2026-11-21) — MARKET NEWS „blindat": earnings, anunturi Binance, 21 de publicatii, stiri pe moneda (server + client, reload)
+Cerut de operator: „uita-te la Market News daca mai poti adauga ceva sa fim blindati".
+- **Calendar de rezultate financiare (Nasdaq, JSON public)** pentru actiunile din GLOBAL MARKETS (catalogul tradfi): 14 zile inainte, la 6 h. Mari (NVDA, AAPL, MSFT, AMZN, GOOGL, META, TSLA, AVGO, MSTR, COIN) = High, restul Medium; EPS estimat + anul trecut; ora = 08:00 / 16:05 ora New York (cu ora de vara/iarna, `Intl shortOffset`), marcata APROXIMATIVA → fara alerta „in 15 min". Dupa raport se masoara reactia actiunii. **Capcana:** Nasdaq tine agatata cererea cu antetele generice → `Accept: application/json` + identificator scurt. Fereastra calendarului: 14 zile pentru earnings (Salesforce 2 dec era taiat la 7).
+- **Anunturi Binance** (listari cat. 48, delistari cat. 161): titlu + link oficial + moneda din paranteze masurata pe Gate; **delistarile dau alerta** („Binance delisting"). Oficialele/Binance raman in lista chiar daca sursele cu multe articole le-ar impinge afara din cele 160.
+- **+6 surse:** Blockworks, The Defiant, CryptoPotato, U.Today, BeInCrypto, Cointelegraph (reglementare). **Scoase/neadaugate:** CFTC (ecran anti-bot Cloudflare), CoinDesk prin FeedBurner (CoinDesk refuza robotii) — NU se ocolesc. Sursele se numara acum ca **publicatii distincte: 21** (fluxuri: 26).
+- **+13 monede etichetate:** BNB, DOGE, ADA, AVAX, LINK, TON, SUI, TRX, DOT, LTC, HYPE, PEPE, SHIB (cuvinte sigure: „chainlink", „toncoin", nu „link"/„ton").
+- **Aplicatia:** filtru pe **moneda din grafic** (tab „BTC" etc.); pe caseta **„N new since you looked"** (de la ultima deschidere a panoului, localStorage); subsolul cu toate sursele + Binance + Nasdaq.
+- **Pagina de start:** „21 outlets", earnings si listarile Binance mentionate.
+Teste: server `newsFeed` 22 (Binance, delistare → alerta, ora earnings vara/iarna, publicatii distincte), client `news`.
+
 ### 🎯 2026-11-21 — pagina de start, runda 4: tot inventarul + Teacher + text persuasiv
 Operatorul: „e ok … uita-te in tot zeus, nu rata nimic, ca reclama spune tot ce putem face … nu uita de Teacher … fa-le psihologic, ca la carte, sa le lase gura apa".
 - **„The Teacher trains while you sleep."** — reluare pe istorie reala, curriculum autonom (alege lunile cel mai putin exersate), autopilot cu tranzactii simulate complete, calibrarea increderii, motorul de motive (de ce a intrat), scor de capabilitate 0–100 + memoria lectiilor (din `client/src/teacher/*`).

@@ -3,7 +3,7 @@
 // „S-a miscat DUPA stire", niciodata „din cauza" — cauza nu se poate dovedi pe ecran, reactia da.
 import { useEffect, useMemo, useState } from 'react'
 import { useNews } from './useNews'
-import { NEWS_FILTERS, filterNews, bestMove, ago, countdown, setAlertPref, type NewsCat, type NewsItem, type CalEvent, type NewsMove, type AlertPref } from '../../markets/news'
+import { NEWS_FILTERS, filterNews, bestMove, ago, countdown, setAlertPref, markSeen, chartCoinTag, type NewsCat, type NewsItem, type CalEvent, type NewsMove, type AlertPref } from '../../markets/news'
 import '../markets/markets.css'
 import './news.css'
 
@@ -85,7 +85,10 @@ const PREF_LABEL: Record<AlertPref, string> = { off: 'Off', app: 'In-app', app_t
 export function NewsPanel({ onClose }: { onClose: () => void }) {
   const { snap, err } = useNews(true)
   const [view, setView] = useState<'news' | 'cal'>('news')
-  const [cat, setCat] = useState<'all' | NewsCat>('all')
+  const [cat, setCat] = useState<'all' | NewsCat | `coin:${string}`>('all')
+  // [2026-11-21] stirile monedei din grafic (BTC, ETH, SOL…) — etichetele vin de pe server
+  const coin = chartCoinTag((window as any).S?.symbol)
+  useEffect(() => { markSeen(); return () => markSeen() }, [])
   const [q, setQ] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const [impact, setImpact] = useState<'high' | 'all'>('high')
@@ -144,6 +147,11 @@ export function NewsPanel({ onClose }: { onClose: () => void }) {
         <>
           <div className="zmkp-tools">
             <div className="zmkp-tabs" role="tablist">
+              {coin && (
+                <button role="tab" aria-selected={cat === `coin:${coin}`} className={'zmkp-tab' + (cat === `coin:${coin}` ? ' on' : '')} onClick={() => setCat(`coin:${coin}`)}>
+                  {coin}<span className="n">{items.filter((i) => i.tags.includes(coin)).length}</span>
+                </button>
+              )}
               {NEWS_FILTERS.map((f) => (
                 <button key={f.id} role="tab" aria-selected={cat === f.id} className={'zmkp-tab' + (cat === f.id ? ' on' : '')} onClick={() => setCat(f.id)}>
                   {f.label}<span className="n">{counts[f.id] || 0}</span>
@@ -173,7 +181,8 @@ export function NewsPanel({ onClose }: { onClose: () => void }) {
             {snap && (
               <div className="zmkp-foot">
                 Headlines from Bloomberg, Financial Times, MarketWatch, Investing.com, OilPrice, Kitco, Cointelegraph, The Block, Decrypt,
-                Bitcoin Magazine, CryptoSlate, Bitcoin.com and official releases from the Federal Reserve, ECB and SEC. Only titles and links are shown.
+                Bitcoin Magazine, CryptoSlate, Bitcoin.com, Blockworks, The Defiant, CryptoPotato, U.Today and BeInCrypto, official releases from
+                the Federal Reserve, ECB and SEC, and Binance listing and delisting announcements. Only titles and links are shown.
                 Moves are measured from 1-minute prices after publication; the same story from several outlets is grouped.
               </div>
             )}
@@ -198,7 +207,7 @@ export function NewsPanel({ onClose }: { onClose: () => void }) {
               </div>
             ))}
             {snap && !days.length && !snap.calendarNote && <div className="zmkp-empty">No events in this range.</div>}
-            <div className="zmkp-foot">Economic calendar from ForexFactory (times in your local time zone). After a high-impact release the panel shows how the main markets moved.</div>
+            <div className="zmkp-foot">Economic calendar from ForexFactory and company earnings from Nasdaq (times in your local time zone; earnings times are approximate: before the open or after the close). After a high-impact release the panel shows how the main markets moved.</div>
           </div>
         </>
       )}

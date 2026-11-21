@@ -2,7 +2,7 @@
 // Titlurile importante defileaza spre stanga cu eticheta activului si reactia masurata; atingerea deschide panoul.
 import { useUiStore } from '../../stores'
 import { useNews } from './useNews'
-import { bestMove, countdown, type NewsItem } from '../../markets/news'
+import { bestMove, countdown, countNew, getSeenTs, type NewsItem } from '../../markets/news'
 import '../markets/markets.css'
 import './news.css'
 
@@ -23,6 +23,8 @@ export function NewsBar() {
   const heads = (snap?.top?.length ? snap.top : snap?.items || []).slice(0, 6)
   const nextHigh = (snap?.calendar || []).find((e) => e.impact === 'High' && e.ts > Date.now())
   const live = !!snap && !err
+  // [2026-11-21] cate stiri au aparut de la ultima deschidere a panoului (curiozitatea trage omul inauntru)
+  const fresh = snap ? countNew(snap.items || [], getSeenTs()) : 0
 
   return (
     <div id="zeus-news-bar" className="zmk-bar" role="button" tabIndex={0} aria-label="Open market news"
@@ -31,7 +33,7 @@ export function NewsBar() {
       <div className="zmk-status">
         <div className={'zmk-indicator' + (live ? ' live' : '')}></div>
         <div className="zmk-info">
-          <span className="zmk-label">{nextHigh ? `${nextHigh.country} ${nextHigh.title.slice(0, 14)} ${countdown(nextHigh.ts)}` : 'Headlines · live'}</span>
+          <span className="zmk-label">{fresh > 0 ? `${fresh > 99 ? '99+' : fresh} new since you looked` : nextHigh ? `${nextHigh.country} ${nextHigh.title.slice(0, 14)} ${countdown(nextHigh.ts)}` : 'Headlines · live'}</span>
           <span className="zmk-title">MARKET NEWS</span>
         </div>
       </div>

@@ -63,7 +63,7 @@ describe('etichete si grupare', () => {
         const s = news.snapshot(now);
         expect(s.items.length).toBe(1);
         expect(s.sources.ok).toBe(1);
-        expect(s.sources.total).toBe(news.FEEDS.length);
+        expect(s.sources.total).toBe(new Set(news.FEEDS.map((f) => f.name)).size);   // publicatii distincte
     });
 });
 
@@ -178,5 +178,44 @@ describe('alerte dupa restart', () => {
         const a = fresh.alertsDue(now);
         expect(a.map((x) => x.kind)).toEqual(['calendar']);
         expect(fresh.alertsDue(now + 60_000)).toEqual([]);
+    });
+});
+
+describe('[2026-11-21 runda 2] Binance, earnings, publicatii', () => {
+    const bin = (arts) => JSON.stringify({ code: '000000', data: { catalogs: [{ catalogId: 161, articles: arts }] } });
+    test('anunturile Binance: titlu, link oficial, moneda din paranteze', () => {
+        const out = news.parseBinance(bin([{ title: 'Binance Will Delist Foo (FOO) and Bar (BAR) on 2026-12-01', releaseDate: Date.UTC(2026, 10, 21, 10), code: 'a'.repeat(32) }]), 'DELISTING');
+        expect(out[0].url).toBe('https://www.binance.com/en/support/announcement/detail/' + 'a'.repeat(32));
+        expect(out[0].extraTags.map((x) => x.tag)).toEqual(['DELISTING', 'FOO', 'BAR']);
+        expect(news.parseBinance('not json', 'X')).toEqual([]);
+    });
+    test('delistare Binance noua → alerta „Binance delisting"', async () => {
+        const now = Date.UTC(2026, 10, 21, 12);
+        news.alertsDue(now);                       // amorsarea de la pornire
+        const del = news.FEEDS.find((f) => f.id === 'bnb-delist');
+        await news.refreshFeeds(fakeFetch((url) => (url.includes('catalogId=161') ? bin([{ title: 'Binance Will Delist Foo (FOO)', releaseDate: now - 5 * 60_000, code: 'b'.repeat(32) }]) : null)), now);
+        expect(del).toBeTruthy();
+        const a = news.alertsDue(now + 30_000);
+        expect(a.some((x) => x.title === 'Binance delisting' && /Delist Foo/.test(x.body))).toBe(true);
+    });
+    test('earnings: ora din New York cu ora de vara/iarna; mari = High; fara alerta „in 15 min"', () => {
+        const watch = new Map([['NVDA', 'Nvidia'], ['DELL', 'Dell']]);
+        const ev = news.earningsFrom([
+            { symbol: 'NVDA', time: 'time-after-hours', epsForecast: '$1.10', lastYearEPS: '$0.81' },
+            { symbol: 'DELL', time: 'time-pre-market' },
+            { symbol: 'XYZ', time: 'time-pre-market' },
+        ], '2026-11-24', watch);
+        expect(ev.map((e) => e.country)).toEqual(['NVDA', 'DELL']);
+        expect(new Date(ev[0].ts).toISOString()).toBe('2026-11-24T21:05:00.000Z');   // 16:05 EST
+        expect(ev[0]).toMatchObject({ impact: 'High', forecast: 'EPS $1.10', previous: 'EPS $0.81', approx: true });
+        expect(ev[1].impact).toBe('Medium');
+        const summer = news.earningsFrom([{ symbol: 'NVDA', time: 'time-pre-market' }], '2026-07-15', watch);
+        expect(new Date(summer[0].ts).toISOString()).toBe('2026-07-15T12:00:00.000Z'); // 08:00 EDT
+    });
+    test('surse = publicatii DISTINCTE (MarketWatch are 3 fluxuri, Binance 2)', () => {
+        const s = news.snapshot(Date.UTC(2026, 10, 21, 12));
+        expect(s.sources.total).toBe(new Set(news.FEEDS.map((f) => f.name)).size);
+        expect(s.sources.feeds).toBe(news.FEEDS.length);
+        expect(news.FEEDS.some((f) => f.id === 'cftc')).toBe(false);    // ecran anti-bot — nu se ocoleste
     });
 });

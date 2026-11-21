@@ -47,6 +47,7 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
 
   const _USER_KEYS: any = {
     'zt_state_v1': 1, 'zt_journal': 1, 'zeus_user_settings': 1,
+    'zmn-seen-ts': 1,   // [2026-11-21] MARKET NEWS — „N new since you looked", per cont
     'ARES_MISSION_STATE_V1': 1, 'ARES_MISSION_STATE_V1_vw2': 1,
     'ARES_POSITIONS_V1': 1, 'ARES_STATE_V1': 1, 'ares_init_v1': 1,
     'ARES_LAST_TRADE_TS': 1, 'ARES_JOURNAL_V1': 1,

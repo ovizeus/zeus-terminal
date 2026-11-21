@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.389',
-    build: 415,
+    version: '1.7.390',
+    build: 416,
     date: '2026-11-21',
     changelog: [
+        'b416 v1.7.390 - MARKET NEWS: calendar de earnings (Nasdaq), anunturi Binance de listare/delistare (delistarile = alerta), +6 surse (21 de publicatii), 13 monede noi etichetate, filtru pe moneda din grafic, „N new since you looked", 2026-11-21 (server + client).',
         'b415 v1.7.389 - ™ de langa ZEU\'S dublu (1.1em), de proba, 2026-11-21 (client).',
         'b414 v1.7.388 - ™ de langa ZEU\'S putin mai mare (0.55em), 2026-11-21 (client).',
         'b413 v1.7.387 - ™ langa ZEU\'S in antet (stanga sus), mic si ridicat, aceeasi culoare, 2026-11-21 (client).',

@@ -52,13 +52,27 @@ export function bestMove(m: NewsMove): { v: number | null; label: string } {
   if (m.since != null) return { v: m.since, label: 'since' }
   return { v: null, label: '' }
 }
-export function filterNews(items: NewsItem[], cat: 'all' | NewsCat, q: string): NewsItem[] {
+export function filterNews(items: NewsItem[], cat: 'all' | NewsCat | `coin:${string}`, q: string): NewsItem[] {
   const qq = q.trim().toLowerCase()
-  return items.filter((i) => (cat === 'all' || i.cat === cat) && (!qq || i.title.toLowerCase().includes(qq) || i.tags.some((t) => t.toLowerCase().includes(qq))))
+  const coin = typeof cat === 'string' && cat.startsWith('coin:') ? cat.slice(5) : null
+  return items.filter((i) => (cat === 'all' || (coin ? i.tags.includes(coin) : i.cat === cat)) && (!qq || i.title.toLowerCase().includes(qq) || i.tags.some((t) => t.toLowerCase().includes(qq))))
 }
 /** Calendarul din Quant Monitor (era hardcodat cu date din 2025, expirat) — acum evenimentele High reale. PURA. */
 export function toMacroEvents(cal: CalEvent[]): Array<{ name: string; date: Date }> {
   return cal.filter((e) => e.impact === 'High').map((e) => ({ name: `${e.country} ${e.title}`.slice(0, 28), date: new Date(e.ts) }))
+}
+
+/** [2026-11-21] Cate stiri NOI de la ultima deschidere a panoului (pentru caseta). PURA. */
+export function countNew(items: NewsItem[], seenTs: number): number {
+  return seenTs > 0 ? items.filter((i) => i.ts > seenTs).length : 0
+}
+const SEEN_KEY = 'zmn-seen-ts'
+export function getSeenTs(): number { try { return Number(localStorage.getItem(SEEN_KEY)) || 0 } catch { return 0 } }
+export function markSeen(now = Date.now()): void { try { localStorage.setItem(SEEN_KEY, String(now)) } catch { /* privat */ } }
+/** Moneda din grafic → eticheta de stiri (BTCUSDT → BTC). PURA. */
+export function chartCoinTag(symbol: unknown): string | null {
+  const b = String(symbol || '').toUpperCase().replace(/USDT$|USDC$|USD$/, '')
+  return /^[A-Z0-9]{2,12}$/.test(b) ? b : null
 }
 
 // ── un singur sondaj ──

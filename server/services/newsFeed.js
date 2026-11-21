@@ -46,7 +46,21 @@ const FEEDS = [
     { id: 'fedsp', name: 'Federal Reserve', url: 'https://www.federalreserve.gov/feeds/speeches.xml', cat: 'macro', official: true },
     { id: 'ecb', name: 'ECB', url: 'https://www.ecb.europa.eu/rss/press.html', cat: 'macro', official: true },
     { id: 'sec', name: 'SEC', url: 'https://www.sec.gov/news/pressreleases.rss', cat: 'macro', official: true },
+    // [2026-11-21 runda 2] inca 6 surse verificate (CFTC scos: ecran anti-bot Cloudflare) de pe server (CoinDesk/Coinbase blog refuza robotii — NU se ocolesc)
+    { id: 'blockworks', name: 'Blockworks', url: 'https://blockworks.co/feed', cat: 'crypto' },
+    { id: 'defiant', name: 'The Defiant', url: 'https://thedefiant.io/feed', cat: 'crypto' },
+    { id: 'cryptopotato', name: 'CryptoPotato', url: 'https://cryptopotato.com/feed/', cat: 'crypto' },
+    { id: 'utoday', name: 'U.Today', url: 'https://u.today/rss', cat: 'crypto' },
+    { id: 'beincrypto', name: 'BeInCrypto', url: 'https://beincrypto.com/feed/', cat: 'crypto' },
+    { id: 'ctreg', name: 'Cointelegraph', url: 'https://cointelegraph.com/rss/tag/regulation', cat: 'crypto' },
+    // anunturile Binance (JSON public): listari si delistari — misca puternic moneda respectiva
+    { id: 'bnb-list', name: 'Binance', kind: 'binance', catalogId: 48, cat: 'crypto', label: 'LISTING' },
+    { id: 'bnb-delist', name: 'Binance', kind: 'binance', catalogId: 161, cat: 'crypto', label: 'DELISTING', alert: true },
 ];
+const BINANCE_ANN = (cat) => `https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&catalogId=${cat}&pageNo=1&pageSize=20`;
+const NASDAQ_EARN = (d) => `https://api.nasdaq.com/api/calendar/earnings?date=${d}`;
+// rezultatele astea misca piata cel mai tare → impact High (restul catalogului Markets = Medium)
+const EARN_HIGH = new Set(['NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'MSTR', 'COIN']);
 const CAL_URL = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
 
 // ── etichete: cuvinte → activ + contractul Gate cu care masuram reactia ──
@@ -56,6 +70,19 @@ const TAGS = [
     { tag: 'ETH', re: /\b(ethereum|ether|eth)\b/i, px: 'ETH_USDT', cat: 'crypto' },
     { tag: 'SOL', re: /\b(solana)\b/i, px: 'SOL_USDT', cat: 'crypto' },
     { tag: 'XRP', re: /\b(xrp|ripple)\b/i, px: 'XRP_USDT', cat: 'crypto' },
+    { tag: 'BNB', re: /\b(bnb|binance coin)\b/i, px: 'BNB_USDT', cat: 'crypto' },
+    { tag: 'DOGE', re: /\b(dogecoin|doge)\b/i, px: 'DOGE_USDT', cat: 'crypto' },
+    { tag: 'ADA', re: /\b(cardano)\b/i, px: 'ADA_USDT', cat: 'crypto' },
+    { tag: 'AVAX', re: /\b(avalanche|avax)\b/i, px: 'AVAX_USDT', cat: 'crypto' },
+    { tag: 'LINK', re: /\b(chainlink)\b/i, px: 'LINK_USDT', cat: 'crypto' },
+    { tag: 'TON', re: /\b(toncoin)\b/i, px: 'TON_USDT', cat: 'crypto' },
+    { tag: 'SUI', re: /\b(sui)\b/i, px: 'SUI_USDT', cat: 'crypto' },
+    { tag: 'TRX', re: /\b(tron|trx)\b/i, px: 'TRX_USDT', cat: 'crypto' },
+    { tag: 'DOT', re: /\b(polkadot)\b/i, px: 'DOT_USDT', cat: 'crypto' },
+    { tag: 'LTC', re: /\b(litecoin|ltc)\b/i, px: 'LTC_USDT', cat: 'crypto' },
+    { tag: 'HYPE', re: /\b(hyperliquid)\b/i, px: 'HYPE_USDT', cat: 'crypto' },
+    { tag: 'PEPE', re: /\b(pepe)\b/i, px: 'PEPE_USDT', cat: 'crypto' },
+    { tag: 'SHIB', re: /\b(shiba inu|shib)\b/i, px: 'SHIB_USDT', cat: 'crypto' },
     { tag: 'CRYPTO', re: /\b(crypto|cryptocurrenc\w*|stablecoins?|altcoins?|defi|etfs? flows?)\b/i, px: 'BTC_USDT', cat: 'crypto' },
     { tag: 'FED', re: /\b(fed|fomc|powell|federal reserve|rate cuts?|rate hikes?|interest rates?)\b/i, px: 'SPX500_USDT', cat: 'macro' },
     { tag: 'INFLATION', re: /\b(cpi|inflation|pce|consumer prices?)\b/i, px: 'SPX500_USDT', cat: 'macro' },
@@ -112,6 +139,24 @@ function parseFeed(xml) {
     }
     return out;
 }
+/** Anunturile Binance → {title,url,ts,extraTags}; moneda din paranteze „(PREDICT)" se masoara pe Gate. PURA. */
+function parseBinance(txt, label) {
+    let d; try { d = JSON.parse(txt); } catch (_) { return []; }
+    const arts = (((d || {}).data || {}).catalogs || [])[0];
+    const out = [];
+    for (const a of (arts && arts.articles) || []) {
+        const title = String(a.title || '').trim(), ts = Number(a.releaseDate), code = String(a.code || '');
+        if (!title || !Number.isFinite(ts) || !/^[a-f0-9]{16,40}$/i.test(code)) continue;
+        const extra = [{ tag: label, px: null, cat: 'crypto' }];
+        for (const m of title.matchAll(/\(([A-Z0-9]{2,12})\)/g)) {
+            const t = m[1];
+            if (extra.length < 4 && !extra.some((x) => x.tag === t)) extra.push({ tag: t, px: (_prices.size && !_prices.has(t + '_USDT')) ? null : t + '_USDT', cat: 'crypto' });
+        }
+        out.push({ title, url: 'https://www.binance.com/en/support/announcement/detail/' + code, ts, extraTags: extra });
+    }
+    return out;
+}
+
 function tagsOf(title) {
     const t = [];
     for (const x of TAGS) if (x.re.test(title) && !t.find((y) => y.px === x.px && y.tag === x.tag)) t.push(x);
@@ -133,17 +178,18 @@ const _clusters = [];          // {id, ts, items:[id], title, url, tags, cat, of
 const _react = new Map();      // `${px}|${minuteTs}` -> {p0,p15,p60}
 const _queue = [];             // reactii de masurat
 let _cal = [], _calAt = 0, _calErr = null;
+let _earn = [], _earnAt = 0, _earnErr = null;
 const _feedState = new Map();  // feed.id -> {ok, at, n, err}
 let _prices = new Map(), _pricesAt = 0;
 let _brief = null, _briefCount = 0, _briefDay = '', _briefErr = null;
 const _alerted = new Set();
 let _timers = [];
 
-async function _fetchText(url, fetchImpl) {
+async function _fetchText(url, fetchImpl, headers) {
     const f = fetchImpl || fetch;
     const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 12_000);
     try {
-        const r = await f(url, { signal: ctl.signal, headers: { 'User-Agent': UA, Accept: 'application/rss+xml, application/xml, application/json, text/xml, */*' } });
+        const r = await f(url, { signal: ctl.signal, headers: headers || { 'User-Agent': UA, Accept: 'application/rss+xml, application/xml, application/json, text/xml, */*' } });
         if (!r.ok) throw new Error('http_' + r.status);
         return await r.text();
     } finally { clearTimeout(to); }
@@ -153,9 +199,10 @@ function _addItem(feed, it, now) {
     if (now - it.ts > KEEP_MS || it.ts > now + 10 * 60_000) return null;
     const id = crypto.createHash('sha1').update(it.url).digest('base64url').slice(0, 14);
     if (_items.has(id)) return null;
-    const tg = tagsOf(it.title);
+    const tg = [...(it.extraTags || []), ...tagsOf(it.title)].filter((x, i, a) => a.findIndex((y) => y.tag === x.tag) === i).slice(0, 5);
     const item = { id, title: it.title.slice(0, 240), url: it.url, ts: Math.min(it.ts, now), source: feed.name, feed: feed.id,
-        cat: feed.official ? 'macro' : (tg[0] && tg[0].cat) || feed.cat, official: !!feed.official, tags: tg.map((x) => x.tag), px: [...new Set(tg.map((x) => x.px))].slice(0, 3) };
+        cat: feed.official ? 'macro' : (tg[0] && tg[0].cat) || feed.cat, official: !!feed.official, alert: !!feed.alert,
+        tags: tg.map((x) => x.tag), px: [...new Set(tg.map((x) => x.px).filter(Boolean))].slice(0, 3) };
     _items.set(id, item);
     // grupare: aceeasi poveste in 6 ore din alta sursa
     let cl = null;
@@ -170,10 +217,11 @@ function _addItem(feed, it, now) {
         cl.items.push(id);
         if (item.ts < cl.ts) { cl.ts = item.ts; }
         cl.official = cl.official || item.official;
+        cl.alert = cl.alert || item.alert;
         for (const t of item.tags) if (!cl.tags.includes(t)) cl.tags.push(t);
         for (const p of item.px) if (!cl.px.includes(p) && cl.px.length < 3) cl.px.push(p);
     } else {
-        cl = { id, ts: item.ts, items: [id], title: item.title, url: item.url, tags: [...item.tags], px: [...item.px], cat: item.cat, official: item.official, firstSeen: now };
+        cl = { id, ts: item.ts, items: [id], title: item.title, url: item.url, tags: [...item.tags], px: [...item.px], cat: item.cat, official: item.official, alert: item.alert, firstSeen: now };
         _clusters.push(cl);
     }
     return item;
@@ -183,8 +231,7 @@ async function refreshFeeds(fetchImpl, now = Date.now()) {
     const added = [];
     for (const f of FEEDS) {
         try {
-            const xml = await _fetchText(f.url, fetchImpl);
-            const arr = parseFeed(xml);
+            const arr = f.kind === 'binance' ? parseBinance(await _fetchText(BINANCE_ANN(f.catalogId), fetchImpl), f.label) : parseFeed(await _fetchText(f.url, fetchImpl));
             let n = 0;
             for (const it of arr) { const x = _addItem(f, it, now); if (x) { n++; added.push(x); } }
             _feedState.set(f.id, { ok: true, at: now, n: arr.length, err: null });
@@ -210,6 +257,54 @@ async function refreshCalendar(fetchImpl, now = Date.now()) {
         _calAt = now; _calErr = null;
         for (const e of _cal) if (e.impact === 'High' && e.ts < now) for (const px of (CAL_PX[e.country] || CAL_PX.ALL)) _queueReaction(px, e.ts);
     } catch (e) { _calErr = String(e && e.message || e); }
+}
+
+// ── rezultatele financiare (Nasdaq, public), doar pentru actiunile din GLOBAL MARKETS ──
+function _etOffset(dateStr) {
+    try {
+        const p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', timeZoneName: 'shortOffset' }).formatToParts(new Date(dateStr + 'T17:00:00Z'));
+        const z = (p.find((x) => x.type === 'timeZoneName') || {}).value || 'GMT-5';
+        const m = z.match(/GMT([+-])(\d+)/); return m ? `${m[1]}${String(m[2]).padStart(2, '0')}:00` : '-05:00';
+    } catch (_) { return '-05:00'; }
+}
+/** Randurile Nasdaq ale unei zile → evenimente de calendar (doar simbolurile urmarite). PURA. */
+function earningsFrom(rows, dateStr, watch) {
+    const out = [];
+    for (const r of rows || []) {
+        const sym = String(r.symbol || '').replace(/[^A-Z]/g, '');
+        if (!watch.has(sym)) continue;
+        const tm = String(r.time || '');
+        const hhmm = tm.includes('pre-market') ? '08:00' : tm.includes('after-hours') ? '16:05' : '12:00';
+        const when = tm.includes('pre-market') ? 'before the open' : tm.includes('after-hours') ? 'after the close' : 'time not confirmed';
+        out.push({
+            id: crypto.createHash('sha1').update(`earn|${sym}|${dateStr}`).digest('base64url').slice(0, 12),
+            title: `${watch.get(sym)} earnings (${when})`, country: sym, ts: Date.parse(`${dateStr}T${hhmm}:00${_etOffset(dateStr)}`),
+            impact: EARN_HIGH.has(sym) ? 'High' : 'Medium', forecast: r.epsForecast ? 'EPS ' + r.epsForecast : '', previous: r.lastYearEPS ? 'EPS ' + r.lastYearEPS : '',
+            actual: '', px: [sym + '_USDT'], approx: true, kind: 'earnings',
+        });
+    }
+    return out;
+}
+async function refreshEarnings(fetchImpl, now = Date.now(), days = 14, gapMs = 400) {
+    let watch;
+    try { watch = new Map(require('./tradfiMarkets').CATALOG.filter((c) => c.group === 'stocks' || c.group === 'crypto').map((c) => [c.sym, c.name])); }
+    catch (_) { return; }
+    const out = [];
+    let okDays = 0;
+    for (let i = -2; i < days; i++) {
+        const d = new Date(now + i * 86400_000);
+        if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+        const ds = d.toISOString().slice(0, 10);
+        try {
+            // Nasdaq tine agatate cererile cu alte antete (masurat): JSON simplu + identificator scurt
+            const j = JSON.parse(await _fetchText(NASDAQ_EARN(ds), fetchImpl, { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; ZeusTerminal/1.0)' }));
+            out.push(...earningsFrom(((j || {}).data || {}).rows, ds, watch)); okDays++;
+        } catch (_) { /* o zi lipsa nu strica restul */ }
+        if (gapMs) await new Promise((r) => setTimeout(r, gapMs));
+    }
+    if (okDays) { _earn = out.filter((e) => Number.isFinite(e.ts)).sort((a, b) => a.ts - b.ts); _earnAt = now; _earnErr = null; }
+    else _earnErr = 'unavailable';
+    for (const e of _earn) if (e.ts < now) for (const px of e.px) _queueReaction(px, e.ts);
 }
 
 // ── reactia masurata (lumanari de 1 minut Gate) ──
@@ -326,7 +421,7 @@ function alertsDue(now = Date.now()) {
     const out = [];
     const priming = !_primed; _primed = true;
     for (const e of _cal) {
-        if (e.impact !== 'High') continue;
+        if (e.impact !== 'High' || e.approx) continue;
         const k = 'cal|' + e.id;
         if (e.ts - now <= 15 * 60_000 && e.ts - now > 0 && !_alerted.has(k)) { _alerted.add(k); out.push({ kind: 'calendar', title: `${e.country} ${e.title} in ${Math.round((e.ts - now) / 60_000)} min`, body: `High impact · forecast ${e.forecast || '—'} · previous ${e.previous || '—'}` }); }
     }
@@ -334,10 +429,11 @@ function alertsDue(now = Date.now()) {
         const k = 'news|' + c.id;
         if (_alerted.has(k) || now - c.ts > 60 * 60_000) continue;
         const srcs = new Set(c.items.map((id) => (_items.get(id) || {}).source).filter(Boolean));
-        if ((c.official && (c.firstSeen || 0) > now - 10 * 60_000 && now - c.ts < 30 * 60_000) || (srcs.size >= 3 && now - c.ts < 45 * 60_000)) {
+        if ((c.official && (c.firstSeen || 0) > now - 10 * 60_000 && now - c.ts < 30 * 60_000) || (srcs.size >= 3 && now - c.ts < 45 * 60_000)
+            || (c.alert && (c.firstSeen || 0) > now - 10 * 60_000 && now - c.ts < 60 * 60_000)) {
             _alerted.add(k);
             if (priming) continue;
-            out.push({ kind: 'news', title: c.official ? 'Official: ' + [...srcs][0] : `Breaking · ${srcs.size} sources`, body: c.title });
+            out.push({ kind: 'news', title: c.alert ? 'Binance delisting' : c.official ? 'Official: ' + [...srcs][0] : `Breaking · ${srcs.size} sources`, body: c.title });
         }
     }
     return out;
@@ -360,14 +456,20 @@ function snapshot(now = Date.now()) {
         if (top.some((t) => t.tags[0] && t.tags[0] === c.tags[0] && Math.abs(t.ts - c.ts) < 3 * 3600_000)) continue;
         top.push(c); if (top.length >= 5) break;
     }
-    const cal = _cal.filter((e) => e.ts > now - 36 * 3600_000 && e.ts < now + 7 * 86400_000 && e.impact !== 'Low' || (e.impact === 'Low' && e.ts > now && e.ts < now + 86400_000))
-        .map((e) => ({ ...e, moves: e.ts < now && e.impact === 'High' ? _moves(CAL_PX[e.country] || CAL_PX.ALL, e.ts) : [] }));
+    const cal = [..._cal, ..._earn].sort((a, b) => a.ts - b.ts).filter((e) => e.ts > now - 36 * 3600_000 && e.ts < now + (e.kind === 'earnings' ? 14 : 7) * 86400_000 && e.impact !== 'Low' || (e.impact === 'Low' && e.ts > now && e.ts < now + 86400_000))
+        .map((e) => ({ ...e, moves: e.ts < now && (e.impact === 'High' || e.kind === 'earnings') ? _moves(e.px || CAL_PX[e.country] || CAL_PX.ALL, e.ts) : [] }));
     const feeds = FEEDS.map((f) => ({ id: f.id, name: f.name, ok: (_feedState.get(f.id) || {}).ok ?? null }));
+    // publicatii DISTINCTE (MarketWatch are 3 fluxuri, Fed 2, Binance 2): o publicatie e „ok" daca macar un flux al ei raspunde
+    const outlets = [...new Set(FEEDS.map((f) => f.name))];
     return {
-        ok: true, asOf: now, pricesAt: _pricesAt || null, items: clusters.slice(0, 160), top, calendar: cal,
+        ok: true, asOf: now, pricesAt: _pricesAt || null,
+        // cele mai noi 160 + MEREU cele oficiale / Binance / cu alerta din ultimele 48 h (altfel sursele cu multe articole le imping afara)
+        items: (() => { const head = clusters.slice(0, 160); const ids = new Set(head.map((c) => c.id));
+            const keep = clusters.filter((c) => !ids.has(c.id) && (c.official || c.sources.includes('Binance')) && now - c.ts < KEEP_MS).slice(0, 40);
+            return [...head, ...keep].sort((a, b) => b.ts - a.ts); })(), top, calendar: cal,
         brief: _brief ? { text: _brief.text, at: _brief.at } : null, briefStatus: _brief ? 'ok' : (_briefErr || 'pending'),
         calendarNote: _cal.some((e) => e.ts > now) ? null : 'The economic calendar for next week is published on Sunday.',
-        sources: { total: FEEDS.length, ok: feeds.filter((f) => f.ok).length, list: feeds }, calendarAt: _calAt || null, calendarError: _calErr,
+        sources: { total: outlets.length, ok: outlets.filter((n) => feeds.some((f) => f.name === n && f.ok)).length, feeds: FEEDS.length, list: feeds }, earningsAt: _earnAt || null, calendarAt: _calAt || null, calendarError: _calErr,
     };
 }
 
@@ -400,18 +502,19 @@ function start() {
     const every = (fn, ms, first) => { const t = setInterval(() => { Promise.resolve().then(fn).catch(() => {}); }, ms); if (t.unref) t.unref(); _timers.push(t); setTimeout(() => Promise.resolve().then(fn).catch(() => {}), first); };
     every(() => refreshFeeds(), FEED_MS, 5_000);
     every(() => refreshCalendar(), CAL_MS, 8_000);
+    every(() => refreshEarnings(), 6 * 3600_000, 20_000);
     every(() => refreshPrices(), PRICE_MS, 12_000);
     every(() => drainReactions(), 60_000, 40_000);
     every(() => _sendAlerts(alertsDue()), 60_000, 90_000);
     every(() => { let llm = null; try { llm = require('./ml/_voice/llmClient'); } catch (_) { /* */ } return refreshBrief(llm); }, BRIEF_MS, 120_000);
 }
 function stop() { for (const t of _timers) clearInterval(t); _timers = []; }
-function _resetForTest() { _items.clear(); _clusters.length = 0; _react.clear(); _queue.length = 0; _cal = []; _calAt = 0; _calErr = null; _feedState.clear(); _prices = new Map(); _brief = null; _briefCount = 0; _briefErr = null; _alerted.clear(); _primed = true; }
+function _resetForTest() { _items.clear(); _clusters.length = 0; _react.clear(); _queue.length = 0; _cal = []; _calAt = 0; _calErr = null; _earn = []; _earnAt = 0; _earnErr = null; _feedState.clear(); _prices = new Map(); _brief = null; _briefCount = 0; _briefErr = null; _alerted.clear(); _primed = true; }
 function _setReactionForTest(px, ts, r) { _react.set(`${px}|${_minute(ts)}`, r); }
 function _setPricesForTest(m) { _prices = new Map(Object.entries(m)); }
 
 module.exports = {
-    FEEDS, TAGS, parseFeed, decode, tagsOf, similar, reactionFrom, impactOf, wholeSentences,
+    FEEDS, TAGS, parseFeed, parseBinance, earningsFrom, refreshEarnings, decode, tagsOf, similar, reactionFrom, impactOf, wholeSentences,
     refreshFeeds, refreshCalendar, refreshPrices, drainReactions, refreshBrief, alertsDue, snapshot,
     getPrefs, setPrefs, start, stop, _resetForTest, _setReactionForTest, _setPricesForTest,
 };

@@ -134,3 +134,16 @@ describe('caseta si panoul', () => {
     expect(screen.getByText(/published on Sunday/)).toBeTruthy()
   })
 })
+
+describe('[2026-11-21 runda 2] stiri noi + moneda din grafic', () => {
+  it('„N new since you looked": doar ce a aparut dupa ultima deschidere; prima vizita = 0', async () => {
+    const { countNew, chartCoinTag, filterNews: f } = await import('../../../markets/news')
+    const its = [item({ id: 'a', ts: 1000 }), item({ id: 'b', ts: 3000, tags: ['BTC'] }), item({ id: 'c', ts: 5000, tags: ['ETH'] })]
+    expect(countNew(its, 0)).toBe(0)
+    expect(countNew(its, 2000)).toBe(2)
+    expect(chartCoinTag('BTCUSDT')).toBe('BTC')
+    expect(chartCoinTag('ethusdt')).toBe('ETH')
+    expect(chartCoinTag('')).toBeNull()
+    expect(f(its, 'coin:BTC', '').map((i) => i.id)).toEqual(['b'])
+  })
+})
