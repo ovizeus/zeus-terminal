@@ -60,6 +60,9 @@ const _dslRrSim = require('./dslRrSim');
 const dslSafety = require('./dslSafety');
 const mlDslShadow = require('./mlDslShadow');
 const breakevenShadow = require('./breakevenShadow'); // [2026-11-22] umbra breakeven
+// [2026-11-22] Notificari pe telefon (Alerts › Phone notifications). Doar adauga un eveniment;
+// orice eroare e inghitita — nu are voie sa atinga tranzactionarea.
+function _phone(userId, kind, line) { try { require('./notifyEvents').push(userId, kind, line); } catch (_) { /* */ } }
 const priceTrace = require('./priceTrace');
 const mlDslLearner = require('./mlDslLearner');
 const { rewindSafeSeq } = require('./seqGuard');
@@ -1748,6 +1751,7 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         `SL: \`$${entry.sl.toFixed(0)}\` | TP: \`$${entry.tp.toFixed(0)}\`\n` +
         `Confidence: \`${fusion.confidence}%\` | Score: \`${fusion.score}\``
     );
+    _phone(userId, 'atEntry', `${_tgEnv} ${side} ${entry.symbol.replace(/USDT$/, '')} @ $${price.toFixed(price >= 100 ? 0 : 4)} · ${lev}x · conf ${fusion.confidence}%`);
 
     // ── Live execution (only if mode is 'live') ──
     if (entry.mode === 'live') {
@@ -2142,6 +2146,7 @@ async function _executeLiveEntry(entry, stc) {
                 userId, seq: entry.seq, symbol: entry.symbol, side: entry.side,
                 reason: 'CATASTROPHIC_ENTRY_FAILED', error: errMsg,
             }, 'SERVER_AT');
+            _phone(userId, 'safety', `Entry failed on ${entry.side} ${entry.symbol} — position halted, check the app`);
             telegram.sendToUser(userId, `🚨🚨 *CATASTROPHIC ENTRY FAILURE*\n${entry.side} ${entry.symbol}\nPosition halted + queued for recovery.\nError: ${errMsg}`);
         } else {
             entry.live = { status: 'ENTRY_FAILED', error: errMsg };
@@ -2253,6 +2258,7 @@ async function _executeLiveEntry(entry, stc) {
     // CRITICAL: If SL failed (LIVE_NO_SL) — alert immediately
     if (!slPlaced) {
         logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: Position LIVE without SL — binanceOps SL placement exhausted`);
+        _phone(userId, 'safety', `${entry.side} ${entry.symbol} has NO stop loss on the exchange — check now`);
         telegram.sendToUser(userId, `🚨 *CRITICAL: NO SL PROTECTION*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nSL retries exhausted inside exchange router.\nPosition is UNPROTECTED. Place manual SL immediately!`);
     }
 
@@ -2467,6 +2473,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                     // every 60s (the queue used to be processed at boot only).
                     const _queued = module.exports._enqueueEmergencyClose(userId, pos, exitType);
                     logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — ${_queued ? 'ENQUEUED for emergency-close processor (60s)' : 'ENQUEUE FAILED — manual intervention required'}`);
+                    _phone(userId, 'safety', `Close failed for ${pos.side} ${pos.symbol} — position may still be open`);
                     telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on exchange — ${_queued ? 'emergency processor retries every 60s' : 'AUTO-RETRY UNAVAILABLE, close manually'}.*`);
                 }
             }
@@ -3051,6 +3058,7 @@ function _closePosition(idx, pos, exitType, price, pnl) {
         `PnL: \`$${pnl.toFixed(2)}\`${phaseLabel} | Hold: \`${holdMin}min\`\n` +
         `Total: \`$${us.stats.pnl.toFixed(2)}\` | W/L: \`${us.stats.wins}/${us.stats.losses}\``
     );
+    _phone(userId, 'atExit', `${_exitEnv} ${pos.side} ${pos.symbol.replace(/USDT$/, '')} ${pnl >= 0 ? '+' : '−'}$${Math.abs(pnl).toFixed(2)} · ${exitType} · ${holdMin} min`);
 
     // ── Live: handle exchange exit ──
     // [SP2-7b] EXTERNAL (adopted) positions included — the server net's protective-SL
@@ -3369,6 +3377,7 @@ function _checkKillSwitch(userId) {
             `Mode: ${us.engineMode.toUpperCase()}\n` +
             'All new entries *BLOCKED* until manual reset or UTC day change'
         );
+        _phone(userId, 'safety', `Kill switch ON — daily loss $${lossSinceReset.toFixed(2)} hit the limit; new entries blocked`);
         _persistState(userId);
     }
 }
@@ -4638,6 +4647,7 @@ async function _executeLiveEntryCore(entryInput, stc, creds) {
             if (coreResult && coreResult.catastrophic) {
                 // CATASTROPHIC — binanceOps armed halt + persisted emergency_close_queue
                 try {
+                    _phone(entry.userId, 'safety', `Emergency close FAILED for ${entry.side} ${entry.symbol} — act now`);
                     telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol}\nPosition CATASTROPHIC — halt armed.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
                 } catch (_) {}
                 entry.live = { status: 'LIVE_NO_SL', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false };
@@ -4668,6 +4678,7 @@ async function _executeLiveEntryCore(entryInput, stc, creds) {
         if (!slPlaced) {
             // binanceOps exhausted SL retries — alert operator
             try {
+                _phone(entry.userId, 'safety', `Emergency close FAILED for ${entry.side} ${entry.symbol} — act now`);
                 telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${fillPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL.\nSafety mechanisms exhausted inside exchange router.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
             } catch (_) {}
         }
@@ -4800,6 +4811,7 @@ async function _placeProtectionForExistingEntry(entry, creds) {
             logger.error('AT_LIVE_PB', `[${liveSeq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
             try { Sentry.captureException(emgErr, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_failed', symbol: entry.symbol } }); } catch (_) {}
             const safetyMsg = safetySlOrder ? `\nSafety SL (15% OTM) still active.` : '';
+            _phone(userId, 'safety', `Emergency close FAILED for ${entry.side} ${entry.symbol} — act now`);
             try { telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nUNPROTECTED on Binance.${safetyMsg}\n*MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`); } catch (_) {}
             return { slOrderId: safetySlOrder ? safetySlOrder.orderId : null, tpOrderId: null, status: 'LIVE_NO_SL', reason: 'SL_RETRIES_AND_EMERGENCY_FAILED' };
         }

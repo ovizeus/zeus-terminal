@@ -1,4 +1,5 @@
 /** Price Alerts Modal — wired to window.* functions */
+import { PhoneNotifySection } from './PhoneNotifySection'
 import { useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
@@ -109,6 +110,9 @@ export function AlertsModal({ visible, onClose }: Props) {
           <button className="sndbtn" id="snd" style={{ fontSize: 14, padding: '4px 10px', borderRadius: 6 }}
             onClick={() => toggleSnd()}>&#128277;</button>
         </div>
+
+        {/* [2026-11-22] Phone notifications — salvate pe server, merg si cu aplicatia inchisa */}
+        <PhoneNotifySection />
 
         {/* Volume Alerts */}
         <div style={{ background: '#0d1018', border: '1px solid #333', borderRadius: 6, padding: 10, marginBottom: 8 }}>

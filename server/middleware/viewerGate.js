@@ -41,7 +41,7 @@ const VIEWER_ALLOW = [
     'GET /api/user/settings', 'POST /api/user/settings',
     'POST /api/support/send', 'GET /api/support/thread', 'GET /api/support/unread',
     // [2026-11-22] notificari pe telefon pentru raspunsurile suportului — aplicatia o CERE la pornire
-    'POST /api/notify/register',
+    'POST /api/notify/register', 'GET /api/notify/prefs', 'POST /api/notify/prefs',
     'GET /api/referral',
     // ── aplicatia insasi ──
     // `migration/flags` e citit la pornire, INAINTE de orice conexiune: spune

@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.397',
-    build: 423,
+    version: '1.7.398',
+    build: 424,
     date: '2026-11-21',
     changelog: [
+        'b424 v1.7.398 - notificari pe telefon pentru intrari/iesiri AT, miscari mari de pret (±3%/1h) si siguranta (kill switch, fara SL, inchidere de urgenta esuata), adunate pe sfert de ora; Alerts › Phone notifications cu 5 casute, 2026-11-22 (server + client).',
         'b423 v1.7.397 - notificari: proba nu se mai pierde daca telefonul verifica inainte de „Allow" (id stabil 15 min); mesajele automate din suport apar ca „Zeus alert", 2026-11-22 (server).',
         'b422 v1.7.396 - notificari pe telefon pentru mesajele importante (raspunsuri de la suport; la admin si mesajele utilizatorilor + conturile de aprobat), cu cifra pe iconita; APK 1.7.17 (43) cu pluginul ZeusNotify — verificare in fundal la 15 min, 2026-11-22 (server + client + APK).',
         'b421 v1.7.395 - pornire mai rapida: pachetele aplicatiei (2,7 MB) tinute in cache (aveau no-store, se descarcau la fiecare intrare), cele 4 cereri de pornire pleaca odata; backup: 3 copii zilnice, copiile manuale nu mai blocheaza rotatia, 2026-11-22 (server + client).',

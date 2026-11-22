@@ -24,6 +24,18 @@ router.get('/pending', (req, res) => {
     catch (_) { res.status(200).json({ ok: false, badge: 0, items: [] }); }
 });
 
+// [2026-11-22] Alegerile din Alerts › Phone notifications (contul propriu).
+router.get('/prefs', (req, res) => {
+    if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'auth' });
+    try { res.json({ ok: true, prefs: require('../services/notifyEvents').getPrefs(req.user.id) }); }
+    catch (_) { res.status(500).json({ ok: false, error: 'unavailable' }); }
+});
+router.post('/prefs', (req, res) => {
+    if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'auth' });
+    try { res.json({ ok: true, prefs: require('../services/notifyEvents').setPrefs(req.user.id, req.body || {}) }); }
+    catch (_) { res.status(500).json({ ok: false, error: 'unavailable' }); }
+});
+
 router.post('/revoke', (req, res) => {
     try { ND.revoke(req.get(TOKEN_HEADER)); } catch (_) { /* */ }
     res.json({ ok: true });

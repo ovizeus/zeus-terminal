@@ -24,7 +24,9 @@ const fs = require('fs');
 // citire: pe 22 nov telefonul a verificat inainte ca operatorul sa apese „Allow" la notificari,
 // proba a fost „livrata" fara sa poata fi afisata, si s-a pierdut. Nu atinge baza.
 const TEST_TTL_MS = 15 * 60_000;
-const TEST_FILE = () => path.join(process.env.ZEUS_NOTIFY_TEST_DIR || path.join(__dirname, '..', '..', 'data'), 'notify-test.json');
+// Langa baza de date FOLOSITA (testele au o baza temporara → nu pot atinge fisierul real din data/).
+const TEST_FILE = () => path.join(process.env.ZEUS_NOTIFY_TEST_DIR
+    || (process.env.ZEUS_DB_PATH ? path.dirname(process.env.ZEUS_DB_PATH) : path.join(__dirname, '..', '..', 'data')), 'notify-test.json');
 function _takeTest(userId, now = Date.now()) {
     try {
         const f = TEST_FILE();
@@ -67,25 +69,37 @@ function userForToken(token, now = Date.now()) {
 }
 
 /** Ce trebuie anuntat acum. `badge` = cifra de pe iconita. */
-function pending(userId, isAdmin) {
+function pending(userId, isAdmin, now = Date.now()) {
     const db = _db();
+    const NE = require('./notifyEvents');
+    const prefs = NE.getPrefs(userId);
     const items = [];
-    const test = _takeTest(userId);
+    const test = _takeTest(userId, now);
     if (test) items.push(test);
-    const replies = db.prepare(`SELECT id, message FROM support_messages
-        WHERE user_id = ? AND sender = 'admin' AND read_by_user = 0 ORDER BY id DESC LIMIT ?`).all(Number(userId), MAX_ITEMS);
-    for (const r of replies) items.push(_replyItem(r));
-    let badge = replies.length + (test ? 1 : 0);
-    if (isAdmin) {
-        const fromUsers = db.prepare(`SELECT id, message FROM support_messages
-            WHERE sender = 'user' AND read_by_admin = 0 ORDER BY id DESC LIMIT ?`).all(MAX_ITEMS);
-        for (const r of fromUsers) items.push({ id: 'sup-user:' + r.id, kind: 'support', title: 'New support message', body: _clip(r.message) });
-        badge += db.prepare(`SELECT COUNT(*) n FROM support_messages WHERE sender = 'user' AND read_by_admin = 0`).get().n;
-        const waiting = db.prepare(`SELECT id FROM users WHERE coalesce(approved, 0) = 0 AND coalesce(role, 'user') <> 'admin' ORDER BY id DESC LIMIT ?`).all(MAX_ITEMS);
-        for (const u of waiting) items.push({ id: 'approve:' + u.id, kind: 'approval', title: 'New account awaiting approval', body: 'Open Admin to approve or reject it.' });
-        badge += db.prepare(`SELECT COUNT(*) n FROM users WHERE coalesce(approved, 0) = 0 AND coalesce(role, 'user') <> 'admin'`).get().n;
+    let badge = test ? 1 : 0;
+    // [2026-11-22] „Support & admin messages" se poate opri din Alerts › Phone notifications.
+    if (prefs.support) {
+        const replies = db.prepare(`SELECT id, message FROM support_messages
+            WHERE user_id = ? AND sender = 'admin' AND read_by_user = 0 ORDER BY id DESC LIMIT ?`).all(Number(userId), MAX_ITEMS);
+        for (const r of replies) items.push(_replyItem(r));
+        badge += replies.length;
+        if (isAdmin) {
+            const fromUsers = db.prepare(`SELECT id, message FROM support_messages
+                WHERE sender = 'user' AND read_by_admin = 0 ORDER BY id DESC LIMIT ?`).all(MAX_ITEMS);
+            for (const r of fromUsers) items.push({ id: 'sup-user:' + r.id, kind: 'support', title: 'New support message', body: _clip(r.message) });
+            badge += db.prepare(`SELECT COUNT(*) n FROM support_messages WHERE sender = 'user' AND read_by_admin = 0`).get().n;
+            const waiting = db.prepare(`SELECT id FROM users WHERE coalesce(approved, 0) = 0 AND coalesce(role, 'user') <> 'admin' ORDER BY id DESC LIMIT ?`).all(MAX_ITEMS);
+            for (const u of waiting) items.push({ id: 'approve:' + u.id, kind: 'approval', title: 'New account awaiting approval', body: 'Open Admin to approve or reject it.' });
+            badge += db.prepare(`SELECT COUNT(*) n FROM users WHERE coalesce(approved, 0) = 0 AND coalesce(role, 'user') <> 'admin'`).get().n;
+        }
     }
-    return { badge, items: items.slice(0, MAX_ITEMS) };
+    // [2026-11-22] Evenimentele (pret, intrari/iesiri AT, siguranta) din ultima ora, alese de cont.
+    // Intra si in cifra de pe iconita; dupa o ora ies singure.
+    let ev = [];
+    try { ev = NE.forUser(userId, prefs, now); } catch (_) { ev = []; }
+    for (const e of ev) items.push({ ...e, body: String(e.body || '') });
+    badge += ev.length;
+    return { badge, items: items.slice(0, MAX_ITEMS + 8) };
 }
 
 /** La deconectare: telefonul nu mai primeste notificari pentru contul acesta. */

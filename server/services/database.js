@@ -10583,6 +10583,35 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('432_notify_events_prefs', () => {
+    // [2026-11-22] Evenimentele pentru telefon (intrari/iesiri AT, miscari mari de pret, siguranta)
+    // si alegerile fiecarui cont. `bucket` = tip + sfert de ora: evenimentele de acelasi fel din
+    // acelasi sfert de ora se ADUNA intr-o singura notificare („sa nu fie abundente").
+    // user_id NULL = pentru toti (miscarile de pret); fiecare le primeste doar daca le-a lasat pornite.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS notify_events (
+            id         INTEGER PRIMARY KEY,
+            user_id    INTEGER,
+            kind       TEXT    NOT NULL,
+            bucket     TEXT    NOT NULL,
+            title      TEXT    NOT NULL,
+            body       TEXT    NOT NULL,
+            n          INTEGER NOT NULL DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    `);
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_events_bucket ON notify_events(coalesce(user_id, 0), kind, bucket)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_notify_events_ts ON notify_events(created_at)');
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS notify_prefs (
+            user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            prefs      TEXT    NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    `);
+});
+
 migrate('431_notify_devices', () => {
     // [2026-11-22] Telefoanele care primesc notificari Android (verificare in fundal, la 15 min).
     // Telefonul tine o cheie proprie (nu cookie-ul de sesiune); aici se pastreaza doar HASH-ul ei.

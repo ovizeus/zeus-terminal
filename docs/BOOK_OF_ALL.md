@@ -15282,3 +15282,17 @@ Operatorul, cu poze (bulina „2" de pe ADMIN, ecranul telefonului cu cifre pe i
 Teste: server `notifyDevices.test.js` (7), `viewerGate.test.js` actualizat; client `phoneNotify.test.ts` (6). Server si client verzi.
 
 **b423 (22 nov) — prima proba pe telefon.** Operatorul a instalat APK 1.7.17: au venit 3 notificari reale (2 conturi de aprobat, o alerta de chei API) cu iconita Zeus — mecanismul merge. Lipsea PROBA: telefonul a verificat la 10:04:06, imediat dupa inregistrare, INAINTE de „Allow"; serverul stergea fisierul la prima citire → proba s-a pierdut (cele reale raman in baza pana se citesc, deci au venit la verificarea urmatoare). Acum proba are id stabil si ramane 15 minute (telefonul nu arata acelasi id de doua ori), apoi fisierul se sterge. Si: mesajele automate din firul de suport (`[zeus:key-health] …`) apar ca „Zeus alert", fara eticheta, nu „Zeus Support replied". Proba repusa la 10:10 UTC.
+
+## 🔔 2026-11-22 — b424: notificari importante pe telefon + Alerts › Phone notifications (server + client)
+
+Operatorul (dupa ce proba a mers): „trimite notificari importante — miscari mari de pret, la intrarea AT pe pozitii, la iesire — dar sa nu fie abundente; si in Alerts o rubrica on/off cu casute… si daca mai e ceva important, fa si la alea".
+
+Inainte nu exista nimic pentru telefon: alertele din fereastra Alerts (volum, balene, RSI, pivoti) ruleaza doar in aplicatia DESCHISA. Noile notificari pleaca de pe SERVER, deci vin si cu aplicatia inchisa; APK-ul 1.7.17 le afiseaza fara nicio schimbare (le ia din aceeasi lista `/api/notify/pending`).
+
+- **Tipuri (5 casute, implicit toate pornite):** Support & admin · Auto-trade entries · Auto-trade exits (cu P&L) · Big price moves (BTC, ETH, SOL, BNB, XRP, DOGE, LINK: ±3% intr-o ora, o data la 3 h pe moneda) · Safety (kill switch automat, pozitie FARA stop loss, inchidere de urgenta/market esuata, intrare catastrofala). Kill switch-ul pus de mana nu se anunta (e actiunea lui).
+- **Nu abundente:** evenimentele de acelasi fel ale aceluiasi cont, din acelasi sfert de ora, se ADUNA intr-o notificare („Auto-trade: 3 entries", cel mult 4 randuri + „+N more"). Un eveniment sta pe telefon cel mult o ora (intra si in cifra de pe iconita), apoi iese. Se scrie doar pentru conturile cu telefon inregistrat. Retentie 24 h.
+- **Server:** migrarea **432** (`notify_events`, `notify_prefs`), `services/notifyEvents.js`; `notifyDevices.pending` respecta casutele (inclusiv Support & admin). Carlige in `serverAT.js` prin `_phone()` (try/catch — nu poate atinge tranzactionarea) langa mesajele Telegram existente: intrare, iesire, kill switch, 6 alerte critice. Pretul: `serverState._onPrice` → `notifyEvents.onPrice` (esantion pe minut). Rute `GET/POST /api/notify/prefs` (permise si conturilor beta — alegerile proprii; inventarul viewerGate actualizat).
+- **Client:** `components/modals/PhoneNotifySection.tsx` in fereastra Alerts, deasupra „Volume Alerts"; fiecare bifa se salveaza IMEDIAT pe server (nu depinde de SAVE; casutele n-au `id`, deci „SAVE ALL" care citeste DOM-ul dupa id nu le atinge); salvare esuata → bifa revine + mesaj.
+- ⚠️ Prins de teste: fisierul notificarii de proba se cauta in `data/` REAL si in teste — acum se cauta langa baza FOLOSITA (`ZEUS_DB_PATH`), deci testele nu-l pot atinge.
+
+Teste: `notifyEvents.test.js` (7), `notifyDevices.test.js`, `viewerGate.test.js`; client `phoneNotifySection.test.tsx` (2). Server si client verzi.

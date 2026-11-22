@@ -263,6 +263,7 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'GET /api/migration/flags',
             'GET /api/profile', 'GET /api/referral', 'GET /api/sd/symbols',
             // [2026-11-22] notificari pe telefon — aplicatia o CERE la pornire (raspunsurile suportului)
+            'GET /api/notify/prefs', 'POST /api/notify/prefs',
             'POST /api/notify/register',
             'GET /api/support/thread', 'GET /api/support/unread',
             'GET /api/sync/state', 'GET /api/sync/user-context', 'GET /api/user/settings',
@@ -284,7 +285,7 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
         expect(writes.sort()).toEqual(['POST /api/app/version', 'POST /api/client-error', 'POST /api/indicators/active',
             'POST /api/profile', 'POST /api/support/send', 'POST /api/sync/state', 'POST /api/sync/user-context',
             'POST /api/user/settings', 'POST /api/news/prefs',   // alegerea alertelor PROPRII de stiri
-            'POST /api/notify/register'].sort());   // [2026-11-22] cheia de notificari a telefonului PROPRIU
+            'POST /api/notify/register', 'POST /api/notify/prefs'].sort());   // [2026-11-22] cheia de notificari a telefonului PROPRIU
     });
 });
 

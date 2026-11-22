@@ -216,6 +216,8 @@ function _onPrice(data) {
             const serverAT = require('./serverAT');
             serverAT.onPriceUpdate(sd.symbol, data.price, 'binance');
         } catch (_) { }
+        // [2026-11-22] miscari mari de pret → notificari pe telefon (±3% intr-o ora, o data la 3 h pe moneda)
+        try { require('./notifyEvents').onPrice(sd.symbol, data.price); } catch (_) { }
         // Sync SD alias
         if (sd.symbol === _primarySymbol) _syncAlias(sd);
     }
