@@ -222,6 +222,25 @@ function evaluate(params) {
     return { id, state: newState, details };
 }
 
+// ── expireUnevaluated ──────────────────────────────────────────────
+// [2026-11-22] O inregistrare a carei fereastra a trecut fara sa fi fost evaluata
+// (fara actuals) ramanea REGISTERED pentru totdeauna: bloca o inregistrare noua
+// („one active per version") si facea ca Ring5 sa raspunda `eval_window_expired`
+// la fiecare celula, din 9 iulie 2026. O inchidem INVALID cu motivul scris —
+// nu PASS/FAIL, fiindca nu s-a masurat nimic. Doar dupa ce fereastra a trecut.
+function expireUnevaluated(params) {
+    const id = _required(params, 'id');
+    const nowTs = _required(params, 'nowTs');
+    const row = getRegistration(id);
+    if (!row) throw new Error(`expireUnevaluated: registration ${id} not found`);
+    if (TERMINAL_STATES.has(row.state)) return { id, state: row.state, changed: false };
+    if (nowTs <= row.eval_window_to) {
+        throw new Error(`expireUnevaluated: window still open for ${id}`);
+    }
+    _stmts.setEvaluation.run('INVALID', JSON.stringify({ reason: 'window_expired_unevaluated', closedAt: nowTs }), nowTs, id);
+    return { id, state: 'INVALID', changed: true };
+}
+
 // ── getRegistration / getRegistrationsForVersion ───────────────────
 function getRegistration(id) {
     if (!Number.isInteger(id) || id <= 0) return null;
@@ -234,6 +253,7 @@ function getRegistrationsForVersion(versionId) {
 }
 
 module.exports = {
+    expireUnevaluated,
     registerHypothesis,
     recordActuals,
     evaluate,

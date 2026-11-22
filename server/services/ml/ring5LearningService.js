@@ -32,7 +32,24 @@ const reflectionGate = require('./_ring5/reflectionGate');
 const influenceAudit = require('./_ring5/influenceAudit');
 const influenceEligibility = require('./_ring5/influenceEligibility');
 
+const MF = require('../../migrationFlags');
+
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);
+
+// [2026-11-22] „skipped" se scria la FIECARE ciclu, pe fiecare moneda si cont:
+// ~130.000 de randuri pe zi, toate cu acelasi mesaj. Acum un rand pe celula la
+// SKIP_AUDIT_EVERY_MS (randurile accepted/rejected/shadow raman intregi — pe ele
+// se masoara efectul).
+const SKIP_AUDIT_EVERY_MS = 10 * 60_000;
+const _lastSkipAudit = new Map();
+function _skipAuditDue(key, nowTs) {
+    const last = _lastSkipAudit.get(key) || 0;
+    if (nowTs - last < SKIP_AUDIT_EVERY_MS) return false;
+    _lastSkipAudit.set(key, nowTs);
+    if (_lastSkipAudit.size > 5000) _lastSkipAudit.clear();
+    return true;
+}
+function _resetSkipAuditForTest() { _lastSkipAudit.clear(); }
 
 function _required(p, k) {
     if (p == null || p[k] == null) {
@@ -61,7 +78,8 @@ function wrap(params) {
             userId, resolvedEnv, symbol, phase2Decision, mlBrainProInputs,
             regime: params.regime || 'unknown',
             marketContext: params.marketContext || {},
-            nowTs: params.nowTs || Date.now()
+            nowTs: params.nowTs || Date.now(),
+            tierFor: typeof params.tierFor === 'function' ? params.tierFor : null
         });
     }
 
@@ -87,13 +105,14 @@ function wrap(params) {
 }
 
 function _wrapInfluence(ctx) {
-    const { userId, resolvedEnv, symbol, phase2Decision, mlBrainProInputs, regime, marketContext, nowTs } = ctx;
+    const { userId, resolvedEnv, symbol, phase2Decision, mlBrainProInputs, regime, marketContext, nowTs, tierFor } = ctx;
+    const _cell = `${userId}:${resolvedEnv}:${symbol}:${regime}`;
 
     const eligibility = influenceEligibility.checkEligibility({
         userId, env: resolvedEnv, symbol, regime, nowTs
     });
     if (!eligibility.eligible) {
-        influenceAudit.record({
+        if (_skipAuditDue(_cell + ':ne', nowTs)) influenceAudit.record({
             userId, env: resolvedEnv, symbol, regime,
             phase2Decision, proposedDecision: phase2Decision,
             gateStatus: 'skipped',
@@ -110,7 +129,7 @@ function _wrapInfluence(ctx) {
     });
 
     if (!proposal.hasProposal) {
-        influenceAudit.record({
+        if (_skipAuditDue(_cell + ':np', nowTs)) influenceAudit.record({
             userId, env: resolvedEnv, symbol, regime,
             phase2Decision, proposedDecision: phase2Decision,
             gateStatus: 'skipped', gateReason: 'no_proposal',
@@ -135,14 +154,40 @@ function _wrapInfluence(ctx) {
         return { ...phase2Decision, layeredBy: 'ring5-influence-blocked' };
     }
 
+    const _rationale = {
+        proposal: proposal.rationale,
+        penalty: gate.reflectionResult.totalPenalty || 0,
+        cellLevel: eligibility.cellLevel || 4,
+        sample: +draw.sample.toFixed(4),
+    };
+    // [2026-11-22] Ce ar face decizia cu treapta (SMALL/MEDIUM/LARGE/NO_TRADE): serverBrain
+    // da functia lui de retrogradare. „wouldTier = NO_TRADE" la o taiere = intrare blocata.
+    if (tierFor) {
+        try {
+            _rationale.phase2Tier = phase2Decision.decision || null;
+            _rationale.wouldTier = tierFor(gate.finalDecision.confidence);
+        } catch (_) { /* masuratoare, nu blocheaza */ }
+    }
+
+    // [2026-11-22] UMBRA: cat RING5_INFLUENCE_APPLY e oprit, decizia se noteaza dar
+    // creierul primeste decizia lui NEATINSA (serverBrain aplica doar 'ring5-influence-applied').
+    if (!MF.RING5_INFLUENCE_APPLY) {
+        influenceAudit.record({
+            userId, env: resolvedEnv, symbol, regime,
+            phase2Decision, proposedDecision: gate.finalDecision,
+            // tabela are CHECK gate_status IN (accepted, rejected, skipped): in umbra
+            // decizia NU e aplicata → 'skipped', motivul spune ca ar fi trecut.
+            gateStatus: 'skipped', gateReason: 'shadow_accepted',
+            rationale: _rationale, ts: nowTs
+        });
+        return { ...phase2Decision, layeredBy: 'ring5-influence-shadow', ring5Would: gate.finalDecision };
+    }
+
     influenceAudit.record({
         userId, env: resolvedEnv, symbol, regime,
         phase2Decision, proposedDecision: gate.finalDecision,
         gateStatus: 'accepted', gateReason: 'reflection_passed',
-        rationale: {
-            proposal: proposal.rationale,
-            penalty: gate.reflectionResult.totalPenalty || 0
-        },
+        rationale: _rationale,
         ts: nowTs
     });
     return { ...gate.finalDecision, layeredBy: 'ring5-influence-applied' };
@@ -183,6 +228,7 @@ function recordContribution(params) {
 }
 
 module.exports = {
+    _resetSkipAuditForTest,
     wrap,
     recordContribution,
     // Exposed for testing only — internal helper composition.

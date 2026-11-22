@@ -200,6 +200,12 @@ const DEFAULTS = {
     // and CRITICAL always require operator decision. Default OFF until
     // R5B governance proven in shadow.
     ML_BANDIT_AUTO_APPLY_MINOR: false,
+    // [2026-11-22] RING5_INFLUENCE_APPLY — Ring5 isi APLICA decizia (taiere/crestere de
+    // incredere) pe decizia creierului. OPRIT = umbra: Ring5 calculeaza tot (eligibilitate,
+    // tragere, propunere, reflectie) si scrie in audit `shadow_accepted`, dar creierul
+    // primeste decizia NEATINSA. Se aprinde doar cu acordul operatorului, dupa raportul
+    // din umbra (GET /api/ring5/shadow-report).
+    RING5_INFLUENCE_APPLY: false,
     // ML_HYBRID_POOLING_ENABLED — Cornercase A hybrid partial pooling.
     // When true, pooled evidence is computed as read-only prior for
     // proposals but writes remain strict per-(user, env, symbol, feature).
@@ -547,6 +553,7 @@ module.exports = {
     get WS_PROXY_ENABLED() { return flags.WS_PROXY_ENABLED; },
     get ML_LIVE_OPTIN_REQUIRED() { return flags.ML_LIVE_OPTIN_REQUIRED; },
     get ML_BANDIT_AUTO_APPLY_MINOR() { return flags.ML_BANDIT_AUTO_APPLY_MINOR; },
+    get RING5_INFLUENCE_APPLY() { return flags.RING5_INFLUENCE_APPLY; },
     get ML_HYBRID_POOLING_ENABLED() { return flags.ML_HYBRID_POOLING_ENABLED; },
     get ML_OVERRIDE_RESOLVER_ENABLED() { return flags.ML_OVERRIDE_RESOLVER_ENABLED; },
     get ML_CRON_SCAN_ENABLED() { return flags.ML_CRON_SCAN_ENABLED; },

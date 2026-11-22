@@ -11,6 +11,7 @@ const banditPosteriors = require('../services/ml/_ring5/banditPosteriors');
 const effectiveStatus = require('../services/ml/_ring5/effectiveStatus');
 const versionRegistry = require('../services/ml/R5B_governance/versionRegistry');
 const preRegistration = require('../services/ml/R5B_governance/preRegistration');
+const MF = require('../migrationFlags'); // [2026-11-22] raportul din umbra arata daca aplicarea e pornita
 
 const INFLUENCE_COMPONENT_TYPE = 'model';
 const INFLUENCE_COMPONENT_ID = 'ring5-bandit-influence-phase4';
@@ -210,8 +211,8 @@ router.post('/influence/seed', _requireAdmin, (req, res) => {
         let activeVersion = versionRegistry.getActive(INFLUENCE_COMPONENT_TYPE, INFLUENCE_COMPONENT_ID);
         let activeReg = null;
         if (activeVersion) {
-            const regs = preRegistration.getRegistrationsForVersion(activeVersion.id);
-            activeReg = regs.find(r => !TERMINAL_PREREG_STATES.has(r.state)) || null;
+            // [2026-11-22] fereastra care acopera acum; o expirata se inchide si se reinnoieste
+            activeReg = influenceEligibility.currentRegistration(activeVersion.id, now);
         }
 
         if (activeVersion && activeReg) {
@@ -259,6 +260,28 @@ router.post('/influence/seed', _requireAdmin, (req, res) => {
     }
 });
 
+// [2026-11-22] GET /api/ring5/shadow-report?days=7 — ce AR FI facut Ring5 (blocari de
+// intrari) si mutarea stopului la intrare (breakeven), in dolari, pe toate conturile.
+const shadowReport = require('../services/ml/_ring5/shadowReport');
+const breakevenShadow = require('../services/breakevenShadow');
+router.get('/shadow-report', _requireAdmin, (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(30, parseInt(req.query.days, 10) || 7));
+        const sinceMs = Date.now() - days * 86400000;
+        const trades = db.prepare(`SELECT user_id, data FROM at_closed WHERE closed_at >= datetime('now', ?)`)
+            .all(`-${days} days`)
+            .map(r => { try { const d = JSON.parse(r.data); d.userId = r.user_id; return d; } catch (_) { return null; } })
+            .filter(Boolean);
+        const audits = db.prepare(`SELECT user_id, symbol, phase2_dir, phase2_confidence, proposed_confidence,
+                gate_status, gate_reason, rationale_json, created_at FROM ml_influence_audit
+            WHERE created_at >= ? AND (gate_status IN ('accepted','rejected') OR gate_reason = 'shadow_accepted')`).all(sinceMs);
+        const rep = shadowReport.build(trades, audits, breakevenShadow.THRESHOLDS);
+        res.status(200).json({ ok: true, days, applyOn: !!MF.RING5_INFLUENCE_APPLY, thresholds: breakevenShadow.THRESHOLDS, ...rep });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // GET /api/ring5/influence/status — current active version + preReg state.
 router.get('/influence/status', _requireAdmin, (req, res) => {
     try {
@@ -269,8 +292,8 @@ router.get('/influence/status', _requireAdmin, (req, res) => {
                 versionId: null, preRegId: null, preRegState: null
             });
         }
-        const regs = preRegistration.getRegistrationsForVersion(activeVersion.id);
-        const activeReg = regs.find(r => !TERMINAL_PREREG_STATES.has(r.state)) || null;
+        // [2026-11-22] fereastra care ACOPERA acum (o expirata nu mai e „activa")
+        const activeReg = influenceEligibility.currentRegistration(activeVersion.id, Date.now());
         res.status(200).json({
             ok: true,
             active: !!activeReg,

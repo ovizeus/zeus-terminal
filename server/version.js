@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.392',
-    build: 418,
+    version: '1.7.393',
+    build: 419,
     date: '2026-11-21',
     changelog: [
+        'b419 v1.7.393 - Ring5 IN UMBRA pentru toate conturile: fereastra de evaluare care se reinnoieste singura (cea din iunie murise pe 9 iulie), celula comuna (L3) cand celula contului e subtire, decizia notata dar NEAPLICATA (RING5_INFLUENCE_APPLY oprit), audit fara ~130k randuri inutile/zi; breakeven in umbra la +0,3/+0,5/+0,8%; raport in dolari in OMEGA › Ring5, 2026-11-22 (server + client).',
         'b418 v1.7.392 - REVENIRE: scroll-ul ca inainte (anulat b417, cerut de operator), 2026-11-22 (client).',
         'b417 v1.7.391 - negru jos dupa click-uri: pagina derula IN <body> (cadru inalt cat ecranul, din main.css), nu documentul; acum deruleaza documentul, inchiderea unui panou te lasa unde erai, 2026-11-21 (client).',
         'b416 v1.7.390 - MARKET NEWS: calendar de earnings (Nasdaq), anunturi Binance de listare/delistare (delistarile = alerta), +6 surse (21 de publicatii), 13 monede noi etichetate, filtru pe moneda din grafic, „N new since you looked", 2026-11-21 (server + client).',

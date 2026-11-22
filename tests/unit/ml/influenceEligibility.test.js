@@ -121,15 +121,32 @@ describe('influenceEligibility.checkEligibility', () => {
         expect(r.preRegStatus).toBe('REGISTERED');
     });
 
-    test('returns eligible=false reason=eval_window_expired when nowTs > eval_window_to_ms', () => {
+    // [2026-11-22] Contract schimbat la cererea operatorului: fereastra expirata NU mai
+    // blocheaza pentru totdeauna (asa a murit Ring5 in tacere din 9 iulie 2026, #6554).
+    // Se inchide INVALID (nemasurata) si se deschide una noua, o data pe ora cel mult.
+    test('expired eval window → closed INVALID and renewed (rolling window)', () => {
+        elig._resetRenewThrottleForTest();
         _seedObservations(_cellKey(1, 'DEMO', 'BTCUSDT', 'trending'), 30);
         const versionId = _seedActiveVersion();
-        _seedActivePreReg(versionId, _now() - 1000);
+        const old = _seedActivePreReg(versionId, _now() - 1000);
         const r = elig.checkEligibility({
             userId: 1, env: 'DEMO', symbol: 'BTCUSDT', regime: 'trending', nowTs: _now()
         });
-        expect(r.eligible).toBe(false);
-        expect(r.reason).toBe('eval_window_expired');
+        expect(r.eligible).toBe(true);
+        expect(preRegistration.getRegistration(Number(old.id)).state).toBe('INVALID');
+    });
+
+    test('expired eval window and the renewal fails → eval_window_expired (fail-closed)', () => {
+        _seedObservations(_cellKey(1, 'DEMO', 'BTCUSDT', 'trending'), 30);
+        const versionId = _seedActiveVersion();
+        _seedActivePreReg(versionId, _now() - 1000);
+        elig._resetRenewThrottleForTest();
+        const now = _now();
+        jest.spyOn(preRegistration, 'registerHypothesis').mockImplementation(() => { throw new Error('boom'); });
+        const r1 = elig.checkEligibility({ userId: 1, env: 'DEMO', symbol: 'BTCUSDT', regime: 'trending', nowTs: now });
+        expect(r1.eligible).toBe(false);
+        expect(r1.reason).toBe('eval_window_expired');
+        jest.restoreAllMocks();
     });
 
     test('per-cell isolation: user 1 trained, user 2 not -> only user 1 eligible', () => {

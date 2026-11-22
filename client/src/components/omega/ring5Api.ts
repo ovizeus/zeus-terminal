@@ -254,3 +254,23 @@ export async function fetchRing5Posteriors(
     })
     return _get<Ring5PosteriorsResponse>(`/api/ring5/posteriors?${q.toString()}`)
 }
+
+// [2026-11-22] Raportul din umbra: ce AR FI facut Ring5 si mutarea stopului la intrare, in dolari.
+export interface Ring5ShadowR5 {
+    trades: number; matched: number; blockEffect: number
+    wouldBlock: { n: number; pnl: number; winners: number; losers: number }
+    wouldShrink: { n: number; pnl: number }
+    boost: { n: number; pnl: number }
+}
+export interface Ring5ShadowBEThreshold { armed: number; hit: number; hitWinners: number; hitLosers: number; shadowPnl: number; effect: number }
+export interface Ring5ShadowBucket {
+    ring5: Ring5ShadowR5
+    breakeven: { trades: number; realPnl: number } & Record<string, Ring5ShadowBEThreshold | number>
+}
+export interface Ring5ShadowReport {
+    ok: boolean; days: number; applyOn: boolean; thresholds: number[]
+    total: Ring5ShadowBucket; perUser: Record<string, Ring5ShadowBucket>
+}
+export async function fetchRing5ShadowReport(days = 7): Promise<Ring5ShadowReport> {
+    return _get<Ring5ShadowReport>(`/api/ring5/shadow-report?days=${days}`)
+}

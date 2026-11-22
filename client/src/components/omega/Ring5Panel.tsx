@@ -22,8 +22,7 @@ import {
     type Ring5AggregateBucket,
     type Ring5Cell,
     type Ring5TimeseriesBucket,
-    type Ring5BanditPosteriorResponse,
-} from './ring5Api'
+    type Ring5BanditPosteriorResponse, fetchRing5ShadowReport, type Ring5ShadowReport, type Ring5ShadowBEThreshold } from './ring5Api'
 
 // SVG sparkline — minimal, no chart lib. Renders a polyline through n values
 // normalized to height. Width scales to fit container; height fixed.
@@ -161,6 +160,19 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
         return () => clearInterval(t)
     }, [reloadAggregate, reloadCells, reloadTimeseries, reloadBanditView, expanded])
 
+    // [2026-11-22] raportul din umbra (toate conturile), in dolari
+    const [shadow, setShadow] = useState<Ring5ShadowReport | null>(null)
+    const [shadowDays, setShadowDays] = useState(7)
+    const [shadowError, setShadowError] = useState<string | null>(null)
+    useEffect(() => {
+        if (!expanded) return
+        let alive = true
+        fetchRing5ShadowReport(shadowDays)
+            .then((r) => { if (alive) { setShadow(r); setShadowError(null) } })
+            .catch((err) => { if (alive) setShadowError(err instanceof Error ? err.message : String(err)) })
+        return () => { alive = false }
+    }, [expanded, shadowDays])
+
     const reloadInfluenceStatus = useCallback(async () => {
         try {
             const s = await fetchRing5InfluenceStatus()
@@ -283,6 +295,53 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
                 {!influenceStatus?.active && (
                     <div className="omega-ring5-loading">
                         Seeding creates version + 30-day preReg. Eligibility still requires ≥30 obs per cell before wrap mutates fusion.
+                    </div>
+                )}
+            </section>
+
+            <section className="omega-ring5-section" data-testid="r5-shadow">
+                <h3 className="omega-ring5-section-title">Shadow results — all accounts</h3>
+                <div className="omega-ring5-form">
+                    {[1, 7, 14, 30].map((d) => (
+                        <button key={d} type="button" onClick={() => setShadowDays(d)} disabled={shadowDays === d}>{d}d</button>
+                    ))}
+                </div>
+                {shadowError && <div className="omega-ring5-error">{shadowError}</div>}
+                {shadow && (
+                    <div className="omega-ring5-result">
+                        <div>
+                            Mode:{' '}
+                            <strong className={shadow.applyOn ? 'omega-ring5-status-accepted' : 'omega-ring5-status-skipped'}>
+                                {shadow.applyOn ? 'APPLIED' : 'SHADOW — recorded, not applied'}
+                            </strong>
+                        </div>
+                        <div>Bot trades closed: <strong>{shadow.total.ring5.trades}</strong> · with a Ring5 decision: <strong>{shadow.total.ring5.matched}</strong></div>
+                        <div>
+                            Ring5 would have blocked <strong>{shadow.total.ring5.wouldBlock.n}</strong> entries
+                            ({shadow.total.ring5.wouldBlock.losers} losers, {shadow.total.ring5.wouldBlock.winners} winners)
+                            → effect <strong className={shadow.total.ring5.blockEffect >= 0 ? 'omega-ring5-status-accepted' : 'omega-ring5-status-rejected'}>
+                                {shadow.total.ring5.blockEffect >= 0 ? '+' : ''}{shadow.total.ring5.blockEffect.toFixed(2)}$</strong>
+                        </div>
+                        <div>Smaller size on {shadow.total.ring5.wouldShrink.n} · confidence boost on {shadow.total.ring5.boost.n} (size never goes up)</div>
+                        <table className="omega-ring5-audit-table">
+                            <thead><tr><th>Stop to entry after</th><th>Armed</th><th>Hit</th><th>Winners cut</th><th>Effect</th></tr></thead>
+                            <tbody>
+                                {shadow.thresholds.map((t) => {
+                                    const x = shadow.total.breakeven[String(t)] as Ring5ShadowBEThreshold | undefined
+                                    if (!x) return null
+                                    return (
+                                        <tr key={t}>
+                                            <td>+{t}%</td><td>{x.armed}</td><td>{x.hit}</td><td>{x.hitWinners}</td>
+                                            <td className={x.effect >= 0 ? 'omega-ring5-status-accepted' : 'omega-ring5-status-rejected'}>{x.effect >= 0 ? '+' : ''}{x.effect.toFixed(2)}$</td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                        <div className="omega-ring5-loading">
+                            Effect = money the change would have added (+) or cost (−) on the same trades. Real P&L: {shadow.total.breakeven.realPnl.toFixed(2)}$.
+                            Breakeven is measured from the moment positions start reporting, so older trades show no data.
+                        </div>
                     </div>
                 )}
             </section>

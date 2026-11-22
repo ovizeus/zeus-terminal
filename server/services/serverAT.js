@@ -59,6 +59,7 @@ const mlDslPolicy = require('./mlDslPolicy');
 const _dslRrSim = require('./dslRrSim');
 const dslSafety = require('./dslSafety');
 const mlDslShadow = require('./mlDslShadow');
+const breakevenShadow = require('./breakevenShadow'); // [2026-11-22] umbra breakeven
 const priceTrace = require('./priceTrace');
 const mlDslLearner = require('./mlDslLearner');
 const { rewindSafeSeq } = require('./seqGuard');
@@ -3569,6 +3570,8 @@ function onPriceUpdate(symbol, price, exchange) {
         // MAE/MFE tracking — min/max price during position lifetime
         if (!pos._minPrice || price < pos._minPrice) pos._minPrice = price;
         if (!pos._maxPrice || price > pos._maxPrice) pos._maxPrice = price;
+        // [2026-11-22] UMBRA breakeven: doar noteaza, nu muta stopul (breakevenShadow.js)
+        try { breakevenShadow.track(pos, price, Date.now()); } catch (_) { /* masuratoare */ }
 
         // [F3] Safety timeout — an EXPLICIT take-control reverts to 'auto' after
         // 30min so the server resumes management. (Only take-control sets

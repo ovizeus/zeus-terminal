@@ -1439,7 +1439,10 @@ function _runCycle() {
                                 mode: 'influence',
                                 regime: regime.regime,
                                 marketContext: _ring5MarketCtx,
-                                nowTs: Date.now()
+                                nowTs: Date.now(),
+                                // [2026-11-22] doar MASURATOARE in umbra: ce treapta ar fi iesit
+                                // (NO_TRADE = intrare blocata). Nu schimba fusion.
+                                tierFor: (c) => _demoteTierForConfidence(fusion.decision, c, _soakConfFloorFor(userId)),
                             });
                             if (_ring5Wrap && _ring5Wrap.layeredBy === 'ring5-influence-applied') {
                                 fusion.confidence = _ring5Wrap.confidence;

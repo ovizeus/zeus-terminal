@@ -15198,3 +15198,26 @@ Operatorul, cu poza: „cand dau click pe unele sau altele se face negru jos, se
 Operatorul: „ai facut ceva si nu mai merge scroll-ul ca inainte, revino cum era". Anulat integral b417 (regula `html > body { height: auto }` din `app.css`, testul `documentScroller.test.ts`, iar `window.scrollTo(0, 0)` a revenit in `closePageView`). Fisierul CSS construit a revenit IDENTIC cu cel de dinainte (acelasi hash, `index-D8T_OrGe.css`).
 
 De ce s-a stricat: pe telefon (Android WebView) aplicatia deruleaza de la inceput in `<body>`. Chrome trateaza un `<body>` cat ecranul ca „root scroller" implicit, iar tot ce se simte la derulare (inertia, marginile, pull-to-refresh, gesturile pe charturi reglate pe 16 nov) era acordat pe asta. Mutarea derularii pe document a schimbat felul in care se simte, desi pe desktop masuratorile aratau corect. ⚠️ Lectie: o schimbare a ELEMENTULUI care deruleaza nu se poate verifica in Chrome headless pe desktop; nu se livreaza fara proba pe telefon. Negrul de jos ramane deschis; urmatoarea incercare trebuie sa NU schimbe cine deruleaza.
+
+## 🧠 2026-11-22 — b419: Ring5 si breakeven IN UMBRA, pentru toate conturile (server + client)
+
+Operatorul, cu poze din OMEGA › Ring5 si jurnal: „verifica brain, ML, rings, DSL — de ce intra dar pierde… ML-ul trebuie facut sa functioneze, am lucrat foarte mult la el". Apoi: „porneste si fa exact cum ai zis… la toate conturile, si la cei care vor fi".
+
+**Ce am gasit (doar citit, 14 zile, toate conturile).**
+- Intrarile nu sunt problema: doar 20% din pierzatoare n-au fost niciodata pe plus. Banii se pierd la IESIRE: DSL inchide 1.299 din 1.398 (−5.938$), tinta (TP) 82 (+11.552$). 399 de pierzatoare au fost intai +0,3% (−9.044$).
+- Contul 1 (−563$) vs 12/14/13 (pe plus) cu acelasi creier: stopul din setari 1,5% vs 1% → tinta mai departe (3,6% vs ~2,9%) → 2 tinte din 213 vs 14–18. Operatorul a mutat singur stopul la 1%.
+- **Ring5 n-a influentat NICIO decizie din 9 iulie 2026.** Panoul arata ACTIVE, dar fereastra de evaluare a inregistrarii #6554 (9 iun → 9 iul) expirase; nefiind evaluata, ramanea REGISTERED, bloca o inregistrare noua, iar eligibilitatea raspundea `eval_window_expired` la orice celula gata. In plus, eligibilitatea se uita DOAR la celula contului (L4): 7 din 240 aveau 30 de observatii. 1.772.139 de randuri in audit, toate „skipped".
+
+**Ce s-a facut (nimic nu schimba tranzactiile):**
+- `RING5_INFLUENCE_APPLY` (migrationFlags, **OPRIT**): cat e oprit, Ring5 face tot lantul (eligibilitate → tragere Thompson → propunere → reflectie) si scrie in audit `gate_status='skipped', gate_reason='shadow_accepted'` (tabela are CHECK pe status — prins de test), dar intoarce decizia creierului NEATINSA (`layeredBy='ring5-influence-shadow'`; serverBrain aplica doar `ring5-influence-applied`). Randul are si treapta: `phase2Tier` si `wouldTier` (serverBrain da `_demoteTierForConfidence`) → „ar fi blocat intrarea" = taiere la NO_TRADE.
+- Fereastra care se reinnoieste singura (`influenceEligibility.currentRegistration`): se foloseste fereastra care ACOPERA acum; una expirata se inchide INVALID (`preRegistration.expireUnevaluated`, motiv `window_expired_unevaluated` — nu PASS/FAIL, nu s-a masurat) si se inregistreaza una noua de 30 de zile (`system:rolling-window`), cel mult o incercare pe ora. **Nu inventeaza o ipoteza** daca n-a existat niciodata una (`no_active_pre_registration` ramane — contract vechi pastrat). Rutele `/influence/status` si `/seed` folosesc aceeasi regula.
+- Celula comuna (L3 = mediu:moneda:regim, toate conturile) cand celula contului e sub 30 → merge si pentru conturile noi; DEMO nu imprumuta din TESTNET.
+- Audit: „skipped"/„no_proposal" o data la 10 min pe celula, nu la fiecare ciclu (~130.000 randuri/zi inainte).
+- `breakevenShadow.js`: pe fiecare pozitie, tick cu tick, praguri +0,3/+0,5/+0,8%: „armat" cand ajunge la prag, „lovit" daca DUPA aceea pretul revine la intrare. Doar `pos._beShadow`; stopul real neatins.
+- Raport `GET /api/ring5/shadow-report?days=N` (`shadowReport.build`, pur): leaga fiecare tranzactie a botului de ultima decizie Ring5 pe acelasi cont/moneda/directie din 90 s dinainte; blocari (castigatoare/pierzatoare, efect in $), micsorari, cresteri; breakeven pe prag (armate, lovite, castigatoare taiate, efect in $). In aplicatie: OMEGA › Ring5 › „Shadow results — all accounts" (1/7/14/30 zile).
+
+⚠️ Cand am verificat dupa repornire piata era RANGE pe toate monedele, iar celulele RANGE au sub 30 de observatii (BTC 29) → corect „insufficient". Cele 12 celule TREND/BREAKOUT (34–84 obs.) decid la primul ciclu pe acel regim; atunci se reinnoieste si fereastra.
+⚠️ Greseala mea in sesiune: am incarcat un modul cu `node -e require(...)` ca root (deschide baza vie). Oprit in cateva secunde; fisierele bazei au ramas ale lui zeus. Verificarile de sintaxa se fac cu `node --check`.
+**Pasul urmator:** dupa ~7 zile, raportul in dolari; daca e pe plus si operatorul spune „da", se aprinde `RING5_INFLUENCE_APPLY` — intai doar taierile.
+
+Teste: server `ring5ShadowRolling.test.js` (10), `breakevenShadow.test.js` (8), `influenceEligibility.test.js` actualizat (contract schimbat la cerere, scris in test); client `ring5Shadow.test.tsx`. Server 10.972 verzi (4 shard-uri), client 2.339.
