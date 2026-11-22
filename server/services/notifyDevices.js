@@ -18,18 +18,30 @@ const _db = () => require('./database').db;
 const MAX_ITEMS = 10;
 const path = require('path');
 const fs = require('fs');
-// [2026-11-22] Notificare de PROBA: operatorul lasa `data/notify-test.json` = {userId, title, body};
-// se livreaza O SINGURA DATA telefonului acelui cont, apoi fisierul se sterge. Nu atinge baza.
+// [2026-11-22] Notificare de PROBA: operatorul lasa `data/notify-test.json` = {userId, title, body}.
+// Se ofera telefonului acelui cont TEST_TTL_MS de la crearea fisierului, cu un id STABIL (telefonul
+// nu arata acelasi id de doua ori), apoi fisierul se sterge. Prima versiune il stergea la PRIMA
+// citire: pe 22 nov telefonul a verificat inainte ca operatorul sa apese „Allow" la notificari,
+// proba a fost „livrata" fara sa poata fi afisata, si s-a pierdut. Nu atinge baza.
+const TEST_TTL_MS = 15 * 60_000;
 const TEST_FILE = () => path.join(process.env.ZEUS_NOTIFY_TEST_DIR || path.join(__dirname, '..', '..', 'data'), 'notify-test.json');
-function _takeTest(userId) {
+function _takeTest(userId, now = Date.now()) {
     try {
         const f = TEST_FILE();
         if (!fs.existsSync(f)) return null;
+        const born = fs.statSync(f).mtimeMs;
+        if (now - born > TEST_TTL_MS) { fs.unlinkSync(f); return null; }
         const t = JSON.parse(fs.readFileSync(f, 'utf8'));
         if (Number(t.userId) !== Number(userId)) return null;
-        fs.unlinkSync(f);
-        return { id: 'test:' + Date.now(), kind: 'test', title: String(t.title || 'Zeus Terminal').slice(0, 80), body: _clip(t.body || 'Test notification') };
+        return { id: 'test:' + Math.round(born), kind: 'test', title: String(t.title || 'Zeus Terminal').slice(0, 80), body: _clip(t.body || 'Test notification') };
     } catch (_) { return null; }
+}
+// [2026-11-22] Mesajele AUTOMATE din firul de suport (`[zeus:key-health] …`) nu sunt raspunsuri
+// de la suport: titlul „Zeus alert", fara eticheta tehnica.
+const SYSTEM_TAG_RE = /^\s*\[zeus:[a-z0-9_-]+\]\s*/i;
+function _replyItem(r) {
+    const sys = SYSTEM_TAG_RE.test(r.message || '');
+    return { id: 'sup-reply:' + r.id, kind: sys ? 'alert' : 'support', title: sys ? 'Zeus alert' : 'Zeus Support replied', body: _clip(String(r.message || '').replace(SYSTEM_TAG_RE, '')) };
 }
 const BODY_MAX = 140;
 
@@ -62,7 +74,7 @@ function pending(userId, isAdmin) {
     if (test) items.push(test);
     const replies = db.prepare(`SELECT id, message FROM support_messages
         WHERE user_id = ? AND sender = 'admin' AND read_by_user = 0 ORDER BY id DESC LIMIT ?`).all(Number(userId), MAX_ITEMS);
-    for (const r of replies) items.push({ id: 'sup-reply:' + r.id, kind: 'support', title: 'Zeus Support replied', body: _clip(r.message) });
+    for (const r of replies) items.push(_replyItem(r));
     let badge = replies.length + (test ? 1 : 0);
     if (isAdmin) {
         const fromUsers = db.prepare(`SELECT id, message FROM support_messages

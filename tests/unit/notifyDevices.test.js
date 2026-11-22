@@ -82,18 +82,28 @@ test('sessionAuth lasa publice doar /pending si /revoke, nu /register', () => {
     expect(src).not.toMatch(/'\/api\/notify\/'/);
 });
 
-test('notificarea de proba: doar contul ales, o singura data, fisierul se sterge', () => {
+test('notificarea de proba: doar contul ales, cu id stabil 15 minute, apoi fisierul se sterge', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-tst-'));
     process.env.ZEUS_NOTIFY_TEST_DIR = dir;
     const f = path.join(dir, 'notify-test.json');
     fs.writeFileSync(f, JSON.stringify({ userId: 1, title: 'Zeus test', body: 'Merge!' }));
     expect(ND.pending(2, false).items.find((i) => i.kind === 'test')).toBeUndefined();
-    expect(fs.existsSync(f)).toBe(true);
-    const p = ND.pending(1, true);
-    expect(p.items[0]).toMatchObject({ kind: 'test', title: 'Zeus test', body: 'Merge!' });
-    expect(p.badge).toBeGreaterThanOrEqual(1);
-    expect(fs.existsSync(f)).toBe(false);
+    const a = ND.pending(1, true).items.find((i) => i.kind === 'test');
+    expect(a).toMatchObject({ title: 'Zeus test', body: 'Merge!' });
+    // a doua citire (telefonul n-avea inca voie sa o arate): ACELASI id, nu se pierde
+    const b = ND.pending(1, true).items.find((i) => i.kind === 'test');
+    expect(b.id).toBe(a.id);
+    // dupa 15 minute: dispare si fisierul se sterge
+    const old = new Date(Date.now() - 16 * 60_000);
+    fs.utimesSync(f, old, old);
     expect(ND.pending(1, true).items.find((i) => i.kind === 'test')).toBeUndefined();
+    expect(fs.existsSync(f)).toBe(false);
     delete process.env.ZEUS_NOTIFY_TEST_DIR;
     fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('mesajele automate din firul de suport apar ca „Zeus alert", fara eticheta', () => {
+    msg(2, 'admin', '[zeus:key-health] Your BINANCE (testnet) API keys failed verification.');
+    const it = ND.pending(2, false).items[0];
+    expect(it).toMatchObject({ kind: 'alert', title: 'Zeus alert', body: 'Your BINANCE (testnet) API keys failed verification.' });
 });
