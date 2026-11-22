@@ -202,8 +202,12 @@
             overflow: hidden;
             width: 820px;
             max-width: 100%;
-            min-height: 520px
+            min-height: 520px;
+            transition: min-height .6s ease-in-out
         }
+        /* [2026-11-22] Formularul REQUEST ACCESS (4 campuri + bifa) are ~532 px, caseta 520: centrat,
+           iesea si sus si jos, iar titlul era taiat. Caseta creste doar cat e deschisa inscrierea. */
+        .container.active { min-height: 620px }
         .container::after {
             content: '';
             position: absolute;
@@ -227,6 +231,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            justify-content: safe center;   /* daca nu incape: de sus, nu taiat */
             flex-direction: column;
             padding: 0 40px;
             height: 100%
