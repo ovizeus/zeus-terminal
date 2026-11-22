@@ -15227,3 +15227,20 @@ Teste: server `ring5ShadowRolling.test.js` (10), `breakevenShadow.test.js` (8), 
 Operatorul: „pe pagina web cu codurile de bare, Download app — apesi si nu cere aprobare, descarca direct; fa sa ceara aprobare: you want to download? yes / no". Toate cele 5 linkuri `/app` de pe pagina (codul QR, adresa de sub el, butonul „Download APK", codul de bare) deschid acum fereastra „Download the Zeus app?" (APK, ~27 MB) cu **No** / **Yes, download**; doar „Yes" porneste descarcarea. Se inchide si cu Escape sau atingand in afara ferestrei. Un singur ascultator de click pe document (`a[href="/app"]`), deci un link nou catre `/app` e acoperit automat. Pagina de login si blocul de instalare raman neschimbate. Copie: `public/login.html.bak-pre-dl-confirm-20261122`.
 ⚠️ Scanarea codului cu CAMERA nu trece prin pagina (camera deschide direct `/app`, care redirectioneaza la APK) — acolo Android/Chrome isi pune singur intrebarea de descarcare.
 Verificat in Chrome la 390 px: click → fereastra deschisa, adresa neschimbata; „No" → inchisa, fara descarcare.
+
+## 🐢 2026-11-22 — b420: „Zeus se incarca foarte greu" — refacerea radarului ingheta serverul (server)
+
+Operatorul, cu poza: aplicatia ramanea pe CONNECTING, fara preturi si fara chart, „de cand am instalat versiunea noua".
+
+**Masurat, nu ghicit.** `/api/version` raspundea in 52 s; jurnalul serverului avea goluri de ~24 s, unul dupa altul, timp de minute; discul citea ~25 MB/s (5.000 de citiri pe secunda, 80% ocupat, 20% asteptare), toate de la procesul `server.js`. Imediat ce refacerea radarului (`radarBackfill`) s-a terminat (08:39:19), citirile au cazut la ~0,4 MB/s, iar asteptarea la 1%. Nu era versiunea noua: cererile lente cresc din 20 nov (2 → 20 → 49 → 25 pana la 08:30), de cand radarul ruleaza pe server (b391); versiunea noua doar a repornit serverul.
+
+**Cauza.** `_one()` sarea o tranzactie fara cadre ABIA DUPA munca grea (lumanari Binance + toate deciziile creierului pe moneda, de la TOATE conturile, pe toata durata tranzactiei — medie 16 h, ~13.000 de randuri de ~1 KB, de pe disc) si nu nota nicaieri. Aceleasi 105 tranzactii erau refacute de la zero la fiecare pornire (3 min dupa) si zilnic: ~24 s de inghet fiecare, cu 5 s pauza intre ele, 12 minute. Iar „ultimele 30 de zile" compara `closed_at` (TEXT) cu un numar — mereu adevarat, deci citea tot istoricul.
+
+**Reparat:**
+- migrarea **430** `radar_backfill_tried` (cont, secventa, motiv): tranzactia fara mediu/pret sau fara cadre se tine minte si nu se mai reia (`_markTried`, citit in `pending`). 429 era deja luat de Market News — prins de testul de numerotare.
+- refacerea ruleaza **noaptea, 01:00 UTC (03:00 RO)**, apoi zilnic — nu la 3 minute dupa fiecare pornire.
+- `pending`: fereastra de 30 de zile comparata text cu text.
+- deciziile citite `INDEXED BY idx_bd_user_ts` (cont + timp). Castigul e mic (contul 1 are cam tot atatea decizii pe toate monedele cat toate conturile pe BTC); un index (cont, moneda, timp) ar trebui construit peste 4,36 milioane de randuri (~4 GB) — NU l-am facut: ar bloca pornirea minute in sir.
+
+Cele 105 se mai incearca o data, la noapte, si apoi niciodata. Teste: `radarBackfillTried.test.js` (5). Server verde pe 4 shard-uri.
+⚠️ Lectie: la „se incarca greu" masoara intai serverul (timp de raspuns local, goluri in jurnal, `vmstat`/`iostat`, citiri pe proces din `/proc/<pid>/io`) — o operatie de fundal sincrona pe SQLite ingheta tot, iar telefonul doar arata CONNECTING.

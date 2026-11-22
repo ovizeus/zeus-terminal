@@ -192,13 +192,15 @@ async function _one(uid, d) {
     const exists = db.prepare('SELECT 1 FROM brain_captures WHERE user_id = ? AND seq = ?').get(uid, seq);
     if (exists) { _stats.skipped++; return; }
     const env = _envOf(d);
-    if (!env || !(d.price > 0) || !(d.ts > 0)) { _stats.skipped++; return; }
+    if (!env || !(d.price > 0) || !(d.ts > 0)) { _stats.skipped++; _markTried(uid, seq, 'no_env_or_price'); return; }
     const closeTs = Number(d.closeTs) || Number(d.ts);
     const pos = { seq, symbol: sym, side: d.side === 'SHORT' ? 'SHORT' : 'LONG', price: d.price, sl: d.sl, tp: d.tp, size: d.size, lev: d.lev, ts: d.ts, closeTs };
     const from = d.ts - PRE_MS - 105 * BAR5;
     const bars5 = await _bars5For(sym, from, closeTs);
     const bars1 = await _bars1For(sym, d.ts - PRE_MS - 120_000, closeTs);
-    const decisions = db.prepare('SELECT ts, data FROM brain_decisions WHERE user_id = ? AND symbol = ? AND ts BETWEEN ? AND ? ORDER BY ts ASC')
+    // [2026-11-22] INDEXED BY (user_id, ts): fara el SQLite alegea (symbol, ts) si citea deciziile
+    // TUTUROR conturilor pe moneda, pe toata durata tranzactiei (medie 16 h), de pe disc.
+    const decisions = db.prepare('SELECT ts, data FROM brain_decisions INDEXED BY idx_bd_user_ts WHERE user_id = ? AND symbol = ? AND ts BETWEEN ? AND ? ORDER BY ts ASC')
         .all(uid, sym, d.ts - PRE_MS - 120_000, closeTs)
         .map((r) => { try { return { ts: r.ts, d: JSON.parse(r.data) }; } catch (_) { return null; } }).filter(Boolean);
     const T = require('../shared/teacher/teacherIndicators');
@@ -215,7 +217,7 @@ async function _one(uid, d) {
     try { oiHist = await _hist(_oiH, sym, d.ts - PRE_MS - 600_000, closeTs, 'openInterestHist', (r) => Number(r.sumOpenInterest)); } catch (_) { oiHist = []; }
     try { lsHist = await _hist(_lsH, sym, d.ts - PRE_MS - 600_000, closeTs, 'globalLongShortAccountRatio', (r) => Number(r.longShortRatio)); } catch (_) { lsHist = []; }
     const frames = buildFrames({ bars5, bars1, decisions, pos, thr, compute, confluence: require('./serverBrain')._calcConfluence, oiHist, lsHist });
-    if (!frames.length) { _stats.skipped++; return; }
+    if (!frames.length) { _stats.skipped++; _markTried(uid, seq, 'no_frames'); return; }
     const linked = db.prepare('SELECT data FROM brain_decisions WHERE user_id = ? AND linked_seq = ? LIMIT 1').get(uid, seq);
     let regime = null; try { regime = linked ? JSON.parse(linked.data).regime : null; } catch (_) {}
     const entry = entryFrom(frames, pos, { env, thr, profile: RC().profileOf(settings, env), regime, coins: RC().coinsFor(uid).filter(Boolean) });
@@ -229,16 +231,31 @@ async function _one(uid, d) {
 /** Tranzactiile de refacut: reale (definitia unica), ultimele 30 de zile, pe radarul fiecaruia. */
 function pending(now = Date.now()) {
     const { REAL_TRADE_SQL } = require('./ml/_voice/omegaContext');
-    const rows = _db().prepare(`SELECT user_id, data FROM at_closed WHERE closed_at > ? AND ${REAL_TRADE_SQL} ORDER BY closed_at DESC`).all(now - DAYS * 864e5);
+    // [2026-11-22] `closed_at` e TEXT ('YYYY-MM-DD HH:MM:SS'): comparat cu un NUMAR era mereu
+    // adevarat, deci „ultimele 30 de zile" citea tot istoricul. Comparam text cu text.
+    const sinceTxt = new Date(now - DAYS * 864e5).toISOString().slice(0, 19).replace('T', ' ');
+    const rows = _db().prepare(`SELECT user_id, data FROM at_closed WHERE closed_at > ? AND ${REAL_TRADE_SQL} ORDER BY closed_at DESC`).all(sinceTxt);
     const have = new Set(_db().prepare('SELECT user_id || \':\' || seq k FROM brain_captures').all().map((r) => r.k));
+    let tried = new Set();
+    try { tried = new Set(_db().prepare('SELECT user_id || \':\' || seq k FROM radar_backfill_tried').all().map((r) => r.k)); } catch (_) { /* tabela lipsa → nimic sarit */ }
     const out = [];
     for (const r of rows) {
         let d; try { d = JSON.parse(r.data); } catch (_) { continue; }
-        if (!d || d.seq == null || have.has(r.user_id + ':' + d.seq)) continue;
+        if (!d || d.seq == null) continue;
+        const k = r.user_id + ':' + d.seq;
+        if (have.has(k) || tried.has(k)) continue;
         if (!RC().coinsFor(r.user_id).includes(String(d.symbol || '').toUpperCase())) continue;
         out.push({ uid: r.user_id, d });
     }
     return out;
+}
+
+/** [2026-11-22] Tine minte o tranzactie care nu se poate reface, ca sa nu fie reluata la fiecare pornire. */
+function _markTried(uid, seq, reason) {
+    try {
+        _db().prepare('INSERT OR REPLACE INTO radar_backfill_tried (user_id, seq, reason, ts) VALUES (?, ?, ?, ?)')
+            .run(Number(uid), Number(seq), String(reason), Date.now());
+    } catch (_) { /* best-effort */ }
 }
 
 /**
@@ -279,13 +296,23 @@ async function run() {
     } finally { _running = false; _bars5.clear(); _oiH.clear(); _lsH.clear(); }
 }
 
+// [2026-11-22] Noaptea, nu la 3 minute dupa FIECARE pornire: o actualizare reporneste serverul
+// exact cand operatorul deschide aplicatia, iar refacerea citeste mult de pe disc.
+const RUN_HOUR_UTC = 1; // 03:00 ora Romaniei (iarna)
+function msUntilNextRun(now = Date.now()) {
+    const d = new Date(now);
+    const next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), RUN_HOUR_UTC, 0, 0);
+    return next > now ? next - now : next + 24 * 3600_000 - now;
+}
 function start() {
-    const t = setTimeout(() => { run().catch(() => {}); }, 3 * 60_000);
+    const t = setTimeout(() => {
+        run().catch(() => {});
+        _timer = setInterval(() => { run().catch(() => {}); }, 24 * 3600_000);
+        if (_timer.unref) _timer.unref();
+    }, msUntilNextRun());
     if (t.unref) t.unref();
-    _timer = setInterval(() => { run().catch(() => {}); }, 24 * 3600_000);
-    if (_timer.unref) _timer.unref();
 }
 function stop() { if (_timer) clearInterval(_timer); _timer = null; }
 function health() { return { running: _running, ..._stats }; }
 
-module.exports = { start, stop, run, pending, health, buildFrames, entryFrom, lastAtOrBefore, remood };
+module.exports = { start, stop, run, pending, health, buildFrames, entryFrom, lastAtOrBefore, remood, _markTried, msUntilNextRun };

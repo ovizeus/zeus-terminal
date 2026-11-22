@@ -10583,6 +10583,23 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('430_radar_backfill_tried', () => {
+    // [2026-11-22] Tranzactiile pe care refacerea radarului le-a INCERCAT si n-a putut face
+    // nimic (fara mediu valid sau fara niciun cadru). Fara tabela asta, aceleasi 105 erau
+    // refacute de la zero la fiecare pornire a serverului si o data pe zi — fiecare citind
+    // deciziile tuturor conturilor pe toata durata tranzactiei — iar serverul ingheta ~24 s
+    // de fiecare data, 12 minute la rand („Zeus se incarca foarte greu", 22 nov).
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS radar_backfill_tried (
+            user_id INTEGER NOT NULL,
+            seq     INTEGER NOT NULL,
+            reason  TEXT    NOT NULL,
+            ts      INTEGER NOT NULL,
+            PRIMARY KEY (user_id, seq)
+        )
+    `);
+});
+
 migrate('428_brain_radar_server', () => {
     // [2026-11-20] Radarul creierului pe SERVER (radarAxes + radarCapture).
     // brain_radar_prefs: monedele radarului fiecarui utilizator (pana acum doar pe
