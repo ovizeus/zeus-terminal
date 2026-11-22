@@ -51,6 +51,10 @@ const DEVICE_WIDE = new Set([
   // [2026-11-15] Actualizarea automata tine minte ce PACHET a incarcat tabul
   // (si in sessionStorage, nu localStorage): e despre browser, nu despre cont.
   'zeus_autoupdate_done', 'zeus_autoupdate_tried',
+  // [2026-11-22] Al CUI cont e cheia de notificari a TELEFONULUI (core/phoneNotify.ts). E despre
+  // dispozitiv: comparata intre conturi tocmai ca sa vada cand pe telefon intra alt cont.
+  // Scopata per cont, contul 1 ar crede ca telefonul inca e al lui dupa ce a intrat contul 2.
+  'zt-notify-uid',
 ])
 
 // ⚠️ DATORIE CUNOSCUTA — scade, nu creste niciodata.

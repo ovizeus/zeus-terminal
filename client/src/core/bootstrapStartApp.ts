@@ -15,6 +15,8 @@ import { _checkAppUpdate } from './bootstrapError'
 import { _srUpdateStats, setDslStripOpen } from './config'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
 import { startWidgetSync } from './widgetSync'
+import { startPhoneNotify } from './phoneNotify'
+import { useAuthStore } from '../stores/authStore'
 // [MOB-5 2026-05-13] Android back button native handler (no-op pe web).
 import { initBackButtonHandler } from './backButtonHandler'
 import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
@@ -451,6 +453,8 @@ export async function startApp(): Promise<void> {
   setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); _renderBuildInfo(); _pinUpdateUI() }, 15000)
   setTimeout(() => { _showWelcomeModal() }, 2500)
   setTimeout(() => { try { startWidgetSync() } catch (_) {} }, 8000)
+  // [2026-11-22] notificari pe telefon (doar in APK cu pluginul ZeusNotify; pe web nu face nimic)
+  setTimeout(() => { try { void startPhoneNotify(useAuthStore.getState().userId) } catch (_) {} }, 6000)
   // [MOB-5 2026-05-13] Attach Android Back button handler. No-op pe web.
   // Mobile UX: Back navighează modal → pageview → confirm-exit (NU exit instant).
   setTimeout(() => { try { initBackButtonHandler() } catch (e: any) { console.warn('[MOB-5] init failed:', e?.message || e) } }, 1000)

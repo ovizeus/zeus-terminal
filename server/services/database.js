@@ -10583,6 +10583,23 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('431_notify_devices', () => {
+    // [2026-11-22] Telefoanele care primesc notificari Android (verificare in fundal, la 15 min).
+    // Telefonul tine o cheie proprie (nu cookie-ul de sesiune); aici se pastreaza doar HASH-ul ei.
+    // `seen` = ultimele id-uri deja anuntate, ca aceeasi notificare sa nu vina de doua ori.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS notify_devices (
+            id         INTEGER PRIMARY KEY,
+            user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT    NOT NULL UNIQUE,
+            created_at INTEGER NOT NULL,
+            last_seen  INTEGER,
+            revoked    INTEGER NOT NULL DEFAULT 0
+        )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_notify_devices_user ON notify_devices(user_id)');
+});
+
 migrate('430_radar_backfill_tried', () => {
     // [2026-11-22] Tranzactiile pe care refacerea radarului le-a INCERCAT si n-a putut face
     // nimic (fara mediu valid sau fara niciun cadru). Fara tabela asta, aceleasi 105 erau

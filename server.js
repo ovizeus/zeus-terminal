@@ -1325,6 +1325,8 @@ app.use('/api/indicators', require('./server/routes/indicators'));
 // [Task B 2026-05-28] Admin operations — global halt toggle endpoint
 app.use('/api/admin', require('./server/routes/admin'));
 app.use('/api/support', require('./server/routes/support'));
+// [2026-11-22] notificari pe telefon (Android, verificare in fundal) — /pending e public, cu cheia telefonului
+app.use('/api/notify', require('./server/routes/notify'));
 // [2026-11-06] Build Your Own Indicator — paid bespoke indicator orders.
 app.use('/api/byoi', require('./server/routes/byoi'));
 

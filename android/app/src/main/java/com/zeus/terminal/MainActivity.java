@@ -9,6 +9,7 @@ import com.zeus.terminal.biometric.ZeusBiometricPlugin;
 import com.zeus.terminal.widget.ZeusWidgetPlugin;
 import com.zeus.terminal.share.ZeusSharePlugin;
 import com.zeus.terminal.update.ZeusUpdaterPlugin;
+import com.zeus.terminal.notify.ZeusNotifyPlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -24,6 +25,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ZeusBiometricPlugin.class);
         registerPlugin(ZeusSharePlugin.class);
         registerPlugin(ZeusUpdaterPlugin.class);
+        // [2026-11-22] notificari pe telefon pentru mesajele importante (suport, aprobari)
+        registerPlugin(ZeusNotifyPlugin.class);
         super.onCreate(savedInstanceState);
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);

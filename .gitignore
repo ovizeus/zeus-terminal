@@ -105,3 +105,4 @@ data/admin_backups/
 data/audit.jsonl.*
 data/g8-watch.log
 data/shares/
+data/notify-test.json

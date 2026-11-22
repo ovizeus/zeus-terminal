@@ -1,3 +1,4 @@
+import { stopPhoneNotify } from '../../core/phoneNotify'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
@@ -144,6 +145,8 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
       try { sessionStorage.clear() } catch {}
       window.location.href = '/login.html'
     }
+    // [2026-11-22] telefonul nu mai primeste notificari pentru contul care iese
+    void stopPhoneNotify()
     fetch('/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Zeus-Request': '1' } })
       .then(wipeAndGo)
       .catch(wipeAndGo)
