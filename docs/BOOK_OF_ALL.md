@@ -15192,3 +15192,9 @@ Operatorul, cu poza: „cand dau click pe unele sau altele se face negru jos, se
 **Reparat:** `app.css` — `html > body { height: auto; }` (specificitate 0,0,2, bate `html, body` din main.css fara `!important`). Scos `window.scrollTo(0, 0)` din `closePageView`: pana azi nu facea nimic (operatorul ramanea la dock dupa inchiderea unui panou); acum ar fi functionat si l-ar fi aruncat sus — comportamentul cunoscut ramane.
 
 ⚠️ Lectie: la „negru jos", intai intreaba CINE deruleaza pagina (`document.scrollingElement` vs `<body>`), cu foile de stil reale incarcate in ordinea aplicatiei. Patru reparatii anterioare (iunie scroll-lock, 16 nov memorie grafica, 16 nov restaurarea scroll-ului, sonda) au pornit toate de la premisa ca deruleaza fereastra. Test: `components/__tests__/documentScroller.test.ts` (2). Client 2.342 verzi.
+
+## ↩️ 2026-11-22 — b418: REVENIRE la scroll-ul de dinainte (anulat b417)
+
+Operatorul: „ai facut ceva si nu mai merge scroll-ul ca inainte, revino cum era". Anulat integral b417 (regula `html > body { height: auto }` din `app.css`, testul `documentScroller.test.ts`, iar `window.scrollTo(0, 0)` a revenit in `closePageView`). Fisierul CSS construit a revenit IDENTIC cu cel de dinainte (acelasi hash, `index-D8T_OrGe.css`).
+
+De ce s-a stricat: pe telefon (Android WebView) aplicatia deruleaza de la inceput in `<body>`. Chrome trateaza un `<body>` cat ecranul ca „root scroller" implicit, iar tot ce se simte la derulare (inertia, marginile, pull-to-refresh, gesturile pe charturi reglate pe 16 nov) era acordat pe asta. Mutarea derularii pe document a schimbat felul in care se simte, desi pe desktop masuratorile aratau corect. ⚠️ Lectie: o schimbare a ELEMENTULUI care deruleaza nu se poate verifica in Chrome headless pe desktop; nu se livreaza fara proba pe telefon. Negrul de jos ramane deschis; urmatoarea incercare trebuie sa NU schimbe cine deruleaza.
