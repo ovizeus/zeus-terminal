@@ -1110,6 +1110,19 @@
         }
         .getapp-dl:hover { filter: brightness(1.12); transform: translateY(-1px) }
         .getapp-dl-hint { display: none }
+        /* [2026-11-22] Confirmare inainte de descarcare: operatorul — „apesi si descarca
+           direct, fa sa ceara aprobare: you want to download? yes / no". */
+        #dlConfirm { position: fixed; inset: 0; z-index: 10050; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 6, 12, 0.72) }
+        #dlConfirm.open { display: flex }
+        #dlConfirm .dlc-box { width: 100%; max-width: 340px; padding: 20px 18px 16px; background: #0c131d; border: 1px solid #1f2d3f; border-radius: 10px; text-align: center; box-shadow: 0 18px 50px rgba(0,0,0,0.55) }
+        #dlConfirm .dlc-icon { width: 52px; height: 52px; border-radius: 12px; margin: 0 auto 10px; display: block }
+        #dlConfirm .dlc-title { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 18px; letter-spacing: 0.6px; color: #e6eef7; margin: 0 0 6px }
+        #dlConfirm .dlc-text { font-size: 12.5px; line-height: 1.5; color: #8ea2b8; margin: 0 0 16px }
+        #dlConfirm .dlc-row { display: flex; gap: 10px }
+        #dlConfirm .dlc-row button { flex: 1; padding: 10px 12px; border-radius: 6px; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer }
+        #dlConfirm .dlc-no { background: transparent; color: #b8c6d6; border: 1px solid #2a3a4f }
+        #dlConfirm .dlc-yes { background: var(--green); color: #061018; border: 1px solid transparent }
+        #dlConfirm button:focus-visible { outline: 2px solid #7fd3ff; outline-offset: 2px }
 
         @media(max-width:800px) {
             .getapp-row { flex-wrap: wrap; justify-content: center }
@@ -2297,6 +2310,39 @@
                 reg.update().catch(() => { });
             }).catch(err => console.warn('[PWA] SW reg failed:', err));
         }
+    </script>
+    <!-- [2026-11-22] Confirmare inainte de descarcarea aplicatiei (toate linkurile /app de pe pagina) -->
+    <div id="dlConfirm" role="dialog" aria-modal="true" aria-labelledby="dlcTitle" aria-describedby="dlcText">
+        <div class="dlc-box">
+            <img class="dlc-icon" src="/assets/icon-192.png" alt="">
+            <h2 class="dlc-title" id="dlcTitle">Download the Zeus app?</h2>
+            <p class="dlc-text" id="dlcText">The Android installer (Zeus Terminal, APK, about 27&nbsp;MB) will be saved to this device.</p>
+            <div class="dlc-row">
+                <button type="button" class="dlc-no">No</button>
+                <button type="button" class="dlc-yes">Yes, download</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var box = document.getElementById('dlConfirm');
+        if (!box) return;
+        var yes = box.querySelector('.dlc-yes'), no = box.querySelector('.dlc-no');
+        var target = null, back = null;
+        function close() { box.classList.remove('open'); target = null; if (back && back.focus) back.focus(); back = null; }
+        document.addEventListener('click', function (e) {
+            var a = e.target && e.target.closest ? e.target.closest('a[href="/app"]') : null;
+            if (!a) return;
+            e.preventDefault();
+            target = a.getAttribute('href'); back = a;
+            box.classList.add('open');
+            yes.focus();
+        });
+        yes.addEventListener('click', function () { var t = target; close(); if (t) window.location.href = t; });
+        no.addEventListener('click', close);
+        box.addEventListener('click', function (e) { if (e.target === box) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
+    })();
     </script>
 </body>
 

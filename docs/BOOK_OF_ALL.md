@@ -15221,3 +15221,9 @@ Operatorul, cu poze din OMEGA › Ring5 si jurnal: „verifica brain, ML, rings,
 **Pasul urmator:** dupa ~7 zile, raportul in dolari; daca e pe plus si operatorul spune „da", se aprinde `RING5_INFLUENCE_APPLY` — intai doar taierile.
 
 Teste: server `ring5ShadowRolling.test.js` (10), `breakevenShadow.test.js` (8), `influenceEligibility.test.js` actualizat (contract schimbat la cerere, scris in test); client `ring5Shadow.test.tsx`. Server 10.972 verzi (4 shard-uri), client 2.339.
+
+## 📲 2026-11-22 — Pagina de start: confirmare inainte de descarcarea aplicatiei (doar pagina)
+
+Operatorul: „pe pagina web cu codurile de bare, Download app — apesi si nu cere aprobare, descarca direct; fa sa ceara aprobare: you want to download? yes / no". Toate cele 5 linkuri `/app` de pe pagina (codul QR, adresa de sub el, butonul „Download APK", codul de bare) deschid acum fereastra „Download the Zeus app?" (APK, ~27 MB) cu **No** / **Yes, download**; doar „Yes" porneste descarcarea. Se inchide si cu Escape sau atingand in afara ferestrei. Un singur ascultator de click pe document (`a[href="/app"]`), deci un link nou catre `/app` e acoperit automat. Pagina de login si blocul de instalare raman neschimbate. Copie: `public/login.html.bak-pre-dl-confirm-20261122`.
+⚠️ Scanarea codului cu CAMERA nu trece prin pagina (camera deschide direct `/app`, care redirectioneaza la APK) — acolo Android/Chrome isi pune singur intrebarea de descarcare.
+Verificat in Chrome la 390 px: click → fereastra deschisa, adresa neschimbata; „No" → inchisa, fara descarcare.
