@@ -155,8 +155,12 @@ describe('⛔ ORDINEA la boot — de ea depinde tot fixul', () => {
   it('cererea de stare a serverului e asteptata, nu lansata si uitata', () => {
     // Daca n-ar fi `await`-uita inainte de restaurare, ordinea din fisier n-ar
     // insemna nimic.
-    const i = at("fetch('/api/at/state'")
-    expect(SRC.slice(Math.max(0, i - 200), i)).toMatch(/await Promise\.all/)
+    // [2026-11-22] Cererea pleaca acum odata cu celelalte de la pornire (_pfAt), dar e
+    // ASTEPTATA inainte de restaurare — exact contractul de mai sus.
+    expect(at("fetch('/api/at/state'")).toBeGreaterThan(-1)
+    const w = at('await Promise.all([_pfAt, _pfSync])')
+    expect(w).toBeGreaterThan(-1)
+    expect(w).toBeLessThan(at('w.ZState.restore()'))
   })
 })
 

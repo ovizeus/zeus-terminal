@@ -1383,9 +1383,9 @@ app.get('/sw.js', (_req, res) => {
 // ─── Static Files ───
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    // [2026-11-22] pachetele cu cod in nume (/app/assets/*-XXXXXXXX.js|css) → cache 1 an; restul ca inainte
+    const _cc = require('./server/utils/staticCache').cacheControlFor(filePath);
+    if (_cc) res.setHeader('Cache-Control', _cc);
     if (filePath.endsWith('.apk')) {
       res.setHeader('Content-Type', 'application/vnd.android.package-archive');
       res.setHeader('Content-Disposition', 'attachment; filename="zeus-terminal.apk"');

@@ -11474,7 +11474,10 @@ function closeDb() {
 
 // ─── Daily SQLite backup (keeps last 7 copies) [C5] ───
 const BACKUP_DIR = path.join(dataDir, 'db_backups');
-const MAX_BACKUPS = 7;
+// [2026-11-22] 3 copii zilnice (era 7): baza a crescut la ~7 GB si se indreapta spre ~10–12 GB;
+// 7 copii pe acelasi disc ar umple discul. Copia din afara serverului (offsite) ramane separata.
+const MAX_BACKUPS = 3;
+const DAILY_BACKUP_RE = /^zeus-\d{4}-\d{2}-\d{2}\.db$/;
 let _lastBackupDate = '';
 
 // [DB-6] Backup retry queue — single attempt retry on async failure.
@@ -11504,7 +11507,9 @@ function _runDailyBackup() {
             console.log(`[DB] Backup created: ${dest}`);
             // Prune old backups
             try {
-                const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.db')).sort();
+                // [2026-11-22] doar copiile ZILNICE: inainte se numarau si copiile manuale
+                // (zeus-pre-*.db), care la sortare ajung ultimele si nu se stergeau niciodata.
+                const files = fs.readdirSync(BACKUP_DIR).filter(f => DAILY_BACKUP_RE.test(f)).sort();
                 while (files.length > MAX_BACKUPS) {
                     const old = files.shift();
                     fs.unlinkSync(path.join(BACKUP_DIR, old));

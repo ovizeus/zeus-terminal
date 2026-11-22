@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.394',
-    build: 420,
+    version: '1.7.395',
+    build: 421,
     date: '2026-11-21',
     changelog: [
+        'b421 v1.7.395 - pornire mai rapida: pachetele aplicatiei (2,7 MB) tinute in cache (aveau no-store, se descarcau la fiecare intrare), cele 4 cereri de pornire pleaca odata; backup: 3 copii zilnice, copiile manuale nu mai blocheaza rotatia, 2026-11-22 (server + client).',
         'b420 v1.7.394 - Zeus se incarca greu: refacerea radarului relua la FIECARE pornire aceleasi 105 tranzactii fara rezultat (serverul ingheta ~24 s, 12 minute); acum le tine minte (migrarea 430), citeste deciziile dupa cont, „30 de zile" chiar e 30 de zile, si ruleaza noaptea la 03:00, nu dupa pornire, 2026-11-22 (server).',
         'b419 v1.7.393 - Ring5 IN UMBRA pentru toate conturile: fereastra de evaluare care se reinnoieste singura (cea din iunie murise pe 9 iulie), celula comuna (L3) cand celula contului e subtire, decizia notata dar NEAPLICATA (RING5_INFLUENCE_APPLY oprit), audit fara ~130k randuri inutile/zi; breakeven in umbra la +0,3/+0,5/+0,8%; raport in dolari in OMEGA › Ring5, 2026-11-22 (server + client).',
         'b418 v1.7.392 - REVENIRE: scroll-ul ca inainte (anulat b417, cerut de operator), 2026-11-22 (client).',

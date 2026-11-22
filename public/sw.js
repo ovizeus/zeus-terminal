@@ -1,5 +1,5 @@
 const CACHE_VERSION = 'zt-v175-b84-legal';
-// SW_BUILD_TAG: 2026-04-30T22-00-login-network-only
+// SW_BUILD_TAG: 2026-11-22-hashed-assets-cache-first
 // Bump this comment whenever sw.js logic changes — forces byte-level diff
 // so browsers detect the update and reinstall (skipWaiting + clients.claim).
 const CACHE_NAME = `zt-cache-${CACHE_VERSION}`;
@@ -99,6 +99,21 @@ self.addEventListener('fetch', event => {
     if (isStaticAsset) {
         event.respondWith(
             caches.match(event.request).then(resp => resp || fetch(event.request))
+        );
+        return;
+    }
+    // [2026-11-22] Pachetele aplicatiei cu cod in nume (/app/assets/index-BcSSfbih.js) —
+    // CACHE FIRST: numele se schimba cand se schimba continutul, deci copia din cache e
+    // mereu cea corecta. Inainte se descarcau ~2,7 MB la fiecare intrare in aplicatie.
+    if (/\/app\/assets\/[^/?#]+-[A-Za-z0-9_-]{8}\.(?:js|css)(?:[?#]|$)/.test(url)) {
+        event.respondWith(
+            caches.match(event.request).then(cached => cached || fetch(event.request).then(resp => {
+                if (resp && resp.status === 200) {
+                    const respClone = resp.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, respClone));
+                }
+                return resp;
+            }))
         );
         return;
     }

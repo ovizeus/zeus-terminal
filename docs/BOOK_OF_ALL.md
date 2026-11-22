@@ -15244,3 +15244,19 @@ Operatorul, cu poza: aplicatia ramanea pe CONNECTING, fara preturi si fara chart
 
 Cele 105 se mai incearca o data, la noapte, si apoi niciodata. Teste: `radarBackfillTried.test.js` (5). Server verde pe 4 shard-uri.
 ⚠️ Lectie: la „se incarca greu" masoara intai serverul (timp de raspuns local, goluri in jurnal, `vmstat`/`iostat`, citiri pe proces din `/proc/<pid>/io`) — o operatie de fundal sincrona pe SQLite ingheta tot, iar telefonul doar arata CONNECTING.
+
+## 🚀 2026-11-22 — b421: pornire mai rapida + discul (server + client)
+
+Operatorul: „ies din aplicatie si cand intru iar nu are date, se incarca in ~10 s" (poza: CONNECTING, fara preturi, chart gol). Si: „sa nu fie o problema ca se aduna multe capturi si se umple discul?"
+
+**Pornirea.**
+- Toate fisierele .js/.css plecau cu `Cache-Control: no-cache, no-store`, iar service worker-ul le cerea intai din retea → la FIECARE intrare telefonul descarca din nou ~2,7 MB de JS (+ foile de stil). Pachetele Vite din `/app/assets/` au in nume un cod din continut (`index-BcSSfbih.js`), deci acum: server `public, max-age=31536000, immutable` (`server/utils/staticCache.js`), service worker CACHE FIRST pentru ele. `index.html`, `css/main.css`, `sw.js` raman proaspete → o versiune noua ajunge imediat. Prima intrare dupa o versiune noua descarca o data; urmatoarele nu.
+- `startApp` facea 3 drumuri dus-intors la rand (flaguri → AT+sync → DSL). Acum cele 4 cereri pleaca odata; ordinea de APLICARE e neschimbata (flaguri → closedIds → AT → DSL), iar starea AT e tot ASTEPTATA inainte de `ZState.restore()` — testul vechi `serverDemoAuthority` a fost adaptat la forma noua, cu acelasi contract.
+- Masurat dupa b420: serverul raspunde in milisecunde; restul celor 10 s era descarcarea + drumurile la rand + conectarea WS.
+
+**Discul (84%, 24 GB liberi).** Capturile radarului NU sunt problema: 1.533 in total, 16,7 MB, +1–3 MB/zi, plafon 3.000/cont.
+- Baza creste ~0,4 GB/zi (5,7 GB pe 18 nov → 7,2 GB pe 22 nov). Masurat pe copia de backup (`dbstat`, cu `ionice -c3`): `brain_decisions` 2,23 GB, `ml_decision_snapshots` 1,72 GB, `ml_influence_audit` 0,40, `dsl_parity_log` 0,35. Toate AU deja curatare (brain_decisions pe trepte: fara tranzactie 30 z, blocate 90 z, intrari 365 z — G-5; ML 30 z), dar activitatea a crescut de ~8× de curand, deci baza mai creste pana se umplu ferestrele (estimat 10–12 GB) si apoi se opreste. ⚠️ Corectie la mine: am spus intai ca brain_decisions are 4,36 milioane de randuri — era cel mai mare rowid; sunt ~1,63 milioane.
+- Backup: `MAX_BACKUPS` 7 → **3** si numara DOAR copiile zilnice (`zeus-AAAA-LL-ZZ.db`). Inainte numara si copiile manuale (`zeus-pre-*.db`), care la sortare ajung ultimele si nu se stergeau niciodata.
+- `/tmp`: 29 GB in ~28.000 de dosare lasate de teste (`r5-post-*`, `omega-w3-*`, `doctor-*`, `chat-*`, …). Stergerea a fost blocata de garda de permisiuni a sesiunii — comanda i-a fost data operatorului. Copiile manuale vechi ale bazei (~22 GB: `zeus.db.pre-vacuum-*`, `zeus.db.bak.pre-*`, `db_backups/zeus-pre-*`) — decizia lui.
+
+Teste: `staticCache.test.js` (3), `backupRotation.test.js` (2), client `bootParallelFetch.test.ts` (2). Server si client verzi.

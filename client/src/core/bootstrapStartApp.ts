@@ -62,8 +62,15 @@ export async function startApp(): Promise<void> {
   // Blocks before any WS connection so marketDataWS / marketDataChart /
   // orderflow can branch on ALT_WS_FEEDS from the first tick. Falls back to
   // empty object on failure (all flags default off → original behavior).
+  // [2026-11-22] Cele patru cereri de pornire pleaca ODATA (inainte: una dupa alta, 3 drumuri
+  // dus-intors in plus pe telefon). Ordinea in care se APLICA ramane exact cea de dinainte:
+  // flaguri → closedIds din sync → starea AT → DSL.
+  const _pfFlags = fetch('/api/migration/flags', { credentials: 'same-origin' }).catch(() => null)
+  const _pfAt = fetch('/api/at/state', { credentials: 'same-origin' }).catch(() => null)
+  const _pfSync = fetch('/api/sync/state', { credentials: 'same-origin' }).catch(() => null)
+  const _pfDsl = fetch('/api/dsl/toggle', { credentials: 'same-origin' }).catch(() => null)
   try {
-    const _mfRes = await fetch('/api/migration/flags', { credentials: 'same-origin' })
+    const _mfRes = await _pfFlags
     if (_mfRes && _mfRes.ok) {
       w.__MF = await _mfRes.json()
       console.log('[startApp] Migration flags hydrated:', w.__MF)
@@ -75,10 +82,7 @@ export async function startApp(): Promise<void> {
   // [B17b] PREBOOT: fetch sync closedIds AND AT state in parallel.
   // closedIds MUST be populated BEFORE _applyPreboot so _rcSet is never empty at boot.
   try {
-    const [_prebootRes, _syncRes] = await Promise.all([
-      fetch('/api/at/state', { credentials: 'same-origin' }).catch(() => null),
-      fetch('/api/sync/state', { credentials: 'same-origin' }).catch(() => null)
-    ])
+    const [_prebootRes, _syncRes] = await Promise.all([_pfAt, _pfSync])
     // Hydrate _syncClosedIds from server sync state BEFORE AT apply
     if (_syncRes && _syncRes.ok) {
       try {
@@ -95,8 +99,8 @@ export async function startApp(): Promise<void> {
 
   // [DSL-OFF] Preboot: sync client DSL.enabled from server per-user flag
   try {
-    const _dslRes = await fetch('/api/dsl/toggle', { credentials: 'same-origin' })
-    if (_dslRes.ok) {
+    const _dslRes = await _pfDsl
+    if (_dslRes && _dslRes.ok) {
       const _dslData = await _dslRes.json()
       if (_dslData && typeof _dslData.dslEnabled === 'boolean' && w.DSL) {
         w.DSL.enabled = _dslData.dslEnabled
