@@ -18,7 +18,7 @@ import { fetchCrossExchangeFR } from '../data/crossExchangeFR'
 import { fetchBTCDominance, fetchStablecoins } from '../data/btcDominance'
 import { fetchWeeklyKlines, fetchDailyKlines, calcS2F, calcLogRegression, calcMarketCycle } from '../data/onChainMetrics'
 import { connectOKXLiq, disconnectOKXLiq } from '../data/okxLiqWS'
-import { renderFrame } from './render/frame'
+import { renderFrameLines } from './render/frame'
 import { loadLiqSnapshot, startLiqPersist, stopLiqPersist, saveLiqSnapshot } from './persistence/liqPersist'
 
 const w = window as any
@@ -349,7 +349,27 @@ export function _syncQmVars(): void {
 // Acum: nu deseneaza cand pagina e ascunsa sau panoul nu e pe ecran, nu rescrie
 // DOM-ul cand nu s-a schimbat nimic, prinde erorile, iar pe ecrane inguste
 // (telefon) deseneaza o data pe secunda.
-let _lastHtml = ''
+// [2026-11-22] „Intru in Quantitative Monitor si imi blocheaza aplicatia, nici scroll nici nimic."
+// Masurat (Chrome, procesor incetinit 6× ca un telefon): fiecare tic rescria TOT ecranul — ~111 KB,
+// 3.983 de bucati colorate — parsare 38 ms + asezare 100 ms, ~300 ms per tic, o data pe secunda;
+// iar scroll-ul asteapta firul principal (ascultatorul de pull-to-refresh nu e pasiv). Acum fiecare
+// rand e un element propriu si se rescriu DOAR randurile al caror text s-a schimbat.
+let _lines: string[] = []
+/** Pune randurile in ecran; rescrie doar ce s-a schimbat. Exportat pentru teste. */
+export function paintLines(el: HTMLElement, lines: string[]): number {
+  let changed = 0
+  if (el.childElementCount !== lines.length || _lines.length !== lines.length) {
+    el.innerHTML = lines.map((l) => '<div class="qml">' + (l || ' ') + '</div>').join('')
+    _lines = lines.slice()
+    return lines.length
+  }
+  const kids = el.children
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] !== _lines[i]) { (kids[i] as HTMLElement).innerHTML = lines[i] || ' '; _lines[i] = lines[i]; changed++ }
+  }
+  return changed
+}
+export function _resetPaintForTest(): void { _lines = [] }
 function startRenderLoop(screenId: string): void {
   const every = (typeof window !== 'undefined' && window.innerWidth && window.innerWidth < 760) ? 1000 : 500
   renderIv = setInterval(() => {
@@ -360,8 +380,7 @@ function startRenderLoop(screenId: string): void {
     try {
       _syncQmVars()
       runAllEngines()
-      const html = renderFrame()
-      if (html !== _lastHtml) { el.innerHTML = html; _lastHtml = html }
+      paintLines(el as HTMLElement, renderFrameLines())
     } catch (e: any) {
       console.warn('[QM] render tick failed:', e?.message || e)
     }
@@ -495,7 +514,7 @@ export function destroy(): void {
   intervals.length = 0
   polls.forEach(stop => stop())
   polls.length = 0
-  _lastHtml = ''
+  _lines = []
   if (renderIv) { clearInterval(renderIv); renderIv = null }
   if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0 }
   disconnectOKXLiq()

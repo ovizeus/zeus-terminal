@@ -15306,3 +15306,14 @@ Operatorul: „la Global Markets crezi ca ar mai fi ceva de adaugat… si la New
 **Market News.** Verificate de pe server (raspuns + articole + DATE la zi, cu parserul real rulat ca zeus): ForexLive (macro), Seeking Alpha (Market Currents), ZeroHedge, Bank of England (oficial). Respinse: CNBC, CoinDesk, BLS, FMI (zid anti-bot 403 — nu-l ocolim), WSJ Markets (feed abandonat din ian. 2025), Nikkei Asia (articole FARA data → ar fi parut mereu noi). Publicatii distincte 21 → 25; pagina de start si lista din panoul News actualizate.
 
 Teste: `tradfiMarkets.test.js` (+2). Server si client verzi; `mlDslBanditEpoch` a picat o data in shard 1 si trece 3/3 singur (tragere aleatoare, modul neatins). ⚠️ Am rulat din nou din greseala `node -e require(...)` ca root (newsFeed deschide baza abia la folosire — nimic deschis, fara fisiere ale lui root); verificarea parserului am facut-o apoi ca zeus.
+
+## 🧊 2026-11-22 — b426: Quant Monitor bloca telefonul (doar client)
+
+Operatorul: „intru in Quantitative Monitor si imi blocheaza aplicatia, trebuie sa ies de tot, nu merge nici scroll nici nimic". (A doua oara: pe 15 nov s-a rarit desenul la o data pe secunda pe telefon.)
+
+**Masurat, nu ghicit.** Analiza statica (bucle `while`/`for`, `repeat`/`padStart`, bare, lichidari, OKX, potrivirea fontului) n-a gasit o bucla infinita; cu date goale si cu date REALE Binance (lumanari 5m/1h/1d, ticker, raport L/S) panoul NU ingheta in Chrome cu timp simulat. Apoi: panoul real, construit cu esbuild, rulat in Chrome in TIMP REAL, prin DevTools, cu procesorul incetinit de 6× (ca un telefon mediu). Fiecare tic (o data pe secunda) rescria TOT ecranul: ~111 KB, **3.983 de bucati colorate** — parsare 38 ms + asezare 99 ms; pauza pe firul principal **163 ms la fiecare secunda**, plus prima desenare ~300 ms. Iar scroll-ul asteapta firul principal (ascultatorul `touchmove` al pull-to-refresh nu e pasiv) → pe telefon, cu restul aplicatiei, „nu merge nimic".
+
+**Reparat:** `renderFrameLines()` intoarce randurile (cate un `L()`), `renderFrame()` ramane (le uneste); bucla deseneaza prin `paintLines()`: fiecare rand e un `<div class="qml">`, iar la fiecare tic se rescriu DOAR randurile al caror text s-a schimbat (de obicei ~5 din 530). Numar de randuri schimbat → rescriere completa. Rand gol → un spatiu (isi pastreaza inaltimea). Masurat in aceleasi conditii: pauza **163 ms → 2 ms**, parsare 1 ms, asezare 5 ms. Captura la 390 px: ecranul arata identic.
+
+Teste: `quantmonitor/__tests__/paintLines.test.ts` (3). Client 2.352 verzi.
+⚠️ Metoda (de pastrat): pentru „se blocheaza pe telefon" fara eroare → Chrome prin DevTools (`node --experimental-websocket`, `Emulation.setCPUThrottlingRate`), TIMP REAL, ca zeus; timpul simulat (`--virtual-time-budget`) NU arata costul.

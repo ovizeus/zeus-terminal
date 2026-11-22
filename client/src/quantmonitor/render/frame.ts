@@ -164,7 +164,13 @@ function getPressureTrend(): { avg: number; trend: number; rising: boolean } {
 // ================================================================
 // RENDER FRAME
 // ================================================================
+/** Cadrul ca text (randurile unite cu \n). Pastrat pentru testele si apelantii vechi. */
 export function renderFrame(): string {
+  return renderFrameLines().join('\n')
+}
+
+/** [2026-11-22] Cadrul ca LISTA de randuri (cate un apel L()), ca bucla sa rescrie doar randurile schimbate. */
+export function renderFrameLines(): string[] {
   const S = w.S || {}
   const WALLET = QM.wallet
   const SESSION = QM.session
@@ -1391,5 +1397,5 @@ export function renderFrame(): string {
   L(`<span class="d">${binLine(70)}</span>`)
   L(`<span class="dg">ZeuS Alpha AI...tick ${ticks.toLocaleString()} | ${ts} | ${wsOK ? '<span class="g">\u25CF LIVE</span>' : '<span class="r">\u25CB CONNECTING</span>'}</span><span class="g cursor"> \u2588</span>`)
 
-  return o.join('\n')
+  return o
 }
