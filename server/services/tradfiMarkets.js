@@ -57,6 +57,21 @@ const CATALOG = [
     ['MSTR', 'Strategy (MicroStrategy)', 'crypto', 'us'], ['COIN', 'Coinbase', 'crypto', 'us'], ['HOOD', 'Robinhood', 'crypto', 'us'],
     ['IBIT', 'iShares Bitcoin ETF', 'crypto', 'us'], ['CRCL', 'Circle', 'crypto', 'us'], ['MARA', 'MARA Holdings', 'crypto', 'us'],
     ['CLSK', 'CleanSpark', 'crypto', 'us'], ['IREN', 'IREN', 'crypto', 'us'], ['GLXY', 'Galaxy Digital', 'crypto', 'us'],
+    // ── [2026-11-22] adaugate la cererea operatorului („ce se uita traderii din lume") ──
+    // volatilitate (pretul = nivelul indicelui; ~27 = VIX-style, ~56 = volatilitatea implicita BTC)
+    ['VOLX', 'Volatility Index (VIX-style)', 'indices', 'us'], ['BVOL', 'Bitcoin Implied Volatility', 'indices', '24h'],
+    ['EVOL', 'Ether Implied Volatility', 'indices', '24h'], ['GVZ', 'Gold Volatility (GVZ)', 'indices', 'us'],
+    // ETF-urile pe care le urmaresc traderii
+    ['SPY', 'SPDR S&P 500 ETF', 'indices', 'us'], ['QQQ', 'Invesco Nasdaq 100 ETF', 'indices', 'us'],
+    ['SMH', 'VanEck Semiconductor ETF', 'indices', 'us'],
+    // aur tokenizat (se tranzactioneaza non-stop, volum mare)
+    ['XAUT', 'Tether Gold (XAUT)', 'crypto', '24h'], ['PAXG', 'PAX Gold (PAXG)', 'crypto', '24h'],
+    ['BMNR', 'BitMine Immersion', 'crypto', 'us'],
+    // actiuni americane foarte urmarite acum
+    ['SNDK', 'SanDisk'], ['WDC', 'Western Digital'], ['MRVL', 'Marvell'], ['NBIS', 'Nebius'], ['CRWV', 'CoreWeave'],
+    ['APP', 'AppLovin'], ['ASTS', 'AST SpaceMobile'], ['HIMS', 'Hims & Hers'], ['SOFI', 'SoFi'], ['RDDT', 'Reddit'],
+    ['PANW', 'Palo Alto Networks'], ['NET', 'Cloudflare'], ['SNOW', 'Snowflake'], ['VRT', 'Vertiv'], ['GEV', 'GE Vernova'],
+    ['CEG', 'Constellation Energy'], ['OKLO', 'Oklo'], ['SMR', 'NuScale Power'], ['IONQ', 'IonQ'], ['MELI', 'MercadoLibre'],
 ].map(([sym, name, group = 'stocks', market = 'us']) => ({ sym, name, group, market, contract: sym + '_USDT' }));
 
 // ── orarul burselor (fara sarbatori legale — o zi de sarbatoare apare OPEN) ──
@@ -77,6 +92,7 @@ function localParts(tz, now) {
 }
 /** Bursa e deschisa acum? PURA (now injectabil). Marfuri / valute: duminica 18:00 – vineri 17:00 ET, pauza 17–18. */
 function isOpen(market, now = Date.now()) {
+    if (market === '24h') return true;   // [2026-11-22] aur tokenizat, volatilitatea crypto: non-stop
     if (market === 'cmdty' || market === 'fx') {
         const { wd, min } = localParts('America/New_York', now);
         if (wd === 6) return false;

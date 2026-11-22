@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.398',
-    build: 424,
+    version: '1.7.399',
+    build: 425,
     date: '2026-11-21',
     changelog: [
+        'b425 v1.7.399 - GLOBAL MARKETS 105 → 135 (volatilitate VIX-style/BTC/ETH/aur, SPY/QQQ/SMH, aur tokenizat, actiuni urmarite: SanDisk, Nebius, CoreWeave, AppLovin…); MARKET NEWS +4 surse (ForexLive, Seeking Alpha, ZeroHedge, Bank of England), 2026-11-22 (server + client).',
         'b424 v1.7.398 - notificari pe telefon pentru intrari/iesiri AT, miscari mari de pret (±3%/1h) si siguranta (kill switch, fara SL, inchidere de urgenta esuata), adunate pe sfert de ora; Alerts › Phone notifications cu 5 casute, 2026-11-22 (server + client).',
         'b423 v1.7.397 - notificari: proba nu se mai pierde daca telefonul verifica inainte de „Allow" (id stabil 15 min); mesajele automate din suport apar ca „Zeus alert", 2026-11-22 (server).',
         'b422 v1.7.396 - notificari pe telefon pentru mesajele importante (raspunsuri de la suport; la admin si mesajele utilizatorilor + conturile de aprobat), cu cifra pe iconita; APK 1.7.17 (43) cu pluginul ZeusNotify — verificare in fundal la 15 min, 2026-11-22 (server + client + APK).',

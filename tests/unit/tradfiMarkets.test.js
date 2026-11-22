@@ -65,3 +65,20 @@ describe('instantaneul trimis aplicatiei', () => {
         expect(new Set(syms).size).toBe(syms.length);
     });
 });
+
+describe('[2026-11-22] piete noi: volatilitate, ETF-uri, aur tokenizat, actiuni urmarite', () => {
+    const tm = require('../../server/services/tradfiMarkets');
+    test('sunt in catalog, in grupul potrivit', () => {
+        const by = Object.fromEntries(tm.CATALOG.map((c) => [c.sym, c]));
+        expect(by.VOLX.group).toBe('indices');
+        expect(by.SPY.group).toBe('indices');
+        expect(by.XAUT.group).toBe('crypto');
+        expect(by.SNDK.group).toBe('stocks');
+        expect(tm.CATALOG.length).toBe(135);
+    });
+    test('aurul tokenizat si volatilitatea crypto sunt „deschise" mereu, si sambata', () => {
+        const sat = Date.parse('2026-11-21T12:00:00Z');
+        expect(tm.isOpen('24h', sat)).toBe(true);
+        expect(tm.isOpen('us', sat)).toBe(false);
+    });
+});

@@ -15296,3 +15296,13 @@ Inainte nu exista nimic pentru telefon: alertele din fereastra Alerts (volum, ba
 - ⚠️ Prins de teste: fisierul notificarii de proba se cauta in `data/` REAL si in teste — acum se cauta langa baza FOLOSITA (`ZEUS_DB_PATH`), deci testele nu-l pot atinge.
 
 Teste: `notifyEvents.test.js` (7), `notifyDevices.test.js`, `viewerGate.test.js`; client `phoneNotifySection.test.tsx` (2). Server si client verzi.
+
+## 🌍 2026-11-22 — b425: GLOBAL MARKETS 105 → 135, MARKET NEWS +4 surse (server + client)
+
+Operatorul: „la Global Markets crezi ca ar mai fi ceva de adaugat… si la News din paginile importante din lume unde se uita traderii?"
+
+**Global Markets.** Din catalogul Gate (373 de actiuni, 8 indici, 5 metale, 2 valute pe care nu le aveam), ordonate dupa volumul pe 24 h. Adaugate 30: volatilitate (VOLX ~27 = VIX-style, BVOL = volatilitatea implicita BTC, EVOL = ETH, GVZ = aur), ETF-uri (SPY, QQQ, SMH), aur tokenizat (XAUT, PAXG — volum mare, non-stop), BitMine, si 20 de actiuni americane foarte urmarite (SanDisk, Western Digital, Marvell, Nebius, CoreWeave, AppLovin, AST SpaceMobile, Hims, SoFi, Reddit, Palo Alto, Cloudflare, Snowflake, Vertiv, GE Vernova, Constellation, Oklo, NuScale, IonQ, MercadoLibre). Orar nou `24h` (mereu OPEN) pentru aurul tokenizat si volatilitatea crypto. ⚠️ NU adaugate: SAMSUNG (129), SKHYNIX (784), XIAOMI (3,5), TENCENT (42,9), USDEX (3,7) — preturi in unitati care nu se potrivesc cu actiunea reala; pre-IPO (OPENAI, SPCX) — unitati neclare. Pagina de start: 105 → 135 (3 locuri).
+
+**Market News.** Verificate de pe server (raspuns + articole + DATE la zi, cu parserul real rulat ca zeus): ForexLive (macro), Seeking Alpha (Market Currents), ZeroHedge, Bank of England (oficial). Respinse: CNBC, CoinDesk, BLS, FMI (zid anti-bot 403 — nu-l ocolim), WSJ Markets (feed abandonat din ian. 2025), Nikkei Asia (articole FARA data → ar fi parut mereu noi). Publicatii distincte 21 → 25; pagina de start si lista din panoul News actualizate.
+
+Teste: `tradfiMarkets.test.js` (+2). Server si client verzi; `mlDslBanditEpoch` a picat o data in shard 1 si trece 3/3 singur (tragere aleatoare, modul neatins). ⚠️ Am rulat din nou din greseala `node -e require(...)` ca root (newsFeed deschide baza abia la folosire — nimic deschis, fara fisiere ale lui root); verificarea parserului am facut-o apoi ca zeus.

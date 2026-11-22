@@ -180,9 +180,9 @@ export function NewsPanel({ onClose }: { onClose: () => void }) {
             {list.map((it) => <NewsRow key={it.id} it={it} open={openId === it.id} onToggle={() => setOpenId(openId === it.id ? null : it.id)} />)}
             {snap && (
               <div className="zmkp-foot">
-                Headlines from Bloomberg, Financial Times, MarketWatch, Investing.com, OilPrice, Kitco, Cointelegraph, The Block, Decrypt,
-                Bitcoin Magazine, CryptoSlate, Bitcoin.com, Blockworks, The Defiant, CryptoPotato, U.Today and BeInCrypto, official releases from
-                the Federal Reserve, ECB and SEC, and Binance listing and delisting announcements. Only titles and links are shown.
+                Headlines from Bloomberg, Financial Times, MarketWatch, Investing.com, Seeking Alpha, ZeroHedge, ForexLive, OilPrice, Kitco,
+                Cointelegraph, The Block, Decrypt, Bitcoin Magazine, CryptoSlate, Bitcoin.com, Blockworks, The Defiant, CryptoPotato, U.Today
+                and BeInCrypto, official releases from the Federal Reserve, ECB, Bank of England and SEC, and Binance listing and delisting announcements. Only titles and links are shown.
                 Moves are measured from 1-minute prices after publication; the same story from several outlets is grouped.
               </div>
             )}

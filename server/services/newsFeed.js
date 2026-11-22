@@ -53,6 +53,13 @@ const FEEDS = [
     { id: 'utoday', name: 'U.Today', url: 'https://u.today/rss', cat: 'crypto' },
     { id: 'beincrypto', name: 'BeInCrypto', url: 'https://beincrypto.com/feed/', cat: 'crypto' },
     { id: 'ctreg', name: 'Cointelegraph', url: 'https://cointelegraph.com/rss/tag/regulation', cat: 'crypto' },
+    // [2026-11-22] „din paginile importante din lume unde se uita traderii" — verificate de pe server:
+    // raspund, au articole si DATE la zi. Scoase: CNBC, CoinDesk, BLS, FMI (zid anti-bot 403 — nu-l
+    // ocolim), WSJ Markets (feed abandonat, ultimul articol ian. 2025), Nikkei Asia (articole FARA data).
+    { id: 'forexlive', name: 'ForexLive', url: 'https://www.forexlive.com/feed/news', cat: 'macro' },
+    { id: 'seekingalpha', name: 'Seeking Alpha', url: 'https://seekingalpha.com/market_currents.xml', cat: 'markets' },
+    { id: 'zerohedge', name: 'ZeroHedge', url: 'https://feeds.feedburner.com/zerohedge/feed', cat: 'markets' },
+    { id: 'boe', name: 'Bank of England', url: 'https://www.bankofengland.co.uk/rss/news', cat: 'macro', official: true },
     // anunturile Binance (JSON public): listari si delistari — misca puternic moneda respectiva
     { id: 'bnb-list', name: 'Binance', kind: 'binance', catalogId: 48, cat: 'crypto', label: 'LISTING' },
     { id: 'bnb-delist', name: 'Binance', kind: 'binance', catalogId: 161, cat: 'crypto', label: 'DELISTING', alert: true },
