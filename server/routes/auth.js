@@ -97,6 +97,12 @@ function _generateCode() {
 }
 
 // Password policy — 12 chars min, uppercase + lowercase + digit
+// [2026-11-27] extra 6 — parolele cunoscute ca furate (Have I Been Pwned, k-anonymity). Serviciul cazut → nu blocam.
+const PWNED_MSG = 'This password has appeared in a data breach, so attackers try it first. Choose a different one.';
+async function _pwnedPassword(pw) {
+    try { return (await require('../services/pwnedPasswords').isPwned(pw)) === true; } catch (_) { return false; }
+}
+
 function _validatePassword(pw) {
     if (!pw || pw.length < 12) return 'Password must be at least 12 characters';
     if (pw.length > 128) return 'Password cannot exceed 128 characters';
@@ -249,6 +255,7 @@ router.post('/register', async (req, res) => {
         if (_pwErr) {
             return res.status(400).json({ error: _pwErr });
         }
+        if (await _pwnedPassword(password)) return res.status(400).json({ error: PWNED_MSG });
 
         // [2026-11-27] Adrese temporare / semnatura botilor (`verify_…`): acelasi raspuns ca la o
         // inscriere reusita (nu-i spunem botului ce a declansat), dar NU se creeaza contul si nu pleaca email.
@@ -1357,6 +1364,7 @@ router.post('/change-password/confirm', async (req, res) => {
         if (!code || !newPassword) return res.status(400).json({ error: 'Code and new password are required' });
         var _pwErr2 = _validatePassword(newPassword);
         if (_pwErr2) return res.status(400).json({ error: _pwErr2 });
+        if (await _pwnedPassword(newPassword)) return res.status(400).json({ error: PWNED_MSG });
 
         const key = 'chpw_' + decoded.email;
         const pending = pendingCodes.get(key);
@@ -1573,6 +1581,7 @@ router.post('/forgot-password/confirm', async (req, res) => {
     if (!email || !code || !newPassword) return res.status(400).json({ error: 'Email, code and new password are required' });
     var _pwErr3 = _validatePassword(newPassword);
     if (_pwErr3) return res.status(400).json({ error: _pwErr3 });
+    if (await _pwnedPassword(newPassword)) return res.status(400).json({ error: PWNED_MSG });
 
     const key = 'fgpw_' + email.toLowerCase().trim();
     const pending = pendingCodes.get(key);
