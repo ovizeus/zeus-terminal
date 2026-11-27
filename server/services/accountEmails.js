@@ -194,6 +194,23 @@ function emailChangedEmail() {
     return { subject: 'Zeus Terminal — the email address on your account was changed', text: _text(lines), html: _html('Your sign-in email was changed', lines) };
 }
 
+// [2026-11-27] 2FA pornit / oprit — anunt pe adresa contului, ca o schimbare facuta de altcineva sa se vada
+function twoFactorEnabledEmail() {
+    const lines = [
+        'Two-factor authentication is now on for your Zeus Terminal account. Signing in asks for the 6-digit code from your authenticator app instead of an email code.',
+        'Keep your backup codes somewhere safe — each one works once if you lose your phone.',
+        `If you did not turn this on, contact us right away: ${supportUrl()}`,
+    ];
+    return { subject: 'Zeus Terminal — two-factor authentication turned on', text: _text(lines), html: _html('Two-factor authentication is on', lines) };
+}
+function twoFactorDisabledEmail() {
+    const lines = [
+        'Two-factor authentication was turned off for your Zeus Terminal account. Signing in now asks for a code sent to this email again.',
+        `If you did not turn it off, change your password and contact us right away: ${supportUrl()}`,
+    ];
+    return { subject: 'Zeus Terminal — two-factor authentication turned off', text: _text(lines), html: _html('Two-factor authentication is off', lines) };
+}
+
 // ── Accesul ────────────────────────────────────────────────────────────────
 function accessFullEmail(email) {
     const lines = [
@@ -255,6 +272,8 @@ const BUILDERS = {
     suspended: suspendedEmail,
     restored: restoredEmail,
     support_reply: supportReplyEmail,
+    two_factor_enabled: twoFactorEnabledEmail,
+    two_factor_disabled: twoFactorDisabledEmail,
 };
 
 const _mask = (e) => String(e).replace(/^(.).*(@.*)$/, '$1***$2');

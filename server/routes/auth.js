@@ -177,6 +177,10 @@ function _setAuthCookie(res, token, userId) {
 
 // ─── [2026-11-27] Garzi anti-bot (dupa atacul 13–27 nov) ───
 const authGuard = require('../services/authGuard');
+const twoFactor = require('../services/twoFactor');
+// [2026-11-27] limita pe CONT pentru codurile din aplicatie la login
+const TOTP_LOGIN_MAX = 10;
+const TOTP_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const REG_IP_MAX = 3, REG_IP_WINDOW = 10 * 60 * 1000;          // 3 inscrieri / IP / 10 min
 const FGPW_USER_MAX = 3, FGPW_USER_WINDOW = 60 * 60 * 1000;    // 3 coduri de resetare / CONT / ora
 
@@ -397,6 +401,17 @@ router.post('/login', async (req, res) => {
             return res.status(403).json({ error: 'You already have a pending access request — it is awaiting administrator approval.' });
         }
 
+        // [2026-11-27] Securitate etapa 2 — cont cu 2FA din aplicatie: codul vine din telefon, IN LOCUL
+        // emailului (cine are emailul si parola nu mai intra). Orice cod de email cerut inainte e inlocuit.
+        if (twoFactor.isEnabled(user.id)) {
+            pendingCodes.set(normalEmail, {
+                method: 'totp', code: null, role: user.role || 'user', userId: user.id,
+                attempts: 0, expiresAt: Date.now() + CODE_TTL,
+            });
+            logger.info('AUTH', '2FA (authenticator) required for login', { email: _mask(normalEmail) });
+            return res.json({ ok: true, needsCode: true, method: 'totp', message: 'Enter the 6-digit code from your authenticator app, or a backup code.' });
+        }
+
         // [AUTH-1] 2FA email-bombing rate limit — gate before pendingCodes.set
         // + _sendCode dispatch. Without this, attacker (or buggy client cu
         // automatic retry) flooding /login cu correct credentials triggers
@@ -455,7 +470,7 @@ router.post('/login', async (req, res) => {
             // Dev/test: keep the code in pendingCodes and print it server-side.
             console.warn(`[AUTH-2FA][DEV] SMTP not configured. 2FA code for ${_mask(normalEmail)}: ${code}`);
             logger.warn('AUTH', '2FA code printed to console (dev, no SMTP)', { email: _mask(normalEmail) });
-            return res.json({ ok: true, needsCode: true, message: '2FA code printed to the server console (dev mode).' });
+            return res.json({ ok: true, needsCode: true, method: 'email', message: '2FA code printed to the server console (dev mode).' });
         }
 
         const sent = await _sendCode(normalEmail, code, 'login');
@@ -466,7 +481,7 @@ router.post('/login', async (req, res) => {
         }
 
         logger.info('AUTH', '2FA code sent for login', { email: _mask(normalEmail) });
-        res.json({ ok: true, needsCode: true, message: 'A verification code was sent to your email.' });
+        res.json({ ok: true, needsCode: true, method: 'email', message: 'A verification code was sent to your email.' });
     } catch (err) {
         console.error('[AUTH] Login error:', err.message);
         res.status(500).json({ error: 'Internal error' });
@@ -511,10 +526,26 @@ router.post('/verify-code', (req, res) => {
             return res.status(429).json({ error: 'Too many attempts. Please sign in again.' });
         }
 
-        // Verify code (constant-time comparison)
-        const codeStr = String(code).trim();
-        if (codeStr.length !== 6 || !crypto.timingSafeEqual(Buffer.from(codeStr), Buffer.from(pending.code))) {
-            return res.status(401).json({ error: 'Incorrect code. You have ' + (MAX_ATTEMPTS - pending.attempts) + ' attempts left.' });
+        if (pending.method === 'totp') {
+            // [2026-11-27] cod din aplicatie sau de rezerva; plus o limita pe CONT (cine are parola nu poate
+            // relua login-ul la nesfarsit ca sa ghiceasca: 10 coduri / 15 min, pastrat in SQLite)
+            if (!authGuard.hit(db, 'totp_login', pending.userId, TOTP_LOGIN_MAX, TOTP_LOGIN_WINDOW_MS)) {
+                pendingCodes.delete(normalEmail);
+                db.auditLog(pending.userId, 'LOGIN_2FA_THROTTLED', {}, req.ip);
+                return res.status(429).json({ error: 'Too many attempts. Wait 15 minutes and sign in again.' });
+            }
+            const v = twoFactor.verifyLogin(pending.userId, code);
+            if (!v.ok) {
+                db.auditLog(pending.userId, 'LOGIN_2FA_FAILED', { attempt: pending.attempts }, req.ip);
+                return res.status(401).json({ error: 'Incorrect code. You have ' + (MAX_ATTEMPTS - pending.attempts) + ' attempts left.' });
+            }
+            if (v.method === 'recovery') db.auditLog(pending.userId, 'LOGIN_RECOVERY_CODE_USED', { left: v.recoveryLeft }, req.ip);
+        } else {
+            // Verify code (constant-time comparison)
+            const codeStr = String(code).trim();
+            if (codeStr.length !== 6 || !crypto.timingSafeEqual(Buffer.from(codeStr), Buffer.from(pending.code))) {
+                return res.status(401).json({ error: 'Incorrect code. You have ' + (MAX_ATTEMPTS - pending.attempts) + ' attempts left.' });
+            }
         }
 
         // Success — clear code and set JWT (includes user id + tokenVersion)

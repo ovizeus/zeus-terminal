@@ -10583,6 +10583,25 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('434_user_totp', () => {
+    // [2026-11-27] Securitate etapa 2 — 2FA cu aplicatie de autentificare. Tabel separat de `users`,
+    // ca secretul sa nu ajunga in nicio lista de conturi. Secretele CRIPTATE (encryption.js, ca cheile
+    // de exchange); codurile de rezerva doar ca hash. last_step = ultimul pas TOTP acceptat (anti-refolosire).
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS user_totp (
+            user_id       INTEGER PRIMARY KEY,
+            secret_enc    TEXT,
+            pending_enc   TEXT,
+            pending_at    INTEGER,
+            enabled       INTEGER NOT NULL DEFAULT 0,
+            last_step     INTEGER NOT NULL DEFAULT -1,
+            recovery_json TEXT,
+            enabled_at    INTEGER,
+            updated_at    INTEGER NOT NULL
+        )
+    `);
+});
+
 migrate('433_system_settings', () => {
     // [2026-11-27] Setari de sistem schimbate din admin (ex. inscrierile on/off), cheie → valoare text.
     db.exec(`
@@ -12705,6 +12724,19 @@ module.exports = {
     getSupportInbox,
     getAdminUserIds,
     // [2026-11-27] setari de sistem (comutatorul de inscrieri)
+    // [2026-11-27] 2FA (TOTP) — vezi migrarea 434 si services/twoFactor.js
+    totpGet: (uid) => db.prepare('SELECT * FROM user_totp WHERE user_id = ?').get(uid) || null,
+    totpSetPending: (uid, enc, now) => db.prepare(`INSERT INTO user_totp (user_id, pending_enc, pending_at, updated_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET pending_enc = excluded.pending_enc, pending_at = excluded.pending_at, updated_at = excluded.updated_at`).run(uid, enc, now, now),
+    totpEnable: (uid, secretEnc, recoveryJson, step, now) => db.prepare(`UPDATE user_totp SET secret_enc = ?, pending_enc = NULL, pending_at = NULL,
+        enabled = 1, last_step = ?, recovery_json = ?, enabled_at = ?, updated_at = ? WHERE user_id = ?`).run(secretEnc, step, recoveryJson, now, now, uid).changes === 1,
+    /** atomic: true doar daca pasul e MAI NOU decat ultimul acceptat (doua cereri cu acelasi cod → una singura trece) */
+    totpClaimStep: (uid, step, now) => db.prepare('UPDATE user_totp SET last_step = ?, updated_at = ? WHERE user_id = ? AND enabled = 1 AND last_step < ?')
+        .run(step, now, uid, step).changes === 1,
+    /** atomic: inlocuieste lista de coduri de rezerva doar daca nu s-a schimbat intre timp */
+    totpSwapRecovery: (uid, oldJson, newJson, now) => db.prepare('UPDATE user_totp SET recovery_json = ?, updated_at = ? WHERE user_id = ? AND enabled = 1 AND recovery_json = ?')
+        .run(newJson, now, uid, oldJson).changes === 1,
+    totpDisable: (uid) => db.prepare('DELETE FROM user_totp WHERE user_id = ?').run(uid).changes,
     getSystemSetting: (key) => { const r = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(String(key)); return r ? r.value : null; },
     setSystemSetting: (key, value) => db.prepare(`INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`).run(String(key), String(value), Date.now()),

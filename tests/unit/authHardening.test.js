@@ -49,6 +49,12 @@ function build(st) {
         auditLog: (uid, action, details) => { st.audits.push(action); },
         prepare: () => ({ run: () => ({}), get: () => null, all: () => [] }),
     }));
+    // 2FA: cine il are pornit (st.totp[uid] = codul valid de 6 cifre), ca sa controlam login-ul
+    jest.doMock('../../server/services/twoFactor', () => ({
+        isEnabled: (uid) => !!(st.totp && st.totp[uid]),
+        verifyLogin: (uid, code) => (st.totp && st.totp[uid] && String(code).replace(/\s/g, '') === st.totp[uid])
+            ? { ok: true, method: 'totp' } : { ok: false },
+    }));
     jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {} }));
     const app = express();
     app.set('trust proxy', 1);
@@ -218,5 +224,63 @@ describe('cheia PUBLICA Turnstile pentru pagina', () => {
     test('cheia publica fara secret → null (altfel pagina ar cere tokenuri pe care serverul nu le verifica)', async () => {
         process.env.TURNSTILE_SITE_KEY = '0x4AAAA-public';
         expect((await request(app).get('/auth/turnstile-config')).body).toEqual({ siteKey: null });
+    });
+});
+
+// [2026-11-27] Etapa 2 — login cu 2FA din aplicatie: IN LOCUL codului pe email.
+describe('login cu 2FA (aplicatie de autentificare)', () => {
+    const login = () => request(app).post('/auth/login').send({ email: 'admin@example.com', password: PW });
+    const verify = (code) => request(app).post('/auth/verify-code').send({ email: 'admin@example.com', code });
+    test('fara 2FA: ca inainte — cod pe email, method=email', async () => {
+        const r = await login();
+        expect(r.body.needsCode).toBe(true);
+        expect(r.body.method).toBe('email');
+        expect(st.codes).toHaveLength(1);
+    });
+    test('cu 2FA: NU pleaca niciun email, se cere codul din aplicatie', async () => {
+        st.totp = { 1: '424242' };
+        const r = await login();
+        expect(r.status).toBe(200);
+        expect(r.body).toMatchObject({ ok: true, needsCode: true, method: 'totp' });
+        expect(st.codes).toHaveLength(0);
+    });
+    test('cu 2FA: codul din aplicatie deschide sesiunea', async () => {
+        st.totp = { 1: '424242' };
+        await login();
+        const v = await verify('424242');
+        expect(v.status).toBe(200);
+        expect(String(v.headers['set-cookie'])).toContain('zeus_token=');
+        expect(st.audits).toContain('LOGIN_SUCCESS');
+    });
+    test('cu 2FA: un cod gresit NU deschide sesiunea si se numara incercarea', async () => {
+        st.totp = { 1: '424242' };
+        await login();
+        const v = await verify('111111');
+        expect(v.status).toBe(401);
+        expect(String(v.headers['set-cookie'] || '')).not.toContain('zeus_token=');
+        expect(st.audits).toContain('LOGIN_2FA_FAILED');
+    });
+    test('cu 2FA: un cod venit pe EMAIL inainte nu mai merge (emailul spart nu ajunge)', async () => {
+        await login();                                   // fara 2FA → cod pe email
+        const emailCode = codeFrom(st.codes[0]);
+        st.totp = { 1: '424242' };
+        await login();                                   // acum 2FA e pornit → inlocuieste codul de email
+        expect((await verify(emailCode)).status).toBe(401);
+    });
+    test('cu 2FA: dupa coduri gresite repetate nici codul corect nu mai deschide sesiunea', async () => {
+        st.totp = { 1: '424242' };
+        await login();
+        let r;
+        for (let i = 0; i < 6; i++) r = await verify('111111');
+        expect(r.status).toBe(429);
+        // si limita existenta pe IP (3 / 15 min) opreste mai devreme; ce conteaza: nici codul corect nu mai deschide
+        const after = await verify('424242');
+        expect(after.status).not.toBe(200);
+        expect(String(after.headers['set-cookie'] || '')).not.toContain('zeus_token=');
+    });
+    test('cod de rezerva (XXXXX-XXXXX) ajunge la verificare, nu e taiat la 6 caractere', async () => {
+        st.totp = { 1: 'ABCDE-FGHJK' };
+        await login();
+        expect((await verify('ABCDE-FGHJK')).status).toBe(200);
     });
 });

@@ -42,6 +42,8 @@ const VIEWER_ALLOW = [
     'POST /api/support/send', 'GET /api/support/thread', 'GET /api/support/unread',
     // [2026-11-22] notificari pe telefon pentru raspunsurile suportului — aplicatia o CERE la pornire
     'POST /api/notify/register', 'GET /api/notify/prefs', 'POST /api/notify/prefs',
+    // [2026-11-27] 2FA — siguranta contului, nu trading: si un cont nou trebuie sa se poata proteja
+    'GET /api/2fa/status', 'POST /api/2fa/setup', 'POST /api/2fa/confirm', 'POST /api/2fa/disable',
     'GET /api/referral',
     // ── aplicatia insasi ──
     // `migration/flags` e citit la pornire, INAINTE de orice conexiune: spune

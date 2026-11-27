@@ -193,6 +193,7 @@ function inventory() {
         trading: '/api', exchange: '/api/exchange',
         news: '/api/news',   // [2026-11-21] MARKET NEWS
         notify: '/api/notify', // [2026-11-22] notificari pe telefon
+        twoFactor: '/api/2fa', // [2026-11-27] 2FA cu aplicatie de autentificare
     };
     const out = [];
     const RE = /\.(get|post|put|delete|patch)\(\s*'([^']+)'/g;
@@ -236,7 +237,9 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             '/api/news',
             // [2026-11-22] notificari pe telefon: /register (permis viewerilor — raspunsurile suportului);
             // /pending si /revoke n-au sesiune, isi verifica singure cheia telefonului
-            '/api/notify'];
+            '/api/notify',
+            // [2026-11-27] 2FA — siguranta contului: status/setup/confirm/disable permise viewerilor
+            '/api/2fa'];
         for (const u of used) expect(known).toContain(u);
     });
 
@@ -265,6 +268,8 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             // [2026-11-22] notificari pe telefon — aplicatia o CERE la pornire (raspunsurile suportului)
             'GET /api/notify/prefs', 'POST /api/notify/prefs',
             'POST /api/notify/register',
+            // [2026-11-27] 2FA — siguranta contului PROPRIU (si un cont nou trebuie sa se poata proteja)
+            'GET /api/2fa/status', 'POST /api/2fa/confirm', 'POST /api/2fa/disable', 'POST /api/2fa/setup',
             'GET /api/support/thread', 'GET /api/support/unread',
             'GET /api/sync/state', 'GET /api/sync/user-context', 'GET /api/user/settings',
             'GET /api/version', 'GET /api/ws/health',
@@ -285,7 +290,8 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
         expect(writes.sort()).toEqual(['POST /api/app/version', 'POST /api/client-error', 'POST /api/indicators/active',
             'POST /api/profile', 'POST /api/support/send', 'POST /api/sync/state', 'POST /api/sync/user-context',
             'POST /api/user/settings', 'POST /api/news/prefs',   // alegerea alertelor PROPRII de stiri
-            'POST /api/notify/register', 'POST /api/notify/prefs'].sort());   // [2026-11-22] cheia de notificari a telefonului PROPRIU
+            'POST /api/notify/register', 'POST /api/notify/prefs',   // [2026-11-22] cheia de notificari a telefonului PROPRIU
+            'POST /api/2fa/setup', 'POST /api/2fa/confirm', 'POST /api/2fa/disable'].sort());   // [2026-11-27] 2FA pe contul PROPRIU
     });
 });
 

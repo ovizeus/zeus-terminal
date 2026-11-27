@@ -1329,6 +1329,8 @@ app.use('/api/admin', require('./server/routes/admin'));
 app.use('/api/support', require('./server/routes/support'));
 // [2026-11-22] notificari pe telefon (Android, verificare in fundal) — /pending e public, cu cheia telefonului
 app.use('/api/notify', require('./server/routes/notify'));
+// [2026-11-27] Securitate etapa 2 — 2FA cu aplicatie de autentificare (dupa sessionAuth)
+app.use('/api/2fa', require('./server/routes/twoFactor'));
 // [2026-11-06] Build Your Own Indicator — paid bespoke indicator orders.
 app.use('/api/byoi', require('./server/routes/byoi'));
 
