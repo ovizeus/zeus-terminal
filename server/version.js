@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.400',
-    build: 426,
+    version: '1.7.401',
+    build: 427,
     date: '2026-11-21',
     changelog: [
+        'b427 v1.7.401 - Binance real: soldul se citeste si pe contul Multi-Assets (USDC/credite, fara USDT) — trecerea pe real nu mai pica la [BALANCE]; aceeasi citire si la poarta de la decizie si la add-on, 2026-11-27 (server).',
         'b426 v1.7.400 - Quant Monitor nu mai blocheaza telefonul: rescria tot ecranul (~4.000 de bucati) la fiecare secunda; acum rescrie doar randurile schimbate (masurat la procesor de telefon: 163 ms → 2 ms pe secunda), 2026-11-22 (client).',
         'b425 v1.7.399 - GLOBAL MARKETS 105 → 135 (volatilitate VIX-style/BTC/ETH/aur, SPY/QQQ/SMH, aur tokenizat, actiuni urmarite: SanDisk, Nebius, CoreWeave, AppLovin…); MARKET NEWS +4 surse (ForexLive, Seeking Alpha, ZeroHedge, Bank of England), 2026-11-22 (server + client).',
         'b424 v1.7.398 - notificari pe telefon pentru intrari/iesiri AT, miscari mari de pret (±3%/1h) si siguranta (kill switch, fara SL, inchidere de urgenta esuata), adunate pe sfert de ora; Alerts › Phone notifications cu 5 casute, 2026-11-22 (server + client).',

@@ -711,20 +711,39 @@ async function getPositions(uid, params, creds) {
 
 async function getBalance(uid, creds) {
     const resp = await sendSignedRequest('GET', '/fapi/v2/balance', { recvWindow: 5000 }, creds);
-    if (!Array.isArray(resp)) {
-        return { asset: 'USDT', walletBalance: '0', availableBalance: '0', totalUnrealizedPnL: '0', rawExchange: 'binance' };
+    const ZERO = { asset: 'USDT', walletBalance: '0', availableBalance: '0', totalUnrealizedPnL: '0', rawExchange: 'binance' };
+    const usdt = Array.isArray(resp) ? resp.find(r => r.asset === 'USDT') : null;
+    if (usdt && parseFloat(usdt.availableBalance || 0) > 0) {
+        return {
+            asset: 'USDT',
+            walletBalance: usdt.balance || '0',
+            availableBalance: usdt.availableBalance || '0',
+            totalUnrealizedPnL: usdt.crossUnPnl || '0',
+            rawExchange: 'binance',
+        };
     }
-    const usdt = resp.find(r => r.asset === 'USDT');
-    if (!usdt) {
-        return { asset: 'USDT', walletBalance: '0', availableBalance: '0', totalUnrealizedPnL: '0', rawExchange: 'binance' };
+    // [2026-11-22] Cont in modul MULTI-ASSETS (garantie USDC / credite BNFCR, fara USDT): Binance
+    // permite tranzactii pe perechile USDT-M cu soldul disponibil al CONTULUI, exprimat in USD.
+    // Contul operatorului: USDC 11,86 in Futures, USDT lipsa → vedeam 0 si trecerea pe real era
+    // refuzata („FAILED [BALANCE]"). Fail-closed: daca modul nu e Multi-Assets sau cererea esueaza,
+    // ramane 0 — exact ca inainte.
+    try {
+        const acc = await sendSignedRequest('GET', '/fapi/v2/account', { recvWindow: 5000 }, creds);
+        if (acc && acc.multiAssetsMargin === true && parseFloat(acc.availableBalance || 0) > 0) {
+            return {
+                asset: 'USDT',
+                walletBalance: String(acc.totalWalletBalance || '0'),
+                availableBalance: String(acc.availableBalance || '0'),
+                totalUnrealizedPnL: String(acc.totalUnrealizedProfit || '0'),
+                rawExchange: 'binance',
+                multiAssets: true,
+            };
+        }
+    } catch (_) { /* fail-closed: sold 0 */ }
+    if (usdt) {
+        return { ...ZERO, walletBalance: usdt.balance || '0', availableBalance: usdt.availableBalance || '0', totalUnrealizedPnL: usdt.crossUnPnl || '0' };
     }
-    return {
-        asset: 'USDT',
-        walletBalance: usdt.balance || '0',
-        availableBalance: usdt.availableBalance || '0',
-        totalUnrealizedPnL: usdt.crossUnPnl || '0',
-        rawExchange: 'binance',
-    };
+    return ZERO;
 }
 
 async function getUserTrades(uid, params, creds) {

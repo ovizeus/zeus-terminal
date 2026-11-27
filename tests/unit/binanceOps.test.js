@@ -423,6 +423,43 @@ describe('binanceOps.getBalance', () => {
         const r = await binanceOps.getBalance(1, _validCreds);
         expect(r.walletBalance).toBe('0');
     });
+
+    // [2026-11-22] Cont in modul Multi-Assets (garantie USDC/credite, fara USDT): Binance permite
+    // tranzactii pe perechile USDT cu soldul disponibil al CONTULUI (in USD). Masurat pe contul real:
+    // USDC 11,86 in Futures, USDT lipsa → Zeus vedea 0 si refuza trecerea pe real.
+    it('fara USDT, cont Multi-Assets → soldul disponibil al contului', async () => {
+        mockSendSignedRequest
+            .mockResolvedValueOnce([{ asset: 'USDC', balance: '11.86', availableBalance: '0' }, { asset: 'BNFCR', balance: '0', availableBalance: '11.86' }])
+            .mockResolvedValueOnce({ multiAssetsMargin: true, totalWalletBalance: '11.86213285', availableBalance: '11.86213285', totalUnrealizedProfit: '0.1' });
+        const r = await binanceOps.getBalance(1, _validCreds);
+        expect(r.availableBalance).toBe('11.86213285');
+        expect(r.walletBalance).toBe('11.86213285');
+        expect(r.totalUnrealizedPnL).toBe('0.1');
+        expect(r.multiAssets).toBe(true);
+        expect(mockSendSignedRequest.mock.calls[1][1]).toBe('/fapi/v2/account');
+    });
+
+    it('fara USDT, cont NU e Multi-Assets → zero (nu tranzactioneaza pe USDT-M fara USDT)', async () => {
+        mockSendSignedRequest
+            .mockResolvedValueOnce([{ asset: 'USDC', balance: '50', availableBalance: '50' }])
+            .mockResolvedValueOnce({ multiAssetsMargin: false, totalWalletBalance: '50', availableBalance: '50' });
+        const r = await binanceOps.getBalance(1, _validCreds);
+        expect(r.availableBalance).toBe('0');
+    });
+
+    it('fara USDT si cererea de cont esueaza → zero (fail-closed)', async () => {
+        mockSendSignedRequest
+            .mockResolvedValueOnce([{ asset: 'USDC', balance: '50', availableBalance: '0' }])
+            .mockRejectedValueOnce(new Error('timeout'));
+        const r = await binanceOps.getBalance(1, _validCreds);
+        expect(r.availableBalance).toBe('0');
+    });
+
+    it('cu USDT disponibil → NU mai face a doua cerere (comportamentul vechi)', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce([{ asset: 'USDT', balance: '100', availableBalance: '90' }]);
+        await binanceOps.getBalance(1, _validCreds);
+        expect(mockSendSignedRequest).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('binanceOps.ping', () => {

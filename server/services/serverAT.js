@@ -5498,9 +5498,9 @@ async function addOnPosition(userId, seq, options = {}) {
 
             // ── Margin pre-check ──
             try {
-                const balances = await sendSignedRequest('GET', '/fapi/v2/balance', {}, creds);
-                const usdtBal = balances.find(b => b.asset === 'USDT');
-                const available = usdtBal ? parseFloat(usdtBal.availableBalance || 0) : 0;
+                // [2026-11-22] prin getBalance: intelege si contul Multi-Assets (USDC/credite, fara USDT)
+                const _bal = await require('./binanceOps').getBalance(userId, creds);
+                const available = _bal ? parseFloat(_bal.availableBalance || 0) : 0;
                 if (available < addOnSize) {
                     return { ok: false, error: `Insufficient margin ($${available.toFixed(2)} < $${addOnSize})` };
                 }
@@ -6526,8 +6526,10 @@ async function _runReconciliation(isStartup) {
             if (!isStartup) {
                 const us = _uState(userId);
                 try {
-                    const balances = await sendSignedRequest('GET', '/fapi/v2/balance', {}, creds);
-                    const usdtBal = balances.find(b => b.asset === 'USDT');
+                    // [2026-11-22] prin getBalance: intelege si contul Multi-Assets (USDC/credite, fara USDT).
+                    // Altfel liveAvailableRef ramanea 0 si poarta de la decizie bloca orice intrare.
+                    const _b = await require('./binanceOps').getBalance(userId, creds);
+                    const usdtBal = _b ? { balance: _b.walletBalance, availableBalance: _b.availableBalance } : null;
                     if (usdtBal) {
                         const realBalance = parseFloat(usdtBal.balance || 0);
                         if (realBalance > 0) us.liveBalanceRef = realBalance;
