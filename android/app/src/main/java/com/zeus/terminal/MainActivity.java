@@ -1,6 +1,7 @@
 package com.zeus.terminal;
 
 import android.os.Bundle;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 
 import com.getcapacitor.BridgeActivity;
@@ -10,6 +11,7 @@ import com.zeus.terminal.widget.ZeusWidgetPlugin;
 import com.zeus.terminal.share.ZeusSharePlugin;
 import com.zeus.terminal.update.ZeusUpdaterPlugin;
 import com.zeus.terminal.notify.ZeusNotifyPlugin;
+import com.zeus.terminal.secure.ZeusSecurePlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -27,7 +29,10 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ZeusUpdaterPlugin.class);
         // [2026-11-22] notificari pe telefon pentru mesajele importante (suport, aprobari)
         registerPlugin(ZeusNotifyPlugin.class);
+        // [2026-11-27] capturile de ecran blocate pana cand interfata spune altfel (doar Super Admin)
+        registerPlugin(ZeusSecurePlugin.class);
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
         try { cm.setAcceptThirdPartyCookies(getBridge().getWebView(), true); } catch (Exception _e) {}

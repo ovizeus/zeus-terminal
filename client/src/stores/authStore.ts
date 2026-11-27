@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { applySecureScreen } from '../core/secureScreen'
 import { authApi } from '../services/api'
 import { lockEarlyIfKnown } from '../core/pinHint'
 import { accessLevelFrom, setAccessLevel as applyAccessLevel, resetAccessLevel, type AccessLevel } from '../core/betaGate'
@@ -96,3 +97,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
 
   setError: (error) => set({ error }),
 }))
+
+// [2026-11-27] Capturile de ecran in APK: blocate pentru toti, deblocate doar pentru Super Admin;
+// se reaplica la fiecare schimbare de rol (login, logout, retrogradare).
+useAuthStore.subscribe((s, prev) => { if (s.role !== prev.role) applySecureScreen(s.role) })
