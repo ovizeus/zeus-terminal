@@ -1048,11 +1048,9 @@ function _runCycle() {
                         'Price: `$' + (snap.price ? snap.price.toFixed(snap.price >= 100 ? 0 : 2) : '?') + '`';
                     const _now = Date.now();
                     const _lastTs = _regimeTgLastTs.get(userId) || 0;
-                    if (_now - _lastTs >= REGIME_TG_COOLDOWN_MS) {
-                        _regimeTgLastTs.set(userId, _now);
-                        telegram.sendToUser(userId, _regimeMsg);
-                        _persistRegimeTgThrottle();
-                    }
+                    // [2026-11-27] „Regime Change" nu mai pleaca pe Telegram (pana la 96 / zi — zgomot, cerut de
+                    // operator); schimbarea ramane salvata (saveRegimeChange) si vizibila in aplicatie.
+                    void _regimeMsg; void _now; void _lastTs;
                 }
                 _prevRegimes.set(_regimeKey, regime.regime);
                 // [S5] Persist regime baseline whenever it changes so a restart
@@ -1484,11 +1482,8 @@ function _runCycle() {
                         // [S9 2026-06-26] Surface the self-block to the operator: an auditable
                         // REFLECTION_BLOCKED event + a throttled Telegram alert.
                         try { require('./audit').record('REFLECTION_BLOCKED', { userId, symbol: snap.symbol, dir: fusion.dir, confidence: fusion.confidence, concerns: require("./serverReflection")._concernLabels(questioning.concerns) }, 'SERVER_BRAIN'); } catch (_) { /* */ }
-                        try {
-                            if (serverReflection.shouldAlert(`${userId}:${snap.symbol}:${fusion.dir}`, Date.now())) {
-                                telegram.sendToUser(userId, serverReflection.buildReflectionAlert(snap.symbol, fusion.dir, questioning.concerns));
-                            }
-                        } catch (_) { /* */ }
+                        // [2026-11-27] operatorul: „ne bombardeaza cu mesaje" — 2.724 de blocari / zi pe contul lui.
+                        // NU mai pleaca pe Telegram; raman in audit (mai sus), Doctor, jurnal si gandurile OMEGA.
                         _logDecision('BLOCKED', 'reflection', decision, {
                             concerns: require("./serverReflection")._concernLabels(questioning.concerns),
                         });
