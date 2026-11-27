@@ -1811,6 +1811,8 @@ try { require('./server/cron/posClassRetention').schedule(); } catch (_) {}
 // tables the 2026-06-11 audit missed; they grew the DB to 7.9 GB, which froze
 // the event loop and kept GLOBAL_HALT armed for 2 months.
 try { require('./server/cron/mlTelemetryRetention').schedule(); } catch (_) {}
+// [2026-11-27] Securitate etapa 3 — Sentinel: alerte pe telefon adminilor (rafale, IP nou la admin). Doar observa.
+try { require('./server/services/securitySentinel').start(); } catch (e) { console.warn('[SENTINEL] not started:', e.message); }
 
 // [LIQ-HISTORY 2026-10-25] Retentia istoricului de lichidari — 30 de zile.
 // O rulare la 3 minute dupa boot SI pe interval zilnic, nu doar pe interval:

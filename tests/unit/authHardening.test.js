@@ -55,6 +55,10 @@ function build(st) {
         verifyLogin: (uid, code) => (st.totp && st.totp[uid] && String(code).replace(/\s/g, '') === st.totp[uid])
             ? { ok: true, method: 'totp' } : { ok: false },
     }));
+    jest.doMock('../../server/services/securitySentinel', () => ({
+        dailyReport: () => ({ hours: 24, failedSignIns: 3, resetRequests: 1, signUps: 0, blockedSignUps: 0, signIns: 2, topFailIps: [] }),
+        summary: () => ({ alertsSent: 1 }),
+    }));
     jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {} }));
     const app = express();
     app.set('trust proxy', 1);
@@ -282,5 +286,18 @@ describe('login cu 2FA (aplicatie de autentificare)', () => {
         st.totp = { 1: 'ABCDE-FGHJK' };
         await login();
         expect((await verify('ABCDE-FGHJK')).status).toBe(200);
+    });
+});
+
+// [2026-11-27] Etapa 3 — raportul de securitate din admin
+describe('GET /auth/admin/security-report', () => {
+    const get = (email) => request(app).get('/auth/admin/security-report').set('Cookie', cookieOf(st.users[email]));
+    test('doar admin', async () => {
+        expect((await get('user@example.com')).status).toBe(403);
+    });
+    test('admin → cifrele pe 24 h + alertele trimise azi', async () => {
+        const r = await get('admin@example.com');
+        expect(r.status).toBe(200);
+        expect(r.body).toMatchObject({ ok: true, report: { hours: 24, failedSignIns: 3 }, sentinel: { alertsSent: 1 } });
     });
 });

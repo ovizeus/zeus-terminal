@@ -3,6 +3,7 @@ import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
+import { TwoFactorSection } from './TwoFactorSection'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, hubToggleDev, devClearLog, devExportLog, hubPopulate, setAlertsEnabled } from '../../utils/dev'
 import { zeusApplyTheme, zeusGetTheme } from '../../ui/theme'
 import { OmegaMemorySection } from '../settings/OmegaMemorySection'
@@ -213,6 +214,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         </div>
 
         <BiometricToggle />
+
+        <TwoFactorSection />
 
         <div className="msec" style={{marginTop:'16px'}}>CHANGE PASSWORD</div>
         <div id="chpw-form">

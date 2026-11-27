@@ -1449,14 +1449,14 @@
 
                         <!-- 2FA Code Step (replaces login fields) -->
                         <div class="code-step" id="codeStep">
-                            <div class="code-msg">Verification code sent to your email.<br>Enter the 6-digit code:</div>
+                            <div class="code-msg" id="codeMsg">Verification code sent to your email.<br>Enter the 6-digit code:</div>
                             <input type="text" class="code-input" id="codeInput" maxlength="6" inputmode="numeric"
                                 pattern="[0-9]*" placeholder="------" autocomplete="one-time-code">
                             <div class="code-timer" id="codeTimer">Code expires in 5:00</div>
                             <button type="button" class="main-btn" id="verifyBtn" onclick="verifyCode()"
                                 style="margin-top:14px">VERIFY</button>
                             <div class="code-resend" id="codeResend">
-                                <a onclick="resendCode()">&#8635; Resend code</a> &nbsp;|&nbsp; <a onclick="backToLogin()">&#8592; Back</a>
+                                <span id="codeResendLink"><a onclick="resendCode()">&#8635; Resend code</a> &nbsp;|&nbsp; </span><a onclick="backToLogin()">&#8592; Back</a>
                             </div>
                         </div>
 
@@ -2034,13 +2034,34 @@
             } catch (e) { btn.disabled = false; btn.textContent = 'RESET PASSWORD'; document.getElementById('forgot-code-msg').textContent = 'Connection error'; document.getElementById('forgot-code-msg').style.color = '#ff4444'; }
         }
 
-        function showCodeStep() {
+        // [2026-11-27] 2FA: codul vine din email (6 cifre) sau din aplicatia de autentificare (6 cifre
+        // SAU cod de rezerva XXXXX-XXXXX). Aceleasi reguli ca client/src/components/auth/codeStep.ts.
+        var codeMethod = 'email';
+        function sanitizeCode(v) {
+            v = String(v || '');
+            return codeMethod === 'totp' ? v.toUpperCase().replace(/[^0-9A-Z-]/g, '').slice(0, 11) : v.replace(/\D/g, '').slice(0, 6);
+        }
+        function codeComplete(v) {
+            return /^\d{6}$/.test(v) || (codeMethod === 'totp' && /^[0-9A-Z]{10}$/.test(v.replace(/-/g, '')));
+        }
+        function showCodeStep(method) {
+            codeMethod = method === 'totp' ? 'totp' : 'email';
+            var inp = document.getElementById('codeInput');
+            var totp = codeMethod === 'totp';
+            document.getElementById('codeMsg').innerHTML = totp
+                ? 'Enter the 6-digit code from your authenticator app,<br>or a backup code:'
+                : 'Verification code sent to your email.<br>Enter the 6-digit code:';
+            inp.maxLength = totp ? 11 : 6;
+            inp.inputMode = totp ? 'text' : 'numeric';
+            if (totp) inp.removeAttribute('pattern'); else inp.setAttribute('pattern', '[0-9]*');
+            document.getElementById('codeTimer').style.display = totp ? 'none' : '';
+            document.getElementById('codeResendLink').style.display = totp ? 'none' : '';
             document.getElementById('loginFields').style.display = 'none';
             document.getElementById('errorMsg').style.display = 'none';
             document.getElementById('codeStep').style.display = 'block';
-            document.getElementById('codeInput').value = '';
-            document.getElementById('codeInput').focus();
-            startCodeTimer();
+            inp.value = '';
+            inp.focus();
+            if (totp) { if (codeTimerInterval) clearInterval(codeTimerInterval); } else startCodeTimer();
         }
 
         function backToLogin() {
@@ -2070,8 +2091,8 @@
         }
 
         async function verifyCode() {
-            const code = document.getElementById('codeInput').value.trim();
-            if (code.length !== 6) { showError('Enter the 6-digit code'); return; }
+            const code = sanitizeCode(document.getElementById('codeInput').value.trim());
+            if (!codeComplete(code)) { showError(codeMethod === 'totp' ? 'Enter the 6-digit code or a backup code' : 'Enter the 6-digit code'); return; }
             const btn = document.getElementById('verifyBtn');
             btn.disabled = true; btn.textContent = '...';
             try {
@@ -2130,7 +2151,7 @@
                     if (data.needsCode) {
                         pendingEmail = email;
                         pendingPassword = password;
-                        showCodeStep();
+                        showCodeStep(data.method);
                     } else { window.location.href = '/'; }
                 } else { showError(data.error || 'Unknown error'); }
             } catch (err) { showError('Connection error'); }

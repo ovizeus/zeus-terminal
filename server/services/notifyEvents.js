@@ -15,6 +15,8 @@
 const _db = () => require('./database').db;
 
 const KINDS = ['support', 'price', 'atEntry', 'atExit', 'safety'];
+// [2026-11-27] alertele Sentinel (doar adminilor): MEREU pornite, fara casuta — un atac nu se stinge din greseala
+const ALWAYS_ON = ['security'];
 const DEFAULT_PREFS = Object.freeze({ support: true, price: true, atEntry: true, atExit: true, safety: true });
 const BUCKET_MS = 15 * 60_000;
 const SHOW_FOR_MS = 60 * 60_000;      // un eveniment ramane pe telefon cel mult o ora
@@ -29,6 +31,7 @@ const TITLES = {
     atExit: (n) => n > 1 ? `Auto-trade: ${n} exits` : 'Auto-trade exit',
     safety: (n) => n > 1 ? `Safety: ${n} alerts` : 'Safety alert',
     price: (n) => n > 1 ? `Big price moves (${n})` : 'Big price move',
+    security: (n) => n > 1 ? `Security: ${n} alerts` : 'Security alert',
 };
 
 // ── alegerile contului ─────────────────────────────────────────────────────
@@ -66,7 +69,7 @@ function hasDevice(userId, now = Date.now()) {
 let _lastPrune = 0;
 /** Adauga o linie la evenimentul de acest fel din sfertul de ora curent (sau il creeaza). */
 function push(userId, kind, line, now = Date.now()) {
-    if (!KINDS.includes(kind) || kind === 'support') return false;
+    if (!(KINDS.includes(kind) || ALWAYS_ON.includes(kind)) || kind === 'support') return false;
     if (userId != null && !hasDevice(userId, now)) return false;
     try {
         const db = _db();
@@ -96,7 +99,7 @@ function push(userId, kind, line, now = Date.now()) {
 /** Evenimentele din ultima ora pe care contul le-a lasat pornite. */
 function forUser(userId, prefs, now = Date.now()) {
     const p = prefs || getPrefs(userId);
-    const kinds = KINDS.filter((k) => k !== 'support' && p[k]);
+    const kinds = KINDS.filter((k) => k !== 'support' && p[k]).concat(ALWAYS_ON);
     if (!kinds.length) return [];
     const rows = _db().prepare(`SELECT id, kind, title, body, n FROM notify_events
         WHERE (user_id = ? OR user_id IS NULL) AND updated_at > ? AND kind IN (${kinds.map(() => '?').join(',')})

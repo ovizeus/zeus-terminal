@@ -85,3 +85,16 @@ test('motorul AT apeleaza notificarile doar in try/catch (nu poate atinge tranza
     expect(src).toMatch(/function _phone\(userId, kind, line\) \{ try \{ require\('\.\/notifyEvents'\)\.push\(userId, kind, line\); \} catch \(_\) \{/);
     for (const k of ['atEntry', 'atExit', 'safety']) expect(src).toMatch(new RegExp(`_phone\\([^)]*'${k}'`));
 });
+
+// [2026-11-27] Securitate etapa 3 — alertele Sentinel (doar adminilor): tipul `security`, MEREU pornit,
+// fara casuta in prefs (o alerta de atac nu trebuie sa poata fi stinsa din greseala).
+test('security: ajunge pe telefon chiar daca toate casutele sunt oprite; nu apare in prefs', () => {
+    NE.setPrefs(1, { support: false, price: false, atEntry: false, atExit: false, safety: false });
+    expect(NE.push(1, 'security', 'Admin sign-in from a new IP: 203.0.113.9', Date.now())).toBe(true);
+    const p = ND.pending(1, false);   // exact ce primeste telefonul
+    expect(p.items.map((i) => i.kind)).toEqual(['security']);
+    expect(p.items[0].title).toBe('Security alert');
+    expect(Object.keys(NE.getPrefs(1))).not.toContain('security');
+    NE.setPrefs(1, { security: false });
+    expect(Object.keys(NE.getPrefs(1))).not.toContain('security');
+});

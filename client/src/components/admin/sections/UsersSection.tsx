@@ -3,6 +3,7 @@ import { useAdminStore, type AdminUser } from '../../../stores/adminStore'
 import { StatusBadge, ApiBadge, LoadingSkeleton, EmptyState, ConfirmDialog, fmtDate } from '../shared/components'
 import { LeaderboardTab } from './LeaderboardTab'
 import { SignupControls } from './SignupControls'
+import { SecurityReport } from './SecurityReport'
 
 export function UsersSection() {
   const users = useAdminStore((s) => s.users)
@@ -113,6 +114,7 @@ export function UsersSection() {
       {tab === 'leaderboard' && <LeaderboardTab />}
       {tab === 'users' && (<>
       {/* [2026-11-27] inscrieri on/off + stergerea tuturor conturilor blocate */}
+      <SecurityReport />
       <SignupControls blockedCount={users.filter((u) => u.status === 'blocked').length} onChanged={() => loadUsers()} />
       {/* Filters bar */}
       <div className="zac-filters">

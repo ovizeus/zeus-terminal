@@ -1,3 +1,4 @@
+import { sanitizeCode, codeComplete, codePrompt, type CodeMethod } from './codeStep'
 import { getTurnstileToken } from '../../core/turnstile'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '../layout/icons'
@@ -311,6 +312,8 @@ export function LoginPage() {
 
   // 2FA code step
   const [showCodeStep, setShowCodeStep] = useState(false)
+  // [2026-11-27] de unde vine codul: email sau aplicatia de autentificare (2FA)
+  const [codeMethod, setCodeMethod] = useState<CodeMethod>('email')
   const [codeValue, setCodeValue] = useState('')
   const [codeTimerText, setCodeTimerText] = useState('Code expires in 5:00')
   const [verifyText, setVerifyText] = useState('VERIFY')
@@ -444,9 +447,11 @@ export function LoginPage() {
           pendingEmailRef.current = em
           pendingPasswordRef.current = pw
           setErrorMsg('')
+          const m: CodeMethod = data.method === 'totp' ? 'totp' : 'email'
+          setCodeMethod(m)
           setShowCodeStep(true)
           setCodeValue('')
-          startCodeTimer()
+          if (m === 'email') startCodeTimer()
         } else {
           await checkAuth()
         }
@@ -463,7 +468,7 @@ export function LoginPage() {
   /* ── Auth: Verify Code ── */
   const verifyCode = useCallback(async () => {
     const code = codeValue.trim()
-    if (code.length !== 6) { showSignInError('Enter the 6-digit code'); return }
+    if (!codeComplete(codeMethod, code)) { showSignInError(codeMethod === 'totp' ? 'Enter the 6-digit code or a backup code' : 'Enter the 6-digit code'); return }
     setVerifyText('...')
     try {
       const res = await fetch('/auth/verify-code', {
@@ -482,7 +487,7 @@ export function LoginPage() {
     } finally {
       setVerifyText('VERIFY')
     }
-  }, [codeValue, checkAuth])
+  }, [codeValue, codeMethod, checkAuth])
 
   /* ── Auth: Resend Code ── */
   async function resendCode() {
@@ -865,25 +870,25 @@ export function LoginPage() {
 
                 {/* 2FA Code Step */}
                 <div className="code-step" id="codeStep" style={{ display: showCodeStep ? 'block' : 'none' }}>
-                  <div className="code-msg">Verification code sent to your email.<br />Enter the 6-digit code:</div>
+                  <div className="code-msg">{codePrompt(codeMethod)}</div>
                   <input
                     type="text"
                     className="code-input"
                     id="codeInput"
-                    maxLength={6}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
+                    maxLength={codeMethod === 'totp' ? 11 : 6}
+                    inputMode={codeMethod === 'totp' ? 'text' : 'numeric'}
+                    pattern={codeMethod === 'totp' ? undefined : '[0-9]*'}
                     placeholder="------"
                     autoComplete="one-time-code"
                     value={codeValue}
-                    onChange={e => setCodeValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onChange={e => setCodeValue(sanitizeCode(codeMethod, e.target.value))}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); verifyCode() } }}
                     autoFocus={showCodeStep}
                   />
-                  <div className="code-timer" id="codeTimer">{codeTimerText}</div>
+                  {codeMethod === 'email' && <div className="code-timer" id="codeTimer">{codeTimerText}</div>}
                   <button type="button" className="main-btn" id="verifyBtn" onClick={verifyCode} style={{ marginTop: '14px' }}>{verifyText}</button>
                   <div className="code-resend" id="codeResend">
-                    <a onClick={resendCode}>&#8635; Resend code</a> &nbsp;|&nbsp; <a onClick={backToLogin}>&#8592; Back</a>
+                    {codeMethod === 'email' && <><a onClick={resendCode}>&#8635; Resend code</a> &nbsp;|&nbsp; </>}<a onClick={backToLogin}>&#8592; Back</a>
                   </div>
                 </div>
 

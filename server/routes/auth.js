@@ -921,6 +921,18 @@ function _adminGuard(req, res) {
     } catch (_) { res.status(401).json({ error: 'Token invalid' }); return null; }
 }
 
+// ─── [2026-11-27] ADMIN: raportul de securitate (ultimele 24 h din audit_log + alertele Sentinel de azi) ───
+router.get('/admin/security-report', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    try {
+        const sentinel = require('../services/securitySentinel');
+        res.json({ ok: true, report: sentinel.dailyReport(db.db), sentinel: sentinel.summary() });
+    } catch (err) {
+        logger.warn('AUTH', `security-report failed: ${err.message}`);
+        res.status(500).json({ ok: false, error: 'Report unavailable' });
+    }
+});
+
 // ─── [2026-11-27] ADMIN: inscrierile on/off (in locul unui link cu parola in adresa) ───
 router.get('/admin/registration', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
