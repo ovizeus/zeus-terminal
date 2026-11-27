@@ -444,7 +444,8 @@ router.post('/login', async (req, res) => {
         // pending entry exists or previous expired.
         const _now = Date.now();
         const _existing = pendingCodes.get(normalEmail);
-        const _hasValidPending = _existing && _existing.expiresAt > _now;
+        // [2026-11-27] revizie M-1: o incercare 2FA (cod null) nu se refoloseste ca un cod de email
+        const _hasValidPending = _existing && _existing.method !== 'totp' && !!_existing.code && _existing.expiresAt > _now;
         const code = _hasValidPending ? _existing.code : _generateCode();
         pendingCodes.set(normalEmail, {
             code,
@@ -920,6 +921,24 @@ function _adminGuard(req, res) {
         return { caller, decoded };
     } catch (_) { res.status(401).json({ error: 'Token invalid' }); return null; }
 }
+
+// ─── [2026-11-27] ADMIN: scoate 2FA de pe un cont (telefon + coduri de rezerva pierdute) — revizie I-1 ───
+// Niciodata pe propriul cont: o sesiune de admin furata nu are voie sa scoata 2FA-ul adminului.
+// Pentru adminul unic, recuperarea e in Book (SQL pe server, cu acces SSH).
+router.post('/admin/reset-2fa', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const b = req.body || {};
+    if (b.confirm !== 'RESET 2FA') return res.status(400).json({ ok: false, error: 'Type RESET 2FA to confirm' });
+    const email = String(b.email || '').toLowerCase().trim();
+    const target = email ? db.findUserByEmail(email) : null;
+    if (!target) return res.status(404).json({ ok: false, error: 'User not found' });
+    if (target.id === guard.caller.id) return res.status(400).json({ ok: false, error: 'You cannot reset two-factor authentication on your own account.' });
+    if (!twoFactor.adminReset(target.id)) return res.status(404).json({ ok: false, error: 'Two-factor authentication is not on for this account.' });
+    db.auditLog(guard.caller.id, 'ADMIN_RESET_2FA', { targetId: target.id, targetEmail: _mask(email) }, req.ip);
+    void accountEmails.sendAccountEmail('two_factor_disabled', target.email);
+    logger.info('AUTH', `Admin reset 2FA uid=${target.id}`);
+    res.json({ ok: true });
+});
 
 // ─── [2026-11-27] ADMIN: raportul de securitate (ultimele 24 h din audit_log + alertele Sentinel de azi) ───
 router.get('/admin/security-report', (req, res) => {

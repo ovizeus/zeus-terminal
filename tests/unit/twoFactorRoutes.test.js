@@ -89,3 +89,10 @@ test('raspunsurile nu contin niciodata secretul criptat sau hash-urile', async (
     const st = await request(a).get('/api/2fa/status');
     expect(JSON.stringify(st.body)).not.toMatch(/v1:|secret|recovery_json/);
 });
+
+// [2026-11-27] Revizie I-2 — /setup nu e un oracol de parole pentru o sesiune furata
+test('setup: dupa 5 parole gresite in 10 min → 429, chiar si cu parola corecta', async () => {
+    const u = mkUser(); const a = app(u);
+    for (let i = 0; i < 5; i++) expect((await request(a).post('/api/2fa/setup').send({ password: 'gresit' + i })).status).toBe(403);
+    expect((await request(a).post('/api/2fa/setup').send({ password: PASS })).status).toBe(429);
+});

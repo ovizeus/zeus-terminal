@@ -50,6 +50,10 @@ router.get('/status', (req, res) => {
 
 router.post('/setup', async (req, res) => {
     const u = _user(req, res); if (!u) return;
+    // [2026-11-27] revizie I-2: fara limita, /setup era un oracol de parole pentru o sesiune furata
+    if (!authGuard.hit(db, 'totp_pw', u.id, CODE_MAX, CODE_WINDOW_MS)) {
+        return res.status(429).json({ ok: false, error: 'Too many attempts. Wait 10 minutes and try again.' });
+    }
     if (!(await _passwordOk(u, req.body && req.body.password))) {
         db.auditLog(u.id, 'TWO_FACTOR_SETUP_BAD_PASSWORD', {}, req.ip);
         return res.status(403).json({ ok: false, error: 'Wrong password.' });

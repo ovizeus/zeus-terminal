@@ -63,6 +63,7 @@ function _check(uid, code, now) {
     if (/^\d{3}\s?\d{3}$/.test(raw)) {
         let secret;
         try { secret = decrypt(r.secret_enc); } catch (_) { return { ok: false }; }
+        if (!secret || secret.length < 16) return { ok: false };   // asigurare: un secret gol/stricat nu verifica niciodata
         const v = totp.verify(secret, raw, { now: t, lastStep: r.last_step });
         if (!v.ok || !db.totpClaimStep(uid, v.step, t)) return { ok: false };
         return { ok: true, method: 'totp' };
@@ -83,4 +84,11 @@ function disable(uid, code, now) {
     return { ok: true };
 }
 
-module.exports = { isEnabled, status, beginSetup, confirmSetup, verifyLogin, disable, SETUP_TTL_MS };
+/** [2026-11-27] Admin: scoate 2FA de pe un cont (telefon + coduri de rezerva pierdute). → true daca era pornit. */
+function adminReset(uid) {
+    const had = isEnabled(uid);
+    db.totpDisable(uid);
+    return had;
+}
+
+module.exports = { isEnabled, status, beginSetup, confirmSetup, verifyLogin, disable, adminReset, SETUP_TTL_MS };

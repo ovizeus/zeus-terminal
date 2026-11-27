@@ -11,11 +11,12 @@ const jwt = require('jsonwebtoken');
 function build(dbUser, lastActive) {
     jest.resetModules();
     const audits = [];
+    const writes = [];
     jest.doMock('../../server/services/database', () => ({
         findUserById: () => dbUser,
         findUserByEmail: () => dbUser,
         getLastActiveAt: () => lastActive,
-        setLastActiveAt: () => {},
+        setLastActiveAt: () => { writes.push(1); },
         auditLog: (_u, a) => audits.push(a),
     }));
     const { createSessionAuth, cookieParser } = require('../../server/middleware/sessionAuth');
@@ -26,7 +27,7 @@ function build(dbUser, lastActive) {
     app.use('/auth/admin', require('../../server/middleware/sessionAuth').createAdminIdleGuard(process.env.JWT_SECRET));
     app.get('/api/whoami', (req, res) => res.json({ role: req.user.role }));
     app.get('/auth/admin/ping', (req, res) => res.json({ ok: true }));
-    return { app, audits };
+    return { app, audits, writes };
 }
 const cookie = (role) => 'zeus_token=' + jwt.sign({ id: 7, email: 'a@b.co', role, tokenVersion: 1 }, process.env.JWT_SECRET, { expiresIn: '5m' });
 
@@ -67,6 +68,14 @@ describe('/auth/admin/* respecta inactivitatea', () => {
         const first = src.search(/router\.(get|post|put|delete)\('\/admin/);
         expect(g).toBeGreaterThan(0);
         expect(g).toBeLessThan(first);
+    });
+    test('token REVOCAT (parola schimbata): garda nu-l socoteste sesiune — nu atinge activitatea', async () => {
+        // sesiune veche de 5 h + token cu versiunea 1, baza are 2: garda il lasa rutei (care il respinge),
+        // fara sa scrie activitate si fara sa auditeze o „inactivitate" a unei sesiuni care oricum nu mai exista
+        const { app, audits } = build({ id: 7, role: 'admin', status: 'active', token_version: 2 }, Date.now() - 5 * 3600000);
+        const r = await request(app).get('/auth/admin/ping').set('Cookie', cookie('admin'));
+        expect(r.status).toBe(200);              // ruta de test nu verifica nimic; cele reale dau 401
+        expect(audits).not.toContain('INACTIVITY_TIMEOUT');
     });
     test('sesiune activa → trece', async () => {
         const { app } = build({ id: 7, role: 'admin', status: 'active', token_version: 1 }, Date.now());

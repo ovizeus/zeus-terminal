@@ -11087,7 +11087,12 @@ function setAccessLevel(userId, level) {
 }
 
 function deleteUser(email, protectedRole) {
-    return _stmts.deleteUser.run(email.toLowerCase().trim(), protectedRole || 'admin');
+    const em = email.toLowerCase().trim();
+    const u = findUserByEmail(em);
+    const r = _stmts.deleteUser.run(em, protectedRole || 'admin');
+    // [2026-11-27] contul sters isi pierde si 2FA (secretul criptat + codurile de rezerva)
+    if (r.changes && u) { try { db.prepare('DELETE FROM user_totp WHERE user_id = ?').run(u.id); } catch (_) { /* tabel lipsa in teste vechi */ } }
+    return r;
 }
 
 function updatePassword(userId, newHash) {

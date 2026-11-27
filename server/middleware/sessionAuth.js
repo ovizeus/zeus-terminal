@@ -220,8 +220,15 @@ function createAdminIdleGuard(jwtSecret) {
     return function adminIdleGuard(req, res, next) {
         const token = req.cookies && req.cookies.zeus_token;
         let uid = null;
-        try { uid = token ? jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }).id : null; } catch (_) { uid = null; }
+        let tv = null;
+        try { const d = token ? jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) : null; uid = d ? d.id : null; tv = d ? (d.tokenVersion ?? 0) : null; } catch (_) { uid = null; }
         if (!uid) return next();
+        // [2026-11-27] revizie M-2: un token revocat (parola schimbata) nu e o sesiune — nu prelungeste nimic;
+        // ruta il respinge singura
+        try {
+            const fresh = require('../services/database').findUserById(uid);
+            if (!fresh || tv !== (fresh.token_version ?? 0)) return next();
+        } catch (_) { return next(); }
         const last = _readLastActive(uid);
         const now = Date.now();
         if (last && (now - last) > INACTIVITY_TIMEOUT_MS) {

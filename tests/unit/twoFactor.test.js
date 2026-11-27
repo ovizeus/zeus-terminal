@@ -110,3 +110,26 @@ describe('dezactivare', () => {
         expect(tf.isEnabled(e.id)).toBe(false);
     });
 });
+
+// [2026-11-27] Revizie M-6
+describe('curatare si garzi', () => {
+    test('adminReset sterge 2FA si spune daca era pornit', () => {
+        const e = enrolled();
+        expect(tf.adminReset(e.id)).toBe(true);
+        expect(tf.isEnabled(e.id)).toBe(false);
+        expect(tf.adminReset(e.id)).toBe(false);
+    });
+    test('un secret gol / prea scurt nu verifica niciodata (asigurare)', () => {
+        const id = ++uid;
+        db.totpSetPending(id, require('../../server/services/encryption').encrypt(''), NOW);
+        db.totpEnable(id, require('../../server/services/encryption').encrypt(''), '[]', -1, NOW);
+        const emptyCode = totp.codeAt('', stepOf(NOW + 60000));
+        expect(tf.verifyLogin(id, emptyCode, NOW + 60000).ok).toBe(false);
+    });
+    test('stergerea contului sterge si randul 2FA', () => {
+        const e = enrolled();
+        db.db.prepare("INSERT OR IGNORE INTO users (id, email, password_hash, role, approved, status) VALUES (?, ?, 'x', 'user', 1, 'active')").run(e.id, `del${e.id}@x.ro`);
+        db.deleteUser(`del${e.id}@x.ro`);
+        expect(db.totpGet(e.id)).toBeNull();
+    });
+});

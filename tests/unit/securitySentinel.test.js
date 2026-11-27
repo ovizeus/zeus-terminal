@@ -10,7 +10,7 @@ function harness(opts) {
     const o = opts || {};
     const rows = []; const sent = [];
     let id = 0;
-    const add = (action, userId, ip, ms) => rows.push({ id: ++id, user_id: userId, action, ip: ip || '1.2.3.4', created_at: at(ms || 0) });
+    const add = (action, userId, ip, ms) => rows.push({ id: ++id, user_id: userId, action, ip: ip === undefined ? '1.2.3.4' : (ip || null), created_at: at(ms || 0) });
     const s = createSentinel({
         readSince: (last) => rows.filter((r) => r.id > last),
         maxId: () => o.startAfterExisting ? id : 0,
@@ -124,4 +124,12 @@ test('summary(): cifrele zilei pentru raportul din admin', () => {
     expect(sm.failedSignIns).toBe(1);
     expect(sm.signUps).toBe(2);
     expect(sm.alertsSent).toBe(0);
+});
+
+// [2026-11-27] Revizie M-5 — o intrare de admin fara IP nu e „IP nou" la fiecare intrare
+test('LOGIN_SUCCESS de admin fara IP → nicio alerta', () => {
+    const h = harness(); h.s.init();
+    h.add('LOGIN_SUCCESS', 1, '', 0);
+    h.s.tick(T0 + 1000);
+    expect(h.sent).toHaveLength(0);
 });

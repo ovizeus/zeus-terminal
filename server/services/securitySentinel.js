@@ -73,6 +73,7 @@ function createSentinel(deps) {
             if (!admin) continue;
             if (a === 'LOGIN_SUCCESS') {
                 counts.adminSignIns++;
+                if (!r.ip) continue;   // fara IP nu se poate spune „nou" (altfel ar suna la fiecare intrare)
                 let seen = true;
                 try { seen = d.ipSeenBefore(r.user_id, r.ip, r.id); } catch (_) { seen = true; }
                 if (!seen) _send(`Admin sign-in from a new IP: ${r.ip}`);

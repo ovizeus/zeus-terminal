@@ -54,6 +54,7 @@ function build(st) {
         isEnabled: (uid) => !!(st.totp && st.totp[uid]),
         verifyLogin: (uid, code) => (st.totp && st.totp[uid] && String(code).replace(/\s/g, '') === st.totp[uid])
             ? { ok: true, method: 'totp' } : { ok: false },
+        adminReset: (uid) => { const had = !!(st.totp && st.totp[uid]); if (had) delete st.totp[uid]; return had; },
     }));
     jest.doMock('../../server/services/securitySentinel', () => ({
         dailyReport: () => ({ hours: 24, failedSignIns: 3, resetRequests: 1, signUps: 0, blockedSignUps: 0, signIns: 2, topFailIps: [] }),
@@ -300,4 +301,50 @@ describe('GET /auth/admin/security-report', () => {
         expect(r.status).toBe(200);
         expect(r.body).toMatchObject({ ok: true, report: { hours: 24, failedSignIns: 3 }, sentinel: { alertsSent: 1 } });
     });
+});
+
+// [2026-11-27] Revizie I-1 — telefon + coduri de rezerva pierdute: adminul poate scoate 2FA de pe ALT cont
+describe('POST /auth/admin/reset-2fa', () => {
+    const post = (email, body) => request(app).post('/auth/admin/reset-2fa').set('Cookie', cookieOf(st.users[email])).set('X-Zeus-Request', '1').send(body);
+    test('doar admin', async () => {
+        st.totp = { 2: '111111' };
+        expect((await post('user@example.com', { email: 'user@example.com', confirm: 'RESET 2FA' })).status).toBe(403);
+        expect(st.totp[2]).toBe('111111');
+    });
+    test('cere confirmarea scrisa', async () => {
+        st.totp = { 2: '111111' };
+        expect((await post('admin@example.com', { email: 'user@example.com' })).status).toBe(400);
+        expect(st.totp[2]).toBe('111111');
+    });
+    test('pe alt cont: scoate 2FA, audit + email catre cont', async () => {
+        st.totp = { 2: '111111' };
+        const r = await post('admin@example.com', { email: 'user@example.com', confirm: 'RESET 2FA' });
+        expect(r.status).toBe(200);
+        expect(st.totp[2]).toBeUndefined();
+        expect(st.audits).toContain('ADMIN_RESET_2FA');
+        await flush();
+        expect(st.mails).toContainEqual(['two_factor_disabled', 'user@example.com', null]);
+    });
+    test('pe PROPRIUL cont → refuzat (o sesiune furata de admin nu scoate 2FA-ul adminului)', async () => {
+        st.totp = { 1: '424242' };
+        expect((await post('admin@example.com', { email: 'admin@example.com', confirm: 'RESET 2FA' })).status).toBe(400);
+        expect(st.totp[1]).toBe('424242');
+    });
+    test('cont fara 2FA → 404, nimic auditat ca reset', async () => {
+        st.totp = {};
+        expect((await post('admin@example.com', { email: 'user@example.com', confirm: 'RESET 2FA' })).status).toBe(404);
+        expect(st.audits).not.toContain('ADMIN_RESET_2FA');
+    });
+});
+
+// [2026-11-27] Revizie M-1 — o incercare 2FA ramasa, apoi 2FA oprit: login-ul NU refoloseste „codul null"
+test('dupa oprirea 2FA in timpul unui login, se trimite un cod de email NOU, valid', async () => {
+    st.totp = { 1: '424242' };
+    await request(app).post('/auth/login').send({ email: 'admin@example.com', password: PW });
+    st.totp = {};
+    const r = await request(app).post('/auth/login').send({ email: 'admin@example.com', password: PW });
+    expect(r.body.method).toBe('email');
+    const code = codeFrom(st.codes[st.codes.length - 1]);
+    expect(code).toMatch(/^\d{6}$/);
+    expect((await request(app).post('/auth/verify-code').send({ email: 'admin@example.com', code })).status).toBe(200);
 });
