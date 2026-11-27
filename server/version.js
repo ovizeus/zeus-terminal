@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.404',
-    build: 430,
+    version: '1.7.405',
+    build: 431,
     date: '2026-11-27',
     changelog: [
+        'b431 v1.7.405 - Roluri reale de staff (Admin / Support / Analyst) verificate pe server la fiecare actiune de admin, doar cu 2FA pornit, fara acces la contul Super Adminului; pagina Roles reala; /auth/me cu rolul din baza; stergerea unui admin nu mai deconecteaza cheile de exchange inainte de refuz; Telegram fara „Brain blocked" si „Regime Change" (zgomot); capturile de ecran blocate in APK 1.7.18, deblocate doar pentru Super Admin, 2026-11-27.',
         'b430 v1.7.404 - SECURITATE etapa 2+3: 2FA cu aplicatie de autentificare (optional, Settings › Security) — codul vine din telefon in locul emailului, coduri de rezerva, pornire/oprire cu parola si email de anunt; rolul de admin se citeste din baza la fiecare cerere (era din token, zile intregi); sesiunile de admin expira la inactivitate; Sentinel — alerte pe telefon adminilor la rafale de inscrieri/resetari/parole gresite, la intrarea unui admin de pe un IP nou si la schimbari pe contul de admin; raport pe 24 h si „Reset 2FA" in Admin › Users, 2026-11-27.',
         'b429 v1.7.403 - Close all nu mai ramane agatat pe „Closing…": pozitiile se inchideau, dar raspunsul intarzia 18–40 s in ingheturile serverului; dupa 20 s butonul revine si lista se actualizeaza singura (client). Curatarea tabelelor ML tine pasul: rula o data pe zi, 20 s blocant la 04:00, si nu ajungea la toate tabelele (baza +~436 MB/zi); acum din ora in ora, pe rand intre tabele, cu pauze — serverul nu mai ingheata (server), 2026-11-27.',
         'b428 v1.7.402 - SECURITATE etapa 1 (dupa atacul cu boti 13–27 nov): inscriere — adrese temporare si `verify_` refuzate in tacere, max 3 pe IP / 10 min, comutator on/off in admin, Turnstile pregatit (oprit pana la chei); resetare — nu pentru conturi blocate/temporare, max 3 coduri pe CONT / ora, codurile vechi anulate la schimbarea emailului; niciun email spre adrese temporare; admin: stergerea tuturor conturilor blocate cu confirmare scrisa, 2026-11-27 (server + client).',

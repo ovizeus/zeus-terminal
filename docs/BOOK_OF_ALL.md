@@ -15385,3 +15385,18 @@ Atacul din 13–27 nov ar fi sunat din prima ora.
 **Revizie de cod (subagent, doar citire):** nicio ocolire a 2FA (toate locurile care dau sesiune verificate). Reparate: resetarea 2FA din admin (I-1), limita la parola de la pornire (I-2), un login inceput cu 2FA si terminat fara nu mai trimite „codul null" (M-1), token revocat in garda de inactivitate (M-2), intrare fara IP nu mai da alerta (M-5), randul 2FA se sterge odata cu contul + secret gol refuzat (M-6).
 **Acceptat, stiut (M-3):** cine are PAROLA poate consuma limita de 10 coduri/15 min si bloca login-ul proprietarului cat timp continua; resetarea parolei pe email i-o ia.
 **Ramas cu operatorul:** admin separat + `admin.zeus-terminal.com` + Cloudflare Access; roluri reale (Super Admin / Admin / Support / Analyst); passkey; cheile Turnstile; SSH.
+
+## 👥 2026-11-27 — b431: ROLURI REALE de staff + Telegram fara zgomot + APK 1.7.18 fara capturi de ecran
+
+**Roluri (etapa 2, ultima parte care nu cerea Cloudflare-ul operatorului):**
+- Modelul: `users.role = 'admin'` = **SUPER ADMIN** (operatorul) — neschimbat, deci TOATE verificarile vechi `role === 'admin'` din restul aplicatiei (flags, ring5, doctor, byoi, /api/admin…) raman doar ale lui. Coloana noua `users.staff_role` (migrarea **435**): `admin` / `support` / `analyst`.
+- `server/services/adminRoles.js` = matricea (aceeasi ca in `client/src/components/admin/adminRoles.ts` — un test cere sa fie IDENTICE). `can(user, perm)`; perm null = doar Super Admin.
+- `_adminGuard(req, res, perm)` — o singura garda pentru toate cele 27 de rute `/auth/admin/*` (cele 9 vechi care verificau pe loc au trecut si ele prin ea). Staff: doar permisiunile lui, **doar cu 2FA pornit**, si **niciodata** asupra unui cont de admin sau de staff. Raman DOAR ale Super Adminului: flags, inscrieri, stergerea in masa, bulk, module, resetare parola, resetare 2FA (cu ele un staff ar putea prelua un cont de trading).
+- `POST /auth/admin/staff-role` — doar Super Admin, niciodata pe propriul cont / pe un Super Admin; audit `ADMIN_STAFF_ROLE`.
+- `/auth/me` da rolul din BAZA (era din token — un admin retrogradat inca vedea panoul) + `staffRole` + `permissions`; aplicatia arata iconita de admin si sectiunile dupa ele (serverul decide oricum).
+- Pagina **Roles & Permissions** e reala (era macheta): membrii pe roluri, atribuire, matricea aplicata de server.
+- 🐞 Gasit pe drum: `/admin/delete` pe un cont de ADMIN deconecta intai cheile de exchange ale tintei, apoi stergerea era refuzata in tacere si raspundea `ok:true`. Acum refuza din start (400), fara sa atinga nimic.
+
+**Telegram fara zgomot (cerut de operator):** „🧠 Brain blocked … second-guessed" (masurat: 2.724 de blocari intr-o zi pe contul lui) si „🌐 Regime Change" (pana la 96/zi) NU mai pleaca pe Telegram. Raman in audit (`REFLECTION_BLOCKED`), Doctor, jurnal, gandurile OMEGA, `saveRegimeChange`. Pe Telegram raman: intrari/iesiri, esecuri de ordin, kill switch, SL lipsa, drift, stiri alese, alertele de securitate (Sentinel). Test: `tests/unit/telegramNoise.test.js`.
+
+**APK 1.7.18 (44) — fara capturi de ecran:** `MainActivity` porneste cu `FLAG_SECURE` (nici captura, nici inregistrare, ecran negru in aplicatiile recente); pluginul nou `ZeusSecure.setSecure({on})`; interfata (`client/src/core/secureScreen.ts`, legat de authStore) il scoate DOAR pentru Super Admin — operatorul isi trimite capturi. Pe pagina web nu se poate bloca (nicio pagina nu poate). ORDINEA la publicare: intai serverul (b431), apoi APK-ul.

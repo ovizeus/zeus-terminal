@@ -1,6 +1,6 @@
 {
-  "versionCode": 43,
-  "versionName": "1.7.17",
+  "versionCode": 44,
+  "versionName": "1.7.18",
   "url": "https://zeus-terminal.com/download/zeus-terminal.apk",
-  "notes": "Phone notifications for important messages (support replies, admin requests) with a badge on the Zeus icon."
+  "notes": "Screenshots and screen recording are blocked inside the app to protect your account and data."
 }
