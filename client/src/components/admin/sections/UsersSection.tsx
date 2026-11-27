@@ -219,6 +219,7 @@ export function UsersSection() {
                     onDelete={() => { setConfirm({ title: 'Delete user', message: `Delete ${u.email}?\n\nThis permanently removes the account and exchange keys. Irreversible.`, confirmText: 'Delete permanently', tone: 'danger', requireType: u.email, onConfirm: async () => { setConfirm(null); await runAction('delete', { email: u.email }, `Deleted ${u.email}`) } }) }}
                     onForceLogout={() => { setConfirm({ title: 'Force logout', message: `Force logout ${u.email}?\n\nAll their active sessions will be invalidated.`, confirmText: 'Force logout', tone: 'gold', onConfirm: async () => { setConfirm(null); await runAction('force-logout', { email: u.email }, `Forced logout ${u.email}`) } }) }}
                     onSuspend={() => { setConfirm({ title: 'Suspend user', message: `Suspend ${u.email}?\n\nSimilar to block but flagged as temporary operational suspension.`, confirmText: 'Suspend', tone: 'gold', onConfirm: async () => { setConfirm(null); await runAction('suspend', { email: u.email, reason: 'admin_suspend' }, `Suspended ${u.email}`) } }) }}
+                    onReset2fa={() => { setConfirm({ title: 'Reset two-factor authentication', message: `Turn off two-factor authentication for ${u.email}?\n\nUse this only when they lost both their phone and their backup codes, and you have confirmed it is really them. They get an email and can turn it on again from Settings.`, confirmText: 'Reset 2FA', tone: 'danger', requireType: 'RESET 2FA', onConfirm: async () => { setConfirm(null); await runAction('reset-2fa', { email: u.email, confirm: 'RESET 2FA' }, `Two-factor authentication reset for ${u.email}`) } }) }}
                     onResetPassword={() => { setConfirm({ title: 'Reset password', message: `Generate a temporary password for ${u.email}?\n\nA random password will be set and all sessions invalidated. The temp password is shown once — communicate it via a secure channel.`, confirmText: 'Reset password', tone: 'gold', onConfirm: async () => { setConfirm(null); await resetPassword(u.email) } }) }}
                   />
                 ))}
@@ -295,7 +296,7 @@ function VersionCell({ u, latestVer }: { u: AdminUser; latestVer: number | null 
 
 function UserRow({
   u, latestVer, selected, onToggleSelect, onOpen, onBlock, onUnblock, onBanPicker, banPickerOpen, onPickBan, onUnban,
-  onApprove, onSetAccess, onReject, onDelete, onForceLogout, onSuspend, onResetPassword,
+  onApprove, onSetAccess, onReject, onDelete, onForceLogout, onSuspend, onResetPassword, onReset2fa,
 }: {
   u: AdminUser
   latestVer: number | null
@@ -315,6 +316,7 @@ function UserRow({
   onForceLogout: () => void
   onSuspend: () => void
   onResetPassword: () => void
+  onReset2fa: () => void
 }) {
   const isAdmin = u.role === 'admin'
   const isBlocked = u.status === 'blocked'
@@ -392,6 +394,7 @@ function UserRow({
               {!isBanned && !isBlocked && <button className="zac-btn zac-btn-gold zac-btn-sm" onClick={onSuspend} title="Temporary operational suspend">Suspend</button>}
               <button className="zac-btn zac-btn-sm" onClick={onForceLogout} title="Invalidate all sessions">⏻</button>
               <button className="zac-btn zac-btn-sm" onClick={onResetPassword} title="Reset password — generates temp password">⟲</button>
+              <button className="zac-btn zac-btn-sm" onClick={onReset2fa} title="Reset two-factor authentication (lost phone)">2FA</button>
               <button className="zac-btn zac-btn-danger zac-btn-sm" onClick={onDelete} title="Delete account">✕</button>
             </>
           )}
