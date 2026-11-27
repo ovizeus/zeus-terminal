@@ -1,3 +1,4 @@
+import { ROLE_PERMS } from '../admin/adminRoles'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 // [Phase 3C] Engine mode single source — useATStore.mode. AT.mode is a read mirror.
@@ -372,7 +373,9 @@ function useAdminPendingCount(isAdmin: boolean) {
 export function ZeusDock({ active, onDockClick }: ZeusDockProps) {
   const { atHasPos, manualHasPos } = useDockLinkState()
   const role = useAuthStore((s) => s.role)
-  const isAdmin = role === 'admin'
+  const staffRole = useAuthStore((s) => s.staffRole)
+  // [2026-11-27] Super Admin sau staff cu rol valid (cade inchis pe un rol necunoscut); serverul decide
+  const isAdmin = role === 'admin' || (!!staffRole && Object.prototype.hasOwnProperty.call(ROLE_PERMS, staffRole))
   // [BETA-GATE 2026-11-13] Pictogramele de activitate raman la vedere, cu
   // lacat; apasate, arata mesajul de beta in loc sa deschida panoul.
   const accessLevel = useAuthStore((s) => (s.accessKnown ? s.accessLevel : 'full'))

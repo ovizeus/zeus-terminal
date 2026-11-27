@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { wsService } from '../../services/ws'
 import { useAdminStore } from '../../stores/adminStore'
 import { useSupportStore } from '../../stores/supportStore'
-import { NAV, GROUPS, actionCounts } from './adminNav'
+import { GROUPS, actionCounts, visibleNav } from './adminNav'
+import { useAuthStore } from '../../stores/authStore'
 
 /**
  * [2026-11-06] Admin launcher.
@@ -17,6 +18,9 @@ import { NAV, GROUPS, actionCounts } from './adminNav'
  * and that was previously hidden inside a strip.
  */
 export function AdminHome() {
+  // [2026-11-27] staff vede doar secțiunile permise (serverul decide oricum)
+  const role = useAuthStore((s) => s.role)
+  const permissions = useAuthStore((s) => s.permissions)
   const setSection = useAdminStore((s) => s.setSection)
   const users = useAdminStore((s) => s.users)
   const supportUnread = useSupportStore((s) => s.adminUnread)
@@ -85,7 +89,7 @@ export function AdminHome() {
       </div>
 
       {GROUPS.map((g) => {
-        const items = NAV.filter((n) => n.group === g.id)
+        const items = visibleNav(role, permissions).filter((n) => n.group === g.id)
         if (items.length === 0) return null
         return (
           <div className="zac-home-group" key={g.id}>

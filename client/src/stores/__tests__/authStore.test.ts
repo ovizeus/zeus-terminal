@@ -40,3 +40,18 @@ describe('authStore', () => {
     expect(useAuthStore.getState().error).toBeNull()
   })
 })
+
+// [2026-11-27] Roluri reale: /auth/me aduce staffRole + permissions
+describe('authStore — staff', () => {
+  it('checkAuth pastreaza staffRole si permisiunile de la server; clearAuth le sterge', async () => {
+    const { vi } = await import('vitest')
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true, id: 4, email: 's@x.ro', role: 'user', staffRole: 'support', permissions: ['users.view', 'audit.view'], accessLevel: 'viewer' }) })))
+    await useAuthStore.getState().checkAuth()
+    expect(useAuthStore.getState().staffRole).toBe('support')
+    expect(useAuthStore.getState().permissions).toEqual(['users.view', 'audit.view'])
+    useAuthStore.getState().clearAuth()
+    expect(useAuthStore.getState().staffRole).toBeNull()
+    expect(useAuthStore.getState().permissions).toEqual([])
+    vi.unstubAllGlobals()
+  })
+})

@@ -632,6 +632,7 @@ router.get('/admin/users', (req, res) => {
             id: u.id,
             email: u.email,
             role: u.role || 'user',
+            staffRole: adminRoles.staffRoleOf(u),   // [2026-11-27] roluri reale
             approved: !!u.approved,
             accessLevel: accessLevel.levelOfUser(u),
             status: u.status || 'active',
@@ -1008,6 +1009,7 @@ router.get('/admin/users/:id', (req, res) => {
             id: u.id,
             email: u.email,
             role: u.role || 'user',
+            staffRole: adminRoles.staffRoleOf(u),   // [2026-11-27] roluri reale
             approved: !!u.approved,
             accessLevel: accessLevel.levelOfUser(u),
             status: u.status || 'active',

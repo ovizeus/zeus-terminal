@@ -91,6 +91,10 @@ export interface MeResponse {
   id: number
   email: string
   role: string
+  // [2026-11-27] roluri reale de staff (vezi server/services/adminRoles.js)
+  staffRole?: string | null
+  permissions?: string[]
+  accessLevel?: string
 }
 
 export interface AdminUser {

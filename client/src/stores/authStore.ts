@@ -8,6 +8,9 @@ interface AuthStore {
   userId: string | null
   email: string | null
   role: string | null
+  /** [2026-11-27] rol de staff (admin/support/analyst) si permisiunile de admin — de la /auth/me; serverul decide */
+  staffRole: string | null
+  permissions: string[]
   /** [BETA-GATE] 'viewer' pana cand serverul spune explicit 'full'. */
   accessLevel: AccessLevel
   /** Nivelul a fost confirmat de server. Pana atunci nu se pune niciun lacat:
@@ -31,6 +34,8 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   userId: null,
   email: null,
   role: null,
+  staffRole: null,
+  permissions: [],
   accessLevel: 'viewer',
   accessKnown: false,
   loading: true,
@@ -54,6 +59,8 @@ export const useAuthStore = create<AuthStore>()((set) => ({
           userId: String(data.id),
           email: String(data.email ?? ''),
           role: String(data.role ?? 'user'),
+          staffRole: typeof data.staffRole === 'string' ? data.staffRole : null,
+          permissions: Array.isArray(data.permissions) ? (data.permissions as unknown[]).map(String) : [],
           loading: false,
         })
       } else {
@@ -74,13 +81,17 @@ export const useAuthStore = create<AuthStore>()((set) => ({
       const data = (res as { data?: unknown }).data ?? res
       const lvl = accessLevelFrom(data as { role?: unknown; accessLevel?: unknown })
       applyAccessLevel(lvl)
-      set({ accessLevel: lvl, accessKnown: true })
+      const d = data as { role?: unknown; staffRole?: unknown; permissions?: unknown }
+      set({ accessLevel: lvl, accessKnown: true,
+        ...(typeof d.role === 'string' ? { role: d.role } : {}),
+        staffRole: typeof d.staffRole === 'string' ? d.staffRole : null,
+        permissions: Array.isArray(d.permissions) ? d.permissions.map(String) : [] })
     }).catch(() => { /* ramane viewer */ })
   },
 
   clearAuth: () => {
     resetAccessLevel()
-    set({ authenticated: false, userId: null, email: null, role: null, accessLevel: 'viewer', accessKnown: false, loading: false })
+    set({ authenticated: false, userId: null, email: null, role: null, staffRole: null, permissions: [], accessLevel: 'viewer', accessKnown: false, loading: false })
   },
 
   setError: (error) => set({ error }),

@@ -93,3 +93,17 @@ describe('Admin entry is gone from the header', () => {
     expect(src).not.toContain("openModal('adminPage')")
   })
 })
+
+// [2026-11-27] Roluri reale: staff (support/analyst/admin) vede iconita; serverul decide ce poate face
+describe('Admin dock entry — staff', () => {
+  it('apare pentru un membru staff (staffRole valid)', () => {
+    useAuthStore.setState({ role: 'user', staffRole: 'support', permissions: ['users.view'] } as never)
+    const { container } = render(<ZeusDock active={null} onDockClick={() => {}} />)
+    expect(container.querySelector('[data-dock="admin"]')).not.toBeNull()
+  })
+  it('NU apare pentru un staffRole necunoscut (cade inchis)', () => {
+    useAuthStore.setState({ role: 'user', staffRole: 'superadmin', permissions: [] } as never)
+    const { container } = render(<ZeusDock active={null} onDockClick={() => {}} />)
+    expect(container.querySelector('[data-dock="admin"]')).toBeNull()
+  })
+})

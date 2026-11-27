@@ -11,6 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AdminHome } from '../AdminHome'
 import { NAV, GROUPS, actionCounts } from '../adminNav'
 import { useAdminStore } from '../../../stores/adminStore'
+import { useAuthStore } from '../../../stores/authStore'
 import { useSupportStore } from '../../../stores/supportStore'
 import { act } from '@testing-library/react'
 
@@ -28,6 +29,8 @@ vi.mock('../../../services/ws', () => ({
 }))
 
 beforeEach(() => {
+  // [2026-11-27] lansatorul arata secțiunile dupa rol; aici Super Admin = toate
+  useAuthStore.setState({ role: 'admin', staffRole: null, permissions: [] } as never)
   vi.restoreAllMocks()
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) } as Response)))
   useAdminStore.setState({ users: [], currentSection: 'home' } as never)

@@ -22,6 +22,8 @@ export interface AdminUser {
   id: number
   email: string
   role: string
+  /** [2026-11-27] rol de staff (admin/support/analyst) sau null — server/services/adminRoles.js */
+  staffRole?: string | null
   status: string
   approved: boolean
   /** [BETA-GATE] 'viewer' = chart, date de piata, lichidari; 'full' = tot. */

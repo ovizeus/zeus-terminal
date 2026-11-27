@@ -456,3 +456,10 @@ describe('/auth/me si rolurile', () => {
         expect(r.body.permissions).toContain('settings.flags');
     });
 });
+
+test('lista de conturi din admin poarta rolul de staff (pentru pagina Roles)', async () => {
+    const r = await request(app).get('/auth/admin/users').set('Cookie', cookieOf(st.users['admin@example.com']));
+    const sup = r.body.users.find((u) => u.email === 'support@example.com');
+    expect(sup.staffRole).toBe('support');
+    expect(r.body.users.find((u) => u.email === 'user@example.com').staffRole).toBeNull();
+});

@@ -17,6 +17,8 @@ export interface NavItem {
   wip?: boolean
   /** One line on the launcher tile. The sidebar has no room for it. */
   blurb?: string
+  /** [2026-11-27] permisiunea de staff care deschide secțiunea; fără ea = doar Super Admin */
+  perm?: string
 }
 
 export const NAV: NavItem[] = [
@@ -25,16 +27,23 @@ export const NAV: NavItem[] = [
   { id: 'backup', label: 'Backup Zeus', icon: '▧', group: 'overview', blurb: 'Encrypted snapshots' },
   { id: 'vault', label: 'Vault', icon: '▦', group: 'overview', blurb: 'Secrets, zero-knowledge' },
   { id: 'dashboard', label: 'Dashboard', icon: '◉', group: 'overview', blurb: 'Health and overview' },
-  { id: 'users', label: 'Users', icon: '◐', group: 'people', blurb: 'Accounts, roles, access' },
-  { id: 'audit', label: 'Audit Log', icon: '☰', group: 'people', blurb: 'Full activity trail' },
-  { id: 'roles', label: 'Roles & Permissions', icon: '◆', group: 'people', wip: true, blurb: 'Access matrix' },
-  { id: 'security', label: 'Security', icon: '⬡', group: 'system', blurb: 'Sessions and hardening' },
-  { id: 'monitoring', label: 'Monitoring', icon: '◈', group: 'system', blurb: 'Server and modules' },
+  { id: 'users', label: 'Users', icon: '◐', group: 'people', blurb: 'Accounts, roles, access', perm: 'users.view' },
+  { id: 'audit', label: 'Audit Log', icon: '☰', group: 'people', blurb: 'Full activity trail', perm: 'audit.view' },
+  { id: 'roles', label: 'Roles & Permissions', icon: '◆', group: 'people', blurb: 'Who can do what' },
+  { id: 'security', label: 'Security', icon: '⬡', group: 'system', blurb: 'Sessions and hardening', perm: 'security.sessions' },
+  { id: 'monitoring', label: 'Monitoring', icon: '◈', group: 'system', blurb: 'Server and modules', perm: 'monitoring.view' },
   { id: 'billing', label: 'Billing / Plans', icon: '❖', group: 'config', wip: true, blurb: 'Subscriptions' },
   { id: 'indicators', label: 'Indicator Requests', icon: '✦', group: 'config', blurb: 'Built-to-order queue' },
   { id: 'support', label: 'Support / Ops', icon: '☍', group: 'config', blurb: 'Messages and ops tools' },
   { id: 'settings', label: 'Settings / Flags', icon: '⚙', group: 'config', blurb: 'Global toggles' },
 ]
+
+/** [2026-11-27] Secțiunile pe care le vede contul: Super Admin = toate; staff = doar cele cu permisiunea lui.
+ *  Doar afișare — serverul refuză oricum ce nu e permis. */
+export function visibleNav(role: string | null, permissions: string[]): NavItem[] {
+  if (role === 'admin') return NAV
+  return NAV.filter((n) => !!n.perm && permissions.includes(n.perm))
+}
 
 export const GROUPS: Array<{ id: NavItem['group']; label: string }> = [
   { id: 'overview', label: 'Overview' },
