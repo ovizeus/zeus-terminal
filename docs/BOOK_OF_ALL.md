@@ -15415,3 +15415,12 @@ Partea de server e gata si INACTIVA pana la `ADMIN_HOST` in `.env`:
 3. Verifici: `https://admin.zeus-terminal.com` cere intai codul Cloudflare, apoi login-ul Zeus.
 4. ABIA APOI: `ADMIN_HOST=admin.zeus-terminal.com` in `/opt/zeus-terminal/.env` + `sudo -u zeus pm2 reload zeus --update-env`. De acum adminul merge DOAR pe subdomeniu.
 **Revenire:** scoti linia `ADMIN_HOST` din `.env` + reload.
+
+## 🔐 2026-11-27 — b433: EXTRASELE de securitate din planul aprobat (1, 2, 3, 8)
+
+1. **Cheile de exchange** (`services/exchangeKeyGuard.js`, in `/api/exchange/save` INAINTE de orice apel la bursa): 24 h blocate dupa schimbarea parolei / emailului / oprirea 2FA (`SECURITY_HOLD`, ca retragerile la Binance); cu 2FA pornit se cere codul din aplicatie (`TOTP_REQUIRED` → aplicatia il cere prin dialog si retrimite o data); email `exchange_keys_changed` la orice cheie salvata. Nu atinge tranzactionarea.
+2. **Sesiuni** (Settings › Security › Sign-ins): ultimele 10 intrari (ora, IP, dispozitiv — `LOGIN_SUCCESS` poarta acum `device`) + „Sign out everywhere else" (`POST /auth/security/logout-others`: versiunea tokenului creste, sesiunea curenta primeste token nou; un token deja revocat nu poate face nimic). Sesiunile sunt tokenuri — nu exista lista „live" de dispozitive.
+3. **Email la intrarea de pe un IP nou** (`services/newSignIn.js`): nu la prima intrare din viata contului, nu de pe un IP din ultimele 180 de zile, nu fara IP.
+5. **Blocare progresiva — NU, decis:** exista deja 5 incercari / 15 min / cont + 2FA; o blocare mai dura i-ar da atacatorului o arma sa-l tina pe proprietar afara ore intregi.
+8. **Pachete + CSP:** `npm audit` server 0 (era 2 high + 1 moderate): body-parser 2.4.0, qs 6.17.1, **nodemailer 8 → 10.6.1** (codurile de login trec prin el → verificat cu o trimitere REALA spre casuta de sistem inainte de livrare). Client 0. CSP `script-src` fara unpkg.com / cdn.jsdelivr.net (gazduiesc orice pachet npm); singurul lor folos — graficele paginii `/legacy` — servite local `public/vendor/lightweight-charts-4.1.3…` (aceeasi amprenta SRI, testat). `unsafe-inline` ramane (scripturile din login.html) — mutarea lor e o lucrare separata.
+⚠️ Lectie: `git add` ca root creeaza obiecte pe care zeus nu le poate scrie → `chown -R zeus:zeus .git` INAINTE de commit.
