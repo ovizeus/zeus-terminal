@@ -10583,6 +10583,17 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('433_system_settings', () => {
+    // [2026-11-27] Setari de sistem schimbate din admin (ex. inscrierile on/off), cheie → valoare text.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS system_settings (
+            key        TEXT PRIMARY KEY,
+            value      TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+    `);
+});
+
 migrate('432_notify_events_prefs', () => {
     // [2026-11-22] Evenimentele pentru telefon (intrari/iesiri AT, miscari mari de pret, siguranta)
     // si alegerile fiecarui cont. `bucket` = tip + sfert de ora: evenimentele de acelasi fel din
@@ -12693,4 +12704,8 @@ module.exports = {
     markSupportThreadReadByUser,
     getSupportInbox,
     getAdminUserIds,
+    // [2026-11-27] setari de sistem (comutatorul de inscrieri)
+    getSystemSetting: (key) => { const r = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(String(key)); return r ? r.value : null; },
+    setSystemSetting: (key, value) => db.prepare(`INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`).run(String(key), String(value), Date.now()),
 };

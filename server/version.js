@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.401',
-    build: 427,
+    version: '1.7.402',
+    build: 428,
     date: '2026-11-21',
     changelog: [
+        'b428 v1.7.402 - SECURITATE etapa 1 (dupa atacul cu boti 13–27 nov): inscriere — adrese temporare si `verify_` refuzate in tacere, max 3 pe IP / 10 min, comutator on/off in admin, Turnstile pregatit (oprit pana la chei); resetare — nu pentru conturi blocate/temporare, max 3 coduri pe CONT / ora, codurile vechi anulate la schimbarea emailului; niciun email spre adrese temporare; admin: stergerea tuturor conturilor blocate cu confirmare scrisa, 2026-11-27 (server + client).',
         'b427 v1.7.401 - Binance real: soldul se citeste si pe contul Multi-Assets (USDC/credite, fara USDT) — trecerea pe real nu mai pica la [BALANCE]; aceeasi citire si la poarta de la decizie si la add-on, 2026-11-27 (server).',
         'b426 v1.7.400 - Quant Monitor nu mai blocheaza telefonul: rescria tot ecranul (~4.000 de bucati) la fiecare secunda; acum rescrie doar randurile schimbate (masurat la procesor de telefon: 163 ms → 2 ms pe secunda), 2026-11-22 (client).',
         'b425 v1.7.399 - GLOBAL MARKETS 105 → 135 (volatilitate VIX-style/BTC/ETH/aur, SPY/QQQ/SMH, aur tokenizat, actiuni urmarite: SanDisk, Nebius, CoreWeave, AppLovin…); MARKET NEWS +4 surse (ForexLive, Seeking Alpha, ZeroHedge, Bank of England), 2026-11-22 (server + client).',

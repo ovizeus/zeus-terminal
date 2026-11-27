@@ -102,10 +102,12 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com", "https://browser.sentry-cdn.com"],
+      // [2026-11-27] challenges.cloudflare.com = Cloudflare Turnstile (captcha la inscriere/login/resetare)
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com", "https://browser.sentry-cdn.com", "https://challenges.cloudflare.com"],
+      frameSrc: ["'self'", "https://challenges.cloudflare.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      connectSrc: ["'self'", "wss://fstream.binance.com", "wss://stream.bybit.com", "wss://ws.okx.com:8443", "https://fapi.binance.com", "https://api.binance.com", "https://testnet.binancefuture.com", "https://api.alternative.me", "https://*.ingest.de.sentry.io", "https://api.bybit.com", "https://www.okx.com", "https://api.coingecko.com"],
+      connectSrc: ["'self'", "https://challenges.cloudflare.com", "wss://fstream.binance.com", "wss://stream.bybit.com", "wss://ws.okx.com:8443", "https://fapi.binance.com", "https://api.binance.com", "https://testnet.binancefuture.com", "https://api.alternative.me", "https://*.ingest.de.sentry.io", "https://api.bybit.com", "https://www.okx.com", "https://api.coingecko.com"],
       imgSrc: ["'self'", "data:", "blob:"],
       manifestSrc: ["'self'", "blob:"],
       frameAncestors: ["'none'"],

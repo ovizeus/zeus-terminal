@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAdminStore, type AdminUser } from '../../../stores/adminStore'
 import { StatusBadge, ApiBadge, LoadingSkeleton, EmptyState, ConfirmDialog, fmtDate } from '../shared/components'
 import { LeaderboardTab } from './LeaderboardTab'
+import { SignupControls } from './SignupControls'
 
 export function UsersSection() {
   const users = useAdminStore((s) => s.users)
@@ -111,6 +112,8 @@ export function UsersSection() {
       </div>
       {tab === 'leaderboard' && <LeaderboardTab />}
       {tab === 'users' && (<>
+      {/* [2026-11-27] inscrieri on/off + stergerea tuturor conturilor blocate */}
+      <SignupControls blockedCount={users.filter((u) => u.status === 'blocked').length} onChanged={() => loadUsers()} />
       {/* Filters bar */}
       <div className="zac-filters">
         <input

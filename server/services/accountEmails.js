@@ -287,6 +287,12 @@ async function sendAccountEmail(kind, email, opts) {
     try {
         const to = String(email || '').trim().toLowerCase();
         if (!_validAddr(to)) return false;
+        // [2026-11-27] Niciun email de cont spre adrese temporare (mailinator etc.): botii nu-l
+        // citesc oricum, iar trimiterea umple casuta operatorului cu respingeri si ne strica reputatia.
+        if (require('./authGuard').isDisposableEmail(to)) {
+            logger.info('MAIL', `account email "${kind}" skipped — disposable address`, { to: _mask(to) });
+            return false;
+        }
         const build = Object.prototype.hasOwnProperty.call(BUILDERS, kind) ? BUILDERS[kind] : null;
         if (!build) return false;
         const o = opts || {};

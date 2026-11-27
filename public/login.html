@@ -1998,9 +1998,10 @@
             const btn = document.getElementById('forgotSendBtn');
             btn.disabled = true; btn.textContent = 'Sending...';
             try {
+                const turnstileToken = window.ztTurnstileToken ? await window.ztTurnstileToken() : undefined;
                 const res = await fetch('/auth/forgot-password/request', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email, turnstileToken })
                 });
                 const data = await res.json();
                 btn.disabled = false; btn.textContent = 'SEND RESET CODE';
@@ -2089,10 +2090,11 @@
         async function resendCode() {
             if (!pendingEmail || !pendingPassword) return;
             try {
+                const turnstileToken = window.ztTurnstileToken ? await window.ztTurnstileToken() : undefined;
                 const res = await fetch('/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: pendingEmail, password: pendingPassword })
+                    body: JSON.stringify({ email: pendingEmail, password: pendingPassword, turnstileToken })
                 });
                 const data = await res.json();
                 if (res.ok && data.needsCode) {
@@ -2117,10 +2119,11 @@
 
             btn.disabled = true; btn.textContent = '...';
             try {
+                const turnstileToken = window.ztTurnstileToken ? await window.ztTurnstileToken() : undefined;
                 const res = await fetch('/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ email, password, turnstileToken })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -2171,10 +2174,11 @@
             try {
                 var _refEl = document.getElementById('regRef');
                 var _ref = _refEl && _refEl.value.trim() ? _refEl.value.trim() : undefined;
+                const turnstileToken = window.ztTurnstileToken ? await window.ztTurnstileToken() : undefined;
                 const res = await fetch('/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password, termsAcceptedAt, termsVersion, ref: _ref })
+                    body: JSON.stringify({ email, password, termsAcceptedAt, termsVersion, ref: _ref, turnstileToken })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -2349,6 +2353,8 @@
         document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && box.classList.contains('open')) close(); });
     })();
     </script>
+    <!-- [2026-11-27] Cloudflare Turnstile (pornit doar cand serverul are cheile) -->
+    <script src="/js/zt-turnstile.js"></script>
 </body>
 
 </html>

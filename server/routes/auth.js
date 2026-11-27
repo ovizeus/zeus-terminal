@@ -174,9 +174,53 @@ function _setAuthCookie(res, token, userId) {
     }
 }
 
+
+// ─── [2026-11-27] Garzi anti-bot (dupa atacul 13–27 nov) ───
+const authGuard = require('../services/authGuard');
+const REG_IP_MAX = 3, REG_IP_WINDOW = 10 * 60 * 1000;          // 3 inscrieri / IP / 10 min
+const FGPW_USER_MAX = 3, FGPW_USER_WINDOW = 60 * 60 * 1000;    // 3 coduri de resetare / CONT / ora
+
+/** Inscrierile sunt deschise? Comutator in admin (system_settings.registration_open). Implicit DA. */
+function _registrationOpen() {
+    try { return typeof db.getSystemSetting !== 'function' || db.getSystemSetting('registration_open') !== '0'; }
+    catch (_) { return true; }
+}
+
+/**
+ * Cloudflare Turnstile. Fara TURNSTILE_SECRET in .env nu se cere (comportamentul de pana acum).
+ * Cu cheia setata: fara token sau cu serviciul Cloudflare indisponibil → REFUZ (fail-closed).
+ */
+async function _turnstileOk(req) {
+    const secret = process.env.TURNSTILE_SECRET;
+    if (!secret) return true;
+    const token = (req.body && req.body.turnstileToken) || req.get('cf-turnstile-response');
+    if (!token || typeof token !== 'string' || token.length > 2048) return false;
+    try {
+        const body = new URLSearchParams({ secret, response: token, remoteip: req.ip || '' });
+        const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            method: 'POST', body, signal: AbortSignal.timeout(5000),
+        });
+        const j = await r.json();
+        return !!(j && j.success === true);
+    } catch (_) { return false; }
+}
+const _TURNSTILE_FAIL = { error: 'Verification failed. Please refresh the page and try again.' };
+
+// ─── [2026-11-27] GET /auth/turnstile-config — cheia PUBLICA Turnstile pentru pagina (secretul ramane pe server) ───
+router.get('/turnstile-config', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const site = process.env.TURNSTILE_SITE_KEY, secret = process.env.TURNSTILE_SECRET;
+    res.json({ siteKey: site && secret ? site : null });
+});
+
 // ─── POST /auth/register ───
 router.post('/register', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
+    if (!_registrationOpen()) return res.status(403).json({ error: 'Registrations are temporarily closed.' });
+    if (!(await _turnstileOk(req))) return res.status(403).json(_TURNSTILE_FAIL);
+    if (!authGuard.hit(db, 'reg_ip', req.ip, REG_IP_MAX, REG_IP_WINDOW)) {
+        return res.status(429).json({ error: 'Too many sign-ups from this network. Try again later.' });
+    }
     try {
         const { email, password, termsAcceptedAt, termsVersion } = req.body;
         if (!email || !password) {
@@ -199,6 +243,13 @@ router.post('/register', async (req, res) => {
         var _pwErr = _validatePassword(password);
         if (_pwErr) {
             return res.status(400).json({ error: _pwErr });
+        }
+
+        // [2026-11-27] Adrese temporare / semnatura botilor (`verify_…`): acelasi raspuns ca la o
+        // inscriere reusita (nu-i spunem botului ce a declansat), dar NU se creeaza contul si nu pleaca email.
+        if (authGuard.isSuspiciousSignupEmail(normalEmail)) {
+            db.auditLog(null, 'REGISTER_BLOCKED_SUSPICIOUS', { domain: normalEmail.split('@')[1] || '' }, req.ip);
+            return res.json({ ok: true, pending: true, message: 'Account created. Waiting for admin approval.' });
         }
 
         // Check if user exists — generic response to prevent email enumeration
@@ -280,6 +331,7 @@ router.post('/login', async (req, res) => {
         if (!_checkLoginRate(req.ip)) {
             return res.status(429).json({ error: 'Too many login attempts. Wait 15 minutes.' });
         }
+        if (!(await _turnstileOk(req))) return res.status(403).json(_TURNSTILE_FAIL);
 
         const { email, password } = req.body;
         if (!email || !password) {
@@ -835,6 +887,34 @@ function _adminGuard(req, res) {
     } catch (_) { res.status(401).json({ error: 'Token invalid' }); return null; }
 }
 
+// ─── [2026-11-27] ADMIN: inscrierile on/off (in locul unui link cu parola in adresa) ───
+router.get('/admin/registration', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    res.json({ ok: true, open: _registrationOpen() });
+});
+router.post('/admin/registration', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    if (typeof (req.body && req.body.open) !== 'boolean') return res.status(400).json({ error: 'open (true/false) required' });
+    db.setSystemSetting('registration_open', req.body.open ? '1' : '0');
+    db.auditLog(guard.caller.id, 'ADMIN_REGISTRATION_TOGGLE', { open: req.body.open }, req.ip);
+    res.json({ ok: true, open: req.body.open });
+});
+
+// ─── [2026-11-27] ADMIN: sterge TOATE conturile blocate, odata (botii), cu confirmare scrisa ───
+router.post('/admin/delete-blocked', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    if (!req.body || req.body.confirm !== 'DELETE BLOCKED') return res.status(400).json({ error: 'Type DELETE BLOCKED to confirm' });
+    const targets = db.listUsers().filter((u) => u.status === 'blocked' && u.role !== 'admin' && u.id !== guard.caller.id);
+    let deleted = 0; const errors = [];
+    for (const u of targets) {
+        try { db.disconnectExchange(u.id); db.deleteUser(u.email, 'admin'); deleted++; }
+        catch (err) { errors.push({ id: u.id, error: err.message }); }
+    }
+    db.auditLog(guard.caller.id, 'ADMIN_DELETE_BLOCKED', { deleted, ids: targets.map((u) => u.id), errors: errors.length }, req.ip);
+    logger.info('AUTH', 'Admin deleted all blocked accounts', { deleted });
+    res.json({ ok: true, deleted, errors });
+});
+
 // ─── ADMIN: GET /auth/admin/health — server health snapshot ───
 router.get('/admin/health', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
@@ -1336,6 +1416,8 @@ router.post('/change-email/confirm', async (req, res) => {
             return res.status(409).json({ error: emailResult.error });
         }
         pendingCodes.delete(key);
+        // [2026-11-27] Un cod de resetare cerut pe adresa VECHE nu mai are voie sa schimbe parola.
+        for (const [k, v] of pendingCodes) { if (k.startsWith('fgpw_') && v && v.userId === user.id) pendingCodes.delete(k); }
 
         // Issue new JWT with updated email (preserve tokenVersion)
         const newToken = jwt.sign(
@@ -1359,6 +1441,7 @@ router.post('/change-email/confirm', async (req, res) => {
 // ─── FORGOT PASSWORD: Step 1 — request code (no login needed) ───
 router.post('/forgot-password/request', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
+    if (!(await _turnstileOk(req))) return res.status(403).json(_TURNSTILE_FAIL);
     const email = (req.body.email || '').toLowerCase().trim(); // [S13] normalize
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
@@ -1366,7 +1449,15 @@ router.post('/forgot-password/request', async (req, res) => {
     // Always return success (don't reveal if email exists)
     if (!user) return res.json({ ok: true, message: 'If the email exists, you will receive a code.' });
 
-    if (user.status === 'banned' || (user.banned_until && new Date(user.banned_until) > new Date())) {
+    // [2026-11-27] Nici conturile BLOCATE (pe 25 nov un cont-bot blocat si-a resetat parola din inbox-ul
+    // public mailinator), nici adresele temporare nu primesc cod.
+    if (user.status === 'banned' || user.status === 'blocked' || authGuard.isDisposableEmail(email)
+        || (user.banned_until && new Date(user.banned_until) > new Date())) {
+        return res.json({ ok: true, message: 'If the email exists, you will receive a code.' });
+    }
+    // [2026-11-27] Limita pe CONT, nu doar pe IP: atacul a venit din zeci de IP-uri (38 de cereri pe un cont).
+    if (!authGuard.hit(db, 'fgpw_user', user.id, FGPW_USER_MAX, FGPW_USER_WINDOW)) {
+        db.auditLog(user.id, 'FORGOT_PASSWORD_THROTTLED', {}, req.ip);
         return res.json({ ok: true, message: 'If the email exists, you will receive a code.' });
     }
 

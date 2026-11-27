@@ -1,3 +1,4 @@
+import { getTurnstileToken } from '../../core/turnstile'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '../layout/icons'
 
@@ -431,10 +432,11 @@ export function LoginPage() {
     const pw = password
     setSubmitText('...')
     try {
+      const turnstileToken = await getTurnstileToken()
       const res = await fetch('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
-        body: JSON.stringify({ email: em, password: pw }),
+        body: JSON.stringify({ email: em, password: pw, turnstileToken }),
       })
       const data = await res.json()
       if (res.ok) {
@@ -486,10 +488,11 @@ export function LoginPage() {
   async function resendCode() {
     if (!pendingEmailRef.current || !pendingPasswordRef.current) return
     try {
+      const turnstileToken = await getTurnstileToken()
       const res = await fetch('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
-        body: JSON.stringify({ email: pendingEmailRef.current, password: pendingPasswordRef.current }),
+        body: JSON.stringify({ email: pendingEmailRef.current, password: pendingPasswordRef.current, turnstileToken }),
       })
       const data = await res.json()
       if (res.ok && data.needsCode) {
@@ -539,10 +542,11 @@ export function LoginPage() {
     setForgotSendDisabled(true)
     setForgotSendText('Sending...')
     try {
+      const turnstileToken = await getTurnstileToken()
       const res = await fetch('/auth/forgot-password/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
-        body: JSON.stringify({ email: em }),
+        body: JSON.stringify({ email: em, turnstileToken }),
       })
       const data = await res.json()
       setForgotSendDisabled(false)
@@ -612,10 +616,12 @@ export function LoginPage() {
 
     setRegisterBtnText('...')
     try {
+      const turnstileToken = await getTurnstileToken()
       const res = await fetch('/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({
+          turnstileToken,
           email: em,
           password: pw,
           // [Task 1A 2026-05-28] GDPR Art. 7 consent record — required by server
