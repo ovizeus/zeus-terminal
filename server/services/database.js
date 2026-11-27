@@ -12736,6 +12736,8 @@ module.exports = {
     getSupportInbox,
     getAdminUserIds,
     // [2026-11-27] setari de sistem (comutatorul de inscrieri)
+    // [2026-11-27] ultimele intrari ale unui cont (Settings › Security)
+    recentSignIns: (uid, n) => db.prepare("SELECT ip, created_at, details FROM audit_log WHERE user_id = ? AND action = 'LOGIN_SUCCESS' ORDER BY id DESC LIMIT ?").all(uid, n),
     // [2026-11-27] roluri de staff — migrarea 435
     setStaffRole: (uid, role) => db.prepare('UPDATE users SET staff_role = ?, updated_at = datetime(\'now\') WHERE id = ?').run(role, uid).changes,
     // [2026-11-27] 2FA (TOTP) — vezi migrarea 434 si services/twoFactor.js

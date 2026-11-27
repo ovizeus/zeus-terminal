@@ -566,7 +566,7 @@ router.post('/verify-code', (req, res) => {
                 void accountEmails.sendAccountEmail('new_sign_in', normalEmail, { data: { ip: req.ip, at: Date.now(), device: ns.deviceOf(req.get('user-agent')) } });
             }
         } catch (_) { /* emailul nu opreste intrarea */ }
-        db.auditLog(pending.userId, 'LOGIN_SUCCESS', {}, req.ip);
+        db.auditLog(pending.userId, 'LOGIN_SUCCESS', { device: require('../services/newSignIn').deviceOf(req.get('user-agent')) }, req.ip);
         logger.info('AUTH', 'Login verified', { email: _mask(normalEmail), role: pending.role });
         res.json({ ok: true, email: normalEmail, role: pending.role });
     } catch (err) {
@@ -908,6 +908,38 @@ router.post('/admin/reset-2fa', (req, res) => {
     db.auditLog(guard.caller.id, 'ADMIN_RESET_2FA', { targetId: target.id, targetEmail: _mask(email) }, req.ip);
     void accountEmails.sendAccountEmail('two_factor_disabled', target.email);
     logger.info('AUTH', `Admin reset 2FA uid=${target.id}`);
+    res.json({ ok: true });
+});
+
+// ─── [2026-11-27] extra 2: sesiunile contului — ultimele intrari + „deconecteaza toate celelalte" ───
+// Sesiunile sunt tokenuri (nu se tin pe server), deci „celelalte" = toate tokenurile vechi: versiunea creste,
+// iar sesiunea curenta primeste imediat un token nou. Un token deja revocat nu poate face nimic aici.
+function _sessionUser(req, res) {
+    const token = req.cookies && req.cookies.zeus_token;
+    if (!token) { res.status(401).json({ ok: false, error: 'Not authenticated' }); return null; }
+    try {
+        const d = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+        const u = d.id ? db.findUserById(d.id) : db.findUserByEmail(d.email);
+        if (!u || u.status !== 'active' || (d.tokenVersion ?? 0) !== (u.token_version ?? 0)) { res.status(401).json({ ok: false, error: 'Session expired' }); return null; }
+        return u;
+    } catch (_) { res.status(401).json({ ok: false, error: 'Not authenticated' }); return null; }
+}
+router.get('/security/recent-signins', (req, res) => {
+    const u = _sessionUser(req, res); if (!u) return;
+    const rows = (db.recentSignIns(u.id, 10) || []).map((r) => {
+        let device = null; try { device = JSON.parse(r.details || '{}').device || null; } catch (_) { device = null; }
+        return { ip: r.ip || null, at: r.created_at, device };
+    });
+    res.json({ ok: true, signins: rows });
+});
+router.post('/security/logout-others', (req, res) => {
+    const u = _sessionUser(req, res); if (!u) return;
+    db.bumpTokenVersion(u.id);
+    const fresh = db.findUserById(u.id);
+    const token = jwt.sign({ id: u.id, email: u.email, role: fresh.role || 'user', tokenVersion: fresh.token_version }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+    _setAuthCookie(res, token, u.id);
+    resetActivity(u.id, Date.now());
+    db.auditLog(u.id, 'SESSIONS_REVOKED', {}, req.ip);
     res.json({ ok: true });
 });
 

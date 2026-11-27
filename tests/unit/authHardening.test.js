@@ -48,6 +48,7 @@ function build(st) {
         deleteUser: (email) => { delete st.users[email]; },
         loginAttemptGet: (k, key) => st.attempts[k + '|' + key] || null, loginAttemptUpsert: (k, key, count, reset_at) => { st.attempts[k + '|' + key] = { count, reset_at }; },
         setStaffRole: (id, r) => { byId(id).staff_role = r; },
+        recentSignIns: (uid, n) => (st.signins || []).filter((x) => x.user_id === uid).slice(0, n),
         listAuditLog: (limit, offset) => ({ rows: [], total: 0, limit, offset }),
         getSystemSetting: (k) => (k in st.settings ? st.settings[k] : null), setSystemSetting: (k, v) => { st.settings[k] = v; },
         auditLog: (uid, action, details) => { st.audits.push(action); },
@@ -489,5 +490,36 @@ describe('email la intrare de pe IP nou', () => {
         await loginAndVerify();
         await flush();
         expect(st.mails.find((x) => x[0] === 'new_sign_in')).toBeUndefined();
+    });
+});
+
+// [2026-11-27] extra 2 — ultimele intrari + „deconecteaza-te de peste tot in afara de aici"
+describe('sesiuni: ultimele intrari si deconectarea celorlalte', () => {
+    test('ultimele intrari ale contului PROPRIU, cu dispozitivul', async () => {
+        st.signins = [{ user_id: 1, ip: '9.9.9.9', created_at: '2026-11-27 20:00:00', details: '{"device":"Chrome on Android"}' }, { user_id: 2, ip: '8.8.8.8', created_at: 'x', details: '{}' }];
+        const r = await request(app).get('/auth/security/recent-signins').set('Cookie', cookieOf(st.users['admin@example.com']));
+        expect(r.status).toBe(200);
+        expect(r.body.signins).toEqual([{ ip: '9.9.9.9', at: '2026-11-27 20:00:00', device: 'Chrome on Android' }]);
+    });
+    test('fara sesiune → 401', async () => {
+        expect((await request(app).get('/auth/security/recent-signins')).status).toBe(401);
+    });
+    test('logout-others: versiunea tokenului creste, sesiunea curenta primeste token NOU, audit', async () => {
+        const u = st.users['user@example.com'];
+        const old = cookieOf(u);
+        const r = await request(app).post('/auth/security/logout-others').set('Cookie', old).set('X-Zeus-Request', '1').send({});
+        expect(r.status).toBe(200);
+        expect(u.token_version).toBe(1);
+        const set = String(r.headers['set-cookie']);
+        expect(set).toContain('zeus_token=');
+        const tok = set.match(/zeus_token=([^;]+)/)[1];
+        expect(jwt.verify(tok, process.env.JWT_SECRET).tokenVersion).toBe(1);
+        expect(st.audits).toContain('SESSIONS_REVOKED');
+    });
+    test('un token deja revocat nu poate folosi logout-others', async () => {
+        const u = st.users['user@example.com'];
+        const old = cookieOf(u);
+        u.token_version = 5;
+        expect((await request(app).post('/auth/security/logout-others').set('Cookie', old).set('X-Zeus-Request', '1').send({})).status).toBe(401);
     });
 });
