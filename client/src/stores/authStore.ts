@@ -12,6 +12,8 @@ interface AuthStore {
   /** [2026-11-27] rol de staff (admin/support/analyst) si permisiunile de admin — de la /auth/me; serverul decide */
   staffRole: string | null
   permissions: string[]
+  /** [2026-11-27] subdomeniul de admin, daca e pornit pe server (ADMIN_HOST) */
+  adminHost: string | null
   /** [BETA-GATE] 'viewer' pana cand serverul spune explicit 'full'. */
   accessLevel: AccessLevel
   /** Nivelul a fost confirmat de server. Pana atunci nu se pune niciun lacat:
@@ -37,6 +39,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   role: null,
   staffRole: null,
   permissions: [],
+  adminHost: null,
   accessLevel: 'viewer',
   accessKnown: false,
   loading: true,
@@ -62,6 +65,7 @@ export const useAuthStore = create<AuthStore>()((set) => ({
           role: String(data.role ?? 'user'),
           staffRole: typeof data.staffRole === 'string' ? data.staffRole : null,
           permissions: Array.isArray(data.permissions) ? (data.permissions as unknown[]).map(String) : [],
+          adminHost: typeof (data as { adminHost?: unknown }).adminHost === 'string' ? String((data as { adminHost?: unknown }).adminHost) : null,
           loading: false,
         })
       } else {

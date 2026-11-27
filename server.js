@@ -217,6 +217,11 @@ app.get('/health', (_req, res) => {
 });
 
 // ─── Auth Routes (public — before session check) ───
+// [2026-11-27] Admin pe subdomeniu separat (inactiv pana la ADMIN_HOST in .env) — vezi middleware/adminHostGate.js
+{
+    const { createAdminHostGate, adminHostOf } = require('./server/middleware/adminHostGate');
+    app.use(createAdminHostGate(() => adminHostOf(process.env)));
+}
 app.use('/auth', authRoutes);
 
 // [SRV-POS] Shadow report — pre-auth (diagnostic endpoint, localhost-safe)

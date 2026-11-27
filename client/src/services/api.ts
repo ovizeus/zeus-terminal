@@ -95,6 +95,7 @@ export interface MeResponse {
   staffRole?: string | null
   permissions?: string[]
   accessLevel?: string
+  adminHost?: string | null
 }
 
 export interface AdminUser {

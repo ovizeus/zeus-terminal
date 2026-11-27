@@ -1,3 +1,4 @@
+import { adminTarget } from '../../core/adminHostNav'
 import { useState, useEffect, useRef } from 'react'
 import { useUiStore, useAuthStore } from '../../stores'
 import { ChartControls } from '../chart/ChartControls'
@@ -184,6 +185,9 @@ export function PanelShell() {
     // must NOT set dockActive, or the dock would try to render a panel that does
     // not exist and blank the view behind the modal.
     if (id === 'admin') {
+      // [2026-11-27] adminul pe subdomeniu separat (cand e pornit pe server): mergi acolo
+      const go = adminTarget(useAuthStore.getState().adminHost, window.location.hostname)
+      if (go) { window.location.href = go; return }
       openModal('adminPage')
       return
     }

@@ -611,6 +611,7 @@ router.get('/me', (req, res) => {
         const _fresh = userId != null ? db.findUserById(userId) : null;
         res.json({ ok: true, id: userId, email: decoded.email, role: (_fresh && _fresh.role) || 'user',
             staffRole: adminRoles.staffRoleOf(_fresh), permissions: adminRoles.permissionsOf(_fresh),
+            adminHost: require('../middleware/adminHostGate').adminHostOf(process.env),
             accessLevel: accessLevel.levelOf(userId) });
     } catch (err) {
         res.clearCookie('zeus_token', { path: '/' });
