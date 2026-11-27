@@ -15400,3 +15400,18 @@ Atacul din 13–27 nov ar fi sunat din prima ora.
 **Telegram fara zgomot (cerut de operator):** „🧠 Brain blocked … second-guessed" (masurat: 2.724 de blocari intr-o zi pe contul lui) si „🌐 Regime Change" (pana la 96/zi) NU mai pleaca pe Telegram. Raman in audit (`REFLECTION_BLOCKED`), Doctor, jurnal, gandurile OMEGA, `saveRegimeChange`. Pe Telegram raman: intrari/iesiri, esecuri de ordin, kill switch, SL lipsa, drift, stiri alese, alertele de securitate (Sentinel). Test: `tests/unit/telegramNoise.test.js`.
 
 **APK 1.7.18 (44) — fara capturi de ecran:** `MainActivity` porneste cu `FLAG_SECURE` (nici captura, nici inregistrare, ecran negru in aplicatiile recente); pluginul nou `ZeusSecure.setSecure({on})`; interfata (`client/src/core/secureScreen.ts`, legat de authStore) il scoate DOAR pentru Super Admin — operatorul isi trimite capturi. Pe pagina web nu se poate bloca (nicio pagina nu poate). ORDINEA la publicare: intai serverul (b431), apoi APK-ul.
+
+## 🏛️ 2026-11-27 — b432: ADMIN SEPARAT pe `admin.zeus-terminal.com` — pregatit, PORNESTE operatorul
+
+Partea de server e gata si INACTIVA pana la `ADMIN_HOST` in `.env`:
+- `server/middleware/adminHostGate.js` (montat inaintea rutelor `/auth`): cu `ADMIN_HOST=admin.zeus-terminal.com`, `/auth/admin/*` si `/api/admin/*` raspund **404** pe orice alt domeniu → Cloudflare Access nu se poate ocoli prin domeniul principal. Hostul vine din antetul `Host` (nginx), NU din `X-Forwarded-Host` (falsificabil; testat).
+- `/auth/me` da `adminHost`; iconita de admin din aplicatie te trimite pe subdomeniu (`client/src/core/adminHostNav.ts`, doar un nume de host curat).
+- nginx: `server_name` include deja `admin.zeus-terminal.com` (certificatul Cloudflare Origin e `*.zeus-terminal.com`); copie in `scripts/nginx/zeus-terminal.site.conf`, backup `data/nginx-zeus-terminal.bak-20261127-admin`.
+- Sesiunea de pe subdomeniu e SEPARATA de cea din aplicatie (cookie pe host) — te loghezi o data acolo, cu 2FA.
+
+**Pasii operatorului (cu Claude de fata, ~15 min):**
+1. Cloudflare → DNS: `admin` CNAME → `zeus-terminal.com`, **Proxied** (norisor portocaliu).
+2. Cloudflare → Zero Trust → Access → Applications → Self-hosted: domeniul `admin.zeus-terminal.com`; Policy „Allow" → Include → Emails → DOAR emailul tau; metoda: cod unic pe email (One-time PIN). Gratuit pana la 50 de utilizatori.
+3. Verifici: `https://admin.zeus-terminal.com` cere intai codul Cloudflare, apoi login-ul Zeus.
+4. ABIA APOI: `ADMIN_HOST=admin.zeus-terminal.com` in `/opt/zeus-terminal/.env` + `sudo -u zeus pm2 reload zeus --update-env`. De acum adminul merge DOAR pe subdomeniu.
+**Revenire:** scoti linia `ADMIN_HOST` din `.env` + reload.
