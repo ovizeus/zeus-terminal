@@ -163,6 +163,16 @@ router.post('/save', async (req, res) => {
     const cleanKey = apiKey.trim();
     const cleanSecret = apiSecret.trim();
 
+    // [2026-11-27] Securitate: 24 h dupa schimbarea parolei/emailului/2FA nu se pot pune chei noi; cu 2FA
+    // pornit se cere codul din aplicatie. Inainte de orice apel la bursa sau scriere in baza.
+    {
+        const g = require('../services/exchangeKeyGuard').check(req.user.id, req.body);
+        if (!g.ok) {
+            db.auditLog(req.user.id, 'EXCHANGE_SAVE_BLOCKED', { code: g.code, exchange: exName, mode: safeMode }, req.ip);
+            return res.status(g.status).json({ ok: false, code: g.code, error: g.error, until: g.until || null });
+        }
+    }
+
     // ─── Phase 1A: single-exchange + single-env per user enforcement ───
     // Reject conflicting save BEFORE external API verify or DB write.
     // Re-verify/update on exact same (exchange, mode) falls through.
@@ -214,6 +224,11 @@ router.post('/save', async (req, res) => {
     const accountId = db.saveExchangeByName(req.user.id, exName, encKey, encSecret, safeMode, _makeActive);
 
     db.auditLog(req.user.id, 'EXCHANGE_CONNECTED', { exchange: exName, mode: safeMode, accountId, balance: balanceInfo.balance }, req.ip);
+    // [2026-11-27] anunt pe email la orice cheie de exchange pusa/schimbata (daca nu ai fost tu, afli imediat)
+    try {
+        const _u = db.findUserById ? db.findUserById(req.user.id) : null;
+        if (_u && _u.email) void require('../services/accountEmails').sendAccountEmail('exchange_keys_changed', _u.email, { data: { exchange: exName, mode: safeMode } });
+    } catch (_) { /* emailul nu opreste conectarea */ }
     logger.info('EXCHANGE', `User connected ${exName}`, { userId: req.user.id, mode: safeMode });
 
     // Invalidate exchange cache so serverBrain reads fresh exchange on next cycle

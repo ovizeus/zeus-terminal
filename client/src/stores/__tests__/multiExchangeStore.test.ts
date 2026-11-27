@@ -168,3 +168,34 @@ describe('useMultiExchangeStore', () => {
     expect(state.loading).toBe(false)
   })
 })
+
+// [2026-11-27] Cheile de exchange cu 2FA pornit: serverul cere codul, aplicatia il intreaba si reincearca O data
+describe('saveAccount cu 2FA', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+  it('TOTP_REQUIRED → cere codul in dialogul aplicatiei si retrimite cu totpCode', async () => {
+    const { useConfirmDialog } = await import('../../components/common/confirmDialog')
+    const bodies: any[] = []
+    vi.spyOn(global, 'fetch').mockImplementation(async (_u: any, init: any) => {
+      const b = JSON.parse(init.body); bodies.push(b)
+      return { ok: true, json: async () => (b.totpCode ? { ok: true, active: true, mode: 'live', maskedKey: 'ab***', balance: 10 } : { ok: false, code: 'TOTP_REQUIRED', error: 'Enter the code' }) } as any
+    })
+    const p = useMultiExchangeStore.getState().saveAccount('binance', 'k'.repeat(12), 's'.repeat(12), 'live')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(useConfirmDialog.getState().req?.text).toBeTruthy()
+    useConfirmDialog.getState().settle(true, undefined, '123 456')
+    const r = await p
+    expect(r.ok).toBe(true)
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1].totpCode).toBe('123456')
+  })
+  it('daca renunti la cod → nu se retrimite, raspunsul ramane refuzul serverului', async () => {
+    const { useConfirmDialog } = await import('../../components/common/confirmDialog')
+    const calls = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ ok: false, code: 'TOTP_REQUIRED', error: 'Enter the code' }) } as any)
+    const p = useMultiExchangeStore.getState().saveAccount('binance', 'k'.repeat(12), 's'.repeat(12), 'live')
+    await new Promise((r) => setTimeout(r, 0))
+    useConfirmDialog.getState().settle(false)
+    const r = await p
+    expect(r.code).toBe('TOTP_REQUIRED')
+    expect(calls).toHaveBeenCalledTimes(1)
+  })
+})

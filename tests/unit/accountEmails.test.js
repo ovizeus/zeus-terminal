@@ -225,3 +225,18 @@ describe('sendAccountEmail — nu blocheaza si nu arunca', () => {
         expect(t.sent.length).toBe(5);
     });
 });
+
+// [2026-11-27] anunturile noi de securitate: chei de exchange schimbate, 2FA pornit/oprit
+test('exchange_keys_changed: bursa, modul si ce faci daca n-ai fost tu', () => {
+    const ae = require('../../server/services/accountEmails');
+    const m = ae.exchangeKeysChangedEmail('ana@x.ro', { exchange: 'binance', mode: 'live' });
+    expect(m.subject).toMatch(/exchange API keys changed/);
+    expect(m.text).toMatch(/Binance API keys \(live\)/);
+    expect(m.text).toMatch(/If this was not you/);
+    expect(m.html).toContain('Binance');
+});
+test('two_factor_enabled / disabled au subiecte diferite si spun ce s-a schimbat', () => {
+    const ae = require('../../server/services/accountEmails');
+    expect(ae.twoFactorEnabledEmail().subject).toMatch(/turned on/);
+    expect(ae.twoFactorDisabledEmail().subject).toMatch(/turned off/);
+});

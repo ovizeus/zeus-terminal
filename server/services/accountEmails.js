@@ -203,6 +203,17 @@ function twoFactorEnabledEmail() {
     ];
     return { subject: 'Zeus Terminal — two-factor authentication turned on', text: _text(lines), html: _html('Two-factor authentication is on', lines) };
 }
+// [2026-11-27] chei de exchange puse/schimbate — anunt, ca o schimbare facuta de altcineva sa se vada imediat
+function exchangeKeysChangedEmail(email, data) {
+    const d = data || {};
+    const ex = String(d.exchange || 'exchange').replace(/^./, (c) => c.toUpperCase());
+    const lines = [
+        `New ${ex} API keys (${d.mode === 'testnet' ? 'testnet' : 'live'}) were saved on your Zeus Terminal account.`,
+        `If this was not you, change your password right away and contact us: ${supportUrl()}. Also delete those keys on ${ex}.`,
+    ];
+    return { subject: 'Zeus Terminal — exchange API keys changed', text: _text(lines), html: _html('Exchange API keys changed', lines) };
+}
+
 function twoFactorDisabledEmail() {
     const lines = [
         'Two-factor authentication was turned off for your Zeus Terminal account. Signing in now asks for a code sent to this email again.',
@@ -274,6 +285,7 @@ const BUILDERS = {
     support_reply: supportReplyEmail,
     two_factor_enabled: twoFactorEnabledEmail,
     two_factor_disabled: twoFactorDisabledEmail,
+    exchange_keys_changed: exchangeKeysChangedEmail,
 };
 
 const _mask = (e) => String(e).replace(/^(.).*(@.*)$/, '$1***$2');
@@ -341,6 +353,7 @@ module.exports = {
     registrationEmail, approvalEmail, codeEmail, passwordChangedEmail, passwordResetEmail,
     adminPasswordResetEmail, accountClosedEmail, emailChangedEmail, accessFullEmail,
     suspendedEmail, restoredEmail, supportReplyEmail,
+    twoFactorEnabledEmail, twoFactorDisabledEmail, exchangeKeysChangedEmail,
     sendAccountEmail, appUrl, fromHeader, fmtUtc,
     CODE_PURPOSES, SUPPORT_THROTTLE_MS, _resetThrottleForTest: () => _lastSupportMail.clear(),
 };

@@ -11,6 +11,7 @@
  *   - Mutual-exclusion (Binance XOR Bybit) is server-enforced; we display it
  *   - Coming Soon exchanges are NOT in this store (separate UI marker)
  */
+import { appConfirm } from '../components/common/confirmDialog'
 import { create } from 'zustand'
 
 const _CACHE_TTL_MS = 60_000
@@ -26,6 +27,9 @@ export interface ExchangeAccount {
 
 interface SaveResult {
   ok: boolean
+  /** [2026-11-27] SECURITY_HOLD / TOTP_REQUIRED / TOTP_INVALID / ENV_CONFLICT … */
+  code?: string
+  until?: number | null
   message?: string
   error?: string
   active?: boolean
@@ -117,7 +121,17 @@ export const useMultiExchangeStore = create<MultiExchangeState>((set, get) => ({
   },
 
   saveAccount: async (exchange, apiKey, apiSecret, mode) => {
-    const r = await _postJson('/api/exchange/save', { exchange, apiKey, apiSecret, mode })
+    let r = await _postJson('/api/exchange/save', { exchange, apiKey, apiSecret, mode })
+    // [2026-11-27] cont cu 2FA: serverul cere codul din aplicatie → il intrebam O data si retrimitem
+    if (r && !r.ok && r.code === 'TOTP_REQUIRED') {
+      const ans = await appConfirm({
+        title: 'Two-factor code', tone: 'info', confirmLabel: 'Save keys', cancelLabel: 'Cancel',
+        body: 'Exchange keys are protected by two-factor authentication.',
+        text: { label: 'Code from your authenticator app', placeholder: '000000', maxLength: 11 },
+      })
+      const code = String(ans.text || '').replace(/\s/g, '')
+      if (ans.confirmed && code) r = await _postJson('/api/exchange/save', { exchange, apiKey, apiSecret, mode, totpCode: code })
+    }
     if (r.ok) {
       set((s) => ({
         accounts: {
