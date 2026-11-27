@@ -29,10 +29,9 @@
   <link rel="stylesheet" href="css/components.css?v=114">
   <link rel="stylesheet" href="css/themes.css?v=1">
   <!-- SW unregister removed — sw.js is now correctly configured -->
-  <script>function loadLWC2() { var s = document.createElement('script'); s.src = 'https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js'; s.integrity = 'sha384-JZigAjwiaZtkUbA44CWkPaT3iBb/mU5pO6QOANp+OqHd4q+1+7MG1kzp2OOP9ZfP'; s.crossOrigin = 'anonymous'; s.onerror = function () { var s2 = document.createElement('script'); s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.3/lightweight-charts.standalone.production.min.js'; s2.integrity = 'sha384-ZSs6LKr2GoUPDyHrN+rCQgyHL1yUyok5xMniSrgeRG7rUvA6vTmxronM1eZOfjgz'; s2.crossOrigin = 'anonymous'; document.head.appendChild(s2); }; document.head.appendChild(s); }</script>
-  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"
-    integrity="sha384-JZigAjwiaZtkUbA44CWkPaT3iBb/mU5pO6QOANp+OqHd4q+1+7MG1kzp2OOP9ZfP" crossorigin="anonymous"
-    onerror="loadLWC2()"></script>
+  <!-- [2026-11-27] graficele servite LOCAL (era unpkg/jsdelivr — scoase din CSP); acelasi fisier, aceeasi amprenta SRI -->
+  <script src="/vendor/lightweight-charts-4.1.3.standalone.production.js"
+    integrity="sha384-JZigAjwiaZtkUbA44CWkPaT3iBb/mU5pO6QOANp+OqHd4q+1+7MG1kzp2OOP9ZfP" crossorigin="anonymous"></script>
   <script src="js/core/pwa.js?v=111"></script>
   <script src="js/core/managers.js?v=111"></script>
 </head>

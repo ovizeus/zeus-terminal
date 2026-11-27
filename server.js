@@ -103,7 +103,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       // [2026-11-27] challenges.cloudflare.com = Cloudflare Turnstile (captcha la inscriere/login/resetare)
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com", "https://browser.sentry-cdn.com", "https://challenges.cloudflare.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://browser.sentry-cdn.com", "https://challenges.cloudflare.com"],
       frameSrc: ["'self'", "https://challenges.cloudflare.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],

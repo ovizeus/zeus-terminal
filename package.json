@@ -24,7 +24,7 @@
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^8.0.2",
+    "nodemailer": "^10.6.1",
     "ws": "^8.19.0"
   },
   "devDependencies": {
