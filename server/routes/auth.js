@@ -124,7 +124,9 @@ async function _sendCode(email, code, purpose) {
         return true;
     }
     try {
-        const m = accountEmails.codeEmail(purpose || 'login', code, CODE_TTL / 60000);
+        let m = accountEmails.codeEmail(purpose || 'login', code, CODE_TTL / 60000);
+        // [2026-11-27] cod anti-phishing si in emailurile cu cod
+        try { m = accountEmails.withAntiPhishing(m, db.getAntiPhishingByEmail(email)); } catch (_) { /* fara cuvant */ }
         await mailer.sendMail({ from: accountEmails.fromHeader(), to: email, subject: m.subject, text: m.text, html: m.html });
         logger.info('AUTH', '2FA code sent', { to: _mask(email) });
         return true;
@@ -948,6 +950,20 @@ router.post('/security/logout-others', (req, res) => {
     resetActivity(u.id, Date.now());
     db.auditLog(u.id, 'SESSIONS_REVOKED', {}, req.ip);
     res.json({ ok: true });
+});
+
+// ─── [2026-11-27] extra 4: cod anti-phishing (apare in fiecare email Zeus catre cont) ───
+router.get('/security/anti-phishing', (req, res) => {
+    const u = _sessionUser(req, res); if (!u) return;
+    res.json({ ok: true, code: u.anti_phishing || null });
+});
+router.post('/security/anti-phishing', (req, res) => {
+    const u = _sessionUser(req, res); if (!u) return;
+    const w = accountEmails.cleanAntiPhishing(req.body && req.body.code);
+    if (w === undefined) return res.status(400).json({ ok: false, error: 'Use 3 to 20 letters, digits, spaces or dashes.' });
+    db.setAntiPhishing(u.id, w);
+    db.auditLog(u.id, w ? 'ANTI_PHISHING_SET' : 'ANTI_PHISHING_CLEARED', {}, req.ip);
+    res.json({ ok: true, code: w });
 });
 
 // ─── [2026-11-27] ADMIN: rol de staff (admin / support / analyst / null) — DOAR Super Admin ───

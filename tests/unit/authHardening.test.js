@@ -48,6 +48,8 @@ function build(st) {
         deleteUser: (email) => { delete st.users[email]; },
         loginAttemptGet: (k, key) => st.attempts[k + '|' + key] || null, loginAttemptUpsert: (k, key, count, reset_at) => { st.attempts[k + '|' + key] = { count, reset_at }; },
         setStaffRole: (id, r) => { byId(id).staff_role = r; },
+        setAntiPhishing: (id, w) => { byId(id).anti_phishing = w; },
+        getAntiPhishingByEmail: (e) => (st.users[e] ? st.users[e].anti_phishing || null : null),
         recentSignIns: (uid, n) => (st.signins || []).filter((x) => x.user_id === uid).slice(0, n),
         listAuditLog: (limit, offset) => ({ rows: [], total: 0, limit, offset }),
         getSystemSetting: (k) => (k in st.settings ? st.settings[k] : null), setSystemSetting: (k, v) => { st.settings[k] = v; },
@@ -542,5 +544,29 @@ describe('parole furate (Have I Been Pwned)', () => {
         const r = await request(app).post('/auth/forgot-password/confirm').send({ email: 'user@example.com', code, newPassword: BAD });
         expect(r.status).toBe(400);
         expect(r.body.error).toMatch(/data breach/i);
+    });
+});
+
+// [2026-11-27] extra 4 — cod anti-phishing
+describe('cod anti-phishing', () => {
+    const post = (u, body) => request(app).post('/auth/security/anti-phishing').set('Cookie', cookieOf(u)).set('X-Zeus-Request', '1').send(body);
+    test('se seteaza, se citeste, apare in emailul cu codul de login', async () => {
+        const u = st.users['admin@example.com'];
+        expect((await post(u, { code: 'Blue Fox' })).status).toBe(200);
+        expect((await request(app).get('/auth/security/anti-phishing').set('Cookie', cookieOf(u))).body.code).toBe('Blue Fox');
+        await request(app).post('/auth/login').send({ email: 'admin@example.com', password: PW });
+        const m = st.codes[st.codes.length - 1];
+        expect(m.text).toContain('Your anti-phishing code: Blue Fox');
+    });
+    test('cuvant invalid (HTML) → 400, nimic salvat', async () => {
+        const u = st.users['user@example.com'];
+        expect((await post(u, { code: '<script>' })).status).toBe(400);
+        expect(u.anti_phishing).toBeUndefined();
+    });
+    test('gol → sters', async () => {
+        const u = st.users['user@example.com'];
+        await post(u, { code: 'tiger' });
+        expect((await post(u, { code: '' })).status).toBe(200);
+        expect(u.anti_phishing).toBeNull();
     });
 });

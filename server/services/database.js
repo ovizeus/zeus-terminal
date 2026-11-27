@@ -10583,6 +10583,12 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('436_users_anti_phishing', () => {
+    // [2026-11-27] Cod anti-phishing ales de utilizator — apare in fiecare email Zeus catre el.
+    const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    if (!cols.includes('anti_phishing')) db.exec('ALTER TABLE users ADD COLUMN anti_phishing TEXT DEFAULT NULL');
+});
+
 migrate('435_users_staff_role', () => {
     // [2026-11-27] Roluri reale de staff (services/adminRoles.js): 'admin' | 'support' | 'analyst' | NULL.
     // `role = 'admin'` ramane Super Admin; staff_role da doar permisiunile din matrice.
@@ -12736,6 +12742,9 @@ module.exports = {
     getSupportInbox,
     getAdminUserIds,
     // [2026-11-27] setari de sistem (comutatorul de inscrieri)
+    // [2026-11-27] cod anti-phishing (migrarea 436)
+    setAntiPhishing: (uid, word) => db.prepare("UPDATE users SET anti_phishing = ?, updated_at = datetime('now') WHERE id = ?").run(word, uid).changes,
+    getAntiPhishingByEmail: (email) => { const r = db.prepare('SELECT anti_phishing FROM users WHERE email = ?').get(String(email || '').toLowerCase().trim()); return r ? r.anti_phishing : null; },
     // [2026-11-27] ultimele intrari ale unui cont (Settings › Security)
     recentSignIns: (uid, n) => db.prepare("SELECT ip, created_at, details FROM audit_log WHERE user_id = ? AND action = 'LOGIN_SUCCESS' ORDER BY id DESC LIMIT ?").all(uid, n),
     // [2026-11-27] roluri de staff — migrarea 435

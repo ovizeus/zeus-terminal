@@ -327,6 +327,24 @@ function _throttled(kind, to, now) {
  *   opts.transport — pentru teste
  *   opts.now       — pentru teste
  */
+// [2026-11-27] Cod anti-phishing (extra 4): cuvantul ales de utilizator, primul lucru din fiecare email.
+// undefined = invalid (refuzat), null = sters. Doar litere, cifre, spatiu, liniuta — nimic ce ar intra ca HTML.
+function cleanAntiPhishing(v) {
+    const s = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+    if (!s) return null;
+    return /^[A-Za-z0-9 -]{3,20}$/.test(s) ? s : undefined;
+}
+function withAntiPhishing(m, word) {
+    const w = cleanAntiPhishing(word);
+    if (!w) return m;
+    const banner = `<div style="margin:0 0 16px;padding:10px 12px;border:1px solid #2a3b4b;border-radius:6px;background:#111a28;color:#c4cfda;font-size:13px">Your anti-phishing code: <b>${esc(w)}</b></div>`;
+    const html = /<body[^>]*>/i.test(m.html) ? m.html.replace(/(<body[^>]*>)/i, `$1${banner}`) : banner + m.html;
+    return { ...m, text: `Your anti-phishing code: ${w}\n\n${m.text}`, html };
+}
+function _antiPhishingFor(to) {
+    try { return require('./database').getAntiPhishingByEmail(to); } catch (_) { return null; }
+}
+
 async function sendAccountEmail(kind, email, opts) {
     try {
         const to = String(email || '').trim().toLowerCase();
@@ -352,7 +370,7 @@ async function sendAccountEmail(kind, email, opts) {
             logger.warn('MAIL', `account email "${kind}" not sent — SMTP is not configured`, { to: _mask(to) });
             return false;
         }
-        const m = build(to, o.data);
+        const m = withAntiPhishing(build(to, o.data), _antiPhishingFor(to));
         await transport.sendMail({ from: fromHeader(), to, subject: m.subject, text: m.text, html: m.html });
         logger.info('MAIL', `account email "${kind}" sent`, { to: _mask(to) });
         return true;
@@ -367,6 +385,6 @@ module.exports = {
     adminPasswordResetEmail, accountClosedEmail, emailChangedEmail, accessFullEmail,
     suspendedEmail, restoredEmail, supportReplyEmail,
     twoFactorEnabledEmail, twoFactorDisabledEmail, exchangeKeysChangedEmail, newSignInEmail,
-    sendAccountEmail, appUrl, fromHeader, fmtUtc,
+    sendAccountEmail, appUrl, fromHeader, fmtUtc, cleanAntiPhishing, withAntiPhishing,
     CODE_PURPOSES, SUPPORT_THROTTLE_MS, _resetThrottleForTest: () => _lastSupportMail.clear(),
 };
