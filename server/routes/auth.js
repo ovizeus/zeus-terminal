@@ -592,6 +592,24 @@ router.post('/logout', (req, res) => {
 });
 
 // ─── GET /auth/me — check if logged in ───
+// [2026-11-27] Gasit pe drum: rutele de cont de mai jos verificau doar semnatura tokenului, nu si versiunea
+// lui / starea contului → un token REVOCAT (parola schimbata, „Sign out everywhere else", force-logout) sau
+// al unui cont blocat inca mergea pe ele. O singura garda, inaintea lor. Fara token / token invalid → ruta decide.
+router.use(['/me', '/pin', '/change-password', '/change-email', '/close-account'], (req, res, next) => {
+    const token = req.cookies && req.cookies.zeus_token;
+    if (!token) return next();
+    let d;
+    try { d = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }); } catch (_) { return next(); }
+    let u = null;
+    try { u = d.id ? db.findUserById(d.id) : db.findUserByEmail(d.email); } catch (_) { u = null; }
+    if (!u || u.status !== 'active' || (d.tokenVersion ?? 0) !== (u.token_version ?? 0)) {
+        res.clearCookie('zeus_token', { path: '/' });
+        res.clearCookie('zeus_uid', { path: '/' });
+        return res.status(401).json({ error: 'Session expired. Please sign in again.' });
+    }
+    next();
+});
+
 router.get('/me', (req, res) => {
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });

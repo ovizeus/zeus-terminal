@@ -570,3 +570,25 @@ describe('cod anti-phishing', () => {
         expect(u.anti_phishing).toBeNull();
     });
 });
+
+// [2026-11-27] Gasit pe drum: 12 rute de cont acceptau un token REVOCAT (dupa schimbarea parolei, „Sign out
+// everywhere else", force-logout): /me, /pin/*, /change-password/*, /change-email/*, /close-account/*.
+describe('token revocat pe rutele de cont', () => {
+    const paths = [['get', '/auth/me'], ['get', '/auth/pin/status'], ['post', '/auth/pin/set'], ['post', '/auth/change-password/request'],
+        ['post', '/auth/change-email/request'], ['post', '/auth/close-account/request']];
+    test.each(paths)('%s %s cu token revocat → 401', async (m, url) => {
+        const u = st.users['user@example.com'];
+        const old = cookieOf(u);
+        u.token_version = 3;
+        const r = await request(app)[m](url).set('Cookie', old).set('X-Zeus-Request', '1').send({});
+        expect(r.status).toBe(401);
+    });
+    test('cont suspendat/blocat → 401 si pe /me', async () => {
+        const u = st.users['user@example.com'];
+        u.status = 'blocked';
+        expect((await request(app).get('/auth/me').set('Cookie', cookieOf(u))).status).toBe(401);
+    });
+    test('token valid → /me merge ca inainte', async () => {
+        expect((await request(app).get('/auth/me').set('Cookie', cookieOf(st.users['user@example.com']))).status).toBe(200);
+    });
+});
