@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.408',
-    build: 434,
+    version: '1.7.409',
+    build: 435,
     date: '2026-11-27',
     changelog: [
+        'b435 v1.7.409 - O sesiune revocata (dupa schimbarea parolei, Sign out everywhere else sau force logout) sau a unui cont blocat nu mai merge nici pe rutele de cont (/me, PIN, schimbare parola/email, inchidere cont) — pana acum acolo se verifica doar semnatura (server), 2026-11-27.',
         'b434 v1.7.408 - Cod anti-phishing: un cuvant ales de tine apare in fiecare email Zeus (Settings › Security); parolele cunoscute ca furate (Have I Been Pwned, doar 5 caractere din amprenta pleaca) sunt refuzate la inscriere, schimbare si resetare, 2026-11-27.',
         'b433 v1.7.407 - Extrase de securitate: cheile de exchange — 24 h blocate dupa schimbarea parolei/emailului/2FA, cod 2FA cerut cand e pornit, email la orice schimbare; email la intrarea de pe un IP nou; Settings › Security › Sign-ins (ultimele intrari + Sign out everywhere else); npm audit 0 (nodemailer 10, verificat cu o trimitere reala); CSP fara unpkg/jsdelivr (graficele paginii vechi servite local), 2026-11-27.',
         'b432 v1.7.406 - Admin pe subdomeniu separat (admin.zeus-terminal.com) pregatit: rutele de admin raspund doar acolo cand ADMIN_HOST e pus in .env (inactiv pana atunci), iconita de admin duce acolo, nginx accepta subdomeniul; pasii pentru Cloudflare Access in Book, 2026-11-27.',
