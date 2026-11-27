@@ -10583,6 +10583,13 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('435_users_staff_role', () => {
+    // [2026-11-27] Roluri reale de staff (services/adminRoles.js): 'admin' | 'support' | 'analyst' | NULL.
+    // `role = 'admin'` ramane Super Admin; staff_role da doar permisiunile din matrice.
+    const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    if (!cols.includes('staff_role')) db.exec('ALTER TABLE users ADD COLUMN staff_role TEXT DEFAULT NULL');
+});
+
 migrate('434_user_totp', () => {
     // [2026-11-27] Securitate etapa 2 — 2FA cu aplicatie de autentificare. Tabel separat de `users`,
     // ca secretul sa nu ajunga in nicio lista de conturi. Secretele CRIPTATE (encryption.js, ca cheile
@@ -12729,6 +12736,8 @@ module.exports = {
     getSupportInbox,
     getAdminUserIds,
     // [2026-11-27] setari de sistem (comutatorul de inscrieri)
+    // [2026-11-27] roluri de staff — migrarea 435
+    setStaffRole: (uid, role) => db.prepare('UPDATE users SET staff_role = ?, updated_at = datetime(\'now\') WHERE id = ?').run(role, uid).changes,
     // [2026-11-27] 2FA (TOTP) — vezi migrarea 434 si services/twoFactor.js
     totpGet: (uid) => db.prepare('SELECT * FROM user_totp WHERE user_id = ?').get(uid) || null,
     totpSetPending: (uid, enc, now) => db.prepare(`INSERT INTO user_totp (user_id, pending_enc, pending_at, updated_at) VALUES (?, ?, ?, ?)

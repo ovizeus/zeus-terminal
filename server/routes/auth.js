@@ -178,6 +178,7 @@ function _setAuthCookie(res, token, userId) {
 // ─── [2026-11-27] Garzi anti-bot (dupa atacul 13–27 nov) ───
 const authGuard = require('../services/authGuard');
 const twoFactor = require('../services/twoFactor');
+const adminRoles = require('../services/adminRoles');
 // [2026-11-27] limita pe CONT pentru codurile din aplicatie la login
 const TOTP_LOGIN_MAX = 10;
 const TOTP_LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -605,7 +606,11 @@ router.get('/me', (req, res) => {
 
         // [BETA-GATE] Aplicatia isi pune lacatele dupa nivelul asta. Poarta
         // adevarata e pe server (middleware/viewerGate.js), nu aici.
-        res.json({ ok: true, id: userId, email: decoded.email, role: decoded.role || 'user',
+        // [2026-11-27] rolul din BAZA (tokenul tine rolul de la login, zile intregi) + rolul de staff si
+        // permisiunile — clientul doar ascunde ce nu e permis; serverul decide la fiecare actiune
+        const _fresh = userId != null ? db.findUserById(userId) : null;
+        res.json({ ok: true, id: userId, email: decoded.email, role: (_fresh && _fresh.role) || 'user',
+            staffRole: adminRoles.staffRoleOf(_fresh), permissions: adminRoles.permissionsOf(_fresh),
             accessLevel: accessLevel.levelOf(userId) });
     } catch (err) {
         res.clearCookie('zeus_token', { path: '/' });
@@ -619,18 +624,9 @@ router.use('/admin', createAdminIdleGuard(JWT_SECRET));
 
 // ─── ADMIN: GET /auth/admin/users — list all users + exchange info ───
 router.get('/admin/users', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
-
+    const _g = _adminGuard(req, res, 'users.view'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
-            return res.status(403).json({ error: 'Admin only' });
-        }
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
-            return res.status(401).json({ error: 'Session expired' });
-        }
+        const { caller, decoded } = _g; void decoded;
 
         const users = db.listUsers().map(u => ({
             id: u.id,
@@ -682,17 +678,9 @@ router.get('/admin/users', (req, res) => {
 // shows how many registrations await approval without opening the panel.
 // Same guard as /admin/users.
 router.get('/admin/pending-count', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const _g = _adminGuard(req, res, 'users.view'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
-            return res.status(403).json({ error: 'Admin only' });
-        }
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
-            return res.status(401).json({ error: 'Session expired' });
-        }
+        const { caller, decoded } = _g; void decoded;
         const count = db.listUsers().filter(u => !u.approved && (u.role || 'user') !== 'admin').length;
         res.json({ ok: true, count });
     } catch (err) {
@@ -702,18 +690,9 @@ router.get('/admin/pending-count', (req, res) => {
 
 // ─── ADMIN: POST /auth/admin/approve — approve a user ───
 router.post('/admin/approve', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
-
+    const _g = _adminGuard(req, res, 'users.edit'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
-            return res.status(403).json({ error: 'Admin only' });
-        }
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
-            return res.status(401).json({ error: 'Session expired' });
-        }
+        const { caller, decoded } = _g; void decoded;
 
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email required' });
@@ -740,17 +719,9 @@ router.post('/admin/approve', (req, res) => {
 // ─── ADMIN: POST /auth/admin/delete — delete a user ───
 // [BETA-GATE 2026-11-13] Ridica sau coboara un cont intre 'viewer' si 'full'.
 router.post('/admin/access-level', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const _g = _adminGuard(req, res, 'users.edit'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
-            return res.status(403).json({ error: 'Admin only' });
-        }
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
-            return res.status(401).json({ error: 'Session expired' });
-        }
+        const { caller, decoded } = _g; void decoded;
         const { email, level } = req.body || {};
         if (!email) return res.status(400).json({ error: 'Email required' });
         if (level !== 'viewer' && level !== 'full') return res.status(400).json({ error: 'Level must be viewer or full' });
@@ -770,18 +741,9 @@ router.post('/admin/access-level', (req, res) => {
 });
 
 router.post('/admin/delete', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
-
+    const _g = _adminGuard(req, res, 'users.delete'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
-            return res.status(403).json({ error: 'Admin only' });
-        }
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
-            return res.status(401).json({ error: 'Session expired' });
-        }
+        const { caller, decoded } = _g; void decoded;
 
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email required' });
@@ -794,6 +756,9 @@ router.post('/admin/delete', (req, res) => {
 
         const target = db.findUserByEmail(normalEmail);
         if (!target) return res.status(404).json({ error: 'User not found' });
+        // [2026-11-27] un admin nu se sterge — si NU i se deconecteaza cheile de exchange inainte de refuz
+        // (pana azi: deconecta cheile, apoi deleteUser refuza in tacere si raspundea ok:true)
+        if (target.role === 'admin') return res.status(400).json({ error: 'Cannot delete an admin account' });
 
         // Also disconnect their exchange before deleting (cascade should handle it, but be safe)
         db.disconnectExchange(target.id);
@@ -808,13 +773,9 @@ router.post('/admin/delete', (req, res) => {
 
 // ─── ADMIN: POST /auth/admin/reject — reject a pending user (delete) ───
 router.post('/admin/reject', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const _g = _adminGuard(req, res, 'users.delete'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
+        const { caller, decoded } = _g; void decoded;
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email required' });
         const normalEmail = email.toLowerCase().trim();
@@ -830,13 +791,9 @@ router.post('/admin/reject', (req, res) => {
 
 // ─── ADMIN: POST /auth/admin/block — block/unblock a user ───
 router.post('/admin/block', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const _g = _adminGuard(req, res, 'users.block'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
+        const { caller, decoded } = _g; void decoded;
         const { email, block } = req.body; // block: true/false
         if (!email) return res.status(400).json({ error: 'Email required' });
         const normalEmail = email.toLowerCase().trim();
@@ -860,13 +817,9 @@ router.post('/admin/block', (req, res) => {
 
 // ─── ADMIN: POST /auth/admin/ban — ban a user for a duration ───
 router.post('/admin/ban', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const _g = _adminGuard(req, res, 'users.ban'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
+        const { caller, decoded } = _g; void decoded;
         const { email, duration } = req.body; // duration: '1h','24h','7d','30d','permanent'
         if (!email || !duration) return res.status(400).json({ error: 'Email and duration required' });
         const normalEmail = email.toLowerCase().trim();
@@ -893,13 +846,9 @@ router.post('/admin/ban', (req, res) => {
 
 // ─── ADMIN: GET /auth/admin/audit — paginated audit log ───
 router.get('/admin/audit', (req, res) => {
-    const token = req.cookies && req.cookies.zeus_token;
-    if (!token) return res.status(401).json({ error: 'Not authenticated' });
+    const _g = _adminGuard(req, res, 'audit.view'); if (!_g) return;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-        const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
+        const { caller, decoded } = _g; void decoded;
 
         // [M10] True pagination — limit + offset, with total count
         const limit = parseInt(req.query.limit, 10) || 50;
@@ -910,14 +859,27 @@ router.get('/admin/audit', (req, res) => {
 });
 
 // ─── Admin auth helper (reusable) ───
-function _adminGuard(req, res) {
+// [2026-11-27] Securitate etapa 2 — UNA singura garda pentru toate rutele /auth/admin/*.
+// `perm` = permisiunea ceruta (services/adminRoles.js). Super Admin (role 'admin') trece mereu;
+// staff (staff_role) trece doar daca are permisiunea SI 2FA pornit; perm null = doar Super Admin.
+function _adminGuard(req, res, perm = null) {
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) { res.status(401).json({ error: 'Not authenticated' }); return null; }
     try {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
-        if (!caller || caller.role !== 'admin' || caller.status !== 'active') { res.status(403).json({ error: 'Admin only' }); return null; }
+        if (!caller || caller.status !== 'active' || !adminRoles.can(caller, perm)) { res.status(403).json({ error: 'Admin only' }); return null; }
         if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) { res.status(401).json({ error: 'Session expired' }); return null; }
+        if (!adminRoles.isSuper(caller) && !twoFactor.isEnabled(caller.id)) {
+            res.status(403).json({ error: 'Turn on two-factor authentication (Settings › Security) to use the admin panel.' }); return null;
+        }
+        // staff nu actioneaza asupra Super Adminului sau a altui membru staff (toate rutele iau tinta din body.email)
+        if (!adminRoles.isSuper(caller) && req.body && typeof req.body.email === 'string') {
+            const t = db.findUserByEmail(req.body.email.toLowerCase().trim());
+            if (t && t.id !== caller.id && adminRoles.isStaff(t)) {
+                res.status(403).json({ error: 'Staff cannot act on admin or staff accounts.' }); return null;
+            }
+        }
         return { caller, decoded };
     } catch (_) { res.status(401).json({ error: 'Token invalid' }); return null; }
 }
@@ -940,9 +902,26 @@ router.post('/admin/reset-2fa', (req, res) => {
     res.json({ ok: true });
 });
 
+// ─── [2026-11-27] ADMIN: rol de staff (admin / support / analyst / null) — DOAR Super Admin ───
+// Niciodata pe propriul cont si niciodata pe un Super Admin; rolul se citeste din baza la fiecare cerere.
+router.post('/admin/staff-role', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const b = req.body || {};
+    const role = b.staffRole === null ? null : String(b.staffRole || '');
+    if (role !== null && !adminRoles.STAFF_ROLES.includes(role)) return res.status(400).json({ ok: false, error: 'Unknown role' });
+    const email = String(b.email || '').toLowerCase().trim();
+    const target = email ? db.findUserByEmail(email) : null;
+    if (!target) return res.status(404).json({ ok: false, error: 'User not found' });
+    if (target.id === guard.caller.id || target.role === 'admin') return res.status(400).json({ ok: false, error: 'Super Admin accounts have every permission already.' });
+    db.setStaffRole(target.id, role);
+    db.auditLog(guard.caller.id, 'ADMIN_STAFF_ROLE', { targetId: target.id, staffRole: role }, req.ip);
+    logger.info('AUTH', `Staff role uid=${target.id} → ${role || 'none'}`);
+    res.json({ ok: true, staffRole: role });
+});
+
 // ─── [2026-11-27] ADMIN: raportul de securitate (ultimele 24 h din audit_log + alertele Sentinel de azi) ───
 router.get('/admin/security-report', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'monitoring.view'); if (!guard) return;
     try {
         const sentinel = require('../services/securitySentinel');
         res.json({ ok: true, report: sentinel.dailyReport(db.db), sentinel: sentinel.summary() });
@@ -982,7 +961,7 @@ router.post('/admin/delete-blocked', (req, res) => {
 
 // ─── ADMIN: GET /auth/admin/health — server health snapshot ───
 router.get('/admin/health', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'monitoring.view'); if (!guard) return;
     let dbStatus = 'ok';
     try { db.db.prepare('SELECT 1').get(); } catch (_) { dbStatus = 'down'; }
     // [PANEL-LABELS 2026-06-12] Read the REAL WS server (global.__zeusWss, set at
@@ -1012,7 +991,7 @@ router.get('/admin/health', (req, res) => {
 
 // ─── ADMIN: GET /auth/admin/users/:id — user detail ───
 router.get('/admin/users/:id', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'users.view'); if (!guard) return;
     const id = parseInt(req.params.id, 10);
     if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
     const u = db.findUserById(id);
@@ -1043,7 +1022,7 @@ router.get('/admin/users/:id', (req, res) => {
 
 // ─── ADMIN: GET /auth/admin/users/:id/audit — audit filtered by user ───
 router.get('/admin/users/:id/audit', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'audit.view'); if (!guard) return;
     const id = parseInt(req.params.id, 10);
     if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
@@ -1062,7 +1041,7 @@ router.get('/admin/users/:id/audit', (req, res) => {
 
 // ─── ADMIN: POST /auth/admin/force-logout — invalidate all sessions for a user ───
 router.post('/admin/force-logout', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'users.force_logout'); if (!guard) return;
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
     const normalEmail = email.toLowerCase().trim();
@@ -1076,7 +1055,7 @@ router.post('/admin/force-logout', (req, res) => {
 
 // ─── ADMIN: POST /auth/admin/suspend — suspend with reason ───
 router.post('/admin/suspend', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'users.block'); if (!guard) return;
     const { email, reason } = req.body;
     if (!email) return res.status(400).json({ error: 'Email required' });
     const normalEmail = email.toLowerCase().trim();
@@ -1093,7 +1072,7 @@ router.post('/admin/suspend', (req, res) => {
 
 // ─── ADMIN: GET /auth/admin/sessions — list active in-memory sessions ───
 router.get('/admin/sessions', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'security.sessions'); if (!guard) return;
     const sessions = getActiveSessions();
     const userMap = {};
     try { db.listUsers().forEach(u => { userMap[u.id] = u; }); } catch (_) {}
@@ -1113,7 +1092,7 @@ router.get('/admin/sessions', (req, res) => {
 
 // ─── ADMIN: GET /auth/admin/audit/export — export audit log as CSV ───
 router.get('/admin/audit/export', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'audit.export'); if (!guard) return;
     const limit = Math.min(parseInt(req.query.limit, 10) || 1000, 5000);
     const rows = db.listAuditLog(limit, 0).rows; // [M10] new shape
     const headers = ['id', 'created_at', 'user_id', 'action', 'ip', 'details'];
@@ -1131,7 +1110,7 @@ router.get('/admin/audit/export', (req, res) => {
 
 // ─── ADMIN: POST /auth/admin/note — add internal note (stored in audit_log) ───
 router.post('/admin/note', (req, res) => {
-    const guard = _adminGuard(req, res); if (!guard) return;
+    const guard = _adminGuard(req, res, 'users.edit'); if (!guard) return;
     const { email, note } = req.body;
     if (!email || !note) return res.status(400).json({ error: 'Email and note required' });
     const normalEmail = email.toLowerCase().trim();

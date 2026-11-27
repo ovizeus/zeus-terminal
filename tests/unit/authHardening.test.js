@@ -13,6 +13,8 @@ const HASH = bcrypt.hashSync(PW, 4);
 const mkUsers = () => ({
     'admin@example.com': { id: 1, email: 'admin@example.com', role: 'admin', status: 'active', token_version: 0, approved: 1, access_level: 'full', password_hash: HASH },
     'user@example.com': { id: 2, email: 'user@example.com', role: 'user', status: 'active', token_version: 0, approved: 1, access_level: 'viewer', password_hash: HASH },
+    'support@example.com': { id: 4, email: 'support@example.com', role: 'user', staff_role: 'support', status: 'active', token_version: 0, approved: 1, access_level: 'viewer', password_hash: HASH },
+    'staffadmin@example.com': { id: 5, email: 'staffadmin@example.com', role: 'user', staff_role: 'admin', status: 'active', token_version: 0, approved: 1, access_level: 'viewer', password_hash: HASH },
     'pending@example.com': { id: 3, email: 'pending@example.com', role: 'user', status: 'active', token_version: 0, approved: 0, access_level: 'viewer', password_hash: HASH },
 });
 
@@ -42,9 +44,11 @@ function build(st) {
         banUser: (id, until) => { byId(id).banned_until = until; },
         unbanUser: (id) => { byId(id).banned_until = null; },
         atomicEmailUpdate: (id, email) => { const u = byId(id); delete st.users[u.email]; u.email = email; st.users[email] = u; return { ok: true }; },
-        disconnectExchange: () => {},
+        disconnectExchange: (id) => { (st.disconnected = st.disconnected || []).push(id); },
         deleteUser: (email) => { delete st.users[email]; },
         loginAttemptGet: (k, key) => st.attempts[k + '|' + key] || null, loginAttemptUpsert: (k, key, count, reset_at) => { st.attempts[k + '|' + key] = { count, reset_at }; },
+        setStaffRole: (id, r) => { byId(id).staff_role = r; },
+        listAuditLog: (limit, offset) => ({ rows: [], total: 0, limit, offset }),
         getSystemSetting: (k) => (k in st.settings ? st.settings[k] : null), setSystemSetting: (k, v) => { st.settings[k] = v; },
         auditLog: (uid, action, details) => { st.audits.push(action); },
         prepare: () => ({ run: () => ({}), get: () => null, all: () => [] }),
@@ -347,4 +351,108 @@ test('dupa oprirea 2FA in timpul unui login, se trimite un cod de email NOU, val
     const code = codeFrom(st.codes[st.codes.length - 1]);
     expect(code).toMatch(/^\d{6}$/);
     expect((await request(app).post('/auth/verify-code').send({ email: 'admin@example.com', code })).status).toBe(200);
+});
+
+// [2026-11-27] Etapa 2 — roluri reale de staff, verificate pe server; staff fara 2FA = refuzat
+describe('roluri de staff pe rutele de admin', () => {
+    const get = (email, url) => request(app).get(url).set('Cookie', cookieOf(st.users[email]));
+    const post = (email, url, body) => request(app).post(url).set('Cookie', cookieOf(st.users[email])).set('X-Zeus-Request', '1').send(body || {});
+    beforeEach(() => { st.totp = { 4: '111111', 5: '222222' }; });
+    test('support CU 2FA vede lista de conturi si auditul', async () => {
+        expect((await get('support@example.com', '/auth/admin/users')).status).toBe(200);
+        expect((await get('support@example.com', '/auth/admin/audit')).status).toBe(200);
+    });
+    test('support FARA 2FA → 403 cu motivul spus', async () => {
+        st.totp = {};
+        const r = await get('support@example.com', '/auth/admin/users');
+        expect(r.status).toBe(403);
+        expect(r.body.error).toMatch(/two-factor/i);
+    });
+    test('support NU poate bloca, sterge, schimba flag-uri sau inscrieri', async () => {
+        expect((await post('support@example.com', '/auth/admin/block', { email: 'user@example.com' })).status).toBe(403);
+        expect((await post('support@example.com', '/auth/admin/delete', { email: 'user@example.com' })).status).toBe(403);
+        expect((await post('support@example.com', '/auth/admin/registration', { open: false })).status).toBe(403);
+        expect(st.users['user@example.com'].status).toBe('active');
+    });
+    test('staff admin poate bloca un user, dar NU reseta parola sau 2FA (preluare de cont) si NU flags', async () => {
+        expect((await post('staffadmin@example.com', '/auth/admin/block', { email: 'user@example.com', blocked: true })).status).toBe(200);
+        expect((await post('staffadmin@example.com', '/auth/admin/reset-password', { email: 'user@example.com' })).status).toBe(403);
+        expect((await post('staffadmin@example.com', '/auth/admin/reset-2fa', { email: 'user@example.com', confirm: 'RESET 2FA' })).status).toBe(403);
+        expect((await post('staffadmin@example.com', '/auth/admin/flags', { key: 'X', value: true })).status).toBe(403);
+    });
+    test('user obisnuit → 403 peste tot', async () => {
+        expect((await get('user@example.com', '/auth/admin/users')).status).toBe(403);
+    });
+    test('Super Admin neschimbat: totul merge, fara sa i se ceara 2FA', async () => {
+        st.totp = {};
+        expect((await get('admin@example.com', '/auth/admin/users')).status).toBe(200);
+        expect((await get('admin@example.com', '/auth/admin/registration')).status).toBe(200);
+    });
+});
+
+describe('POST /auth/admin/staff-role (doar Super Admin)', () => {
+    const post = (email, body) => request(app).post('/auth/admin/staff-role').set('Cookie', cookieOf(st.users[email])).set('X-Zeus-Request', '1').send(body);
+    beforeEach(() => { st.totp = { 4: '111111', 5: '222222' }; });
+    test('Super Admin da rolul support unui user → salvat + audit', async () => {
+        const r = await post('admin@example.com', { email: 'user@example.com', staffRole: 'support' });
+        expect(r.status).toBe(200);
+        expect(st.users['user@example.com'].staff_role).toBe('support');
+        expect(st.audits).toContain('ADMIN_STAFF_ROLE');
+    });
+    test('null scoate rolul', async () => {
+        expect((await post('admin@example.com', { email: 'support@example.com', staffRole: null })).status).toBe(200);
+        expect(st.users['support@example.com'].staff_role).toBeNull();
+    });
+    test('rol necunoscut → 400', async () => {
+        expect((await post('admin@example.com', { email: 'user@example.com', staffRole: 'superadmin' })).status).toBe(400);
+    });
+    test('pe propriul cont sau pe un Super Admin → 400', async () => {
+        expect((await post('admin@example.com', { email: 'admin@example.com', staffRole: 'support' })).status).toBe(400);
+    });
+    test('staff admin NU poate da roluri (nicio escaladare)', async () => {
+        const r = await post('staffadmin@example.com', { email: 'user@example.com', staffRole: 'admin' });
+        expect(r.status).toBe(403);
+        expect(st.users['user@example.com'].staff_role).toBeUndefined();
+    });
+});
+
+// [2026-11-27] Staff nu atinge conturile de admin sau de staff; stergerea unui admin nu mai deconecteaza cheile
+describe('tintele protejate', () => {
+    const post = (email, url, body) => request(app).post(url).set('Cookie', cookieOf(st.users[email])).set('X-Zeus-Request', '1').send(body || {});
+    beforeEach(() => { st.totp = { 4: '111111', 5: '222222' }; });
+    test.each(['block', 'ban', 'force-logout', 'suspend', 'note', 'access-level', 'delete'])('staff admin pe contul Super Adminului: %s → 403', async (a) => {
+        const r = await post('staffadmin@example.com', '/auth/admin/' + a, { email: 'admin@example.com', block: true, duration: '1h', note: 'x', level: 'viewer', reason: 'x' });
+        expect(r.status).toBe(403);
+        expect(st.users['admin@example.com'].status).toBe('active');
+    });
+    test('staff admin pe un alt membru staff → 403', async () => {
+        expect((await post('staffadmin@example.com', '/auth/admin/block', { email: 'support@example.com', block: true })).status).toBe(403);
+    });
+    test('STERGEREA unui admin (chiar de catre Super Admin) e refuzata INAINTE sa atinga cheile de exchange', async () => {
+        st.users['admin2@example.com'] = { id: 6, email: 'admin2@example.com', role: 'admin', status: 'active', token_version: 0, approved: 1, password_hash: HASH };
+        const r = await post('admin@example.com', '/auth/admin/delete', { email: 'admin2@example.com' });
+        expect(r.status).toBe(400);
+        expect(st.disconnected || []).not.toContain(6);
+    });
+});
+
+// [2026-11-27] /auth/me: rolul din BAZA (era din token) + rolul de staff si permisiunile, pentru panou
+describe('/auth/me si rolurile', () => {
+    const me = (u) => request(app).get('/auth/me').set('Cookie', cookieOf(u));
+    test('admin retrogradat in baza → /me spune user, fara permisiuni', async () => {
+        const tok = { ...st.users['admin@example.com'] };            // tokenul spune admin
+        st.users['admin@example.com'].role = 'user';
+        const r = await me(tok);
+        expect(r.body.role).toBe('user');
+        expect(r.body.permissions).toEqual([]);
+    });
+    test('support: staffRole + permisiunile lui', async () => {
+        const r = await me(st.users['support@example.com']);
+        expect(r.body).toMatchObject({ role: 'user', staffRole: 'support', permissions: ['users.view', 'audit.view', 'security.sessions', 'monitoring.view'] });
+    });
+    test('Super Admin: toate permisiunile', async () => {
+        const r = await me(st.users['admin@example.com']);
+        expect(r.body.role).toBe('admin');
+        expect(r.body.permissions).toContain('settings.flags');
+    });
 });
