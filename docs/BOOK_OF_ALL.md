@@ -15357,3 +15357,31 @@ Teste: `authHardening.test.js` (18), `systemSettings.test.js`, client `ztTurnsti
 **Curatarea ML (`server/cron/mlTelemetryRetention.js`).** Masurat din doua backup-uri zilnice: ~800k randuri noi/zi in tabelele ML, iar curatarea de la 04:00 stergea ~100–260k si se oprea la bugetul de 20 s pe PRIMELE tabele → `ml_decision_snapshots` la 33 de zile, `ml_pit_snapshots` si `ml_voice_log` NICIODATA atinse; baza +~436 MB/zi (9,66 GB). Plus: bucla era SINCRONA 20 s → serverul inghetat zilnic la 04:00. Acum `runFair`: asincron (pauza 100 ms intre loturi de 2.000), cate un lot din fiecare tabela pe rand, din ORA in ORA, buget 10 min, fara suprapuneri. `run()` vechi pastrat. Teste noi 4 (toate tabelele primesc tura; goleste restanta; serverul lucreaza intre loturi; bugetul).
 Prima tura live: 419.266 randuri in 60 s (ml_pit_snapshots 108.588, ml_voice_log 79.115 …), zero cereri lente, latenta 1–3 ms; `ml_decision_snapshots` acum exact 30 de zile. ⚠️ Fisierul NU scade (paginile eliberate se refolosesc) — doar nu mai creste; micsorarea ar cere VACUUM (minute de blocare) — nu fara operator.
 Teste: server 11.028 verzi (4 shard-uri), client 2.361.
+
+## 🔐 2026-11-27 — b430: SECURITATE etapa 2 (2FA din aplicatie, rol din baza) + etapa 3 (Sentinel)
+
+**Doua gauri gasite si inchise:**
+- **Rolul de admin se lua din TOKEN** (`sessionAuth` punea `req.user = token decodat`), iar tokenul tine zile intregi → un admin retrogradat ramanea admin pe rutele care citesc `req.user.role` (ring5, doctor, byoi…). Acum `req.user.role = rolul din baza` la fiecare cerere.
+- **Rutele de admin nu expirau la inactivitate**: `/auth/` e pe lista publica a `sessionAuth` (rutele de admin isi verifica singure tokenul), deci verificarea de 4 h nu ajungea la ele. Acum `createAdminIdleGuard` montat in `auth.js` inaintea celor 25 de rute `/admin`; un token revocat (parola schimbata) nu prelungeste nimic.
+- ⚠️ Corectie a mea pe drum: am crezut ca 4 rute de admin nu verifica versiunea tokenului — FALS, o verifica pe un singur rand (cautasem la linia gresita). Retras inainte de orice schimbare.
+
+**2FA cu aplicatie de autentificare (TOTP, RFC 6238), optional pentru orice cont:**
+- De ce: login-ul cerea deja cod pe EMAIL → cine are emailul + parola intra. Cu 2FA pornit, codul vine din telefon IN LOCUL emailului.
+- `services/totp.js` — fara biblioteci (speakeasy e neintretinut), verificat pe vectorii oficiali RFC 6238; fereastra ±30 s; comparatie in timp constant; un cod se accepta O SINGURA data (`last_step` + UPDATE conditionat atomic).
+- Migrarea **434** `user_totp` (tabel separat de `users`): secret CRIPTAT (`encryption.js`, cheia de la exchange-uri), 10 coduri de rezerva doar ca hash SHA-256, consumate la folosire.
+- `/api/2fa` (dupa sessionAuth): pornirea cere PAROLA (o sesiune furata nu poate porni 2FA cu telefonul altcuiva) + limita 5/10 min; oprirea cere parola + cod; email + audit la pornire/oprire.
+- Login: cont cu 2FA → `method:'totp'`, niciun email; cod din aplicatie sau de rezerva; limita 10 coduri / 15 min / cont. Resetarea parolei pe email NU opreste 2FA.
+- Client: Settings › Security › Two-factor authentication (QR desenat in browser, nu de un serviciu extern); pagina de start si aplicatia accepta si codul de rezerva `XXXXX-XXXXX` (`auth/codeStep.ts`, copiat in login.html).
+- Admin › Users: butonul **2FA** pe fiecare cont scoate 2FA (confirmare scrisa „RESET 2FA", email catre cont, audit `ADMIN_RESET_2FA`) — NICIODATA pe propriul cont.
+
+**🆘 RECUPERARE pentru adminul unic (telefon + coduri de rezerva pierdute)** — doar cu SSH pe server:
+`sqlite3 /opt/zeus-terminal/data/zeus.db "DELETE FROM user_totp WHERE user_id=1"` → login-ul revine la codul pe email. Apoi reporneste 2FA din Settings.
+Si daca se schimba vreodata `ENCRYPTION_KEY`, secretele 2FA nu se mai pot citi → aceeasi recuperare, pentru fiecare cont.
+
+**Sentinel (etapa 3, `services/securitySentinel.js`) — doar OBSERVA, nu blocheaza:** citeste `audit_log` o data pe minut (doar randurile noi) si trimite adminilor pe telefon (tip nou `security`, MEREU pornit, fara casuta) + Telegram daca e legat:
+rafala de inscrieri (≥5/10 min), resetari (≥5/10 min), parole/coduri gresite (≥10/10 min) — apoi tace 30 min; admin intrat de pe un IP NOU (180 de zile); pe un cont de admin: parola/email/2FA schimbate, cod de rezerva folosit. Raport pe 24 h in Admin › Users (`GET /auth/admin/security-report`).
+Atacul din 13–27 nov ar fi sunat din prima ora.
+
+**Revizie de cod (subagent, doar citire):** nicio ocolire a 2FA (toate locurile care dau sesiune verificate). Reparate: resetarea 2FA din admin (I-1), limita la parola de la pornire (I-2), un login inceput cu 2FA si terminat fara nu mai trimite „codul null" (M-1), token revocat in garda de inactivitate (M-2), intrare fara IP nu mai da alerta (M-5), randul 2FA se sterge odata cu contul + secret gol refuzat (M-6).
+**Acceptat, stiut (M-3):** cine are PAROLA poate consuma limita de 10 coduri/15 min si bloca login-ul proprietarului cat timp continua; resetarea parolei pe email i-o ia.
+**Ramas cu operatorul:** admin separat + `admin.zeus-terminal.com` + Cloudflare Access; roluri reale (Super Admin / Admin / Support / Analyst); passkey; cheile Turnstile; SSH.
