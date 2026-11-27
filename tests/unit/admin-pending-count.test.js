@@ -25,7 +25,7 @@ function buildApp(users) {
         prepare: () => ({ run: () => ({}), get: () => null, all: () => [] }),
     }));
     jest.doMock('../../server/middleware/sessionAuth', () => ({
-        getActiveSessions: () => [],
+        getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(),
         resetActivity: () => {},
     }));
     const app = express();

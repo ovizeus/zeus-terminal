@@ -26,7 +26,7 @@ function buildApp(mfState) {
         prepare: () => ({ run: () => ({}), get: () => null, all: () => [] }),
     }));
     jest.doMock('../../server/middleware/sessionAuth', () => ({
-        getActiveSessions: () => [], resetActivity: () => {},
+        getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {},
     }));
     jest.doMock('../../server/migrationFlags', () => ({
         DEFAULTS: { SERVER_AT: false, _SRV_POS_REAL_ENABLED: false, _USERDATA_STREAM_REAL_ENABLED: false },

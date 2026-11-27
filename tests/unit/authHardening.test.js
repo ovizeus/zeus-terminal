@@ -49,7 +49,7 @@ function build(st) {
         auditLog: (uid, action, details) => { st.audits.push(action); },
         prepare: () => ({ run: () => ({}), get: () => null, all: () => [] }),
     }));
-    jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], resetActivity: () => {} }));
+    jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {} }));
     const app = express();
     app.set('trust proxy', 1);
     app.use(express.json()); app.use(cookieParser());

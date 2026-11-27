@@ -50,7 +50,7 @@ function build(st) {
         auditLog: () => {},
         prepare: () => ({ run: () => ({}), get: () => null, all: () => [] }),
     }));
-    jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], resetActivity: () => {} }));
+    jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {} }));
     const app = express();
     app.use(express.json()); app.use(cookieParser());
     app.use('/auth', require('../../server/routes/auth.js'));

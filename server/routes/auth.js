@@ -9,7 +9,7 @@ const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const db = require('../services/database');
 const logger = require('../services/logger');
-const { getActiveSessions, resetActivity } = require('../middleware/sessionAuth');
+const { getActiveSessions, resetActivity, createAdminIdleGuard } = require('../middleware/sessionAuth');
 const accessLevel = require('../services/accessLevel');
 const accountEmails = require('../services/accountEmails');
 function _mask(email) { if (!email) return '?'; const [u, d] = email.split('@'); return u[0] + '***@' + (d || '?'); }
@@ -581,6 +581,9 @@ router.get('/me', (req, res) => {
         res.status(401).json({ error: 'Token invalid' });
     }
 });
+
+// [2026-11-27] inactivitatea se aplica si rutelor de admin (vezi sessionAuth.createAdminIdleGuard)
+router.use('/admin', createAdminIdleGuard(JWT_SECRET));
 
 // ─── ADMIN: GET /auth/admin/users — list all users + exchange info ───
 router.get('/admin/users', (req, res) => {

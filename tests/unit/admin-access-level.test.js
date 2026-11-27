@@ -25,7 +25,7 @@ function buildApp(st) {
         auditLog: (...a) => { st.audits.push([a[1], a[2]]); },
         prepare: () => ({ run: () => ({}), get: () => null, all: () => [] }),
     }));
-    jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], resetActivity: () => {} }));
+    jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {} }));
     const app = express();
     app.use(express.json());
     app.use(cookieParser());

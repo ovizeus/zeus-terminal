@@ -144,6 +144,9 @@ function createSessionAuth(jwtSecret) {
                         if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired. Please log in again.' });
                         return res.redirect('/login.html');
                     }
+                    // [2026-11-27] Rolul din BAZA, nu din token (tokenul tine rolul de la login, zile intregi:
+                    // un admin retrogradat ramanea admin pe rutele care citesc req.user.role).
+                    req.user.role = fresh.role || 'user';
                 } catch (dbErr) {
                     console.error('[SESSION] DB check failed:', dbErr.message);
                     if (req.path.startsWith('/api/')) return res.status(503).json({ error: 'Service temporarily unavailable' });
@@ -151,8 +154,7 @@ function createSessionAuth(jwtSecret) {
                 }
             }
 
-            // Also allow /auth/admin/* for logged-in admin (even from login page context)
-            if (req.path.startsWith('/auth/admin/')) return next();
+            // [2026-11-27] /auth/admin/* NU mai sare peste inactivitate (iesea aici, inainte de verificare).
 
             // [SENTRY] Tag all errors with authenticated user
             if (req.user.id) {
@@ -210,4 +212,28 @@ function resetActivity(userId, ts) {
     } catch (_) { /* DB not ready */ }
 }
 
-module.exports = { createSessionAuth, cookieParser, getActiveSessions, resetActivity };
+// [2026-11-27] Securitate etapa 2 — inactivitatea si pe rutele de admin. `/auth/` e public in
+// createSessionAuth (rutele de admin din auth.js isi verifica singure tokenul, rolul si versiunea),
+// deci o sesiune de admin uitata deschisa nu expira niciodata pe ele. Montata in auth.js inaintea
+// tuturor rutelor /admin. Token lipsa/invalid → lasa ruta sa raspunda (ea da 401/403).
+function createAdminIdleGuard(jwtSecret) {
+    return function adminIdleGuard(req, res, next) {
+        const token = req.cookies && req.cookies.zeus_token;
+        let uid = null;
+        try { uid = token ? jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }).id : null; } catch (_) { uid = null; }
+        if (!uid) return next();
+        const last = _readLastActive(uid);
+        const now = Date.now();
+        if (last && (now - last) > INACTIVITY_TIMEOUT_MS) {
+            _activity.delete(uid);
+            _lastPersistedTs.delete(uid);
+            res.clearCookie('zeus_token', { path: '/' });
+            try { require('../services/database').auditLog(uid, 'INACTIVITY_TIMEOUT', { inactiveMs: now - last, admin: true }, req.ip); } catch (_) {}
+            return res.status(401).json({ error: 'Session expired due to inactivity' });
+        }
+        _writeLastActive(uid, now);
+        next();
+    };
+}
+
+module.exports = { createSessionAuth, createAdminIdleGuard, cookieParser, getActiveSessions, resetActivity };
