@@ -559,6 +559,13 @@ router.post('/verify-code', (req, res) => {
         // tripped by the previous session's stale last_active_at.
         resetActivity(pending.userId, Date.now());
 
+        // [2026-11-27] extra 3: intrare de pe un IP nou → email (verificat INAINTE de a scrie intrarea curenta)
+        try {
+            const ns = require('../services/newSignIn');
+            if (ns.shouldNotify(pending.userId, req.ip, Number.MAX_SAFE_INTEGER)) {
+                void accountEmails.sendAccountEmail('new_sign_in', normalEmail, { data: { ip: req.ip, at: Date.now(), device: ns.deviceOf(req.get('user-agent')) } });
+            }
+        } catch (_) { /* emailul nu opreste intrarea */ }
         db.auditLog(pending.userId, 'LOGIN_SUCCESS', {}, req.ip);
         logger.info('AUTH', 'Login verified', { email: _mask(normalEmail), role: pending.role });
         res.json({ ok: true, email: normalEmail, role: pending.role });

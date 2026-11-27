@@ -64,6 +64,10 @@ function build(st) {
         dailyReport: () => ({ hours: 24, failedSignIns: 3, resetRequests: 1, signUps: 0, blockedSignUps: 0, signIns: 2, topFailIps: [] }),
         summary: () => ({ alertsSent: 1 }),
     }));
+    jest.doMock('../../server/services/newSignIn', () => ({
+        shouldNotify: (uid, ip) => !!(st.knownIps && st.knownIps[uid] && !st.knownIps[uid].includes(ip)),
+        deviceOf: () => 'Chrome on Android',
+    }));
     jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {} }));
     const app = express();
     app.set('trust proxy', 1);
@@ -462,4 +466,28 @@ test('lista de conturi din admin poarta rolul de staff (pentru pagina Roles)', a
     const sup = r.body.users.find((u) => u.email === 'support@example.com');
     expect(sup.staffRole).toBe('support');
     expect(r.body.users.find((u) => u.email === 'user@example.com').staffRole).toBeNull();
+});
+
+// [2026-11-27] extra 3 — email la intrarea de pe un IP nou
+describe('email la intrare de pe IP nou', () => {
+    const loginAndVerify = async () => {
+        await request(app).post('/auth/login').send({ email: 'admin@example.com', password: PW });
+        const code = codeFrom(st.codes[st.codes.length - 1]);
+        return request(app).post('/auth/verify-code').set('User-Agent', 'x').send({ email: 'admin@example.com', code });
+    };
+    test('IP nou → email new_sign_in cu IP-ul si dispozitivul', async () => {
+        st.knownIps = { 1: ['82.77.10.140'] };
+        expect((await loginAndVerify()).status).toBe(200);
+        await flush();
+        const m = st.mails.find((x) => x[0] === 'new_sign_in');
+        expect(m).toBeTruthy();
+        expect(m[1]).toBe('admin@example.com');
+        expect(m[2]).toMatchObject({ device: 'Chrome on Android' });
+    });
+    test('IP cunoscut → fara email', async () => {
+        st.knownIps = {};
+        await loginAndVerify();
+        await flush();
+        expect(st.mails.find((x) => x[0] === 'new_sign_in')).toBeUndefined();
+    });
 });

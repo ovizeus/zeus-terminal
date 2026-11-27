@@ -214,6 +214,18 @@ function exchangeKeysChangedEmail(email, data) {
     return { subject: 'Zeus Terminal — exchange API keys changed', text: _text(lines), html: _html('Exchange API keys changed', lines) };
 }
 
+// [2026-11-27] intrare de pe un IP nou
+function newSignInEmail(email, data) {
+    const d = data || {};
+    const when = new Date(Number.isFinite(d.at) ? d.at : Date.now()).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+    const lines = [
+        `Your Zeus Terminal account was signed in from a new IP address: ${String(d.ip || 'unknown').slice(0, 64)}.`,
+        `When: ${when}. Device: ${String(d.device || 'Unknown device').slice(0, 64)}.`,
+        `If this was not you, change your password right away (Settings › Security) and contact us: ${supportUrl()}.`,
+    ];
+    return { subject: 'Zeus Terminal — new sign-in to your account', text: _text(lines), html: _html('New sign-in', lines) };
+}
+
 function twoFactorDisabledEmail() {
     const lines = [
         'Two-factor authentication was turned off for your Zeus Terminal account. Signing in now asks for a code sent to this email again.',
@@ -286,6 +298,7 @@ const BUILDERS = {
     two_factor_enabled: twoFactorEnabledEmail,
     two_factor_disabled: twoFactorDisabledEmail,
     exchange_keys_changed: exchangeKeysChangedEmail,
+    new_sign_in: newSignInEmail,
 };
 
 const _mask = (e) => String(e).replace(/^(.).*(@.*)$/, '$1***$2');
@@ -353,7 +366,7 @@ module.exports = {
     registrationEmail, approvalEmail, codeEmail, passwordChangedEmail, passwordResetEmail,
     adminPasswordResetEmail, accountClosedEmail, emailChangedEmail, accessFullEmail,
     suspendedEmail, restoredEmail, supportReplyEmail,
-    twoFactorEnabledEmail, twoFactorDisabledEmail, exchangeKeysChangedEmail,
+    twoFactorEnabledEmail, twoFactorDisabledEmail, exchangeKeysChangedEmail, newSignInEmail,
     sendAccountEmail, appUrl, fromHeader, fmtUtc,
     CODE_PURPOSES, SUPPORT_THROTTLE_MS, _resetThrottleForTest: () => _lastSupportMail.clear(),
 };
