@@ -160,3 +160,44 @@ describe('the prune says what it pruned, per table', () => {
         } finally { spy.mockRestore(); }
     });
 });
+
+// [2026-11-27] Curatarea nu tinea pasul: ~800k randuri noi/zi in tabelele ML, iar rularea de la
+// 04:00 sterge ~100–260k si se oprea la bugetul de 20 s pe PRIMELE tabele (ml_decision_snapshots
+// a ajuns la 33 de zile, ml_pit_snapshots si ml_voice_log neatinse) → baza +~436 MB/zi. Iar bucla
+// sincrona de 20 s inghata serverul in fiecare zi la 04:00. runFair: asincron, cu pauza intre loturi,
+// cate un lot din FIECARE tabela pe rand, din ora in ora.
+describe('runFair — corect, pe rand, fara sa blocheze serverul', () => {
+    test('cu buget mic, TOATE tabelele primesc o tura (nu doar primele)', async () => {
+        const now = Date.now();
+        for (const spec of retention.POLICY) seed(spec, spec.days + 3, 30, now);
+        const res = await retention.runFair({ now, batchSize: 10, timeBudgetMs: 60000, maxRounds: 1, yieldMs: 0 });
+        for (const spec of retention.POLICY) expect(res.deleted[spec.table]).toBe(10);
+    });
+    test('continua pe rand pana goleste restanta, apoi se opreste singur', async () => {
+        const now = Date.now();
+        const a = retention.POLICY[0], z = retention.POLICY[retention.POLICY.length - 1];
+        seed(a, a.days + 3, 25, now); seed(z, z.days + 3, 25, now); seed(z, 1, 5, now);
+        const res = await retention.runFair({ now, batchSize: 10, timeBudgetMs: 60000, yieldMs: 0 });
+        expect(res.deleted[a.table]).toBe(25);
+        expect(res.deleted[z.table]).toBe(25);
+        expect(count(z.table)).toBe(5);
+        expect(res.drained).toBe(true);
+    });
+    test('intre loturi lasa serverul sa lucreze (alt cod ruleaza in timpul curatarii)', async () => {
+        const now = Date.now();
+        const spec = retention.POLICY[0];
+        seed(spec, spec.days + 3, 50, now);
+        let ticks = 0;
+        const iv = setInterval(() => { ticks++; }, 1);
+        await retention.runFair({ now, batchSize: 5, timeBudgetMs: 60000, yieldMs: 2 });
+        clearInterval(iv);
+        expect(ticks).toBeGreaterThan(3);
+    });
+    test('se opreste la bugetul de timp si spune asta', async () => {
+        const now = Date.now();
+        const spec = retention.POLICY[0];
+        seed(spec, spec.days + 3, 100, now);
+        const res = await retention.runFair({ now, batchSize: 1, timeBudgetMs: 0, yieldMs: 0 });
+        expect(res.budgetExhausted).toBe(true);
+    });
+});

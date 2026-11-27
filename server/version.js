@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.402',
-    build: 428,
-    date: '2026-11-21',
+    version: '1.7.403',
+    build: 429,
+    date: '2026-11-27',
     changelog: [
+        'b429 v1.7.403 - Close all nu mai ramane agatat pe „Closing…": pozitiile se inchideau, dar raspunsul intarzia 18–40 s in ingheturile serverului; dupa 20 s butonul revine si lista se actualizeaza singura (client). Curatarea tabelelor ML tine pasul: rula o data pe zi, 20 s blocant la 04:00, si nu ajungea la toate tabelele (baza +~436 MB/zi); acum din ora in ora, pe rand intre tabele, cu pauze — serverul nu mai ingheata (server), 2026-11-27.',
         'b428 v1.7.402 - SECURITATE etapa 1 (dupa atacul cu boti 13–27 nov): inscriere — adrese temporare si `verify_` refuzate in tacere, max 3 pe IP / 10 min, comutator on/off in admin, Turnstile pregatit (oprit pana la chei); resetare — nu pentru conturi blocate/temporare, max 3 coduri pe CONT / ora, codurile vechi anulate la schimbarea emailului; niciun email spre adrese temporare; admin: stergerea tuturor conturilor blocate cu confirmare scrisa, 2026-11-27 (server + client).',
         'b427 v1.7.401 - Binance real: soldul se citeste si pe contul Multi-Assets (USDC/credite, fara USDT) — trecerea pe real nu mai pica la [BALANCE]; aceeasi citire si la poarta de la decizie si la add-on, 2026-11-27 (server).',
         'b426 v1.7.400 - Quant Monitor nu mai blocheaza telefonul: rescria tot ecranul (~4.000 de bucati) la fiecare secunda; acum rescrie doar randurile schimbate (masurat la procesor de telefon: 163 ms → 2 ms pe secunda), 2026-11-22 (client).',

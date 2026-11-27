@@ -1,3 +1,4 @@
+import { withTimeout } from '../../utils/withTimeout'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useATStore, useSettingsStore, useUiStore } from '../../stores'
 import { api } from '../../services/api'
@@ -242,7 +243,10 @@ export function AutoTradePanel() {
     if (!confirmed) return
     setClosingAll(true)
     try {
-      const r: any = await api.raw('POST', '/api/at/close-all', {})
+      // [2026-11-27] cel mult 20 s: daca serverul intarzie, butonul revine si lista se actualizeaza singura
+      const t = await withTimeout(api.raw<any>('POST', '/api/at/close-all', {}), 20000)
+      if (t.timedOut) { toast('Close all is still running on the server — the list updates when it finishes.', 6000); return }
+      const r: any = t.value
       if (r && r.ok) {
         const n = Number(r.closed) || 0
         const pnl = Number(r.pnl) || 0

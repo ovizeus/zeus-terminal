@@ -133,18 +133,91 @@ function run(opts) {
     return { deleted, errors, budgetExhausted, durationMs: Date.now() - startedAt };
 }
 
-function schedule() {
-    setInterval(() => {
-        const now = new Date();
-        const dateStr = now.toISOString().slice(0, 10);
-        if (dateStr === _lastRunDate) return;
-        if (now.getUTCHours() !== TARGET_HOUR_UTC) return;
-        _lastRunDate = dateStr;
-        try { run(); } catch (err) {
-            try { logger.warn('CRON', `[mlTelemetryRetention] error: ${err.message}`); } catch (_) {}
+// [2026-11-27] runFair — ACEEASI curatare, dar:
+//   - ASINCRON, cu pauza (`yieldMs`) intre loturi: rularea zilnica de 20 s era o bucla sincrona care
+//     ingheta serverul in fiecare zi la 04:00;
+//   - PE RAND: cate un lot din fiecare tabela, tura dupa tura — bugetul se consuma pe primele tabele,
+//     iar ml_decision_snapshots ajunsese la 33 de zile, ml_pit_snapshots / ml_voice_log neatinse;
+//   - din ORA in ORA (schedule) — ~800k randuri noi/zi; o rulare pe zi stergea ~100–260k (+~436 MB/zi).
+const FAIR_BATCH_SIZE = 2000;         // un lot ≈ o fractiune de secunda pe firul principal
+const FAIR_TIME_BUDGET_MS = 10 * 60_000;
+const FAIR_YIELD_MS = 100;
+
+async function runFair(opts) {
+    const o = opts || {};
+    const now = Number.isFinite(o.now) ? o.now : Date.now();
+    const batchSize = Number.isFinite(o.batchSize) ? o.batchSize : FAIR_BATCH_SIZE;
+    const timeBudgetMs = Number.isFinite(o.timeBudgetMs) ? o.timeBudgetMs : FAIR_TIME_BUDGET_MS;
+    const yieldMs = Number.isFinite(o.yieldMs) ? o.yieldMs : FAIR_YIELD_MS;
+    const maxRounds = Number.isFinite(o.maxRounds) ? o.maxRounds : Infinity;
+    const { db } = require('../services/database');
+    const startedAt = Date.now();
+    const deleted = {};
+    const errors = [];
+    let budgetExhausted = false;
+
+    const live = [];
+    for (const spec of POLICY) {
+        try {
+            live.push({ spec, cutoff: now - spec.days * DAY_MS, stmt: db.prepare(
+                `DELETE FROM ${spec.table} WHERE rowid IN (
+                     SELECT rowid FROM ${spec.table} WHERE ${spec.column} < ? LIMIT ${batchSize}
+                 )`) });
+            deleted[spec.table] = 0;
+        } catch (err) {
+            errors.push(spec.table);
+            try { logger.warn('CRON', `[mlTelemetryRetention] ${spec.table}: ${err.message}`); } catch (_) {}
         }
-    }, 60000);
-    try { logger.info('CRON', '[mlTelemetryRetention] scheduled daily 04:00 UTC'); } catch (_) {}
+    }
+
+    let rounds = 0;
+    while (live.length && rounds < maxRounds) {
+        rounds++;
+        for (let i = 0; i < live.length; i++) {
+            if (Date.now() - startedAt >= timeBudgetMs) { budgetExhausted = true; break; }
+            const t = live[i];
+            try {
+                const changes = t.stmt.run(t.cutoff).changes || 0;
+                deleted[t.spec.table] += changes;
+                if (changes < batchSize) { live.splice(i, 1); i--; }   // golita
+            } catch (err) {
+                errors.push(t.spec.table); live.splice(i, 1); i--;
+                try { logger.warn('CRON', `[mlTelemetryRetention] ${t.spec.table}: ${err.message}`); } catch (_) {}
+            }
+            await new Promise((r) => setTimeout(r, yieldMs));
+        }
+        if (budgetExhausted) break;
+    }
+
+    const sum = Object.values(deleted).reduce((a, b) => a + b, 0);
+    if (sum > 0) {
+        try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch (err) {
+            try { logger.warn('CRON', `[mlTelemetryRetention] wal_checkpoint failed: ${err.message}`); } catch (_) {}
+        }
+        try {
+            const perTable = Object.keys(deleted).filter((t) => deleted[t] > 0)
+                .sort((a, b) => deleted[b] - deleted[a]).map((t) => `${t}=${deleted[t]}`).join(' ');
+            logger.info('CRON', `[mlTelemetryRetention] pruned ${sum} rows in ${Date.now() - startedAt}ms (fair, ${rounds} rounds)`
+                + (perTable ? ` — ${perTable}` : '') + (budgetExhausted ? ' (time budget spent — continues next hour)' : ''));
+        } catch (_) {}
+    }
+    return { deleted, errors, budgetExhausted, drained: !live.length, rounds, durationMs: Date.now() - startedAt };
 }
 
-module.exports = { POLICY, run, schedule, _resetForTest: () => { _lastRunDate = ''; } };
+let _fairRunning = false;
+let _lastRunHour = '';
+function schedule() {
+    // [2026-11-27] din ora in ora (era o data pe zi la 04:00), asincron, fara suprapuneri
+    setInterval(() => {
+        const hourKey = new Date().toISOString().slice(0, 13);
+        if (hourKey === _lastRunHour || _fairRunning) return;
+        _lastRunHour = hourKey;
+        _fairRunning = true;
+        runFair().catch((err) => {
+            try { logger.warn('CRON', `[mlTelemetryRetention] error: ${err.message}`); } catch (_) {}
+        }).finally(() => { _fairRunning = false; });
+    }, 60000);
+    try { logger.info('CRON', '[mlTelemetryRetention] scheduled hourly (fair, non-blocking)'); } catch (_) {}
+}
+
+module.exports = { POLICY, run, runFair, schedule, _resetForTest: () => { _lastRunDate = ''; _lastRunHour = ''; _fairRunning = false; } };

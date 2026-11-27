@@ -15349,3 +15349,11 @@ Teste: `binanceOps.test.js` (+4: Multi-Assets, non-Multi-Assets, eroare, USDT pr
 
 Teste: `authHardening.test.js` (18), `systemSettings.test.js`, client `ztTurnstile.test.ts` (3), `signupControls.test.tsx` (3). Server verde (4 shard-uri), client 2.355.
 ⚠️ Lectie de sesiune: am lucrat in pasi mici cu punct de reluare in memorie — sesiunea s-a taiat de doua ori in timpul backup-ului.
+
+## 🧹 2026-11-27 — b429: „Close all" agatat pe „Closing…" + baza crestea ~436 MB/zi
+
+**Close all.** Pozitiile SE inchideau (audit `AT_CLOSE_ALL` 22 nov: 4/4 de doua ori), dar raspunsul a venit dupa 40 s si 18 s — in ingheturile serverului din 22 nov (86 de cereri lente in ziua aceea, toate rutele). Butonul astepta raspunsul fara limita. Acum `client/src/utils/withTimeout.ts`: dupa 20 s butonul revine, mesaj „still running on the server", lista se actualizeaza (inchiderea NU se anuleaza — continua pe server). Teste `withTimeout.test.ts` (3).
+
+**Curatarea ML (`server/cron/mlTelemetryRetention.js`).** Masurat din doua backup-uri zilnice: ~800k randuri noi/zi in tabelele ML, iar curatarea de la 04:00 stergea ~100–260k si se oprea la bugetul de 20 s pe PRIMELE tabele → `ml_decision_snapshots` la 33 de zile, `ml_pit_snapshots` si `ml_voice_log` NICIODATA atinse; baza +~436 MB/zi (9,66 GB). Plus: bucla era SINCRONA 20 s → serverul inghetat zilnic la 04:00. Acum `runFair`: asincron (pauza 100 ms intre loturi de 2.000), cate un lot din fiecare tabela pe rand, din ORA in ORA, buget 10 min, fara suprapuneri. `run()` vechi pastrat. Teste noi 4 (toate tabelele primesc tura; goleste restanta; serverul lucreaza intre loturi; bugetul).
+Prima tura live: 419.266 randuri in 60 s (ml_pit_snapshots 108.588, ml_voice_log 79.115 …), zero cereri lente, latenta 1–3 ms; `ml_decision_snapshots` acum exact 30 de zile. ⚠️ Fisierul NU scade (paginile eliberate se refolosesc) — doar nu mai creste; micsorarea ar cere VACUUM (minute de blocare) — nu fara operator.
+Teste: server 11.028 verzi (4 shard-uri), client 2.361.
