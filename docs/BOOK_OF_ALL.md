@@ -15482,3 +15482,14 @@ Gasit pe drum: `/auth/me`, `/auth/pin/*`, `/auth/change-password/*`, `/auth/chan
 **Teste:** `liveBar.test.ts` (7), `liveBarProxy.test.ts` (4, prin `fetchKlines` real + puntea reala); mutatia (legatura cu pretul scoasa) → testul pica. Client 2432 verzi, typecheck curat. Backup: tag `pre-b439` + `data/backups/public-app-pre-b439.tgz`. Commit c559f601, tag post-b439.
 
 **De retinut:** fstream e MORT pe Hetzner — orice functie care asteapta cadre de acolo (kline, aggTrade, depth, forceOrder pe calea proxy) e muta pe VPS. Cartea de ordine din proxy (`market.depth`) are aceeasi problema — de verificat separat daca panoul OB se bazeaza pe ea.
+
+## 🔍 2026-11-28 — b440: Cartea de ordine din nou VIE pe VPS (aprobat de operator: „fa cartea de ordine poti singur")
+
+**Cauza:** aceeasi ca la b439 — fstream trimite 0 cadre catre Hetzner, deci `market.depth` din proxy nu venea. `S.bids`/`S.asks` ramaneau goale: panoul Order Book, alertele de balene, zidurile din Quant Monitor si din orderflow nu aveau date. (`/api/market/depth` exista, dar serveste cache-ul lui serverLiquidity — la 60 s, putine monede — nu ajunge pentru un panou live.)
+
+**Reparatia:**
+- **Server** `server/routes/marketProxy.js` — `GET /api/market/orderbook?symbol=X`: Binance `fapi/v1/depth limit=20` (greutate 2) prin gateway (limitator + disjunctor raman), cache 3 s impartit si cereri in zbor unite (≈40 greutate/min pe moneda privita). **Nu serveste o carte veche** (503). Simbol validat `^[A-Z0-9]{2,20}$`. **Plafon 8 monede distincte / 30 s** — ruta e publica ca `/klines` (marketProxy e montat inainte de autentificare), deci nimeni nu poate arde greutatea Binance de care depind ordinele. Adaugata in lista viewerGate (+ testul de inventar).
+- **Client** `client/src/data/marketDataWS.ts` (`_connectBNBProxy`): cat timp `market.depth` tace >6 s, citeste ruta la 3 s, doar cu ecranul vizibil; raspunsul pentru alta moneda e aruncat; un singur ceas la reconectari; oprit pe calea directa. Aceeasi poarta `_applyBook` (alertele de balene vad instantaneele ca inainte, doar la 3 s in loc de 0,5 s). `require` → import static (testabil).
+- **Test b439 reparat:** depindea de ora (o rulare peste granita de 5 m schimba lumanarea curenta) — ceas fix.
+
+**Teste:** `marketOrderbook.test.js` (6), `orderbookPoll.test.ts` (4), mutatia (aplicarea scoasa) → pica. Server 11.265 verzi pe 4 sharduri, client 2436, typecheck curat. Pe viu: 20+20 niveluri, spread 0,1 $, al doilea apel din cache (3 ms). Backup: tag `pre-b440` + copie public/app. Tag post-b440.

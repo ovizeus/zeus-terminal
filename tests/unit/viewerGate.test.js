@@ -254,7 +254,7 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
         expect(allowed).toEqual([
             'GET /api/byoi/config', 'GET /api/byoi/indicators', 'GET /api/fng',
             'GET /api/indicators/usage', 'GET /api/liq/recent',
-            'GET /api/market/bookmap', 'GET /api/market/depth', 'GET /api/market/footprint', 'GET /api/market/funding',
+            'GET /api/market/bookmap', 'GET /api/market/depth', 'GET /api/market/orderbook', 'GET /api/market/footprint', 'GET /api/market/funding',
             // [2026-11-20] axele radarului de pe server: radarul viewerului le CERE (regula: lista = ce cere aplicatia)
             'GET /api/market/radar',
             'GET /api/market/klines', 'GET /api/market/liq-map', 'GET /api/market/liq-panel',

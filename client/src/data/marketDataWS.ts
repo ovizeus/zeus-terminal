@@ -8,6 +8,7 @@ import { applyTimezone } from '../engine/brain'
 import { fetchBasisRate } from './basisRate'
 import { readAlertControls, alertControlValues } from './alertFields'
 import { checkWhaleAlerts } from './whaleAlerts'
+import { on as _bridgeOn, subscribeSymbol as _bridgeSubscribe } from '../services/wsMarketBridge'
 import type { BookLevel } from './alertRules'
 import { getTPObject } from '../services/stateAccessors'
 import { updateHecate, updateThanatos, updateNotos } from '../engine/indicators'
@@ -79,6 +80,26 @@ function _setWsDiag(name: string, patch: any) {
 // [WS-PROXY B.6] Server proxy path — receives market.* from /ws/sync
 let _proxyUnsubs: Array<() => void> = []
 let _fundingTimer: ReturnType<typeof setInterval> | null = null
+let _bookTimer: ReturnType<typeof setInterval> | null = null
+let _lastDepthMs = 0
+let _bookBusy = false
+async function _pollBook(sym: string): Promise<void> {
+  if (_bookBusy || Date.now() - _lastDepthMs < 6000) return
+  if (typeof document !== 'undefined' && document.hidden) return
+  if ((w.S.symbol || 'BTCUSDT').toUpperCase() !== sym) return
+  _bookBusy = true
+  try {
+    const r = await fetch(`/api/market/orderbook?symbol=${encodeURIComponent(sym)}`, { signal: AbortSignal.timeout(5000) })
+    if (!r || !r.ok) return
+    const d = await r.json()
+    if (!d || !Array.isArray(d.bids) || !Array.isArray(d.asks)) return
+    if (Date.now() - _lastDepthMs < 6000) return                       // fluxul real a revenit intre timp
+    if ((w.S.symbol || 'BTCUSDT').toUpperCase() !== sym || (d.symbol && d.symbol !== sym)) return
+    _applyBook(d.bids, d.asks)
+    renderOB()
+    _flowTick('hecate')
+  } catch (_) { /* liniste — urmatoarea citire reincearca */ } finally { _bookBusy = false }
+}
 function _connectBNBProxy(): void {
   const sym = (w.S.symbol || 'BTCUSDT').toUpperCase()
   // Rata de finantare a monedei din chart: o data la conectare (deci si la
@@ -88,8 +109,15 @@ function _connectBNBProxy(): void {
     if (_fundingTimer) clearInterval(_fundingTimer)
     _fundingTimer = setInterval(() => { void fetchBasisRate() }, 60_000)
   } catch (_) { /* afisaj */ }
-  const { on, subscribeSymbol } = require('../services/wsMarketBridge')
+  const on = _bridgeOn, subscribeSymbol = _bridgeSubscribe   // [2026-11-28] import static (testabil)
   _proxyUnsubs.forEach(fn => fn()); _proxyUnsubs = []
+  // [2026-11-28] Cartea de ordine: serverul nu primeste cadre de la fstream (Hetzner), deci
+  // `market.depth` nu vine si panoul OB / alertele de balene / zidurile erau goale. Cat timp tace
+  // (>6 s), citim /api/market/orderbook la 3 s (cache 3 s pe server, impartit). Doar cu ecranul
+  // vizibil; cand fluxul revine, tace singura. Un raspuns pentru alta moneda e aruncat.
+  if (_bookTimer) { clearInterval(_bookTimer); _bookTimer = null }
+  _lastDepthMs = 0
+  _bookTimer = setInterval(() => { void _pollBook(sym) }, 3000)
   _proxyUnsubs.push(on('market.price', (msg: any) => {
     if (msg.symbol !== sym) return
     if (w.ingestPrice(String(msg.price), 'BNB')) {
@@ -107,6 +135,7 @@ function _connectBNBProxy(): void {
   }))
   _proxyUnsubs.push(on('market.depth', (msg: any) => {
     if (msg.symbol !== sym) return
+    _lastDepthMs = Date.now()
     _applyBook(msg.bids || [], msg.asks || [])
     renderOB()
     _flowTick('hecate')
@@ -161,6 +190,7 @@ export function connectBNB(): void {
     return
   }
   // ── Legacy direct path (fallback) ──
+  if (_bookTimer) { clearInterval(_bookTimer); _bookTimer = null }   // aici cartea vine direct din browser
   const sym = (w.S.symbol || 'BTCUSDT').toLowerCase()
   const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
   const _priceStream = _altFeeds ? `${sym}@bookTicker` : `${sym}@markPrice@1s`

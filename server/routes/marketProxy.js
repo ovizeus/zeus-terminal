@@ -159,6 +159,57 @@ router.get('/klines', async (req, res) => {
     }
 });
 
+// [2026-11-28] Cartea de ordine prin REST. Pe VPS fstream trimite 0 cadre (Hetzner), deci `market.depth`
+// din proxy nu vine si panoul OB / alertele de balene / zidurile ramaneau goale. 20 de niveluri =
+// greutate 2; cache 3 s impartit de toti clientii (≈40 greutate/min pe moneda privita). Nu servim o
+// carte VECHE (o carte de acum un minut e o minciuna); si un plafon de monede distincte pe fereastra,
+// ca nimeni sa nu poata arde greutatea Binance — de care depind si ordinele — cerand sute de monede.
+const ORDERBOOK_TTL_MS = 3000;
+const ORDERBOOK_MAX_SYMBOLS = 8;
+const ORDERBOOK_WINDOW_MS = 30000;
+const _obCache = new Map();     // SYM → { data, ts }
+const _obPending = new Map();   // SYM → Promise
+const _obSeen = new Map();      // SYM → ultima cerere catre Binance
+function _obLevels(rows) {
+    if (!Array.isArray(rows)) return null;
+    const out = [];
+    for (const r of rows) {
+        const p = +(r && r[0]), q = +(r && r[1]);
+        if (Number.isFinite(p) && p > 0 && Number.isFinite(q) && q >= 0) out.push({ p, q });
+    }
+    return out;
+}
+function _obAdmit(sym, now) {
+    for (const [s, t] of _obSeen) if (now - t > ORDERBOOK_WINDOW_MS) _obSeen.delete(s);
+    if (_obSeen.has(sym) || _obSeen.size < ORDERBOOK_MAX_SYMBOLS) { _obSeen.set(sym, now); return true; }
+    return false;
+}
+router.get('/orderbook', async (req, res) => {
+    const sym = String(req.query.symbol || '').toUpperCase();
+    if (!/^[A-Z0-9]{2,20}$/.test(sym)) return res.status(400).json({ error: 'bad symbol' });
+    const now = Date.now();
+    const hit = _obCache.get(sym);
+    if (hit && now - hit.ts < ORDERBOOK_TTL_MS) return res.json(hit.data);
+    let p = _obPending.get(sym);
+    if (!p) {
+        if (!_obAdmit(sym, now)) return res.status(503).json({ error: 'busy' });
+        p = (async () => {
+            const r = await gateway.fetch(`${FUTURES_BASE}/fapi/v1/depth?symbol=${sym}&limit=20`, { __weight: 2, __src: 'marketProxy:orderbook' });
+            if (!r || !r.ok) return null;
+            const j = await r.json();
+            const bids = _obLevels(j && j.bids), asks = _obLevels(j && j.asks);
+            if (!bids || !asks || (!bids.length && !asks.length)) return null;
+            const data = { symbol: sym, bids, asks, ts: Date.now() };
+            _obCache.set(sym, { data, ts: data.ts });
+            return data;
+        })().catch(() => null).finally(() => _obPending.delete(sym));
+        _obPending.set(sym, p);
+    }
+    const data = await p;
+    if (!data) return res.status(503).json({ error: 'order book unavailable' });
+    res.json(data);
+});
+
 router.get('/ticker24hr', async (req, res) => {
     const { symbols } = req.query;
     const url = symbols
@@ -236,3 +287,4 @@ module.exports.fallbackEdge = fallbackEdge;
 module.exports._klinesCacheKeyParams = _klinesCacheKeyParams;
 module.exports._klinesTtl = _klinesTtl;
 module.exports.FUTURES_BASE = FUTURES_BASE;
+module.exports.ORDERBOOK_MAX_SYMBOLS = ORDERBOOK_MAX_SYMBOLS;

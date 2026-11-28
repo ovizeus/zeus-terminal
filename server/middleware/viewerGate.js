@@ -20,7 +20,7 @@ const VIEWER_ALLOW = [
     'GET /api/market/klines', 'GET /api/market/ticker24hr', 'GET /api/market/topLongShort',
     'GET /api/market/spot/klines', 'GET /api/market/funding', 'GET /api/market/oi',
     'GET /api/market/top', 'GET /api/market/symbol/:symbol', 'GET /api/market/ticker',
-    'GET /api/market/markprice', 'GET /api/market/ticker/all', 'GET /api/market/depth',
+    'GET /api/market/markprice', 'GET /api/market/ticker/all', 'GET /api/market/depth', 'GET /api/market/orderbook',
     'GET /api/market/sentiment', 'GET /api/market/time',
     'GET /api/sd/symbols', 'GET /api/fng',
     // ── lichidari: harta, heatmap, live, predict, book ──

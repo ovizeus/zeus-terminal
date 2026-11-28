@@ -18,6 +18,8 @@ const push = (m: any) => feed.forEach(fn => fn(m))
 let updates: any[] = []
 
 beforeEach(async () => {
+  // ceas FIX la un minut dupa granita: altfel o rulare care trece peste granita de 5m schimba lumanarea curenta
+  vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime((T0 + 60) * 1000)
   updates = []
   w.S = { symbol: 'BTCUSDT', chartTf: '5m', klines: [] }
   w.__wsGen = 1
@@ -59,7 +61,7 @@ describe('lumanarea live fara flux de lumanari', () => {
     expect(w.S.klines.at(-1).close).toBe(101)
   })
   it('citirea REST de 10 s aduce lumanarea reala (cu volum)', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] }); vi.setSystemTime((T0 + 60) * 1000)
     await boot()
     const real = [[(T0 - 300) * 1000, '100', '101', '99', '100.7', '33'], [T0 * 1000, '100.7', '108', '100', '107', '44']]
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => real })))
