@@ -15503,3 +15503,16 @@ Gasit pe drum: `/auth/me`, `/auth/pin/*`, `/auth/change-password/*`, `/auth/chan
 **Reparatia** (`marketDataChart.ts`, ramura proxy): ultimul tic live (<15 s, in intervalul lumanarii) ramane close-ul lumanarii curente si dupa citirea REST; citirea aduce volumul si largeste high/low. Test nou in `liveBarProxy.test.ts` (pica inainte: close 107 din cache in loc de 105 live). Client 2437 verzi, typecheck curat. Tag pre-b441 / post-b441.
 
 **Observat, NEatins:** (1) pe server `marketFeed` emite `price` si din pollerul de lumanari (close-ul barei, mai vechi) intercalat cu `ticker/price` — pretul poate tremura usor inapoi; e pe calea brain/AT, deci nu-l schimb fara el. (2) `▲ 0.00%` din antet e schimbarea de la tic la tic, nu pe 24 h — practic mereu 0,00%.
+
+
+## 🔍 2026-11-28 — b442: Pretul nu mai sare inapoi + procentul din header pe 24h
+
+**Cerut de operator:** „repara si alea 2 inainte" — cele doua lucruri observate si neatinse la b441.
+
+**1. Server — o singura sursa de pret** (`server/services/marketFeed.js`). Cu `ALT_WS_FEEDS` se emitea `price` din DOUA surse amestecate: `ticker/price` la 3 s si close-ul lumanarii de la fiecare poller de kline (3 TF × 30 s). Masurat pe VPS (6 perechi simultane): diferenta ±10 $ in AMBELE sensuri, iar campul `time` din ticker ramane in urma pana la 5,7 s. Reparatia: `_acceptTickerPrice` — tickerul e sursa, un raspuns cu `time` mai vechi decat ultimul emis e aruncat (sosit pe dos); `_klinePriceAllowed` — close-ul de kline se emite ca pret DOAR cand tickerul tace peste 2 cicluri (6 s), ca rezerva. Starea se sterge la dezabonarea monedei. Test nou `tests/unit/marketFeedPriceSource.test.js` (6, pica inainte).
+
+**2. Client — procentul de langa pret** (`client/src/data/header24.ts`, nou). Era (pret − pretul tickului anterior), deci aproape mereu „▲ 0.00%". Acum e schimbarea pe 24h calculata la FIECARE tick din pretul live fata de deschiderea de acum 24h (`open = last / (1 + pct/100)`), deci se misca sincron cu pretul. Deschiderea vine din `zeus:wlPrice` (watchlist-ul serverului, ticker/24hr la 10 s) sau, pentru moneda din chart din afara listei, din `/api/market/ticker24hr` la 30 s. Pana vine referinta arata „—", nu un 0.00% inventat; referinta mai veche de 5 min nu se foloseste. Legat in ambii scriitori ai `#bchg`: `Header.tsx` si `updatePriceDisplay`.
+
+**Gasit pe drum:** Binance futures IGNORA parametrul `symbols` la `/fapi/v1/ticker/24hr` si intoarce toate cele 819 monede; serverul plateste greutate 40 pe fiecare cheie de cache distincta. Deci header-ul cere cu cheia listei de urmarire (aceeasi ca Quant Monitor) si cere moneda singura doar daca lipseste din raspuns → zero greutate noua. (Pre-existent, neatins: `positionPriceFeed` face o cheie pe setul de pozitii deschise.)
+
+**Teste:** client 2446 verzi (9 noi in `header24.test.ts`), typecheck curat; server 4 sharduri verzi — 3 suite cazute doar sub incarcare (worker SIGKILL la 4 sharduri paralele) trec separat cu `--runInBand`. Tag pre-b442 / post-b442. Neverificat: pe telefon.

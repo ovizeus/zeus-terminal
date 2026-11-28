@@ -71,6 +71,23 @@ function _parseTickerPrice(json) {
     return (Number.isFinite(p) && p > 0) ? p : null;
 }
 
+// [2026-11-28] O SINGURA sursa de pret. Tickerul (3 s) si close-ul de kline (3 TF × 30 s) erau
+// emise amestecat; masurat pe VPS ele difera cu ±10 $ in ambele sensuri si `time` din ticker
+// ramane in urma pana la 5,7 s → pretul sarea inapoi. Tickerul e sursa; un raspuns sosit pe dos
+// (time mai vechi decat ultimul emis) e aruncat; close-ul de kline e doar REZERVA cand tickerul tace.
+const _priceGate = new Map();   // sym -> { ms: ultima emitere din ticker (ceas local), ts: time Binance }
+function _acceptTickerPrice(sym, price, ts, nowMs) {
+    const g = _priceGate.get(sym);
+    const hasTs = Number.isFinite(ts);
+    if (g && hasTs && Number.isFinite(g.ts) && ts < g.ts) return false;
+    _priceGate.set(sym, { ms: nowMs, ts: hasTs ? ts : (g ? g.ts : NaN) });
+    return true;
+}
+function _klinePriceAllowed(sym, nowMs) {
+    const g = _priceGate.get(sym);
+    return !g || (nowMs - g.ms) > 2 * ALT_PRICE_POLL_MS;
+}
+
 // [BIN-TELEM Phase B 2026-05-19] Ref-counting for symbol subscriptions.
 // Each symbol holds a Set of refKeys. refKey = "userId|env|posSeq" for
 // position-driven subs, "boot|system" for sticky boot symbols.
@@ -242,6 +259,7 @@ function _unsubscribeSymbolReal(symbol) {
         if (_altPricePollers[sym].timer) clearInterval(_altPricePollers[sym].timer);
         delete _altPricePollers[sym];
     }
+    _priceGate.delete(sym);
     _activeSymbols.delete(sym);
     _symbolRefs.delete(sym);
     logger.info('FEED', `[refcount] ${sym} unsubscribed (last ref released)`);
@@ -528,8 +546,11 @@ function _altStartPricePoller(symUpper) {
             const url = `${BINANCE_REST}/fapi/v1/ticker/price?symbol=${encodeURIComponent(symUpper)}`;
             const res = await _telemFetch(url, { signal: AbortSignal.timeout(6000), __src: 'marketFeed:altPrice', __weight: 1 });
             if (!res.ok) return; // quiet — next tick retries
-            const price = _parseTickerPrice(await res.json());
-            if (price != null) _emit('price', { symbol: symUpper, price });
+            const json = await res.json();
+            const price = _parseTickerPrice(json);
+            if (price != null && _acceptTickerPrice(symUpper, price, json && +json.time, Date.now())) {
+                _emit('price', { symbol: symUpper, price });
+            }
         } catch (_) { /* quiet failure — next tick retries */ }
     };
     let _firstFireDelay = 700;
@@ -564,7 +585,7 @@ function _altStartKlinePoller(symUpper, tf) {
                 state.lastOpenTs = latest.openTime;
                 state.lastBar = latest;
                 _emit('kline', { symbol: symUpper, timeframe: tf, bar: { ...latest, closed: false }, initial: false });
-                if (latest.close > 0) _emit('price', { symbol: symUpper, price: latest.close });
+                if (latest.close > 0 && _klinePriceAllowed(symUpper, Date.now())) _emit('price', { symbol: symUpper, price: latest.close });
                 return;
             }
 
@@ -581,7 +602,7 @@ function _altStartKlinePoller(symUpper, tf) {
                 state.lastBar = latest;
                 _emit('kline', { symbol: symUpper, timeframe: tf, bar: { ...latest, closed: false }, initial: false });
             }
-            if (latest.close > 0) _emit('price', { symbol: symUpper, price: latest.close });
+            if (latest.close > 0 && _klinePriceAllowed(symUpper, Date.now())) _emit('price', { symbol: symUpper, price: latest.close });
         } catch (err) {
             // Quiet failure — next tick retries.
             // [2026-11-07] circuit_open is no longer logged here. All 21
@@ -974,6 +995,8 @@ function stopSelfHeal() {
 module.exports = {
     _parseTickerPrice, // [LAG-FIX 2026-05-31] exposed for unit test
     _altFetchKlinesLatest, // [ALT-503-REASON 2026-10-19] exposed for unit test
+    _acceptTickerPrice, _klinePriceAllowed, // [2026-11-28] o singura sursa de pret — teste
+    _resetPriceGateForTest: () => _priceGate.clear(),
     subscribe,
     subscribeMulti,    // [MULTI-SYM]
     subscribeMultiWithBootRef,  // [BIN-TELEM Phase B 2026-05-19]

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
 import { BetaBadge } from '../common/BetaNotice'
+import { chg24For, startHeader24 } from '../../data/header24'
 import { useSupportStore } from '../../stores/supportStore'
 import { useAdminStore } from '../../stores/adminStore'
 import { supportTarget, supportBadge, badgeText } from '../../core/supportEntry'
@@ -11,7 +12,9 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
   const connected = useUiStore((s) => s.connected)
   const openModal = useUiStore((s) => s.openModal)
   const price = useMarketStore((s) => s.market.price)
-  const prevPrice = useMarketStore((s) => s.market.prevPrice)
+  const symbol = useMarketStore((s) => s.market.symbol)
+  // [2026-11-28] procentul pe 24h (era tick-la-tick → mereu „0.00%”)
+  useEffect(() => { startHeader24() }, [])
   const email = useAuthStore((s) => s.email)
   const role = useAuthStore((s) => s.role)
   const clearAuth = useAuthStore((s) => s.clearAuth)
@@ -152,9 +155,9 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
       .catch(wipeAndGo)
   }
 
-  const chg = prevPrice > 0 ? (price - prevPrice) / prevPrice * 100 : 0
-  const chgClass = chg >= 0 ? 'up' : 'dn'
-  const chgArrow = chg >= 0 ? '\u25B2' : '\u25BC'
+  const chg = chg24For(symbol, price)
+  const chgClass = chg == null ? '' : chg >= 0 ? 'up' : 'dn'
+  const chgArrow = chg == null ? '' : chg >= 0 ? '\u25B2' : '\u25BC'
 
   return (
     <div className="zeus-fixed-top">
@@ -194,7 +197,7 @@ export function Header({ onLogoClick }: { onLogoClick?: () => void } = {}) {
                   ? `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                   : '$\u2014'}
               </div>
-              <div className={`bchg ${chgClass}`} id="bchg">{chgArrow} {Math.abs(chg).toFixed(2)}%</div>
+              <div className={`bchg ${chgClass}`} id="bchg" title="24h change">{chg == null ? '\u2014' : `${chgArrow} ${Math.abs(chg).toFixed(2)}%`}</div>
             </div>
             <button id="installBtn" style={{
               display: 'none', marginTop: '3px',

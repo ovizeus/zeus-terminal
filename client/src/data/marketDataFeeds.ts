@@ -7,6 +7,7 @@ import { checkBarAlerts } from './barAlerts'
 import { fmtTime, fmtDate, calcRSI, _calcATRSeries } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
+import { chg24For } from './header24'
 import { _demoTick } from '../engine/aresUI'
 import { clearHeatmap, clearSR } from './marketDataOverlays'
 import { resetBackfill } from './chartBackfill'
@@ -234,9 +235,13 @@ export function toggleFS(): void {
 export function updatePriceDisplay(): void {
   if (document.hidden) return
   const e = el('bprice'); if (e) e.textContent = '$' + fP(w.S.price)
-  const c = (w.S.price - w.S.prevPrice) / w.S.prevPrice * 100
+  // [2026-11-28] schimbarea pe 24h, din pretul live (era tick-la-tick → mereu „0.00%”)
+  const c = chg24For(w.S.symbol, w.S.price)
   const bc = el('bchg')
-  if (bc) { bc.className = 'bchg ' + (c >= 0 ? 'up' : 'dn'); bc.textContent = (c >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(c).toFixed(2) + '%' }
+  if (bc) {
+    if (c == null) { bc.className = 'bchg'; bc.textContent = '\u2014' }
+    else { bc.className = 'bchg ' + (c >= 0 ? 'up' : 'dn'); bc.textContent = (c >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(c).toFixed(2) + '%' }
+  }
   calcSRTable()
   updateMetrics()
   const _tp = getTPObject()
