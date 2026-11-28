@@ -15430,6 +15430,20 @@ Partea de server e gata si INACTIVA pana la `ADMIN_HOST` in `.env`:
 - **Parole furate** (`services/pwnedPasswords.js`): la inscriere, schimbare si resetare, parola e verificata in Have I Been Pwned prin k-anonymity — pleaca DOAR primele 5 caractere ale SHA-1, cu `Add-Padding`. Serviciul cazut/lent (3 s) → nu blocam pe nimeni. Verificat live: „password" → furata, una aleatoare → nu.
 - Din lista de extrase ramane doar **7 (Authenticated Origin Pulls)** — cere comutatorul din Cloudflare, cu operatorul.
 
+## 🔑 2026-11-28 — b437: PASSKEY (amprenta / fata / PIN) — PORNIT
+
+**Ce face:** in Settings › Security › Passkeys adaugi un passkey (parola + codul 2FA daca e pornit). Apoi pe pagina de login apesi „Sign in with a passkey" si intri cu amprenta / fata / PIN-ul telefonului sau calculatorului — fara parola, fara cod. Nu cere nicio cheie API: verificarea e locala (`@simplewebauthn/server` 13.3.3 — v14 cere Node 22).
+
+**De ce e mai sigur:** cheia privata nu paraseste dispozitivul si e legata de `zeus-terminal.com` — un site fals NU o poate folosi (phishing-ul moare). Serverul tine doar cheia PUBLICA (`user_passkeys`, migrarea 437).
+
+**Reguli:** userVerification `required` (tine loc de parola + al doilea factor); provocari de 5 min, o singura folosire, plafon 5000 in memorie (plin → cea mai veche iese); contor care nu creste = cheie clonata → refuz (cele sincronizate iCloud/Google raman pe 0); login-ul trece prin aceleasi verificari ca parola (blocat/suspendat/neaprobat), rol + tokenVersion din baza; email „passkey added/removed", audit `PASSKEY_ADDED/REMOVED/LOGIN_PASSKEY_FAILED`, Sentinel suna la adminul care primeste un passkey; cheile de exchange intra 24 h in pauza dupa un passkey nou; **resetarea parolei (pe email sau de admin) STERGE passkey-urile** (`PASSKEYS_CLEARED`). Doar esecurile de semnatura ajung la fail2ban (un passkey sters ramas in managerul de parole nu banuieste IP-ul). Ascuns in aplicatia Android (WebView nu are WebAuthn). Comutator: `PASSKEY_ENABLED=true` in .env (oprit → butoanele dispar).
+
+**Verificat:** 20 teste cu criptografie REALA (un „telefon" software P-256: site fals, alta cheie, clona, fara amprenta, provocare refolosita — toate refuzate); rute + login (117); **Chrome real cu autentificator virtual** pe un server local cu baza temporara: login.html → sesiune, a doua intrare, passkey sters → mesaj clar, fara sesiune. Server 11.256 + client 2.421 verzi. Revizie independenta: fara ocoliri; 7 observatii reparate (resetare → sterge passkey-urile, fail2ban, plafon, buget pe IP doar pe esecuri, cod de rezerva in audit, dublu-click, origine www).
+
+**Gasit pe drum:** `bookmap-contract.test.js` pica din 21 nov (ruta foloseste `heat = BM.heatAbs(` din b390) — reparat; testul Sentinel `summary()` folosea ceasul real (pica dupa miezul noptii) — reparat. `RING5_INFLUENCE_APPLY` e APRINS — de operator, din Admin, pe 25 nov (audit 782000), nu o scapare.
+
+Commit b0459548, tag post-b437.
+
 ## 🚪 2026-11-28 — b436: Close sign-ups cere confirmare
 
 Butonul din Admin › Users (Close sign-ups / Open sign-ups, comutatorul `registration_open`) schimba inscrierile dintr-o singura atingere. Acum deschide o fereastra de confirmare: „Close sign-ups?" cu Close (rosu) / Cancel, si „Open sign-ups?" cu Open / Cancel. Cancel nu trimite nimic. Ruta de pe server ramane doar pentru Super Admin si e trecuta in audit (`ADMIN_REGISTRATION_TOGGLE`). Teste: signupControls (5), client 2401 verzi, typecheck curat. Commit 36ce2d6a, tag post-b436.
@@ -15438,7 +15452,7 @@ Butonul din Admin › Users (Close sign-ups / Open sign-ups, comutatorul `regist
 1. Admin separat: DNS `admin` CNAME proxied + Zero Trust Access doar pe emailul operatorului → apoi `ADMIN_HOST` in .env + reload.
 2. Authenticated Origin Pulls: comutatorul din Cloudflare → `sudo scripts/origin-pulls.sh enable`.
 3. Turnstile: cheile Site Key + Secret.
-4. Passkey: doar la „instalează passkey" (@simplewebauthn/server@13.3.3).
+4. ~~Passkey~~ — LIVRAT b437.
 5. SSH hardening: doar cu operatorul de fata.
 6. Operatorul singur: 2FA + cod anti-phishing in Settings › Security.
 
