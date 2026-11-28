@@ -180,12 +180,15 @@ export async function fetchKlines(tf: any): Promise<void> {
       if (w.S._proxyKlinePollTimer) { clearInterval(w.S._proxyKlinePollTimer); w.S._proxyKlinePollTimer = null }
       w._proxyKlineLastMs = 0
       const _tfSec = tfSeconds(tf)
+      // [2026-11-28] SINCRON cu pretul de sus: ultimul pret live ramane close-ul lumanarii curente si
+      // dupa citirea REST (care vine din cache si poate fi cu pana la ~10 s mai veche).
+      let _liveTick: { px: number; ms: number } | null = null
       const _klineQuiet = () => Date.now() - (w._proxyKlineLastMs || 0) > 15000
       const _stillWanted = () => w.__wsGen === _klineGen && w.S.symbol === sym && (w.S.chartTf || tf) === tf
       w._wsProxyTickUnsub = on('market.price', (msg: any) => {
         if (msg.symbol !== sym || !_klineQuiet() || !_stillWanted()) return
         const bar = mergeTick(w.S.klines?.[w.S.klines.length - 1], +msg.price, Math.floor(Date.now() / 1000), _tfSec)
-        if (bar) _applyBarProxy(bar)
+        if (bar) { _liveTick = { px: +msg.price, ms: Date.now() }; _applyBarProxy(bar) }
       })
       const _pollProxyKline = async () => {
         if (!_klineQuiet() || !_stillWanted()) return
@@ -205,6 +208,10 @@ export async function fetchKlines(tf: any): Promise<void> {
               const i = kl.findIndex((x: any) => x.time === b.time)
               if (i >= 0) kl[i] = b
             } else {
+              const lt = _liveTick
+              if (lt && Date.now() - lt.ms < 15000 && _tfSec > 0 && Math.floor(lt.ms / 1000) - b.time < _tfSec && Math.floor(lt.ms / 1000) >= b.time) {
+                b.close = lt.px; b.high = Math.max(b.high, lt.px); b.low = Math.min(b.low, lt.px)
+              }
               _applyBarProxy(b)
             }
           }

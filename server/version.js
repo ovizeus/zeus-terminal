@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.414',
-    build: 440,
+    version: '1.7.415',
+    build: 441,
     date: '2026-11-27',
     changelog: [
+        'b441 v1.7.415 - Pretul de sus (langa ZEUS) si pretul chartului SINCRONE. Ambele vin din acelasi tic live, dar la 10 s citirea REST a lumanarii (din cache, pana la ~10 s mai veche) suprascria close-ul, deci chartul ramanea cu 8-20 $ in urma fata de antet. Acum lumanarea curenta pastreaza ultimul pret live; citirea aduce doar volumul si extremele (client), 2026-11-28.',
         'b440 v1.7.414 - Cartea de ordine din nou VIE pe VPS. Ca la chart (b439): serverul nu primeste cadre de la fstream (Hetzner), deci market.depth nu venea si panoul Order Book, alertele de balene si zidurile din Quant Monitor si orderflow erau goale. Ruta noua /api/market/orderbook (20 de niveluri, greutate 2, cache 3 s impartit de toti, fara carte veche, plafon de 8 monede distincte / 30 s); clientul o citeste la 3 s doar cat fluxul tace si ecranul e vizibil. In acelasi build: testul b439 nu mai depinde de ora (server + client), 2026-11-28.',
         'b439 v1.7.413 - Chart: ultima lumanare se misca din nou LIVE. Serverul nu primeste nimic de la fluxul de lumanari Binance (Hetzner blocat, masurat 0 mesaje in 10 s), deci lumanarea ramanea inghetata pana la refresh. Acum pretul live (la ~3 s) misca ultima lumanare, iar la 10 s se citesc lumanarile reale (volum, OHLC exact; cache pe server, cost 1). Cand fluxul revine, se opresc singure (client), 2026-11-28.',
         'b438 v1.7.412 - ICHNOS: banda de sus mai inalta si scrisul mai mare; butonul de setari din dreapta mai mare (tinta de deget pe telefon); pe ecrane inguste textul din dreapta se scurteaza la $k · Bybit in loc sa se suprapuna (client), 2026-11-28.',

@@ -15493,3 +15493,13 @@ Gasit pe drum: `/auth/me`, `/auth/pin/*`, `/auth/change-password/*`, `/auth/chan
 - **Test b439 reparat:** depindea de ora (o rulare peste granita de 5 m schimba lumanarea curenta) — ceas fix.
 
 **Teste:** `marketOrderbook.test.js` (6), `orderbookPoll.test.ts` (4), mutatia (aplicarea scoasa) → pica. Server 11.265 verzi pe 4 sharduri, client 2436, typecheck curat. Pe viu: 20+20 niveluri, spread 0,1 $, al doilea apel din cache (3 ms). Backup: tag `pre-b440` + copie public/app. Tag post-b440.
+
+## 🔍 2026-11-28 — b441: Pretul de sus si pretul chartului SINCRONE
+
+**Raport operator (2 capturi):** antet $59.231,55 / chart 59.211,51; antet $59.215,15 / chart 59.207,41.
+
+**Cauza:** amandoua vin din acelasi `market.price` (singurul scriitor al antetului e `updatePriceDisplay` ← `ingestPrice`), iar din b439 lumanarea primeste acelasi tic. Dar la 10 s citirea REST `/api/market/klines?limit=2` — servita din cache-ul de 10 s, deci cu pana la ~10 s mai veche — SUPRASCRIA close-ul lumanarii curente. Chartul sarea inapoi 8–20 $ pana la urmatorul tic.
+
+**Reparatia** (`marketDataChart.ts`, ramura proxy): ultimul tic live (<15 s, in intervalul lumanarii) ramane close-ul lumanarii curente si dupa citirea REST; citirea aduce volumul si largeste high/low. Test nou in `liveBarProxy.test.ts` (pica inainte: close 107 din cache in loc de 105 live). Client 2437 verzi, typecheck curat. Tag pre-b441 / post-b441.
+
+**Observat, NEatins:** (1) pe server `marketFeed` emite `price` si din pollerul de lumanari (close-ul barei, mai vechi) intercalat cu `ticker/price` — pretul poate tremura usor inapoi; e pe calea brain/AT, deci nu-l schimb fara el. (2) `▲ 0.00%` din antet e schimbarea de la tic la tic, nu pe 24 h — practic mereu 0,00%.

@@ -70,4 +70,15 @@ describe('lumanarea live fara flux de lumanari', () => {
     expect(w.S.klines.at(-2)).toMatchObject({ time: T0 - 300, close: 100.7, volume: 33 })
     expect(w.S.klines.length).toBe(20)
   })
+  it('SINCRON cu pretul de sus: citirea REST (din cache, mai veche) nu suprascrie pretul live pe lumanarea curenta', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] }); vi.setSystemTime((T0 + 60) * 1000)
+    await boot()
+    push({ type: 'market.price', symbol: 'BTCUSDT', price: 105 })
+    const real = [[T0 * 1000, '100.7', '108', '99.5', '107', '44']]
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => real })))
+    vi.advanceTimersByTime(10000)
+    await vi.waitFor(() => expect(w.S.klines.at(-1).volume).toBe(44))
+    expect(w.S.klines.at(-1)).toMatchObject({ time: T0, close: 105, high: 108, low: 99.5 })
+    expect(updates.at(-1).close).toBe(105)
+  })
 })
