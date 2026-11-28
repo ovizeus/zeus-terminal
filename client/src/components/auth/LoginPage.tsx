@@ -1,5 +1,6 @@
 import { sanitizeCode, codeComplete, codePrompt, type CodeMethod } from './codeStep'
 import { getTurnstileToken } from '../../core/turnstile'
+import { passkeyLoginEnabled, signInWithPasskey } from '../../services/passkey'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Icon } from '../layout/icons'
 
@@ -426,6 +427,21 @@ export function LoginPage() {
       const s = seconds % 60
       setCodeTimerText('Code expires in ' + m + ':' + String(s).padStart(2, '0'))
     }, 1000)
+  }
+
+  /* ── [2026-11-28] Auth: passkey (doar web, doar cu PASSKEY_ENABLED pe server) ── */
+  const [passkeyOn, setPasskeyOn] = useState(false)
+  const [passkeyText, setPasskeyText] = useState('Sign in with a passkey')
+  useEffect(() => { let alive = true; void passkeyLoginEnabled().then((on) => { if (alive) setPasskeyOn(on) }); return () => { alive = false } }, [])
+  const passkeyBusy = useRef(false)
+  async function handlePasskey() {
+    if (passkeyBusy.current) return   // un al doilea get() ar pica cu „request already pending"
+    passkeyBusy.current = true
+    setPasskeyText('...')
+    try {
+      const r = await signInWithPasskey()
+      if (r.ok) { setErrorMsg(''); await checkAuth() } else showSignInError(r.error)
+    } finally { passkeyBusy.current = false; setPasskeyText('Sign in with a passkey') }
   }
 
   /* ── Auth: Sign In ── */
@@ -863,6 +879,10 @@ export function LoginPage() {
                     <PwEye inputRef={pwRef} />
                   </div>
                   <button type="submit" className="main-btn" id="submitBtn">{submitText}</button>
+                  {passkeyOn && (
+                    <button type="button" className="main-btn" id="passkeyBtn" onClick={handlePasskey} disabled={passkeyText === '...'}
+                      style={{ marginTop: '8px', background: 'transparent', border: '1px solid currentColor' }}>{passkeyText}</button>
+                  )}
                   <div className="link-line">Need access? <a href="#" id="goToRegister2" onClick={e => { e.preventDefault(); setActive(true) }}>Request an invite</a></div>
                   <a href="#" className="link" id="forgotLink" onClick={e => { e.preventDefault(); showForgotPassword() }}>Forgot password?</a>
                   <div className="footer-note">Access requests are manually reviewed</div>

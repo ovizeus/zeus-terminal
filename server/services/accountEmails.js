@@ -234,6 +234,24 @@ function twoFactorDisabledEmail() {
     return { subject: 'Zeus Terminal — two-factor authentication turned off', text: _text(lines), html: _html('Two-factor authentication is off', lines) };
 }
 
+// [2026-11-28] passkey adaugat / sters — o usa noua in cont trebuie sa se vada imediat
+function passkeyAddedEmail(email, data) {
+    const name = String((data && data.name) || 'a passkey').slice(0, 40);
+    const lines = [
+        `A passkey (${name}) was added to your Zeus Terminal account. It can sign in with this device's fingerprint, face or screen lock — no password needed.`,
+        `If you did not add it, remove it in Settings › Security, change your password and contact us right away: ${supportUrl()}`,
+    ];
+    return { subject: 'Zeus Terminal — passkey added', text: _text(lines), html: _html('A passkey was added', lines) };
+}
+function passkeyRemovedEmail(email, data) {
+    const name = String((data && data.name) || 'A passkey').slice(0, 40);
+    const lines = [
+        `${name} was removed from your Zeus Terminal account and can no longer sign in.`,
+        `If you did not remove it, change your password and contact us right away: ${supportUrl()}`,
+    ];
+    return { subject: 'Zeus Terminal — passkey removed', text: _text(lines), html: _html('A passkey was removed', lines) };
+}
+
 // ── Accesul ────────────────────────────────────────────────────────────────
 function accessFullEmail(email) {
     const lines = [
@@ -299,6 +317,8 @@ const BUILDERS = {
     two_factor_disabled: twoFactorDisabledEmail,
     exchange_keys_changed: exchangeKeysChangedEmail,
     new_sign_in: newSignInEmail,
+    passkey_added: passkeyAddedEmail,
+    passkey_removed: passkeyRemovedEmail,
 };
 
 const _mask = (e) => String(e).replace(/^(.).*(@.*)$/, '$1***$2');
@@ -384,7 +404,7 @@ module.exports = {
     registrationEmail, approvalEmail, codeEmail, passwordChangedEmail, passwordResetEmail,
     adminPasswordResetEmail, accountClosedEmail, emailChangedEmail, accessFullEmail,
     suspendedEmail, restoredEmail, supportReplyEmail,
-    twoFactorEnabledEmail, twoFactorDisabledEmail, exchangeKeysChangedEmail, newSignInEmail,
+    twoFactorEnabledEmail, twoFactorDisabledEmail, exchangeKeysChangedEmail, newSignInEmail, passkeyAddedEmail, passkeyRemovedEmail,
     sendAccountEmail, appUrl, fromHeader, fmtUtc, cleanAntiPhishing, withAntiPhishing,
     CODE_PURPOSES, SUPPORT_THROTTLE_MS, _resetThrottleForTest: () => _lastSupportMail.clear(),
 };

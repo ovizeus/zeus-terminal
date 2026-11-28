@@ -48,7 +48,7 @@ function frames(n) {
 // aparase o forma pe care nimeni nu o mai trimitea, si a scapat un camp
 // (`bandPct`) pe care panoul il citea si ruta nu-l mai trimitea. Asa nu mai
 // poate ramane in urma — daca ruta trece pe alta functie, testul o urmeaza.
-const HEAT_FN = (ROUTE_SRC.match(/const heat = BM\.([a-zA-Z]+)\(/) || [])[1];
+const HEAT_FN = (ROUTE_SRC.match(/heat = BM\.([a-zA-Z]+)\(/) || [])[1];   // [2026-11-28] ruta foloseste `heat = BM.heatAbs(` (din b390), nu `const heat`
 
 describe('forma hartii trimise de ruta acopera tot ce citeste panoul', () => {
     test('ruta chiar cheama o functie de harta din bookMap', () => {

@@ -240,3 +240,13 @@ test('two_factor_enabled / disabled au subiecte diferite si spun ce s-a schimbat
     expect(ae.twoFactorEnabledEmail().subject).toMatch(/turned on/);
     expect(ae.twoFactorDisabledEmail().subject).toMatch(/turned off/);
 });
+test('[2026-11-28] passkey_added / removed: numele passkey-ului, si ce faci daca nu ai fost tu', () => {
+    const ae = require('../../server/services/accountEmails');
+    const a = ae.passkeyAddedEmail('a@x.ro', { name: 'My phone' });
+    expect(a.subject).toMatch(/passkey added/);
+    expect(a.text).toContain('My phone');
+    expect(a.text).toMatch(/did not add it/);
+    const r = ae.passkeyRemovedEmail('a@x.ro', { name: 'My phone' });
+    expect(r.subject).toMatch(/passkey removed/);
+    expect(r.text).toContain('My phone');
+});

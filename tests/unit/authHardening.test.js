@@ -48,6 +48,7 @@ function build(st) {
         deleteUser: (email) => { delete st.users[email]; },
         loginAttemptGet: (k, key) => st.attempts[k + '|' + key] || null, loginAttemptUpsert: (k, key, count, reset_at) => { st.attempts[k + '|' + key] = { count, reset_at }; },
         setStaffRole: (id, r) => { byId(id).staff_role = r; },
+        passkeyDeleteAll: (id) => { const n = (st.passkeyCount && st.passkeyCount[id]) || 0; if (st.passkeyCount) st.passkeyCount[id] = 0; return n; },
         setAntiPhishing: (id, w) => { byId(id).anti_phishing = w; },
         getAntiPhishingByEmail: (e) => (st.users[e] ? st.users[e].anti_phishing || null : null),
         recentSignIns: (uid, n) => (st.signins || []).filter((x) => x.user_id === uid).slice(0, n),
@@ -72,6 +73,12 @@ function build(st) {
         shouldNotify: (uid, ip) => !!(st.knownIps && st.knownIps[uid] && !st.knownIps[uid].includes(ip)),
         deviceOf: () => 'Chrome on Android',
     }));
+    // [2026-11-28] passkey: criptografia e testata in passkeys.test.js; aici controlam doar rezultatul
+    jest.doMock('../../server/services/passkeys', () => ({ live: () => ({
+        config: () => ({ enabled: !!(st.passkey && st.passkey.enabled) }),
+        authenticationOptions: async () => ({ ok: true, challengeId: 'cid', options: { challenge: 'ch' } }),
+        authenticationVerify: async (cid, resp) => (st.passkey && st.passkey.result) || { ok: false, error: 'unknown' },
+    }) }));
     jest.doMock('../../server/middleware/sessionAuth', () => ({ getActiveSessions: () => [], createAdminIdleGuard: () => (_q, _r, n) => n(), resetActivity: () => {} }));
     const app = express();
     app.set('trust proxy', 1);
@@ -590,5 +597,93 @@ describe('token revocat pe rutele de cont', () => {
     });
     test('token valid → /me merge ca inainte', async () => {
         expect((await request(app).get('/auth/me').set('Cookie', cookieOf(st.users['user@example.com']))).status).toBe(200);
+    });
+});
+
+describe('[2026-11-28] intrare cu passkey', () => {
+    const pk = (url, body) => request(app).post(url).set('X-Zeus-Request', '1').send(body || {});
+    test('stins (PASSKEY_ENABLED lipsa): config spune enabled:false, rutele 404', async () => {
+        expect((await request(app).get('/auth/passkey/config')).body).toEqual({ ok: true, enabled: false });
+        expect((await pk('/auth/passkey/options')).status).toBe(404);
+        expect((await pk('/auth/passkey/verify', { challengeId: 'cid', response: {} })).status).toBe(404);
+    });
+    test('pornit: options da provocarea; un passkey valid deschide sesiunea, fara parola si fara cod', async () => {
+        st.passkey = { enabled: true, result: { ok: true, userId: 2, passkeyId: 7 } };
+        const o = await pk('/auth/passkey/options');
+        expect(o.body).toMatchObject({ ok: true, challengeId: 'cid' });
+        const r = await pk('/auth/passkey/verify', { challengeId: 'cid', response: { id: 'x' } });
+        expect(r.status).toBe(200);
+        expect(r.body).toMatchObject({ ok: true, email: 'user@example.com', role: 'user' });
+        const cookie = (r.headers['set-cookie'] || []).find((c) => c.startsWith('zeus_token='));
+        expect(cookie).toBeTruthy();
+        const tok = jwt.verify(cookie.split(';')[0].slice('zeus_token='.length), process.env.JWT_SECRET);
+        expect(tok).toMatchObject({ id: 2, role: 'user', tokenVersion: 0 });
+        expect(st.audits).toContain('LOGIN_SUCCESS');
+    });
+    test('rolul din sesiune vine din BAZA (adminul primeste admin)', async () => {
+        st.passkey = { enabled: true, result: { ok: true, userId: 1, passkeyId: 1 } };
+        const r = await pk('/auth/passkey/verify', { challengeId: 'cid', response: { id: 'x' } });
+        expect(r.body.role).toBe('admin');
+    });
+    test('passkey invalid → 401, fara cookie, cu audit pe cont', async () => {
+        st.passkey = { enabled: true, result: { ok: false, error: 'invalid', userId: 2 } };
+        const r = await pk('/auth/passkey/verify', { challengeId: 'cid', response: { id: 'x' } });
+        expect(r.status).toBe(401);
+        expect((r.headers['set-cookie'] || []).some((c) => c.startsWith('zeus_token='))).toBe(false);
+        expect(st.audits).toContain('LOGIN_PASSKEY_FAILED');
+    });
+    test('passkey necunoscut → 401 cu indrumare', async () => {
+        st.passkey = { enabled: true, result: { ok: false, error: 'unknown' } };
+        const r = await pk('/auth/passkey/verify', { challengeId: 'cid', response: { id: 'x' } });
+        expect(r.status).toBe(401);
+        expect(r.body.error).toMatch(/not registered/);
+    });
+    test('cont blocat / neaprobat / suspendat → fara sesiune, chiar cu passkey valid', async () => {
+        st.passkey = { enabled: true, result: { ok: true, userId: 2, passkeyId: 7 } };
+        st.users['user@example.com'].status = 'blocked';
+        expect((await pk('/auth/passkey/verify', { challengeId: 'cid', response: {} })).status).toBe(403);
+        st.users['user@example.com'].status = 'active';
+        st.users['user@example.com'].status = 'banned'; st.users['user@example.com'].banned_until = '9999-12-31T00:00:00Z';
+        const b = await pk('/auth/passkey/verify', { challengeId: 'cid', response: {} });
+        expect(b.status).toBe(403);
+        expect((b.headers['set-cookie'] || []).some((c) => c.startsWith('zeus_token='))).toBe(false);
+        st.passkey.result = { ok: true, userId: 3, passkeyId: 8 };   // pending@ — neaprobat
+        expect((await pk('/auth/passkey/verify', { challengeId: 'cid', response: {} })).status).toBe(403);
+    });
+    test('limita pe IP: dupa 20 de incercari in 15 min → 429', async () => {
+        st.passkey = { enabled: true, result: { ok: false, error: 'invalid', userId: 2 } };
+        let last;
+        for (let i = 0; i < 21; i++) last = await pk('/auth/passkey/verify', { challengeId: 'cid', response: {} });
+        expect(last.status).toBe(429);
+    });
+    test('intrarea cu passkey trimite emailul de IP nou', async () => {
+        st.passkey = { enabled: true, result: { ok: true, userId: 2, passkeyId: 7 } };
+        st.knownIps = { 2: ['9.9.9.9'] };
+        await pk('/auth/passkey/verify', { challengeId: 'cid', response: {} });
+        await flush();
+        expect(st.mails.some((m) => m[0] === 'new_sign_in')).toBe(true);
+    });
+    test('[revizie] intrarile reusite nu consuma bugetul pe IP (un birou cu acelasi IP intra des)', async () => {
+        st.passkey = { enabled: true, result: { ok: true, userId: 2, passkeyId: 7 } };
+        for (let i = 0; i < 25; i++) {
+            expect((await pk('/auth/passkey/options')).status).toBe(200);
+            expect((await pk('/auth/passkey/verify', { challengeId: 'cid', response: {} })).status).toBe(200);
+        }
+    });
+    test('[revizie] resetarea parolei pe email sterge passkey-urile (ce a lasat un hot nu supravietuieste)', async () => {
+        st.passkeyCount = { 2: 2 };
+        await forgot('user@example.com');
+        const code = (String(st.codes[0].text).match(/Code: (\d{6})/) || [])[1];
+        const r = await request(app).post('/auth/forgot-password/confirm').set('X-Zeus-Request', '1')
+            .send({ email: 'user@example.com', code, newPassword: 'An0ther-Str0ng-Pass!' });
+        expect(r.status).toBe(200);
+        expect(st.passkeyCount[2]).toBe(0);
+        expect(st.audits).toContain('PASSKEYS_CLEARED');
+    });
+    test('[revizie] resetarea parolei de catre admin sterge si ea passkey-urile', async () => {
+        st.passkeyCount = { 2: 1 };
+        const r = await as('admin@example.com').post('/auth/admin/reset-password', { email: 'user@example.com' });
+        expect(r.status).toBe(200);
+        expect(st.passkeyCount[2]).toBe(0);
     });
 });

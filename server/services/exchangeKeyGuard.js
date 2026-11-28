@@ -8,7 +8,7 @@
  * Nu atinge tranzactionarea: doar refuza o salvare.
  */
 const HOLD_MS = 24 * 3600 * 1000;
-const HOLD_ACTIONS = ['CHANGE_PASSWORD_SUCCESS', 'FORGOT_PASSWORD_SUCCESS', 'CHANGE_EMAIL_SUCCESS', 'TWO_FACTOR_DISABLED'];
+const HOLD_ACTIONS = ['CHANGE_PASSWORD_SUCCESS', 'FORGOT_PASSWORD_SUCCESS', 'CHANGE_EMAIL_SUCCESS', 'TWO_FACTOR_DISABLED', 'PASSKEY_ADDED'];   // [2026-11-28] + passkey nou
 
 function lastCredentialChange(uid) {
     const { db } = require('./database');
@@ -24,7 +24,7 @@ function check(uid, body) {
     if (last && Date.now() - last < HOLD_MS) {
         const until = last + HOLD_MS;
         return { ok: false, status: 403, code: 'SECURITY_HOLD', until,
-            error: `For your safety, exchange keys can't be added or changed for 24 hours after a password, email or two-factor change. Try again after ${new Date(until).toISOString().replace('T', ' ').slice(0, 16)} UTC.` };
+            error: `For your safety, exchange keys can't be added or changed for 24 hours after a password, email, two-factor or passkey change. Try again after ${new Date(until).toISOString().replace('T', ' ').slice(0, 16)} UTC.` };
     }
     const tf = require('./twoFactor');
     if (tf.isEnabled(uid)) {

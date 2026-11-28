@@ -10583,6 +10583,27 @@ migrate('429_news_prefs', () => {
     `);
 });
 
+migrate('437_user_passkeys', () => {
+    // [2026-11-28] Passkey (WebAuthn): intrare cu amprenta/fata/PIN-ul telefonului sau calculatorului, fara
+    // parola si fara cod. Pastram doar CHEIA PUBLICA (nu e secreta); cheia privata nu paraseste dispozitivul.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS user_passkeys (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            credential_id TEXT    NOT NULL UNIQUE,
+            public_key    TEXT    NOT NULL,
+            counter       INTEGER NOT NULL DEFAULT 0,
+            transports    TEXT,
+            name          TEXT,
+            device_type   TEXT,
+            backed_up     INTEGER NOT NULL DEFAULT 0,
+            created_at    INTEGER NOT NULL,
+            last_used_at  INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_passkeys_user ON user_passkeys(user_id);
+    `);
+});
+
 migrate('436_users_anti_phishing', () => {
     // [2026-11-27] Cod anti-phishing ales de utilizator — apare in fiecare email Zeus catre el.
     const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
@@ -11105,6 +11126,8 @@ function deleteUser(email, protectedRole) {
     const r = _stmts.deleteUser.run(em, protectedRole || 'admin');
     // [2026-11-27] contul sters isi pierde si 2FA (secretul criptat + codurile de rezerva)
     if (r.changes && u) { try { db.prepare('DELETE FROM user_totp WHERE user_id = ?').run(u.id); } catch (_) { /* tabel lipsa in teste vechi */ } }
+    // [2026-11-28] si passkey-urile lui
+    if (r.changes && u) { try { db.prepare('DELETE FROM user_passkeys WHERE user_id = ?').run(u.id); } catch (_) { /* tabel lipsa in teste vechi */ } }
     return r;
 }
 
@@ -12762,6 +12785,17 @@ module.exports = {
     totpSwapRecovery: (uid, oldJson, newJson, now) => db.prepare('UPDATE user_totp SET recovery_json = ?, updated_at = ? WHERE user_id = ? AND enabled = 1 AND recovery_json = ?')
         .run(newJson, now, uid, oldJson).changes === 1,
     totpDisable: (uid) => db.prepare('DELETE FROM user_totp WHERE user_id = ?').run(uid).changes,
+    // [2026-11-28] passkey — migrarea 437 si services/passkeys.js
+    passkeyList: (uid) => db.prepare('SELECT * FROM user_passkeys WHERE user_id = ? ORDER BY id').all(uid),
+    passkeyCount: (uid) => db.prepare('SELECT count(*) n FROM user_passkeys WHERE user_id = ?').get(uid).n,
+    passkeyByCredential: (cid) => db.prepare('SELECT * FROM user_passkeys WHERE credential_id = ?').get(String(cid)) || null,
+    passkeyAdd: (row) => db.prepare(`INSERT INTO user_passkeys (user_id, credential_id, public_key, counter, transports, name, device_type, backed_up, created_at)
+        VALUES (@user_id, @credential_id, @public_key, @counter, @transports, @name, @device_type, @backed_up, @created_at)`).run(row).lastInsertRowid,
+    /** atomic: contorul doar CRESTE (sau ramane 0 la passkey-urile sincronizate care nu numara) */
+    passkeyTouch: (id, counter, now) => db.prepare('UPDATE user_passkeys SET counter = ?, last_used_at = ? WHERE id = ? AND (counter < ? OR (counter = 0 AND ? = 0))')
+        .run(counter, now, id, counter, counter).changes === 1,
+    passkeyDeleteAll: (uid) => db.prepare('DELETE FROM user_passkeys WHERE user_id = ?').run(uid).changes,
+    passkeyDelete: (uid, id) => db.prepare('DELETE FROM user_passkeys WHERE user_id = ? AND id = ?').run(uid, id).changes,
     getSystemSetting: (key) => { const r = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(String(key)); return r ? r.value : null; },
     setSystemSetting: (key, value) => db.prepare(`INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`).run(String(key), String(value), Date.now()),

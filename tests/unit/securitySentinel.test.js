@@ -89,6 +89,8 @@ test.each([
     ['CHANGE_EMAIL_SUCCESS', /email changed/i],
     ['TWO_FACTOR_DISABLED', /two-factor.*off/i],
     ['LOGIN_RECOVERY_CODE_USED', /backup code/i],
+    ['PASSKEY_ADDED', /passkey added/i],      // [2026-11-28]
+    ['PASSKEY_REMOVED', /passkey removed/i],
 ])('schimbare pe contul de ADMIN: %s → alerta', (action, re) => {
     const h = harness(); h.s.init();
     h.add(action, 1, '82.77.10.140', 0);
@@ -120,7 +122,7 @@ test('summary(): cifrele zilei pentru raportul din admin', () => {
     h.add('USER_REGISTERED', null, '5.5.5.5', 0);
     h.add('REGISTER_BLOCKED_SUSPICIOUS', null, '5.5.5.6', 0);
     h.s.tick(T0 + 1000);
-    const sm = h.s.summary();
+    const sm = h.s.summary(T0 + 1000);   // [2026-11-28] acelasi ceas ca tick (altfel pica dupa miezul noptii)
     expect(sm.failedSignIns).toBe(1);
     expect(sm.signUps).toBe(2);
     expect(sm.alertsSent).toBe(0);

@@ -584,6 +584,98 @@ router.post('/verify-code', (req, res) => {
     }
 });
 
+// ─── [2026-11-28] Intrare cu PASSKEY (amprenta / fata / PIN-ul dispozitivului) ───
+// Passkey-ul cere verificarea utilizatorului si e legat de domeniu → tine loc de parola SI de al doilea
+// factor (inclusiv 2FA din aplicatie). Contul trece prin ACELEASI verificari ca la parola: blocat,
+// suspendat, neaprobat. Stins pana la PASSKEY_ENABLED=true.
+const PASSKEY_IP_MAX = 20, PASSKEY_IP_WINDOW = 15 * 60 * 1000;
+const PASSKEY_OPT_MAX = 60;   // cererile de provocare: ieftine, dar nu nelimitate
+const _passkeys = () => require('../services/passkeys').live();
+/** [2026-11-28] revizie: cine isi reseteaza parola (sau o reseteaza adminul) pierde si passkey-urile — un passkey
+ *  lasat de un hot nu supravietuieste resetarii. Schimbarea parolei din Settings (cu parola veche) nu le atinge. */
+function _clearPasskeys(uid, reason, ip) {
+    try {
+        const n = db.passkeyDeleteAll ? db.passkeyDeleteAll(uid) : 0;
+        if (n) db.auditLog(uid, 'PASSKEYS_CLEARED', { reason, count: n }, ip);
+    } catch (_) { /* resetarea nu se opreste din cauza asta */ }
+}
+function _passkeyFailsOver(ip) {
+    const row = db.loginAttemptGet && db.loginAttemptGet('passkey_fail', String(ip));
+    return !!(row && Date.now() <= row.reset_at && row.count >= PASSKEY_IP_MAX);
+}
+
+router.get('/passkey/config', (req, res) => {
+    res.json({ ok: true, enabled: _passkeys().config().enabled });
+});
+
+router.post('/passkey/options', async (req, res) => {
+    try {
+        if (!_passkeys().config().enabled) return res.status(404).json({ error: 'Passkeys are not available.' });
+        if (_passkeyFailsOver(req.ip) || !authGuard.hit(db, 'passkey_opt', req.ip, PASSKEY_OPT_MAX, PASSKEY_IP_WINDOW)) {
+            return res.status(429).json({ error: 'Too many attempts. Wait 15 minutes.' });
+        }
+        const r = await _passkeys().authenticationOptions();
+        if (!r.ok) return res.status(503).json({ error: 'Busy — try again in a minute.' });
+        res.json({ ok: true, challengeId: r.challengeId, options: r.options });
+    } catch (err) {
+        logger.warn('AUTH', 'passkey options failed: ' + err.message);
+        res.status(500).json({ error: 'Internal error' });
+    }
+});
+
+router.post('/passkey/verify', async (req, res) => {
+    try {
+        if (!_passkeys().config().enabled) return res.status(404).json({ error: 'Passkeys are not available.' });
+        if (_passkeyFailsOver(req.ip)) return res.status(429).json({ error: 'Too many attempts. Wait 15 minutes.' });
+        const b = req.body || {};
+        const r = await _passkeys().authenticationVerify(b.challengeId, b.response);
+        if (!r.ok) {
+            authGuard.hit(db, 'passkey_fail', req.ip, PASSKEY_IP_MAX, PASSKEY_IP_WINDOW);   // doar esecurile se numara
+            if (r.userId) db.auditLog(r.userId, 'LOGIN_PASSKEY_FAILED', { reason: r.error }, req.ip);
+            // fail2ban (filtrul prinde „LOGIN_FAILED … ip=") doar pe semnaturi gresite / cheie clonata; un passkey
+            // sters ramas in managerul de parole (unknown) sau o fereastra lasata deschisa (expired) NU banuiesc IP-ul
+            if (r.error === 'invalid' || r.error === 'counter') logger.warn('AUTH', 'LOGIN_FAILED passkey_' + r.error + ' ip=' + req.ip);
+            else logger.info('AUTH', 'passkey sign-in not completed: ' + r.error);
+            const msg = r.error === 'expired' ? 'Took too long — try again.'
+                : r.error === 'unknown' ? 'This passkey is not registered with Zeus. Sign in with your password, then add it in Settings › Security.'
+                    : 'Passkey sign-in failed — try again.';
+            return res.status(401).json({ error: msg });
+        }
+        const user = db.findUserById(r.userId);
+        if (!user) return res.status(401).json({ error: 'Passkey sign-in failed — try again.' });
+        if (user.status === 'blocked') return res.status(403).json({ error: 'Your account has been blocked.' });
+        if (user.status === 'banned' && user.banned_until) {
+            const banEnd = new Date(user.banned_until);
+            if (banEnd > new Date()) {
+                const remaining = banEnd.getFullYear() >= 9999 ? 'permanent' : banEnd.toLocaleString('ro-RO');
+                return res.status(403).json({ error: 'Your account is suspended until: ' + remaining });
+            }
+            db.unbanUser(user.id);
+        }
+        if (!user.approved) {
+            return res.status(403).json({ error: 'You already have a pending access request — it is awaiting administrator approval.' });
+        }
+        const fresh = db.findUserById(user.id);
+        if (!fresh || fresh.status !== 'active') return res.status(403).json({ error: 'Your account is not active.' });
+        const role = fresh.role || 'user';
+        const token = jwt.sign({ id: fresh.id, email: fresh.email, role, tokenVersion: fresh.token_version }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+        _setAuthCookie(res, token, fresh.id);
+        resetActivity(fresh.id, Date.now());
+        const ns = require('../services/newSignIn');
+        try {
+            if (ns.shouldNotify(fresh.id, req.ip, Number.MAX_SAFE_INTEGER)) {
+                void accountEmails.sendAccountEmail('new_sign_in', fresh.email, { data: { ip: req.ip, at: Date.now(), device: ns.deviceOf(req.get('user-agent')) } });
+            }
+        } catch (_) { /* emailul nu opreste intrarea */ }
+        db.auditLog(fresh.id, 'LOGIN_SUCCESS', { method: 'passkey', device: ns.deviceOf(req.get('user-agent')) }, req.ip);
+        logger.info('AUTH', 'Login verified (passkey)', { email: _mask(fresh.email), role });
+        res.json({ ok: true, email: fresh.email, role });
+    } catch (err) {
+        console.error('[AUTH] Passkey verify error:', err.message);
+        res.status(500).json({ error: 'Internal error' });
+    }
+});
+
 // ─── POST /auth/logout ───
 router.post('/logout', (req, res) => {
     res.clearCookie('zeus_token', { path: '/' });
@@ -1222,6 +1314,7 @@ router.post('/admin/reset-password', async (req, res) => {
     db.setTempPasswordMeta(target.id, expiresAt);
     db.bumpTokenVersion(target.id);
     db.auditLog(guard.caller.id, 'ADMIN_RESET_PASSWORD', { targetEmail: normalEmail, targetId: target.id, expiresAt }, req.ip);
+    _clearPasskeys(target.id, 'admin_reset_password', req.ip);
     // [2026-11-14] Omul afla ca parola i-a fost resetata. Parola temporara NU se
     // scrie in email: i-o da echipa, direct.
     void accountEmails.sendAccountEmail('admin_password_reset', normalEmail);
@@ -1651,6 +1744,7 @@ router.post('/forgot-password/confirm', async (req, res) => {
     pendingCodes.delete(key);
 
     db.auditLog(pending.userId, 'FORGOT_PASSWORD_SUCCESS', {}, req.ip);
+    _clearPasskeys(pending.userId, 'forgot_password', req.ip);
     // [2026-11-14] Confirmare pe adresa CONTULUI (din baza), nu pe cea din cerere.
     try {
         const owner = db.findUserById(pending.userId);

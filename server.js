@@ -1336,6 +1336,8 @@ app.use('/api/support', require('./server/routes/support'));
 app.use('/api/notify', require('./server/routes/notify'));
 // [2026-11-27] Securitate etapa 2 — 2FA cu aplicatie de autentificare (dupa sessionAuth)
 app.use('/api/2fa', require('./server/routes/twoFactor'));
+// [2026-11-28] passkey-urile contului (dupa sessionAuth); intrarea cu passkey e in /auth/passkey/*
+app.use('/api/passkeys', require('./server/routes/passkeys'));
 // [2026-11-06] Build Your Own Indicator — paid bespoke indicator orders.
 app.use('/api/byoi', require('./server/routes/byoi'));
 

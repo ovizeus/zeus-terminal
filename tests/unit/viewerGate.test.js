@@ -194,6 +194,7 @@ function inventory() {
         news: '/api/news',   // [2026-11-21] MARKET NEWS
         notify: '/api/notify', // [2026-11-22] notificari pe telefon
         twoFactor: '/api/2fa', // [2026-11-27] 2FA cu aplicatie de autentificare
+        passkeys: '/api/passkeys', // [2026-11-28] passkey-urile contului
     };
     const out = [];
     const RE = /\.(get|post|put|delete|patch)\(\s*'([^']+)'/g;
@@ -239,7 +240,9 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             // /pending si /revoke n-au sesiune, isi verifica singure cheia telefonului
             '/api/notify',
             // [2026-11-27] 2FA — siguranta contului: status/setup/confirm/disable permise viewerilor
-            '/api/2fa'];
+            '/api/2fa',
+            // [2026-11-28] passkey-urile contului — tot siguranta contului
+            '/api/passkeys'];
         for (const u of used) expect(known).toContain(u);
     });
 
@@ -270,6 +273,8 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'POST /api/notify/register',
             // [2026-11-27] 2FA — siguranta contului PROPRIU (si un cont nou trebuie sa se poata proteja)
             'GET /api/2fa/status', 'POST /api/2fa/confirm', 'POST /api/2fa/disable', 'POST /api/2fa/setup',
+            // [2026-11-28] passkey-urile contului PROPRIU
+            'GET /api/passkeys', 'POST /api/passkeys/register/options', 'POST /api/passkeys/register/verify', 'POST /api/passkeys/remove',
             'GET /api/support/thread', 'GET /api/support/unread',
             'GET /api/sync/state', 'GET /api/sync/user-context', 'GET /api/user/settings',
             'GET /api/version', 'GET /api/ws/health',
@@ -291,7 +296,8 @@ describe('⛔ inventarul rutelor — nimic nu devine vizibil viewerilor din gres
             'POST /api/profile', 'POST /api/support/send', 'POST /api/sync/state', 'POST /api/sync/user-context',
             'POST /api/user/settings', 'POST /api/news/prefs',   // alegerea alertelor PROPRII de stiri
             'POST /api/notify/register', 'POST /api/notify/prefs',   // [2026-11-22] cheia de notificari a telefonului PROPRIU
-            'POST /api/2fa/setup', 'POST /api/2fa/confirm', 'POST /api/2fa/disable'].sort());   // [2026-11-27] 2FA pe contul PROPRIU
+            'POST /api/2fa/setup', 'POST /api/2fa/confirm', 'POST /api/2fa/disable',   // [2026-11-27] 2FA pe contul PROPRIU
+            'POST /api/passkeys/register/options', 'POST /api/passkeys/register/verify', 'POST /api/passkeys/remove'].sort());   // [2026-11-28] passkey PROPRIU
     });
 });
 

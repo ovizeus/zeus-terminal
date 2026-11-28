@@ -18,7 +18,7 @@ const BURSTS = {
         line: (n, rows) => `Sign-up burst: ${n} in 10 min (${rows.filter((r) => r.action === 'REGISTER_BLOCKED_SUSPICIOUS').length} blocked as bots)` },
     reset: { actions: ['FORGOT_PASSWORD_REQUESTED', 'FORGOT_PASSWORD_THROTTLED'], min: 5,
         line: (n, rows) => `Password-reset burst: ${n} requests in 10 min on ${new Set(rows.map((r) => r.user_id).filter((u) => u != null)).size} accounts` },
-    failed: { actions: ['LOGIN_FAILED', 'LOGIN_2FA_FAILED', 'LOGIN_2FA_THROTTLED'], min: 10,
+    failed: { actions: ['LOGIN_FAILED', 'LOGIN_2FA_FAILED', 'LOGIN_2FA_THROTTLED', 'LOGIN_PASSKEY_FAILED'], min: 10,
         line: (n, rows) => `${n} failed sign-ins in 10 min from ${new Set(rows.map((r) => r.ip)).size} IPs` },
 };
 const ADMIN_EVENTS = {
@@ -29,6 +29,8 @@ const ADMIN_EVENTS = {
     TWO_FACTOR_DISABLED: 'Admin account: two-factor authentication turned off',
     TWO_FACTOR_ENABLED: 'Admin account: two-factor authentication turned on',
     LOGIN_RECOVERY_CODE_USED: 'Admin account: signed in with a backup code',
+    PASSKEY_ADDED: 'Admin account: passkey added',          // [2026-11-28]
+    PASSKEY_REMOVED: 'Admin account: passkey removed',
 };
 
 const _ts = (r) => { const t = Date.parse(String(r.created_at || '').replace(' ', 'T') + 'Z'); return Number.isFinite(t) ? t : 0; };
@@ -66,7 +68,7 @@ function createSentinel(deps) {
             if (a === 'USER_REGISTERED') counts.signUps++;
             if (a === 'REGISTER_BLOCKED_SUSPICIOUS') { counts.signUps++; counts.blockedSignUps++; }
             if (a === 'FORGOT_PASSWORD_REQUESTED') counts.resetRequests++;
-            if (a === 'LOGIN_FAILED' || a === 'LOGIN_2FA_FAILED') counts.failedSignIns++;
+            if (a === 'LOGIN_FAILED' || a === 'LOGIN_2FA_FAILED' || a === 'LOGIN_PASSKEY_FAILED') counts.failedSignIns++;
             for (const [k, b] of Object.entries(BURSTS)) if (b.actions.includes(a)) recent[k].push(r);
             let admin = false;
             try { admin = r.user_id != null && d.isAdmin(r.user_id); } catch (_) { admin = false; }
@@ -104,7 +106,7 @@ function dailyReport(db, hours) {
     const since = `-${h} hours`;
     const c = (actions) => db.prepare(`SELECT count(*) n FROM audit_log WHERE created_at > datetime('now', ?) AND action IN (${actions.map(() => '?').join(',')})`)
         .get(since, ...actions).n;
-    const fails = ['LOGIN_FAILED', 'LOGIN_2FA_FAILED'];
+    const fails = ['LOGIN_FAILED', 'LOGIN_2FA_FAILED', 'LOGIN_PASSKEY_FAILED'];
     return {
         hours: h,
         failedSignIns: c(fails),
@@ -112,7 +114,7 @@ function dailyReport(db, hours) {
         signUps: c(['USER_REGISTERED', 'REGISTER_BLOCKED_SUSPICIOUS']),
         blockedSignUps: c(['REGISTER_BLOCKED_SUSPICIOUS']),
         signIns: c(['LOGIN_SUCCESS']),
-        topFailIps: db.prepare(`SELECT ip, count(*) n FROM audit_log WHERE created_at > datetime('now', ?) AND action IN (?, ?, 'FORGOT_PASSWORD_REQUESTED')
+        topFailIps: db.prepare(`SELECT ip, count(*) n FROM audit_log WHERE created_at > datetime('now', ?) AND action IN (?, ?, ?, 'FORGOT_PASSWORD_REQUESTED')
             AND ip IS NOT NULL GROUP BY ip ORDER BY n DESC LIMIT 5`).all(since, ...fails).map((r) => ({ ip: r.ip, n: r.n })),
     };
 }

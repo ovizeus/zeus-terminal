@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.410',
-    build: 436,
+    version: '1.7.411',
+    build: 437,
     date: '2026-11-27',
     changelog: [
+        'b437 v1.7.411 - Passkey: intrare cu amprenta / fata / PIN-ul dispozitivului, fara parola si fara cod (Settings › Security › Passkeys + butonul Sign in with a passkey). Adaugarea cere parola (+ codul 2FA), audit + email; resetarea parolei sterge passkey-urile; legat de zeus-terminal.com, deci un site fals nu-l poate folosi; doar pe web, ascuns in aplicatia Android. Verificat cu criptografie reala si in Chrome (server + client), 2026-11-28.',
         'b436 v1.7.410 - Admin › Users: Close sign-ups / Open sign-ups cer acum confirmare (o fereastra cu Close/Cancel) — nu se mai comuta dintr-o atingere scapata (client), 2026-11-28.',
         'b435 v1.7.409 - O sesiune revocata (dupa schimbarea parolei, Sign out everywhere else sau force logout) sau a unui cont blocat nu mai merge nici pe rutele de cont (/me, PIN, schimbare parola/email, inchidere cont) — pana acum acolo se verifica doar semnatura (server), 2026-11-27.',
         'b434 v1.7.408 - Cod anti-phishing: un cuvant ales de tine apare in fiecare email Zeus (Settings › Security); parolele cunoscute ca furate (Have I Been Pwned, doar 5 caractere din amprenta pleaca) sunt refuzate la inscriere, schimbare si resetare, 2026-11-27.',

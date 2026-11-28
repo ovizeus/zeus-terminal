@@ -4,6 +4,7 @@ import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
 import { TwoFactorSection } from './TwoFactorSection'
+import { PasskeySection } from './PasskeySection'
 import { SessionsSection } from './SessionsSection'
 import { AntiPhishingSection } from './AntiPhishingSection'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, hubToggleDev, devClearLog, devExportLog, hubPopulate, setAlertsEnabled } from '../../utils/dev'
@@ -218,6 +219,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <BiometricToggle />
 
         <TwoFactorSection />
+
+        <PasskeySection />
 
         <SessionsSection />
 
