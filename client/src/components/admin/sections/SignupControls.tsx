@@ -14,6 +14,7 @@ export function SignupControls({ blockedCount, onChanged }: { blockedCount: numb
   const [open, setOpen] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [ask, setAsk] = useState(false)
+  const [askToggle, setAskToggle] = useState(false)   // [2026-11-28] comutarea cere confirmare
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export function SignupControls({ blockedCount, onChanged }: { blockedCount: numb
   }, [])
 
   async function toggle() {
+    setAskToggle(false)
     if (open === null) return
     setBusy(true)
     try {
@@ -51,13 +53,23 @@ export function SignupControls({ blockedCount, onChanged }: { blockedCount: numb
       <span style={{ fontWeight: 700, color: open === false ? '#ff6b81' : '#3ddc97' }}>
         Sign-ups: {open === null ? '…' : open ? 'OPEN' : 'CLOSED'}
       </span>
-      <button className="zac-btn" disabled={busy || open === null} onClick={toggle}>
+      <button className="zac-btn" disabled={busy || open === null} onClick={() => setAskToggle(true)}>
         {open ? 'Close sign-ups' : 'Open sign-ups'}
       </button>
       <button className="zac-btn zac-btn-danger" disabled={busy || blockedCount === 0} onClick={() => setAsk(true)}>
         Delete all blocked ({blockedCount})
       </button>
       {msg && <span role="status" style={{ fontSize: 12, color: 'var(--dim, #8aa)' }}>{msg}</span>}
+      {askToggle && open !== null && (
+        <ConfirmDialog
+          title={open ? 'Close sign-ups?' : 'Open sign-ups?'}
+          message={open
+            ? 'New accounts will be refused until you open sign-ups again. Existing accounts keep signing in as usual.'
+            : 'Anyone will be able to create a new account again.'}
+          confirmText={open ? 'Close' : 'Open'} tone={open ? 'danger' : 'default'}
+          onConfirm={toggle} onCancel={() => setAskToggle(false)}
+        />
+      )}
       {ask && (
         <ConfirmDialog
           title="Delete all blocked accounts?"
