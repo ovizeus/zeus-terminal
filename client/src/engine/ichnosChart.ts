@@ -20,7 +20,8 @@ const w = window as any
 const SUPPORTED_TF = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h'])
 const POLL_MS = 5000
 // [2026-11-21] COL_W / ROW_H sunt acum setari (Column width / Row height); acestea sunt implicitele.
-const AXIS_W = 66, HEAD_H = 22, TIME_H = 18, STRIP = 7
+// [2026-11-28] HEAD_H 22 → 30: antetul se citea greu pe telefon
+const AXIS_W = 66, HEAD_H = 30, TIME_H = 18, STRIP = 7
 const BG = '#0a0f16', GRID = '#121b26'
 const GREEN = [57, 255, 106], RED = [255, 77, 109]
 const rgba = (c: number[], a: number) => `rgba(${c[0]},${c[1]},${c[2]},${a})`
@@ -87,11 +88,17 @@ export function renderIchnos(): void {
     ctx.textBaseline = 'middle'
 
     // antetul
-    ctx.font = `600 10px ${FONT}`; ctx.textAlign = 'left'; ctx.fillStyle = '#9fb3c8'
+    ctx.font = `600 12px ${FONT}`; ctx.textAlign = 'left'; ctx.fillStyle = '#9fb3c8'
     const sym = chartSym().replace(/USDT$/, '')
-    ctx.fillText(`ICHNOS · FOOTPRINT · ${sym} · ${chartTf()}`, 8, HEAD_H / 2)
-    ctx.textAlign = 'right'; ctx.fillStyle = '#56657a'; ctx.font = `500 9px ${FONT}`
-    ctx.fillText((c0.cells === 'delta' ? 'delta per level' : c0.cells === 'total' ? 'volume per level' : 'sold x bought') + ' · $k · Bybit', W - 34, HEAD_H / 2)
+    const headL = `ICHNOS · FOOTPRINT · ${sym} · ${chartTf()}`
+    ctx.fillText(headL, 8, HEAD_H / 2)
+    const leftW = ctx.measureText(headL).width
+    // [2026-11-28] dreapta: textul lung doar daca incape langa titlu si butonul de setari; altfel varianta scurta
+    ctx.textAlign = 'right'; ctx.fillStyle = '#6a7b90'; ctx.font = `500 11px ${FONT}`
+    const room = W - 46 - (8 + leftW + 12)
+    const longR = (c0.cells === 'delta' ? 'delta per level' : c0.cells === 'total' ? 'volume per level' : 'sold x bought') + ' · $k · Bybit'
+    const headR = ctx.measureText(longR).width <= room ? longR : ctx.measureText('$k · Bybit').width <= room ? '$k · Bybit' : ''
+    if (headR) ctx.fillText(headR, W - 46, HEAD_H / 2)
     ctx.fillStyle = '#142235'; ctx.fillRect(0, HEAD_H - 1, W, 1)
 
     const msg = st.status === 'ok' ? '' : st.status === 'loading' ? (st.msg || 'Collecting trades… the footprint fills from the moment the server started.') : st.msg
@@ -275,7 +282,7 @@ function wireGestures(el: HTMLElement): void {
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up)
     // Butoanele de pe axa: pretul sus / jos (cate 4 randuri) si LIVE
     const bar = document.createElement('div')
-    bar.style.cssText = 'position:absolute;right:4px;top:26px;display:flex;flex-direction:column;gap:4px;z-index:2'
+    bar.style.cssText = 'position:absolute;right:4px;top:34px;display:flex;flex-direction:column;gap:4px;z-index:2'
     const mk = (txt: string, label: string, fn: () => void) => {
         const b = document.createElement('button')
         b.type = 'button'; b.className = 'ichnos-btn'; b.textContent = txt; b.setAttribute('aria-label', label)
@@ -297,11 +304,11 @@ function wireSettings(el: HTMLElement): void {
     const gear = document.createElement('button')
     gear.type = 'button'; gear.className = 'ichnos-btn'; gear.textContent = '⚙'
     gear.setAttribute('aria-label', 'ICHNOS settings')
-    gear.style.cssText = 'position:absolute;right:4px;top:0;width:26px;height:22px;border:0;background:transparent;color:#9fb3c8;font-size:15px;cursor:pointer;z-index:3'
+    gear.style.cssText = 'position:absolute;right:2px;top:0;width:42px;height:30px;border:0;background:transparent;color:#b8c8da;font-size:22px;line-height:30px;cursor:pointer;z-index:3'   // [2026-11-28] mai mare: tinta de deget pe telefon
     const pop = document.createElement('div')
     pop.className = 'ichnos-btn'
     pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'ICHNOS settings')
-    pop.style.cssText = 'position:absolute;right:6px;top:24px;z-index:4;display:none;width:min(300px,calc(100% - 12px));max-height:calc(100% - 30px);overflow-y:auto;background:rgba(6,12,22,.98);border:1px solid #2a3a4d;border-radius:10px;padding:10px 12px;font:500 12px "IBM Plex Mono",monospace;color:#c4d5e8;box-sizing:border-box'
+    pop.style.cssText = 'position:absolute;right:6px;top:32px;z-index:4;display:none;width:min(300px,calc(100% - 12px));max-height:calc(100% - 30px);overflow-y:auto;background:rgba(6,12,22,.98);border:1px solid #2a3a4d;border-radius:10px;padding:10px 12px;font:500 12px "IBM Plex Mono",monospace;color:#c4d5e8;box-sizing:border-box'
     const save = (k: string, v: unknown) => {
         if (!w.IND_SETTINGS) return
         w.IND_SETTINGS.ichnos = Object.assign({}, w.IND_SETTINGS.ichnos || {}, { [k]: v })
