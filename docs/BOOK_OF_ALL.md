@@ -15467,3 +15467,18 @@ Gasit pe drum: `/auth/me`, `/auth/pin/*`, `/auth/change-password/*`, `/auth/chan
 `scripts/origin-pulls.sh status|enable|disable` + certificatul public Cloudflare `scripts/nginx/cloudflare-origin-pull-ca.pem` (CN origin-pull.cloudflare.net, SHA-256 9A:1A:C2:B4…A2:B9, expira 2029). nginx va cere certificatul de client al Cloudflare → doar Cloudflare poate vorbi cu serverul, dovedit criptografic (completeaza lista de IP-uri din `cf-origin-lock.sh`).
 **Ordinea:** 1) Cloudflare → SSL/TLS → Origin Server → „Authenticated Origin Pulls" ON; 2) `sudo /opt/zeus-terminal/scripts/origin-pulls.sh enable`. Scriptul verifica pe TRAFICUL REAL din jurnalul nginx (o cerere de pe server prin Cloudflare ia 403 de la Bot Fight Mode — nu dovedeste nimic): ≥3 raspunsuri 2xx/3xx in 2 min → ramane; 400 de certificat sau trafic insuficient → revine singur. Revenire manuala: `… disable`.
 ⚠️ Prins inainte de folosire: primul marcaj `# [origin-pulls]` era citit de grep ca o clasa de caractere → `status` spunea ON fara sa fie. Acum cuvant simplu cautat literal (`grep -F`). Proba dus-intors pe o copie a configuratiei: identica.
+
+## 🔍 2026-11-28 — b439: Chart — ultima lumanare din nou LIVE
+
+**Raport operator:** „pretul la chart nu e live, nu se actualizeaza live".
+
+**Cauza (masurata):** de pe VPS, `wss://fstream.binance.com` se DESCHIDE dar trimite **0 mesaje** (test 10 s, kline_5m + markPrice; si jurnalul LIQ-FEED: `BNB frames=0`). Pe calea `WS_PROXY_ENABLED` clientul astepta `market.kline` de la server — care nu venea niciodata — iar calea de rezerva REST (ALT_WS_FEEDS, 10 s) era OCOLITA fiindca ramura proxy are prioritate. Pretul de sus mergea (puntea marketFeed → `market.price`, ~3 s), dar lumanarea ramanea inghetata pana la refresh. Rezerva serverului (`_startFallbackPolling`) nu pornea: soclul nu se inchide, doar tace (si oricum era doar pe 5m).
+
+**Reparatia (client, fara logica de trading):**
+- `client/src/data/liveBar.ts` — `tfSeconds(tf)` si `mergeTick(last, price, nowSec, tfSec)`: in acelasi interval close + high/low largite (volumul pastrat); dupa interval lumanare noua pe granita calculata de la ultima (saptamanile Binance incep luni — ies corect), deschisa la close-ul vechi; lunar → nimic.
+- `marketDataChart.ts`, ramura proxy: cat timp `market.kline` tace >15 s, (1) `market.price` al monedei din chart misca ultima lumanare; (2) la 10 s `/api/market/klines?limit=2` (cache pe server 10 s, cost 1, impartit de toti clientii) aduce lumanarea reala cu volum; lumanarea tocmai inchisa se corecteaza in `S.klines`. Cand fluxul real revine, ambele tac singure. Garda pe generatie/simbol/timeframe.
+- `require('../services/wsMarketBridge')` → import static in acest fisier (modulul n-are efecte la incarcare; altfel calea nu se putea testa in vitest).
+
+**Teste:** `liveBar.test.ts` (7), `liveBarProxy.test.ts` (4, prin `fetchKlines` real + puntea reala); mutatia (legatura cu pretul scoasa) → testul pica. Client 2432 verzi, typecheck curat. Backup: tag `pre-b439` + `data/backups/public-app-pre-b439.tgz`. Commit c559f601, tag post-b439.
+
+**De retinut:** fstream e MORT pe Hetzner — orice functie care asteapta cadre de acolo (kline, aggTrade, depth, forceOrder pe calea proxy) e muta pe VPS. Cartea de ordine din proxy (`market.depth`) are aceeasi problema — de verificat separat daca panoul OB se bazeaza pe ea.
