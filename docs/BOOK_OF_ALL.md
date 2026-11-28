@@ -15430,6 +15430,18 @@ Partea de server e gata si INACTIVA pana la `ADMIN_HOST` in `.env`:
 - **Parole furate** (`services/pwnedPasswords.js`): la inscriere, schimbare si resetare, parola e verificata in Have I Been Pwned prin k-anonymity — pleaca DOAR primele 5 caractere ale SHA-1, cu `Add-Padding`. Serviciul cazut/lent (3 s) → nu blocam pe nimeni. Verificat live: „password" → furata, una aleatoare → nu.
 - Din lista de extrase ramane doar **7 (Authenticated Origin Pulls)** — cere comutatorul din Cloudflare, cu operatorul.
 
+## 🚪 2026-11-28 — b436: Close sign-ups cere confirmare
+
+Butonul din Admin › Users (Close sign-ups / Open sign-ups, comutatorul `registration_open`) schimba inscrierile dintr-o singura atingere. Acum deschide o fereastra de confirmare: „Close sign-ups?" cu Close (rosu) / Cancel, si „Open sign-ups?" cu Open / Cancel. Cancel nu trimite nimic. Ruta de pe server ramane doar pentru Super Admin si e trecuta in audit (`ADMIN_REGISTRATION_TOGGLE`). Teste: signupControls (5), client 2401 verzi, typecheck curat. Commit 36ce2d6a, tag post-b436.
+
+### 🌙 De facut IMPREUNA, seara de 28 nov
+1. Admin separat: DNS `admin` CNAME proxied + Zero Trust Access doar pe emailul operatorului → apoi `ADMIN_HOST` in .env + reload.
+2. Authenticated Origin Pulls: comutatorul din Cloudflare → `sudo scripts/origin-pulls.sh enable`.
+3. Turnstile: cheile Site Key + Secret.
+4. Passkey: doar la „instalează passkey" (@simplewebauthn/server@13.3.3).
+5. SSH hardening: doar cu operatorul de fata.
+6. Operatorul singur: 2FA + cod anti-phishing in Settings › Security.
+
 ## 🔑 2026-11-27 — b435: tokenul revocat nu mai trece nici pe rutele de cont
 Gasit pe drum: `/auth/me`, `/auth/pin/*`, `/auth/change-password/*`, `/auth/change-email/*`, `/auth/close-account/*` verificau doar SEMNATURA tokenului (`/auth/` e public in sessionAuth). Deci dupa „Sign out everywhere else", schimbarea parolei sau force-logout, o sesiune furata mai putea seta/scoate PIN-ul, porni schimbarea emailului sau inchiderea contului (unele cereau si parola/codul pe email). Acum o garda unica (`router.use([...])` in auth.js) cere versiunea curenta a tokenului si cont `active`; altfel 401 + cookie sters. Fara token / token invalid → ruta raspunde ca inainte. Teste: 8 noi in authHardening.
 
