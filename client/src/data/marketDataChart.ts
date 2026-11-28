@@ -9,6 +9,8 @@ import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/
 import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
 import { renderVWAP, renderOviLiquid } from '../ui/panels'
 import { _isHistoricalBarSane, _resetKlineWatchdog } from '../utils/guards'
+import { tfSeconds, mergeTick } from './liveBar'
+import { on as _bridgeOn } from '../services/wsMarketBridge'
 import { renderTradeMarkers } from './marketDataOverlays'
 import { _capKlines, initBackfill } from './chartBackfill'
 import { initScrollToRealtime } from '../ui/chartScrollToRealtime'
@@ -154,7 +156,7 @@ export async function fetchKlines(tf: any): Promise<void> {
     // [WS-PROXY B.6] Server proxy path for kline — no direct Binance WS
     if (w.__MF && w.__MF.WS_PROXY_ENABLED === true) {
       if (w._wsProxyKlineUnsub) { w._wsProxyKlineUnsub(); w._wsProxyKlineUnsub = null }
-      const { on } = require('../services/wsMarketBridge')
+      const on = _bridgeOn   // [2026-11-28] import static (testabil); modulul n-are efecte la incarcare
       const _applyBarProxy = (bar: any) => {
         const last = w.S.klines?.[w.S.klines.length - 1]
         if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
@@ -166,8 +168,49 @@ export async function fetchKlines(tf: any): Promise<void> {
       }
       w._wsProxyKlineUnsub = on('market.kline', (msg: any) => {
         if (msg.symbol !== sym || msg.tf !== tf) return
+        w._proxyKlineLastMs = Date.now()
         _applyBarProxy(msg.bar)
       })
+      // [2026-11-28] „pretul la chart nu e live": serverul primeste 0 cadre de la fstream (Hetzner
+      // blocat), deci `market.kline` nu vine si lumanarea ramanea inghetata pana la refresh.
+      // Cat timp fluxul de lumanari tace: (1) pretul live (~3 s) misca ultima lumanare;
+      // (2) la 10 s citim lumanarile reale din /api/market/klines (cache pe server 10 s, cost 1,
+      // impartit de toti clientii) — aduc volumul si OHLC-ul exact. Cand fluxul revine, tac singure.
+      if (w._wsProxyTickUnsub) { w._wsProxyTickUnsub(); w._wsProxyTickUnsub = null }
+      if (w.S._proxyKlinePollTimer) { clearInterval(w.S._proxyKlinePollTimer); w.S._proxyKlinePollTimer = null }
+      w._proxyKlineLastMs = 0
+      const _tfSec = tfSeconds(tf)
+      const _klineQuiet = () => Date.now() - (w._proxyKlineLastMs || 0) > 15000
+      const _stillWanted = () => w.__wsGen === _klineGen && w.S.symbol === sym && (w.S.chartTf || tf) === tf
+      w._wsProxyTickUnsub = on('market.price', (msg: any) => {
+        if (msg.symbol !== sym || !_klineQuiet() || !_stillWanted()) return
+        const bar = mergeTick(w.S.klines?.[w.S.klines.length - 1], +msg.price, Math.floor(Date.now() / 1000), _tfSec)
+        if (bar) _applyBarProxy(bar)
+      })
+      const _pollProxyKline = async () => {
+        if (!_klineQuiet() || !_stillWanted()) return
+        try {
+          const _pr = await fetch(`/api/market/klines?symbol=${sym}&interval=${tf}&limit=2`, { signal: AbortSignal.timeout(8000) })
+          if (!_pr || !_pr.ok) return
+          const _pd = await _pr.json()
+          if (!Array.isArray(_pd) || !_pd.length || !_stillWanted()) return
+          const bars = _pd.map((k: any) => ({ time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }))
+            .filter((b: any) => b.time > 0 && b.close > 0)
+          const kl = w.S.klines
+          if (!kl || !kl.length) return
+          for (const b of bars) {
+            const lastT = kl[kl.length - 1].time
+            if (b.time < lastT) {
+              // lumanarea tocmai inchisa: valorile ei finale in date (indicatori); pe ecran ramane cea mostrata
+              const i = kl.findIndex((x: any) => x.time === b.time)
+              if (i >= 0) kl[i] = b
+            } else {
+              _applyBarProxy(b)
+            }
+          }
+        } catch (_) { /* liniste — urmatoarea citire reincearca */ }
+      }
+      w.S._proxyKlinePollTimer = setInterval(_pollProxyKline, 10000)
       console.log(`[fetchKlines] WS_PROXY mode | sym=${sym} tf=${tf}`)
     } else {
     // ── Legacy paths (ALT_WS_FEEDS or direct WS) ──
