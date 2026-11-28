@@ -15430,6 +15430,10 @@ Partea de server e gata si INACTIVA pana la `ADMIN_HOST` in `.env`:
 - **Parole furate** (`services/pwnedPasswords.js`): la inscriere, schimbare si resetare, parola e verificata in Have I Been Pwned prin k-anonymity — pleaca DOAR primele 5 caractere ale SHA-1, cu `Add-Padding`. Serviciul cazut/lent (3 s) → nu blocam pe nimeni. Verificat live: „password" → furata, una aleatoare → nu.
 - Din lista de extrase ramane doar **7 (Authenticated Origin Pulls)** — cere comutatorul din Cloudflare, cu operatorul.
 
+## 🔍 2026-11-28 — b438: ICHNOS — banda de sus mai mare pe telefon
+
+La cererea operatorului (captura de pe telefon): antetul ICHNOS 22 → 30 px, titlul 10 → 12 px, textul din dreapta 9 → 11 px, butonul de setari ⚙ 26×22 → 42×30 (font 22). Pe ecrane inguste textul din dreapta (`volume per level · $k · Bybit`) se scurteaza la `$k · Bybit` sau dispare, in loc sa intre peste titlu. Butoanele ▲ ▼ LIVE si fereastra de setari coborate cu 8 px. `client/src/engine/ichnosChart.ts`. Client 2421 verzi, typecheck curat. Commit 79f84757, tag post-b438.
+
 ## 🔑 2026-11-28 — b437: PASSKEY (amprenta / fata / PIN) — PORNIT
 
 **Ce face:** in Settings › Security › Passkeys adaugi un passkey (parola + codul 2FA daca e pornit). Apoi pe pagina de login apesi „Sign in with a passkey" si intri cu amprenta / fata / PIN-ul telefonului sau calculatorului — fara parola, fara cod. Nu cere nicio cheie API: verificarea e locala (`@simplewebauthn/server` 13.3.3 — v14 cere Node 22).
